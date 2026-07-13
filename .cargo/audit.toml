@@ -1,0 +1,5 @@
+[advisories]
+# sqlx 0.8.6 locks its disabled MySQL driver and rsa dependency even though the
+# workspace enables only PostgreSQL/SQLite. `cargo tree --target all
+# --all-features -i rsa@0.9.10` must remain empty.
+ignore = ["RUSTSEC-2023-0071"]

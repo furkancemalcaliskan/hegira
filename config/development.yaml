@@ -1,0 +1,162 @@
+application:
+  name: Hegira
+  public_url: http://127.0.0.1:3000
+
+server:
+  addr: 127.0.0.1:3000
+  request_timeout_seconds: 30
+  body_limit_bytes: 2097152
+
+runtime:
+  role: all # all | web | worker
+
+worker_operations:
+  enabled: false
+  addr: 127.0.0.1:9091
+  heartbeat_grace_seconds: 30
+
+startup:
+  ensure_database: true
+  seed_identity: true
+  scheduler: true
+  durable_jobs: true
+
+database:
+  backend: postgres
+  url: postgres://postgres:postgres@localhost:5432/hegira
+  max_connections: 5
+  auto_migrate: true
+
+security:
+  jwt_secret: change-me-in-production
+  cors:
+    enabled: true
+    allowed_origins:
+      - http://127.0.0.1:3000
+      - http://localhost:3000
+    allow_credentials: false
+  rate_limit:
+    enabled: true
+    backend: memory # memory | redis
+    max_requests: 20
+    window_seconds: 60
+    redis:
+      url: redis://127.0.0.1:6379
+
+sessions:
+  backend: database # database | redis
+  sliding_ttl_seconds: 1800
+  max_lifetime_seconds: 3600
+  refresh_threshold_percent: 25
+  redis:
+    url: redis://127.0.0.1:6379
+
+oauth:
+  enabled: false
+  state_ttl_seconds: 600
+  providers:
+    google:
+      enabled: false
+      client_id: ""
+      client_secret: ""
+      redirect_uri: http://127.0.0.1:3000/oauth/google/callback
+      authorization_url: https://accounts.google.com/o/oauth2/v2/auth
+      token_url: https://oauth2.googleapis.com/token
+      userinfo_url: https://openidconnect.googleapis.com/v1/userinfo
+      scopes:
+        - openid
+        - email
+        - profile
+    github:
+      enabled: false
+      client_id: ""
+      client_secret: ""
+      redirect_uri: http://127.0.0.1:3000/oauth/github/callback
+      authorization_url: https://github.com/login/oauth/authorize
+      token_url: https://github.com/login/oauth/access_token
+      userinfo_url: https://api.github.com/user
+      scopes:
+        - read:user
+        - user:email
+
+mailer:
+  enabled: true
+  backend: log # null | log | smtp
+  from: no-reply@example.com
+  smtp:
+    host: localhost
+    port: 1025
+    username:
+    password:
+    starttls: false
+
+cache:
+  enabled: false
+  backend: "null" # null | memory | redis
+  authorization_ttl_seconds: 60
+  redis:
+    url: redis://127.0.0.1:6379
+
+storage:
+  enabled: false
+  backend: "null" # null | local | s3
+  local:
+    root: storage/development
+  s3:
+    bucket: hegira
+    region: us-east-1
+    endpoint_url: http://127.0.0.1:9000
+    force_path_style: true
+
+search:
+  enabled: false
+  backend: "null" # null | meilisearch
+  index_prefix: hegira
+  task_timeout_milliseconds: 10000
+  meilisearch:
+    url: http://127.0.0.1:7700
+    api_key:
+
+scheduler:
+  enabled: true
+  run_on_startup: true
+  cleanup_expired_sessions_interval_seconds: 300
+
+jobs:
+  durable:
+    enabled: false
+    poll_interval_milliseconds: 1000
+    batch_size: 20
+    lock_timeout_seconds: 300
+
+audit:
+  enabled: true
+
+settings:
+  enabled: true
+  cache_ttl_seconds: 60
+
+openapi:
+  enabled: true
+
+metrics:
+  enabled: false
+  path: /metrics
+
+telemetry:
+  enabled: false
+  protocol: grpc # grpc | http_protobuf
+  endpoint: http://127.0.0.1:4317
+  timeout_milliseconds: 5000
+  sample_ratio: 1.0
+
+health:
+  readiness_timeout_milliseconds: 2000
+
+seed:
+  seed_admin: true
+  admin_username: admin@example.com
+  admin_password: admin12345
+
+logging:
+  filter: info,hegira=debug

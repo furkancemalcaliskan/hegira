@@ -1,0 +1,2 @@
+ALTER TABLE users
+    ADD COLUMN search_revision BIGINT NOT NULL DEFAULT 0;

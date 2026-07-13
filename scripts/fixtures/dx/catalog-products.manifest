@@ -1,0 +1,24 @@
+# Manual CRUD feature budget. Provider SQL has a separate LOC budget.
+max_feature_files=8
+max_feature_loc=1000
+max_provider_loc=550
+max_central_touchpoints=9
+
+feature:crates/domain/src/catalog/products.rs
+feature:crates/application_contracts/src/catalog/products.rs
+feature:crates/application/src/catalog/products.rs
+feature:crates/presentation/src/http/controllers/catalog/products.rs
+feature:crates/web/src/catalog/products/server_fns.rs
+feature:crates/web/src/catalog/products/page.rs
+provider:crates/infrastructure/src/catalog/postgres.rs
+provider:crates/infrastructure/src/catalog/sqlite.rs
+
+central:crates/application_contracts/src/features.rs
+central:crates/presentation/src/composition/services.rs
+central:crates/presentation/src/composition/server_fns.rs
+central:crates/presentation/src/http/controllers/mod.rs
+central:crates/web/src/mod.rs
+central:crates/web/src/routes.rs
+central:crates/web/src/app/navigation.rs
+central:crates/web/src/app/sidebar.rs
+central:crates/runtime/src/lib.rs

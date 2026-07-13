@@ -1,0 +1,4 @@
+base_color = "neutral"
+color_theme = "default"
+base_path_components = "shared/rust_ui"
+rtl = false

@@ -1,0 +1,51 @@
+# Rust and Leptos build output
+/target/
+/pkg/
+*.profraw
+coverage/
+lcov.info
+
+# Frontend dependencies and tool caches
+**/node_modules/
+.npm/
+.parcel-cache/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Local databases and SQLite sidecar files
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite-journal
+*.sqlite-shm
+*.sqlite-wal
+*.sqlite3
+*.sqlite3-journal
+*.sqlite3-shm
+*.sqlite3-wal
+
+# Runtime state
+/storage/
+/logs/
+*.log
+
+# Local archives
+*.tar
+*.tar.gz
+*.tgz
+
+# Editors and operating systems
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db

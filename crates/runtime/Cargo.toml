@@ -1,0 +1,33 @@
+[package]
+name = "runtime"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+publish = false
+
+[dependencies]
+axum = "0.8.9"
+infrastructure = { path = "../infrastructure", default-features = false, features = ["ssr"] }
+leptos = "0.8.19"
+leptos_axum = "0.8.9"
+opentelemetry = { version = "0.32.0", optional = true }
+opentelemetry-otlp = { version = "0.32.0", default-features = false, features = ["trace", "grpc-tonic", "http-proto", "reqwest-blocking-client", "tls-ring", "tls-roots"], optional = true }
+opentelemetry_sdk = { version = "0.32.0", features = ["trace", "rt-tokio"], optional = true }
+presentation = { path = "../presentation", default-features = false, features = ["ssr"] }
+prometheus = { version = "0.14.0", optional = true }
+serde = { version = "1.0.228", features = ["derive"] }
+sqlx = { version = "0.8.6", features = ["runtime-tokio-rustls", "migrate", "chrono", "uuid"] }
+tokio = { version = "1.52.3", features = ["rt-multi-thread", "macros", "fs", "signal"] }
+tower-http = { version = "0.6.11", features = ["compression-br", "compression-gzip", "cors", "limit", "timeout"] }
+tracing = "0.1.44"
+tracing-opentelemetry = { version = "0.33.0", optional = true }
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+web = { path = "../web", default-features = false, features = ["ssr"] }
+
+[features]
+default = ["db-postgres", "db-sqlite"]
+db-postgres = ["infrastructure/db-postgres", "presentation/db-postgres", "web/db-postgres", "sqlx/postgres"]
+db-sqlite = ["infrastructure/db-sqlite", "presentation/db-sqlite", "web/db-sqlite", "sqlx/sqlite"]
+ssr = []
+metrics-prometheus = ["dep:prometheus", "presentation/metrics-prometheus"]
+otel-otlp = ["dep:opentelemetry", "dep:opentelemetry-otlp", "dep:opentelemetry_sdk", "dep:tracing-opentelemetry", "presentation/otel-otlp"]

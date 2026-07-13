@@ -1,0 +1,17 @@
+.git
+.github
+.env
+.env.*
+!.env.example
+target
+**/node_modules
+*.db
+*.sqlite
+*.sqlite3
+*.log
+storage
+logs
+coverage
+backups
+docs
+AxumKit
