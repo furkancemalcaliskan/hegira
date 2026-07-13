@@ -21,7 +21,7 @@ jobs:
           - ssr,db-postgres,cache-redis,storage-s3,mailer-smtp,search-meilisearch
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.96.1
+      - uses: dtolnay/rust-toolchain@1.100.0
         with:
           targets: wasm32-unknown-unknown
           components: rustfmt, clippy
@@ -49,7 +49,7 @@ jobs:
       APP_ENV: test
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.96.1
+      - uses: dtolnay/rust-toolchain@1.100.0
         with:
           targets: wasm32-unknown-unknown
           components: rustfmt, clippy
@@ -60,7 +60,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.96.1
+      - uses: dtolnay/rust-toolchain@1.100.0
       - name: Prove ignored RSA advisory is inactive
         run: test -z "$(cargo tree --locked --target all --all-features -i rsa@0.9.10 2>/dev/null)"
       - uses: EmbarkStudios/cargo-deny-action@v2
