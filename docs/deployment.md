@@ -26,15 +26,19 @@ must have one active executor.
 
 ## Release Build
 
-Build only the production database provider and required integrations:
+The committed production profile is the minimal PostgreSQL contract: database
+sessions, in-process rate limiting, and disabled optional external providers.
+It matches the Dockerfile's default `ssr,db-postgres` server feature set.
+
+Build that minimal profile with:
 
 ```sh
 cargo leptos build --release \
-  --bin-features ssr,db-postgres,mailer-smtp \
+  --bin-features ssr,db-postgres \
   --lib-features hydrate
 ```
 
-Optional distributed profile:
+Compile optional integrations explicitly for a distributed profile:
 
 ```sh
 cargo leptos build --release \
@@ -43,6 +47,9 @@ cargo leptos build --release \
 ```
 
 OpenAPI is intentionally omitted from production builds.
+Compiling a capability does not enable it at runtime. Override the matching
+configuration backend and credentials when enabling Redis, SMTP, S3,
+Meilisearch, Prometheus, or OTLP.
 
 ## Database Release Step
 
@@ -72,6 +79,9 @@ Build a normal web image:
 ```sh
 docker build -t hegira:latest .
 ```
+
+This image matches the committed minimal production profile and does not
+require Redis, SMTP, S3, Meilisearch, Prometheus, or an OTLP collector.
 
 Build explicit role images with the same capability set:
 

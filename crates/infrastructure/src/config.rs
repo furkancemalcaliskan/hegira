@@ -719,6 +719,20 @@ fn validate_oauth_provider(name: &str, provider: &OAuthProviderConfig) -> Result
 mod tests {
     use super::*;
 
+    fn committed_production_config() -> AppConfig {
+        config::Config::builder()
+            .add_source(config::File::with_name(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../config/production.yaml"
+            )))
+            .set_override("environment", "production")
+            .expect("production environment override should be valid")
+            .build()
+            .expect("committed production profile should load")
+            .try_deserialize()
+            .expect("committed production profile should deserialize")
+    }
+
     fn config(environment: &str) -> AppConfig {
         AppConfig {
             environment: environment.to_string(),
@@ -901,6 +915,27 @@ mod tests {
         let config = config("production");
 
         assert!(config.validate_for_boot().is_err());
+    }
+
+    #[test]
+    fn committed_production_profile_matches_minimal_server_capabilities() {
+        let config = committed_production_config();
+
+        assert_eq!(config.database.backend, DatabaseBackend::Postgres);
+        assert_eq!(config.sessions.backend, SessionBackend::Database);
+        assert_eq!(config.security.rate_limit.backend, RateLimitBackend::Memory);
+        assert!(!config.mailer.enabled);
+        assert_eq!(config.mailer.backend, MailerBackend::Null);
+        assert!(!config.cache.enabled);
+        assert_eq!(config.cache.backend, CacheBackend::Null);
+        assert!(!config.storage.enabled);
+        assert_eq!(config.storage.backend, StorageBackend::Null);
+        assert!(!config.search.enabled);
+        assert_eq!(config.search.backend, SearchBackend::Null);
+        assert!(!config.metrics.enabled);
+        assert!(!config.telemetry.enabled);
+        assert!(!config.openapi.enabled);
+        assert!(!config.seed.seed_admin);
     }
 
     #[test]

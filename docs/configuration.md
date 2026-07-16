@@ -62,10 +62,11 @@ Small local application:
 db-sqlite + runtime.role=all + database sessions + log mailer
 ```
 
-Conventional production application:
+Minimal production application (the committed `production` profile):
 
 ```text
-db-postgres + runtime.role=web + database sessions + SMTP
+db-postgres + runtime.role=web + database sessions + memory rate limiting
+optional providers disabled
 ```
 
 Distributed production application:
@@ -77,6 +78,12 @@ optional Meilisearch, S3, Prometheus, and OTLP
 
 SQLite is intended for local development, tests, and single-process small
 deployments. Do not run independently scaled SQLite web and worker replicas.
+
+The minimal profile is deliberately compatible with a binary compiled using
+only `ssr,db-postgres`. To select Redis, SMTP, S3, Meilisearch, Prometheus, or
+OTLP at runtime, first compile the corresponding Cargo feature and then
+override the provider configuration. Runtime configuration never adds a
+provider that was omitted from the binary.
 
 ## Production Validation
 
