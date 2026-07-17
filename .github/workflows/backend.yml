@@ -20,7 +20,7 @@ jobs:
           - ssr,db-postgres,openapi,metrics-prometheus,otel-otlp
           - ssr,db-postgres,cache-redis,storage-s3,mailer-smtp,search-meilisearch
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.100.0
         with:
           targets: wasm32-unknown-unknown
@@ -48,7 +48,7 @@ jobs:
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/hegira_test
       APP_ENV: test
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.100.0
         with:
           targets: wasm32-unknown-unknown
@@ -59,7 +59,7 @@ jobs:
   supply-chain:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.100.0
       - name: Prove ignored RSA advisory is inactive
         run: test -z "$(cargo tree --locked --target all --all-features -i rsa@0.9.10 2>/dev/null)"
