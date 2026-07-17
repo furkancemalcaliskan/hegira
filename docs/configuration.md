@@ -13,19 +13,6 @@ APP__RUNTIME__ROLE=web
 Profiles are `development`, `sqlite`, `test`, and `production`. Treat committed
 YAML values as defaults, not a secret store.
 
-Startup validates configuration before initializing telemetry, the database,
-or another external dependency. Validation runs in this order:
-
-1. Structural invariants that apply to every environment, such as lifetimes,
-   positive timeouts, provider settings, and URL schemes.
-2. Runtime selections against capabilities compiled into the binary.
-3. Production-only policy, including HTTPS public URLs and origins, a strong
-   JWT secret, disabled admin seed and OpenAPI, and supported database topology.
-
-Each failure names the relevant configuration key. Development and test
-profiles may use intentionally relaxed policy values, but they do not bypass
-structural validation.
-
 ## Compile-Time Features
 
 Cargo features decide which providers enter the binary. Runtime settings only
@@ -102,10 +89,9 @@ provider that was omitted from the binary.
 
 ## Production Validation
 
-Production startup rejects unsafe policy values, including the default JWT
-secret, admin seed, enabled OpenAPI, non-HTTPS public URLs or CORS origins, and
-split web/worker roles backed by a local SQLite database. Structural provider,
-URL, metric, lifetime, and worker-operation checks apply in every environment.
+Production startup rejects unsafe or inconsistent settings, including the
+default JWT secret, admin seed, enabled OpenAPI, invalid provider/URL pairs,
+invalid metric paths, and worker operations on a non-worker role.
 
 Keep `database.auto_migrate=false` and `startup.seed_identity=false` in
 production. Run `db_migrator` as an explicit release step.

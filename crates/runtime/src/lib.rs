@@ -42,14 +42,11 @@ async fn serve() -> Result<(), String> {
     let app_config = infrastructure::config::AppConfig::load()
         .map_err(|err| format!("failed to load application configuration: {err}"))?;
     app_config
-        .validate_structure()
-        .map_err(|err| format!("structurally invalid application configuration: {err}"))?;
+        .validate_for_boot()
+        .map_err(|err| format!("invalid application configuration: {err}"))?;
     app_config
         .validate_capabilities(compiled_capabilities())
         .map_err(|err| format!("invalid application capabilities: {err}"))?;
-    app_config
-        .validate_production_policy()
-        .map_err(|err| format!("application configuration violates production policy: {err}"))?;
 
     let telemetry = telemetry::init(&app_config)?;
     let result = serve_configured(app_config).await;
