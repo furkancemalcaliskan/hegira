@@ -59,6 +59,20 @@ cargo test --workspace --all-features
 PostgreSQL tests marked `ignored` require a disposable `DATABASE_URL` because
 they reset the target database.
 
+## Integration Workflow
+
+`develop` is the integration branch for milestone work and `main` contains
+release-ready history. Create issue branches from `develop`, open pull requests
+back to `develop`, and promote a verified milestone from `develop` to `main`
+through a pull request before tagging a release.
+
+The backend workflow runs for pull requests targeting `develop` or `main`,
+post-merge pushes to those branches, and explicit manual dispatches. Plain
+feature-branch pushes do not run the full validation matrix. Superseded runs
+for the same pull request or integration ref are cancelled. Release automation
+runs only for `v*` tags; no workflow creates a preview application or GitHub
+Environment.
+
 ## Project Policy
 
 This project is published as open-source software, but external code
