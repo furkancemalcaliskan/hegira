@@ -16,7 +16,9 @@ YAML values as defaults, not a secret store.
 ## Compile-Time Features
 
 Cargo features decide which providers enter the binary. Runtime settings only
-select among providers that were compiled.
+select among providers that were compiled. Startup validates this contract
+before connecting to the database or any other external dependency and reports
+every missing enabled capability together.
 
 | Capability | Cargo feature | Runtime selection | External service |
 |---|---|---|---|

@@ -137,7 +137,7 @@ settings:
   cache_ttl_seconds: 60
 
 openapi:
-  enabled: true
+  enabled: false
 
 metrics:
   enabled: false

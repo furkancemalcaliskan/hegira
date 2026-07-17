@@ -57,6 +57,15 @@ struct RateLimitDecision {
 
 impl RateLimiter {
     pub fn from_config(config: &RateLimitConfig) -> Result<Self, String> {
+        if !config.enabled {
+            return Ok(Self {
+                enabled: false,
+                max_requests: config.max_requests.max(1),
+                window: Duration::from_secs(config.window_seconds.max(1)),
+                backend: RateLimiterBackend::Memory(MemoryRateLimiter::default()),
+            });
+        }
+
         let backend = match config.backend {
             RateLimitBackend::Memory => RateLimiterBackend::Memory(MemoryRateLimiter::default()),
             RateLimitBackend::Redis => build_redis(&config.redis.url)?,
@@ -403,5 +412,22 @@ mod tests {
             assert!(limiter.check(key, MAX_REQUESTS, WINDOW).allowed);
         }
         assert!(!limiter.check(key, MAX_REQUESTS, WINDOW).allowed);
+    }
+
+    #[test]
+    fn disabled_limiter_does_not_initialize_selected_redis_backend() {
+        let limiter = RateLimiter::from_config(&RateLimitConfig {
+            enabled: false,
+            backend: RateLimitBackend::Redis,
+            max_requests: 20,
+            window_seconds: 60,
+            redis: infrastructure::config::RedisRateLimitConfig {
+                url: "not a redis URL".to_string(),
+            },
+        })
+        .expect("a disabled limiter should not initialize its selected backend");
+
+        assert!(!limiter.enabled);
+        assert!(matches!(limiter.backend, RateLimiterBackend::Memory(_)));
     }
 }
