@@ -124,6 +124,20 @@ forwarding headers at the public edge. Hegira walks the chain from the direct
 peer toward the client and stops at the nearest untrusted address. Malformed or
 excessively long chains are rejected.
 
+The address seen on Hegira's TCP connection must belong to the expected direct
+proxy network. If several trusted proxy layers append to the chain, configure
+each trusted hop with the smallest practical CIDR; do not add client or public
+Internet ranges. Keep `security.trusted_proxies` empty when Hegira is directly
+Internet-facing.
+
+Failure behavior is intentionally fail-closed:
+
+- an untrusted peer's `X-Forwarded-For` is ignored, even when malformed;
+- a malformed or overlong chain from a trusted peer returns `400 Bad Request`;
+- missing TCP peer information returns an internal error instead of assigning a
+  shared fallback identity;
+- invalid or universal trusted-proxy CIDRs prevent startup.
+
 The memory rate limiter is local to one web process, so replicas enforce
 independent quotas. Select the Redis backend for a quota shared across web
 replicas. Both backends use the same trusted-proxy-aware resolved client

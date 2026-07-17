@@ -44,16 +44,24 @@ configured in `config/sqlite.yaml`.
 - [Configuration](docs/configuration.md)
 - [Deployment](docs/deployment.md)
 - [Operations](docs/operations.md)
+- [Maintainer workflow](docs/maintainers.md)
 - [Security policy](SECURITY.md)
 - [Changelog](CHANGELOG.md)
 
 ## Quality Gate
 
+Run the same local backend gate used by CI:
+
 ```sh
-cargo fmt --all -- --check
-cargo clippy --workspace --all-targets --all-features -- -D warnings
-cargo test --workspace --all-features
-./scripts/dx-manual-check.sh
+sh scripts/backend-check.sh
+```
+
+The CI quality job also sets `WITH_IGNORED_DB_TESTS=true` and supplies a
+disposable PostgreSQL `DATABASE_URL`. Verify the production container contract
+separately when Docker is available:
+
+```sh
+sh scripts/container-smoke.sh
 ```
 
 PostgreSQL tests marked `ignored` require a disposable `DATABASE_URL` because
@@ -67,11 +75,16 @@ back to `develop`, and promote a verified milestone from `develop` to `main`
 through a pull request before tagging a release.
 
 The backend workflow runs for pull requests targeting `develop` or `main`,
-post-merge pushes to those branches, and explicit manual dispatches. Plain
-feature-branch pushes do not run the full validation matrix. Superseded runs
-for the same pull request or integration ref are cancelled. Release automation
-runs only for `v*` tags; no workflow creates a preview application or GitHub
-Environment.
+post-merge pushes to those branches, and explicit manual dispatches. The
+production container smoke workflow uses the same integration boundaries plus
+production-relevant path filters. Plain feature-branch pushes do not run these
+gates unless they update an open pull request. Superseded runs for the same
+pull request or integration ref are cancelled.
+
+Release automation runs only for `v*` tags. CI validates repository changes;
+it does not deploy them. No workflow creates a preview application, public
+preview URL, or GitHub Environment. See the [maintainer workflow](docs/maintainers.md)
+for the complete trigger and release contract.
 
 ## Project Policy
 
