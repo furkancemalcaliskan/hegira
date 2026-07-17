@@ -1,5 +1,8 @@
 .git
 .github
+Dockerfile
+docker-compose*.yml
+scripts
 .env
 .env.*
 !.env.example
