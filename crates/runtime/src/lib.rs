@@ -366,8 +366,10 @@ async fn serve_http(
     let leptos_options = conf.leptos_options;
     let routes = generate_route_list(App);
 
-    let app = Router::<LeptosOptions>::new()
-        .merge(presentation::http::routes::routes(app_state).with_state(()))
+    let operational_routes =
+        presentation::http::routes::operational_routes(app_state.clone()).with_state(());
+    let bearer_api_routes = presentation::http::routes::bearer_api_routes(app_state).with_state(());
+    let cookie_bff_routes = Router::<LeptosOptions>::new()
         .leptos_routes_with_context(
             &leptos_options,
             routes,
@@ -386,6 +388,8 @@ async fn serve_http(
         )
         .fallback(leptos_axum::file_and_error_handler(shell));
 
+    let app = compose_transport_routes(operational_routes, bearer_api_routes, cookie_bff_routes);
+
     #[cfg(feature = "metrics-prometheus")]
     let app = if app_config.metrics.enabled {
         tracing::info!(path = %app_config.metrics.path, "prometheus metrics enabled");
@@ -401,7 +405,6 @@ async fn serve_http(
             app_config.is_production(),
             app_middleware::security_headers::set,
         ))
-        .layer(middleware::from_fn(app_middleware::csrf::validate))
         .layer(middleware::from_fn_with_state(
             rate_limiter,
             app_middleware::rate_limit::check_configured,
@@ -427,6 +430,24 @@ async fn serve_http(
         .map_err(|err| format!("server error: {err}"))?;
 
     Ok(())
+}
+
+fn compose_transport_routes<S>(
+    operational_routes: axum::Router<S>,
+    bearer_api_routes: axum::Router<S>,
+    cookie_bff_routes: axum::Router<S>,
+) -> axum::Router<S>
+where
+    S: Clone + Send + Sync + 'static,
+{
+    use axum::middleware;
+
+    axum::Router::new()
+        .merge(operational_routes)
+        .merge(bearer_api_routes)
+        .merge(cookie_bff_routes.layer(middleware::from_fn(
+            presentation::http::middleware::csrf::validate,
+        )))
 }
 
 async fn shutdown_signal() {
@@ -481,4 +502,104 @@ fn cors_layer(
         .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE])
         .allow_credentials(config.allow_credentials)
         .max_age(Duration::from_secs(600)))
+}
+
+#[cfg(test)]
+mod transport_policy_tests {
+    use super::*;
+    use axum::{
+        Router,
+        body::Body,
+        http::{Request, StatusCode, header},
+        middleware,
+        routing::{get, post},
+    };
+    use presentation::http::middleware as app_middleware;
+    use tower::ServiceExt;
+
+    fn app() -> Router {
+        let operational = Router::new().route("/healthz", get(|| async { "ok" }));
+        let bearer_api = Router::new().route("/api/external-mutation", post(|| async { "ok" }));
+        let cookie_bff = Router::new().route("/api/browser-mutation", post(|| async { "ok" }));
+
+        compose_transport_routes(operational, bearer_api, cookie_bff)
+            .layer(middleware::from_fn(app_middleware::request_id::set))
+            .layer(middleware::from_fn_with_state(
+                false,
+                app_middleware::security_headers::set,
+            ))
+    }
+
+    #[tokio::test]
+    async fn bearer_api_mutation_does_not_require_browser_origin_headers() {
+        let response = app()
+            .oneshot(
+                Request::post("/api/external-mutation")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn cookie_bff_mutation_remains_csrf_protected() {
+        let missing_origin = app()
+            .oneshot(
+                Request::post("/api/browser-mutation")
+                    .header(header::HOST, "example.com")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(missing_origin.status(), StatusCode::FORBIDDEN);
+
+        let same_origin = app()
+            .oneshot(
+                Request::post("/api/browser-mutation")
+                    .header(header::HOST, "example.com")
+                    .header(header::ORIGIN, "https://example.com")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(same_origin.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn common_middleware_wraps_bearer_and_cookie_transports() {
+        for uri in ["/api/external-mutation", "/api/browser-mutation"] {
+            let response = app()
+                .oneshot(
+                    Request::post(uri)
+                        .header(header::HOST, "example.com")
+                        .header(header::ORIGIN, "https://example.com")
+                        .header(
+                            app_middleware::request_id::REQUEST_ID_HEADER.clone(),
+                            "test-id",
+                        )
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(response.status(), StatusCode::OK);
+            assert_eq!(
+                response
+                    .headers()
+                    .get(&app_middleware::request_id::REQUEST_ID_HEADER)
+                    .unwrap(),
+                "test-id"
+            );
+            assert_eq!(
+                response.headers().get(header::X_FRAME_OPTIONS).unwrap(),
+                "DENY"
+            );
+        }
+    }
 }
