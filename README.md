@@ -1,6 +1,6 @@
 # Hegira
 
-A production-oriented Rust application template built with Axum, Leptos, SQLx,
+A production-oriented Full-Stack Rust web application template built with Axum, Leptos, SQLx,
 and an ABP-inspired layered architecture.
 
 The template supports a containers-free SQLite development profile and a
