@@ -26,6 +26,21 @@ Each failure names the relevant configuration key. Development and test
 profiles may use intentionally relaxed policy values, but they do not bypass
 structural validation.
 
+Capability validation aggregates all missing compiled providers into one
+startup error. For example, selecting Redis sessions and SMTP with a minimal
+binary produces an error shaped like:
+
+```text
+invalid application capabilities: runtime configuration requires capabilities not present in the binary:
+- sessions.backend=redis requires the cache-redis Cargo feature
+- mailer.backend=smtp requires the mailer-smtp Cargo feature
+```
+
+This preflight runs before telemetry, database pools, or other external clients
+are initialized. A bad capability selection therefore fails deterministically
+instead of appearing later as a connection or missing-provider error. Disabled
+optional providers do not require their Cargo features.
+
 ## Compile-Time Features
 
 Cargo features decide which providers enter the binary. Runtime settings only
@@ -38,7 +53,7 @@ every missing enabled capability together.
 | PostgreSQL | `db-postgres` | `database.backend=postgres` | PostgreSQL |
 | SQLite | `db-sqlite` | `database.backend=sqlite` | None |
 | OpenAPI UI | `openapi` | `openapi.enabled=true` | None |
-| Redis cache/session/rate limit | `cache-redis` | relevant backend `redis` | Redis |
+| Redis cache/session/rate limit | `cache-redis` | `cache.backend=redis`, `sessions.backend=redis`, or enabled `security.rate_limit.backend=redis` | Redis |
 | SMTP | `mailer-smtp` | `mailer.backend=smtp` | SMTP server |
 | S3 storage | `storage-s3` | `storage.backend=s3` | S3-compatible service |
 | Meilisearch | `search-meilisearch` | `search.backend=meilisearch` | Meilisearch |
@@ -99,6 +114,14 @@ only `ssr,db-postgres`. To select Redis, SMTP, S3, Meilisearch, Prometheus, or
 OTLP at runtime, first compile the corresponding Cargo feature and then
 override the provider configuration. Runtime configuration never adds a
 provider that was omitted from the binary.
+
+Compile-time availability and runtime enablement are deliberately independent:
+
+- compiling a feature makes its adapter available but does not enable it;
+- selecting an adapter at runtime requires its feature to be present;
+- enabling several unavailable adapters reports all missing features together;
+- structural and production-policy validation still applies when every
+  requested capability is compiled.
 
 ## Production Validation
 

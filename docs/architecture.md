@@ -58,6 +58,30 @@ Both entry points use the same service instance from `AppServices`. Controllers
 and server functions deserialize and delegate; business validation,
 authorization, and concurrency policy stay in the application layer.
 
+### Transport Middleware Contract
+
+Runtime composition keeps transport authentication policies separate instead
+of inferring them from URL prefixes:
+
+| Route group | Authentication model | CSRF policy |
+|---|---|---|
+| Operational routes | Health/readiness; restrict operational exposure at the network layer | No browser CSRF layer |
+| Axum API | Bearer token | No browser CSRF layer |
+| Leptos BFF and browser routes | HttpOnly session cookie where authenticated | CSRF validation on unsafe methods |
+
+Cookie-authenticated `POST`, `PUT`, `PATCH`, and `DELETE` requests require a
+same-origin `Origin` header, or a same-origin `Referer` only when `Origin` is
+absent. `GET`, `HEAD`, and `OPTIONS` are exempt. When `Origin` is present it is
+authoritative; a malformed or cross-origin value cannot be rescued by
+`Referer`.
+
+The trusted origin comes from validated `application.public_url`, never from a
+request `Host` or forwarded host header. Bearer API mutations remain usable by
+non-browser clients without browser-origin headers. Both transports still pass
+through the common request ID, security header, CORS, timeout, body-limit,
+compression, tracing, and configured rate-limit layers. Application-layer
+authorization remains mandatory for both.
+
 ## Persistence And Transactions
 
 Repository traits describe business persistence without SQLx types. PostgreSQL
@@ -124,7 +148,7 @@ build; runtime configuration selects an enabled adapter. See
 - HttpOnly session cookies for the Leptos BFF
 - Bearer authentication for the external API
 - Application-layer RBAC checks
-- Origin-based CSRF validation for cookie-authenticated mutations
+- Origin-based CSRF validation for every unsafe cookie-authenticated mutation
 - Request limits, rate limiting, security headers, and request IDs
 - OAuth state expiry/single use and TOTP backup-code replay protection
 - Production configuration validation for secrets, OpenAPI, seed, and metrics

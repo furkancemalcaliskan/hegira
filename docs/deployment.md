@@ -51,6 +51,17 @@ Compiling a capability does not enable it at runtime. Override the matching
 configuration backend and credentials when enabling Redis, SMTP, S3,
 Meilisearch, Prometheus, or OTLP.
 
+The two supported production capability contracts are:
+
+| Contract | Server features | Runtime expectation |
+|---|---|---|
+| Minimal | `ssr,db-postgres` | Database sessions, in-process rate limiting, optional providers disabled |
+| Distributed | `ssr,db-postgres,cache-redis,mailer-smtp,storage-s3,search-meilisearch,metrics-prometheus,otel-otlp` | Enable only the external providers that are provisioned and configured |
+
+The distributed build makes adapters available; it does not turn them on.
+Runtime configuration that selects an adapter missing from the binary fails
+capability preflight before dependency initialization.
+
 ## Database Release Step
 
 Run migrations once before rolling out application replicas:
