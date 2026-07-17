@@ -29,6 +29,7 @@ database:
 
 security:
   jwt_secret: change-me-in-production
+  trusted_proxies: []
   cors:
     enabled: true
     allowed_origins:

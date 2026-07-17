@@ -131,6 +131,7 @@ mod tests {
             },
             security: crate::config::SecurityConfig {
                 jwt_secret: "test-secret".to_string(),
+                trusted_proxies: Vec::new(),
                 cors: crate::config::CorsConfig {
                     enabled: false,
                     allowed_origins: vec![],
