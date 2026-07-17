@@ -67,7 +67,8 @@ when a schema change belongs to a provider-independent feature.
 Compile OpenAPI explicitly:
 
 ```sh
-cargo check --no-default-features --features ssr,db-sqlite,openapi
+APP__OPENAPI__ENABLED=true \
+cargo run --no-default-features --features ssr,db-sqlite,openapi
 ```
 
 ## Verify The Workspace

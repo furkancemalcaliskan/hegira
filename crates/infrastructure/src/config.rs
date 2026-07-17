@@ -29,6 +29,19 @@ pub struct AppConfig {
     pub logging: LoggingConfig,
 }
 
+#[derive(Debug, Clone, Copy, Default)]
+pub struct CompiledCapabilities {
+    pub db_postgres: bool,
+    pub db_sqlite: bool,
+    pub cache_redis: bool,
+    pub mailer_smtp: bool,
+    pub storage_s3: bool,
+    pub search_meilisearch: bool,
+    pub metrics_prometheus: bool,
+    pub otel_otlp: bool,
+    pub openapi: bool,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct ApplicationConfig {
     pub name: String,
@@ -493,7 +506,7 @@ impl AppConfig {
             .set_default("audit.enabled", true)?
             .set_default("settings.enabled", true)?
             .set_default("settings.cache_ttl_seconds", 60)?
-            .set_default("openapi.enabled", true)?
+            .set_default("openapi.enabled", false)?
             .set_default("metrics.enabled", false)?
             .set_default("metrics.path", "/metrics")?
             .set_default("telemetry.enabled", false)?
@@ -519,14 +532,6 @@ impl AppConfig {
     pub fn validate_for_boot(&self) -> Result<(), String> {
         if self.database.max_connections == 0 {
             return Err("database.max_connections must be greater than zero".to_string());
-        }
-        if self.database.backend == DatabaseBackend::Postgres && !cfg!(feature = "db-postgres") {
-            return Err(
-                "database.backend=postgres requires the db-postgres Cargo feature".to_string(),
-            );
-        }
-        if self.database.backend == DatabaseBackend::Sqlite && !cfg!(feature = "db-sqlite") {
-            return Err("database.backend=sqlite requires the db-sqlite Cargo feature".to_string());
         }
         match self.database.backend {
             DatabaseBackend::Postgres
@@ -690,6 +695,71 @@ impl AppConfig {
         }
 
         Ok(())
+    }
+
+    pub fn validate_capabilities(&self, compiled: CompiledCapabilities) -> Result<(), String> {
+        let mut missing = Vec::new();
+
+        match self.database.backend {
+            DatabaseBackend::Postgres if !compiled.db_postgres => {
+                missing.push("database.backend=postgres requires the db-postgres Cargo feature")
+            }
+            DatabaseBackend::Sqlite if !compiled.db_sqlite => {
+                missing.push("database.backend=sqlite requires the db-sqlite Cargo feature")
+            }
+            _ => {}
+        }
+        if self.sessions.backend == SessionBackend::Redis && !compiled.cache_redis {
+            missing.push("sessions.backend=redis requires the cache-redis Cargo feature");
+        }
+        if self.security.rate_limit.enabled
+            && self.security.rate_limit.backend == RateLimitBackend::Redis
+            && !compiled.cache_redis
+        {
+            missing
+                .push("security.rate_limit.backend=redis requires the cache-redis Cargo feature");
+        }
+        if self.cache.enabled && self.cache.backend == CacheBackend::Redis && !compiled.cache_redis
+        {
+            missing.push("cache.backend=redis requires the cache-redis Cargo feature");
+        }
+        if self.mailer.enabled
+            && self.mailer.backend == MailerBackend::Smtp
+            && !compiled.mailer_smtp
+        {
+            missing.push("mailer.backend=smtp requires the mailer-smtp Cargo feature");
+        }
+        if self.storage.enabled
+            && self.storage.backend == StorageBackend::S3
+            && !compiled.storage_s3
+        {
+            missing.push("storage.backend=s3 requires the storage-s3 Cargo feature");
+        }
+        if self.search.enabled
+            && self.search.backend == SearchBackend::Meilisearch
+            && !compiled.search_meilisearch
+        {
+            missing
+                .push("search.backend=meilisearch requires the search-meilisearch Cargo feature");
+        }
+        if self.metrics.enabled && !compiled.metrics_prometheus {
+            missing.push("metrics.enabled=true requires the metrics-prometheus Cargo feature");
+        }
+        if self.telemetry.enabled && !compiled.otel_otlp {
+            missing.push("telemetry.enabled=true requires the otel-otlp Cargo feature");
+        }
+        if self.openapi.enabled && !compiled.openapi {
+            missing.push("openapi.enabled=true requires the openapi Cargo feature");
+        }
+
+        if missing.is_empty() {
+            Ok(())
+        } else {
+            Err(format!(
+                "runtime configuration requires capabilities not present in the binary:\n- {}",
+                missing.join("\n- ")
+            ))
+        }
     }
 
     pub fn is_production(&self) -> bool {
@@ -936,6 +1006,109 @@ mod tests {
         assert!(!config.telemetry.enabled);
         assert!(!config.openapi.enabled);
         assert!(!config.seed.seed_admin);
+    }
+
+    #[test]
+    fn capability_preflight_reports_every_missing_enabled_capability() {
+        let mut config = config("development");
+        config.database.backend = DatabaseBackend::Postgres;
+        config.sessions.backend = SessionBackend::Redis;
+        config.security.rate_limit.enabled = true;
+        config.security.rate_limit.backend = RateLimitBackend::Redis;
+        config.cache.enabled = true;
+        config.cache.backend = CacheBackend::Redis;
+        config.mailer.enabled = true;
+        config.mailer.backend = MailerBackend::Smtp;
+        config.storage.enabled = true;
+        config.storage.backend = StorageBackend::S3;
+        config.search.enabled = true;
+        config.search.backend = SearchBackend::Meilisearch;
+        config.metrics.enabled = true;
+        config.telemetry.enabled = true;
+        config.openapi.enabled = true;
+
+        let error = config
+            .validate_capabilities(CompiledCapabilities::default())
+            .expect_err("enabled capabilities should be rejected when absent");
+
+        for key in [
+            "database.backend=postgres",
+            "sessions.backend=redis",
+            "security.rate_limit.backend=redis",
+            "cache.backend=redis",
+            "mailer.backend=smtp",
+            "storage.backend=s3",
+            "search.backend=meilisearch",
+            "metrics.enabled=true",
+            "telemetry.enabled=true",
+            "openapi.enabled=true",
+        ] {
+            assert!(error.contains(key), "missing capability error for {key}");
+        }
+    }
+
+    #[test]
+    fn capability_preflight_ignores_disabled_optional_providers() {
+        let mut config = config("development");
+        config.database.backend = DatabaseBackend::Postgres;
+        config.cache.enabled = false;
+        config.cache.backend = CacheBackend::Redis;
+        config.security.rate_limit.enabled = false;
+        config.security.rate_limit.backend = RateLimitBackend::Redis;
+        config.mailer.enabled = false;
+        config.mailer.backend = MailerBackend::Smtp;
+        config.storage.enabled = false;
+        config.storage.backend = StorageBackend::S3;
+        config.search.enabled = false;
+        config.search.backend = SearchBackend::Meilisearch;
+        config.metrics.enabled = false;
+        config.telemetry.enabled = false;
+        config.openapi.enabled = false;
+
+        assert!(
+            config
+                .validate_capabilities(CompiledCapabilities {
+                    db_postgres: true,
+                    ..CompiledCapabilities::default()
+                })
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn capability_preflight_accepts_enabled_compiled_capabilities() {
+        let mut config = config("development");
+        config.database.backend = DatabaseBackend::Sqlite;
+        config.sessions.backend = SessionBackend::Redis;
+        config.security.rate_limit.enabled = true;
+        config.security.rate_limit.backend = RateLimitBackend::Redis;
+        config.cache.enabled = true;
+        config.cache.backend = CacheBackend::Redis;
+        config.mailer.enabled = true;
+        config.mailer.backend = MailerBackend::Smtp;
+        config.storage.enabled = true;
+        config.storage.backend = StorageBackend::S3;
+        config.search.enabled = true;
+        config.search.backend = SearchBackend::Meilisearch;
+        config.metrics.enabled = true;
+        config.telemetry.enabled = true;
+        config.openapi.enabled = true;
+
+        assert!(
+            config
+                .validate_capabilities(CompiledCapabilities {
+                    db_sqlite: true,
+                    cache_redis: true,
+                    mailer_smtp: true,
+                    storage_s3: true,
+                    search_meilisearch: true,
+                    metrics_prometheus: true,
+                    otel_otlp: true,
+                    openapi: true,
+                    ..CompiledCapabilities::default()
+                })
+                .is_ok()
+        );
     }
 
     #[test]

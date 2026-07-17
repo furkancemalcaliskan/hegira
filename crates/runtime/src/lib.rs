@@ -44,6 +44,9 @@ async fn serve() -> Result<(), String> {
     app_config
         .validate_for_boot()
         .map_err(|err| format!("invalid application configuration: {err}"))?;
+    app_config
+        .validate_capabilities(compiled_capabilities())
+        .map_err(|err| format!("invalid application capabilities: {err}"))?;
 
     let telemetry = telemetry::init(&app_config)?;
     let result = serve_configured(app_config).await;
@@ -53,6 +56,20 @@ async fn serve() -> Result<(), String> {
         (Err(error), _) => Err(error),
         (Ok(()), Err(error)) => Err(error),
         (Ok(()), Ok(())) => Ok(()),
+    }
+}
+
+fn compiled_capabilities() -> infrastructure::config::CompiledCapabilities {
+    infrastructure::config::CompiledCapabilities {
+        db_postgres: cfg!(feature = "db-postgres"),
+        db_sqlite: cfg!(feature = "db-sqlite"),
+        cache_redis: cfg!(feature = "cache-redis"),
+        mailer_smtp: cfg!(feature = "mailer-smtp"),
+        storage_s3: cfg!(feature = "storage-s3"),
+        search_meilisearch: cfg!(feature = "search-meilisearch"),
+        metrics_prometheus: cfg!(feature = "metrics-prometheus"),
+        otel_otlp: cfg!(feature = "otel-otlp"),
+        openapi: cfg!(feature = "openapi"),
     }
 }
 
