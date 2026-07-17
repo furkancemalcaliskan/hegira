@@ -1,4 +1,4 @@
-FROM rust:1.96.1-bookworm AS chef
+FROM rust:1.97.0-bookworm AS chef
 
 RUN rustup target add wasm32-unknown-unknown && \
     cargo install --locked cargo-chef --version 0.1.77 && \
