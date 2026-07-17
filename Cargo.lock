@@ -3229,6 +3229,7 @@ dependencies = [
  "tower",
  "tracing",
  "tracing-opentelemetry",
+ "url",
  "utoipa",
  "utoipa-swagger-ui",
  "uuid",
