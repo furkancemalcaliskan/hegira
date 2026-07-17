@@ -367,7 +367,7 @@ async fn serve_http(
     )
     .map_err(|err| format!("invalid CSRF configuration: {err}"))?;
 
-    let mut conf = get_configuration(Some("Cargo.toml"))
+    let mut conf = get_configuration(None)
         .map_err(|err| format!("failed to load leptos configuration: {err}"))?;
     conf.leptos_options.site_addr = app_config.server.addr;
     let addr = conf.leptos_options.site_addr;

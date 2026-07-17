@@ -1,6 +1,7 @@
 # Rust and Leptos build output
 /target/
 /pkg/
+/dist/
 *.profraw
 coverage/
 lcov.info
