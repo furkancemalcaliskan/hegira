@@ -103,6 +103,32 @@ Monitor task completion before directing search traffic to the rebuilt index.
 - Alert on authentication failures, readiness failures, dead letters, and stale
   worker heartbeats.
 
+## Trusted Proxy and Client IP Contract
+
+Hegira uses the TCP peer address as the secure default for request rate-limit
+identity. It ignores `X-Forwarded-For` from every peer unless that peer belongs
+to an explicitly configured `security.trusted_proxies` CIDR.
+
+```yaml
+security:
+  trusted_proxies:
+    - 10.20.0.0/16
+    - 2001:db8:20::/48
+```
+
+List only networks used by proxies that connect directly to the application;
+never use broad public ranges as a convenience. Universal `0.0.0.0/0` and
+`::/0` trust entries are rejected. Each trusted proxy must append
+the address it received to `X-Forwarded-For` and replace untrusted inbound
+forwarding headers at the public edge. Hegira walks the chain from the direct
+peer toward the client and stops at the nearest untrusted address. Malformed or
+excessively long chains are rejected.
+
+The memory rate limiter is local to one web process, so replicas enforce
+independent quotas. Select the Redis backend for a quota shared across web
+replicas. Both backends use the same trusted-proxy-aware resolved client
+identity when constructing their keys.
+
 ## Production Integration Tests
 
 Tests that reset PostgreSQL are ignored by default. Run them only against a

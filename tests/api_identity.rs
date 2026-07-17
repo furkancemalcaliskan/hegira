@@ -74,6 +74,7 @@ fn test_config() -> AppConfig {
         },
         security: SecurityConfig {
             jwt_secret: "test-secret".to_string(),
+            trusted_proxies: Vec::new(),
             cors: CorsConfig {
                 enabled: true,
                 allowed_origins: vec!["http://127.0.0.1:3000".to_string()],

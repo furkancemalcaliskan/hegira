@@ -17,6 +17,7 @@ config = { version = "0.15.19", features = ["yaml"] }
 domain = { path = "../domain" }
 domain_shared = { path = "../domain_shared" }
 hmac = "0.13.0"
+ipnet = "2.12.0"
 lettre = { version = "0.11.22", default-features = false, features = ["builder", "smtp-transport", "tokio1-rustls-tls"], optional = true }
 redis = { version = "1.2.3", features = ["tokio-comp"], optional = true }
 rand_core = { version = "0.6.4", features = ["getrandom"] }

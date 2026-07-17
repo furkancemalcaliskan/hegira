@@ -58,7 +58,7 @@ database providers accidentally.
 | `runtime` | `role`: `all`, `web`, or `worker` |
 | `startup` | database ensure, identity seed, scheduler, durable jobs |
 | `database` | backend, URL, pool size, auto migration |
-| `security` | JWT secret, CORS, rate limiting |
+| `security` | JWT secret, trusted proxy CIDRs, CORS, rate limiting |
 | `sessions` | database/Redis backend and lifetime limits |
 | `oauth` | provider credentials, callbacks, scopes, state TTL |
 | `mailer` | null/log/SMTP backend and sender |
@@ -109,6 +109,11 @@ URL, metric, lifetime, and worker-operation checks apply in every environment.
 
 Keep `database.auto_migrate=false` and `startup.seed_identity=false` in
 production. Run `db_migrator` as an explicit release step.
+
+`security.trusted_proxies` is empty by default. Add only the IPv4 and IPv6
+CIDRs of reverse proxies that connect directly to Hegira. Direct clients cannot
+select their rate-limit identity with `X-Forwarded-For`; the header is evaluated
+only when the TCP peer is trusted.
 
 See [Deployment](deployment.md) for build profiles and [Operations](operations.md)
 for health, migrations, backup, and recovery.

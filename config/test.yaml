@@ -29,6 +29,7 @@ database:
 
 security:
   jwt_secret: test-secret
+  trusted_proxies: []
   cors:
     enabled: true
     allowed_origins:

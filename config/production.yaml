@@ -29,6 +29,7 @@ database:
 
 security:
   jwt_secret: change-me-in-production
+  trusted_proxies: [] # Example: ["10.0.0.0/8", "2001:db8::/32"]
   cors:
     enabled: true
     allowed_origins:

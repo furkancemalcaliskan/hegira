@@ -342,6 +342,7 @@ async fn serve_http(
         .map_err(|err| format!("invalid storage configuration: {err}"))?;
     let rate_limiter = presentation::http::middleware::rate_limit::RateLimiter::from_config(
         &app_config.security.rate_limit,
+        &app_config.security.trusted_proxies,
     )
     .map_err(|err| format!("invalid rate limiter configuration: {err}"))?;
 
@@ -436,10 +437,13 @@ async fn serve_http(
     let listener = tokio::net::TcpListener::bind(&addr)
         .await
         .map_err(|err| format!("failed to bind to address {addr}: {err}"))?;
-    axum::serve(listener, app.into_make_service())
-        .with_graceful_shutdown(shutdown_signal())
-        .await
-        .map_err(|err| format!("server error: {err}"))?;
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    )
+    .with_graceful_shutdown(shutdown_signal())
+    .await
+    .map_err(|err| format!("server error: {err}"))?;
 
     Ok(())
 }

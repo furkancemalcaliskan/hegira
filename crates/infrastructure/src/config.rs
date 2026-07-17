@@ -130,6 +130,7 @@ impl DatabaseConfig {
 #[derive(Debug, Clone, Deserialize)]
 pub struct SecurityConfig {
     pub jwt_secret: String,
+    pub trusted_proxies: Vec<String>,
     pub cors: CorsConfig,
     pub rate_limit: RateLimitConfig,
 }
@@ -409,6 +410,7 @@ impl AppConfig {
             .set_default("database.max_connections", 5)?
             .set_default("database.auto_migrate", true)?
             .set_default("security.jwt_secret", "change-me-in-production")?
+            .set_default("security.trusted_proxies", Vec::<String>::new())?
             .set_default("security.cors.enabled", true)?
             .set_default(
                 "security.cors.allowed_origins",
@@ -563,6 +565,18 @@ impl AppConfig {
             return Err(
                 "health.readiness_timeout_milliseconds must be greater than zero".to_string(),
             );
+        }
+        for network in &self.security.trusted_proxies {
+            let parsed = network.parse::<ipnet::IpNet>().map_err(|_| {
+                format!(
+                    "security.trusted_proxies entry `{network}` must be a valid IPv4 or IPv6 CIDR"
+                )
+            })?;
+            if parsed.prefix_len() == 0 {
+                return Err(format!(
+                    "security.trusted_proxies entry `{network}` must not trust every address"
+                ));
+            }
         }
         if self.security.rate_limit.enabled {
             if self.security.rate_limit.max_requests == 0 {
@@ -954,6 +968,7 @@ mod tests {
             },
             security: SecurityConfig {
                 jwt_secret: "change-me-in-production".to_string(),
+                trusted_proxies: Vec::new(),
                 cors: CorsConfig {
                     enabled: true,
                     allowed_origins: vec!["https://example.com".to_string()],
@@ -1113,6 +1128,7 @@ mod tests {
 
         assert_eq!(config.database.backend, DatabaseBackend::Postgres);
         assert_eq!(config.sessions.backend, SessionBackend::Database);
+        assert!(config.security.trusted_proxies.is_empty());
         assert_eq!(config.security.rate_limit.backend, RateLimitBackend::Memory);
         assert!(!config.mailer.enabled);
         assert_eq!(config.mailer.backend, MailerBackend::Null);
@@ -1466,6 +1482,32 @@ mod tests {
             config.validate_structure(),
             Err(
                 "sessions.max_lifetime_seconds must be greater than or equal to sessions.sliding_ttl_seconds"
+                    .to_string()
+            )
+        );
+
+        config.security.trusted_proxies = vec!["0.0.0.0/0".to_string()];
+        assert_eq!(
+            config.validate_structure(),
+            Err(
+                "security.trusted_proxies entry `0.0.0.0/0` must not trust every address"
+                    .to_string()
+            )
+        );
+    }
+
+    #[test]
+    fn trusted_proxies_require_valid_ipv4_or_ipv6_cidrs() {
+        let mut config = config("development");
+        config.security.trusted_proxies =
+            vec!["10.0.0.0/8".to_string(), "2001:db8::/32".to_string()];
+        assert_eq!(config.validate_structure(), Ok(()));
+
+        config.security.trusted_proxies = vec!["all-proxies".to_string()];
+        assert_eq!(
+            config.validate_structure(),
+            Err(
+                "security.trusted_proxies entry `all-proxies` must be a valid IPv4 or IPv6 CIDR"
                     .to_string()
             )
         );
