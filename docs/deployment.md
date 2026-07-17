@@ -83,6 +83,24 @@ docker build -t hegira:latest .
 This image matches the committed minimal production profile and does not
 require Redis, SMTP, S3, Meilisearch, Prometheus, or an OTLP collector.
 
+### Production Container Smoke Test
+
+Run the release smoke test locally with:
+
+```sh
+sh scripts/container-smoke.sh
+```
+
+The test builds the default `ssr,db-postgres` production image, starts a
+disposable PostgreSQL database, applies migrations as a one-shot task, and
+verifies `/healthz`, `/readyz`, the application page, and generated CSS and
+JavaScript assets. Failure logs are printed before the complete stack and its
+volumes are removed.
+
+The smoke workflow validates the container contract only. It does not create a
+preview application, publish a public URL, use a GitHub Environment, or require
+deployment credentials.
+
 Build explicit role images with the same capability set:
 
 ```sh
