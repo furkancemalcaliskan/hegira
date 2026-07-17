@@ -81,6 +81,18 @@ a release, and a pull request never publishes an artifact. Before creating a
 - `CHANGELOG.md` and affected documentation are current;
 - release notes are ready.
 
+Create and verify a signed annotated tag only from the verified `main` release
+commit:
+
+```sh
+git tag -s vX.Y.Z -m "Hegira vX.Y.Z"
+git tag -v vX.Y.Z
+git push origin vX.Y.Z
+```
+
+Pushing the tag is the publication boundary. Do not create or push it while a
+required check, checksum, SBOM, release note, or milestone gate is incomplete.
+
 The tag workflow builds the minimal PostgreSQL server and hydrated frontend,
 then publishes a Linux bundle, SHA-256 checksum, and SPDX JSON SBOM to a GitHub
 Release. It does not publish a container image.

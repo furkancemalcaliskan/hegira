@@ -34,7 +34,6 @@ RUN apt-get update && \
 COPY --from=builder /app/target/release/hegira /usr/local/bin/hegira
 COPY --from=builder /app/target/release/db_migrator /usr/local/bin/db_migrator
 COPY --from=builder /app/config/production.yaml /app/config/production.yaml
-COPY --from=builder /app/Cargo.toml /app/Cargo.toml
 
 WORKDIR /app
 ENTRYPOINT ["hegira"]
