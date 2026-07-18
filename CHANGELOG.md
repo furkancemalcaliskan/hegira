@@ -2,7 +2,7 @@
 
 All notable changes are documented here. Releases follow Semantic Versioning.
 
-## [0.1.1] - 2026-07-17
+## [0.1.1] - 2026-07-18
 
 ### Fixed
 
@@ -37,6 +37,10 @@ All notable changes are documented here. Releases follow Semantic Versioning.
 - Added a pre-publish release-candidate path that verifies the release bundle,
   checksum, SPDX SBOM, and prepared release notes without creating a preview
   deployment.
+- Kept dependency auditing read-only on GitHub-hosted runners and isolated
+  database-backed release tests from ambient connection settings.
+- Aligned PostgreSQL search outbox assertions with the flattened document
+  payload contract and scoped lifecycle checks to their target identity.
 
 ### Operator Notes
 

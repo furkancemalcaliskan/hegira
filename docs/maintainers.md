@@ -23,7 +23,7 @@ validation gates pass.
 |---|---|---|---|---|---|
 | `backend` | Targets `develop` or `main` | `develop` or `main` | Yes | No | Validation only |
 | `production-container-smoke` | Targets `develop` or `main`, with production path filters | `develop` or `main`, with production path filters | Yes | No | Disposable local containers only |
-| `release` | No | No | No | Push matching `v*` | Publishes a GitHub Release |
+| `release` | No | No | Yes, build only | Push matching `v*` | Manual: validation artifact; tag: GitHub Release |
 
 A plain push to an issue branch does not trigger the push-based validation
 workflows. Updating an open pull request triggers its `pull_request` checks.
@@ -71,15 +71,21 @@ Never point the ignored database tests at persistent or production data.
 
 ## Release Contract
 
-The `release` workflow is tag-only. A push to `develop` or `main` never creates
-a release, and a pull request never publishes an artifact. Before creating a
-`v*` tag, verify:
+The `release` workflow supports manual release-candidate validation and
+tag-triggered publication. A manual run builds and verifies the bundle,
+checksum, SBOM, and release notes, but its publish job is skipped. A push to
+`develop` or `main` never creates a release, and a pull request never publishes
+an artifact. Before creating a `v*` tag, verify:
 
 - every release-gating milestone issue is closed;
 - required CI checks are successful on the release commit;
 - `develop` has been promoted to `main` through a pull request;
 - `CHANGELOG.md` and affected documentation are current;
 - release notes are ready.
+
+Run the workflow manually against the intended release commit before tagging
+and require its build job to succeed. This is release-candidate validation, not
+publication.
 
 Create and verify a signed annotated tag only from the verified `main` release
 commit:
