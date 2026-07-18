@@ -41,6 +41,8 @@ All notable changes are documented here. Releases follow Semantic Versioning.
   database-backed release tests from ambient connection settings.
 - Aligned PostgreSQL search outbox assertions with the flattened document
   payload contract and scoped lifecycle checks to their target identity.
+- Made release bundles resolve Tailwind from the lockfile-pinned frontend
+  dependencies instead of an ambient or automatically downloaded executable.
 
 ### Operator Notes
 
