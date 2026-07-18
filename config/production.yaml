@@ -29,6 +29,7 @@ database:
 
 security:
   jwt_secret: change-me-in-production
+  trusted_proxies: [] # Example: ["10.0.0.0/8", "2001:db8::/32"]
   cors:
     enabled: true
     allowed_origins:
@@ -36,14 +37,14 @@ security:
     allow_credentials: false
   rate_limit:
     enabled: true
-    backend: redis # memory | redis
+    backend: memory # memory | redis
     max_requests: 60
     window_seconds: 60
     redis:
       url: redis://redis:6379
 
 sessions:
-  backend: redis # database | redis
+  backend: database # database | redis
   sliding_ttl_seconds: 1800
   max_lifetime_seconds: 43200
   refresh_threshold_percent: 25
@@ -79,8 +80,8 @@ oauth:
         - user:email
 
 mailer:
-  enabled: true
-  backend: smtp # null | log | smtp
+  enabled: false
+  backend: "null" # null | log | smtp
   from: no-reply@example.com
   smtp:
     host: smtp.example.com
@@ -90,15 +91,15 @@ mailer:
     starttls: true
 
 cache:
-  enabled: true
-  backend: redis # null | memory | redis
+  enabled: false
+  backend: "null" # null | memory | redis
   authorization_ttl_seconds: 60
   redis:
     url: redis://redis:6379
 
 storage:
-  enabled: true
-  backend: s3 # null | local | s3
+  enabled: false
+  backend: "null" # null | local | s3
   local:
     root: storage/production
   s3:

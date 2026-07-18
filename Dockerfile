@@ -1,4 +1,8 @@
-FROM rust:1.96.1-bookworm AS chef
+FROM node:22-bookworm-slim AS node-toolchain
+
+FROM rust:1.97.0-bookworm AS chef
+
+COPY --from=node-toolchain /usr/local/ /usr/local/
 
 RUN rustup target add wasm32-unknown-unknown && \
     cargo install --locked cargo-chef --version 0.1.77 && \
@@ -13,10 +17,13 @@ RUN cargo chef prepare --recipe-path recipe.json
 FROM chef AS builder
 ARG SERVER_FEATURES=ssr,db-postgres
 COPY --from=planner /app/recipe.json recipe.json
-RUN cargo chef cook --release --recipe-path recipe.json --features ${SERVER_FEATURES} && \
-    cargo chef cook --release --recipe-path recipe.json --target wasm32-unknown-unknown --features hydrate
+RUN cargo chef cook --release --recipe-path recipe.json --no-default-features --features ${SERVER_FEATURES} && \
+    cargo chef cook --release --recipe-path recipe.json --target wasm32-unknown-unknown --no-default-features --features hydrate
+COPY crates/web/src/package.json crates/web/src/package-lock.json crates/web/src/
+RUN npm ci --prefix crates/web/src
 COPY . .
-RUN cargo leptos build --release --bin-features ${SERVER_FEATURES} --lib-features hydrate
+RUN cargo build --locked --release -p db_migrator --no-default-features --features ssr,db-postgres && \
+    cargo leptos build --release --bin-features ${SERVER_FEATURES} --lib-features hydrate
 
 FROM debian:bookworm-slim AS runtime-base
 
@@ -25,6 +32,8 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/target/release/hegira /usr/local/bin/hegira
+COPY --from=builder /app/target/release/db_migrator /usr/local/bin/db_migrator
+COPY --from=builder /app/config/production.yaml /app/config/production.yaml
 
 WORKDIR /app
 ENTRYPOINT ["hegira"]

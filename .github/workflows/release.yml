@@ -4,51 +4,90 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      release_ref:
+        description: Release ref matching the Cargo package version
+        required: true
+        default: v0.1.1
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  release:
+  build:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      RELEASE_REF: ${{ inputs.release_ref || github.ref_name }}
+    outputs:
+      release_ref: ${{ steps.release-ref.outputs.value }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: release-ref
+        name: Verify release identity
+        run: |
+          package_version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -n 1)"
+          test "$RELEASE_REF" = "v$package_version"
+          test -s "docs/releases/$RELEASE_REF.md"
+          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            test "$(git cat-file -t "$GITHUB_REF")" = "tag"
+          fi
+          echo "value=$RELEASE_REF" >>"$GITHUB_OUTPUT"
       - uses: dtolnay/rust-toolchain@1.96.1
         with:
           targets: wasm32-unknown-unknown
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-leptos@0.3.7
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: crates/web/src/package-lock.json
-      - run: npm ci
-        working-directory: crates/web/src
-      - name: Build PostgreSQL release bundle
-        run: >-
-          cargo leptos build --release
-          --bin-features ssr,db-postgres
-          --lib-features hydrate
-      - name: Package release
-        run: |
-          mkdir -p dist/bundle
-          cp target/release/hegira dist/bundle/
-          cp -R target/site dist/bundle/site
-          cp LICENSE.txt README.md dist/bundle/
-          tar -C dist/bundle -czf "dist/hegira-${GITHUB_REF_NAME}-linux-x86_64.tar.gz" .
-          sha256sum "dist/hegira-${GITHUB_REF_NAME}-linux-x86_64.tar.gz" > "dist/hegira-${GITHUB_REF_NAME}-linux-x86_64.tar.gz.sha256"
+      - name: Build and verify release bundle
+        run: sh scripts/release-bundle.sh "$RELEASE_REF"
       - uses: anchore/sbom-action@v0
         with:
           path: .
           format: spdx-json
-          output-file: dist/hegira-${{ github.ref_name }}.spdx.json
+          output-file: dist/hegira-${{ env.RELEASE_REF }}.spdx.json
           upload-artifact: false
-      - uses: softprops/action-gh-release@v2
+      - name: Verify checksum and SBOM
+        run: |
+          sha256sum --check "dist/hegira-$RELEASE_REF-linux-x86_64.tar.gz.sha256"
+          test -s "dist/hegira-$RELEASE_REF.spdx.json"
+          jq -e '.spdxVersion | startswith("SPDX-")' "dist/hegira-$RELEASE_REF.spdx.json" >/dev/null
+      - uses: actions/upload-artifact@v7
         with:
-          generate_release_notes: true
+          name: hegira-${{ env.RELEASE_REF }}
+          path: |
+            dist/hegira-${{ env.RELEASE_REF }}-linux-x86_64.tar.gz
+            dist/hegira-${{ env.RELEASE_REF }}-linux-x86_64.tar.gz.sha256
+            dist/hegira-${{ env.RELEASE_REF }}.spdx.json
+            dist/hegira-${{ env.RELEASE_REF }}-release-notes.md
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+
+  publish:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: hegira-${{ needs.build.outputs.release_ref }}
+          path: dist
+      - uses: softprops/action-gh-release@v3
+        with:
+          body_path: dist/hegira-${{ needs.build.outputs.release_ref }}-release-notes.md
+          fail_on_unmatched_files: true
           files: |
-            dist/hegira-${{ github.ref_name }}-linux-x86_64.tar.gz
-            dist/hegira-${{ github.ref_name }}-linux-x86_64.tar.gz.sha256
-            dist/hegira-${{ github.ref_name }}.spdx.json
+            dist/hegira-${{ needs.build.outputs.release_ref }}-linux-x86_64.tar.gz
+            dist/hegira-${{ needs.build.outputs.release_ref }}-linux-x86_64.tar.gz.sha256
+            dist/hegira-${{ needs.build.outputs.release_ref }}.spdx.json

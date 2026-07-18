@@ -28,10 +28,19 @@ struct ReadinessCheck {
 }
 
 pub fn routes(state: AppState) -> Router {
+    operational_routes(state.clone()).merge(bearer_api_routes(state))
+}
+
+pub fn bearer_api_routes(state: AppState) -> Router {
+    Router::new()
+        .nest("/api", crate::http::controllers::routes())
+        .layer(Extension(state))
+}
+
+pub fn operational_routes(state: AppState) -> Router {
     let router = Router::new()
         .route("/healthz", get(healthz))
-        .route("/readyz", get(readyz))
-        .nest("/api", crate::http::controllers::routes());
+        .route("/readyz", get(readyz));
 
     #[cfg(feature = "openapi")]
     let router = {

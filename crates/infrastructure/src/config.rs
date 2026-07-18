@@ -29,6 +29,19 @@ pub struct AppConfig {
     pub logging: LoggingConfig,
 }
 
+#[derive(Debug, Clone, Copy, Default)]
+pub struct CompiledCapabilities {
+    pub db_postgres: bool,
+    pub db_sqlite: bool,
+    pub cache_redis: bool,
+    pub mailer_smtp: bool,
+    pub storage_s3: bool,
+    pub search_meilisearch: bool,
+    pub metrics_prometheus: bool,
+    pub otel_otlp: bool,
+    pub openapi: bool,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct ApplicationConfig {
     pub name: String,
@@ -117,6 +130,7 @@ impl DatabaseConfig {
 #[derive(Debug, Clone, Deserialize)]
 pub struct SecurityConfig {
     pub jwt_secret: String,
+    pub trusted_proxies: Vec<String>,
     pub cors: CorsConfig,
     pub rate_limit: RateLimitConfig,
 }
@@ -396,6 +410,7 @@ impl AppConfig {
             .set_default("database.max_connections", 5)?
             .set_default("database.auto_migrate", true)?
             .set_default("security.jwt_secret", "change-me-in-production")?
+            .set_default("security.trusted_proxies", Vec::<String>::new())?
             .set_default("security.cors.enabled", true)?
             .set_default(
                 "security.cors.allowed_origins",
@@ -493,7 +508,7 @@ impl AppConfig {
             .set_default("audit.enabled", true)?
             .set_default("settings.enabled", true)?
             .set_default("settings.cache_ttl_seconds", 60)?
-            .set_default("openapi.enabled", true)?
+            .set_default("openapi.enabled", false)?
             .set_default("metrics.enabled", false)?
             .set_default("metrics.path", "/metrics")?
             .set_default("telemetry.enabled", false)?
@@ -516,17 +531,11 @@ impl AppConfig {
             .try_deserialize()
     }
 
-    pub fn validate_for_boot(&self) -> Result<(), String> {
+    pub fn validate_structure(&self) -> Result<(), String> {
+        validate_http_url("application.public_url", &self.application.public_url)?;
+
         if self.database.max_connections == 0 {
             return Err("database.max_connections must be greater than zero".to_string());
-        }
-        if self.database.backend == DatabaseBackend::Postgres && !cfg!(feature = "db-postgres") {
-            return Err(
-                "database.backend=postgres requires the db-postgres Cargo feature".to_string(),
-            );
-        }
-        if self.database.backend == DatabaseBackend::Sqlite && !cfg!(feature = "db-sqlite") {
-            return Err("database.backend=sqlite requires the db-sqlite Cargo feature".to_string());
         }
         match self.database.backend {
             DatabaseBackend::Postgres
@@ -557,12 +566,49 @@ impl AppConfig {
                 "health.readiness_timeout_milliseconds must be greater than zero".to_string(),
             );
         }
-        if self.telemetry.enabled {
-            if !(self.telemetry.endpoint.starts_with("http://")
-                || self.telemetry.endpoint.starts_with("https://"))
-            {
-                return Err("telemetry.endpoint must be an http(s) URL".to_string());
+        for network in &self.security.trusted_proxies {
+            let parsed = network.parse::<ipnet::IpNet>().map_err(|_| {
+                format!(
+                    "security.trusted_proxies entry `{network}` must be a valid IPv4 or IPv6 CIDR"
+                )
+            })?;
+            if parsed.prefix_len() == 0 {
+                return Err(format!(
+                    "security.trusted_proxies entry `{network}` must not trust every address"
+                ));
             }
+        }
+        if self.security.rate_limit.enabled {
+            if self.security.rate_limit.max_requests == 0 {
+                return Err(
+                    "security.rate_limit.max_requests must be greater than zero".to_string()
+                );
+            }
+            if self.security.rate_limit.window_seconds == 0 {
+                return Err(
+                    "security.rate_limit.window_seconds must be greater than zero".to_string(),
+                );
+            }
+            if self.security.rate_limit.backend == RateLimitBackend::Redis {
+                validate_redis_url(
+                    "security.rate_limit.redis.url",
+                    &self.security.rate_limit.redis.url,
+                )?;
+            }
+        }
+        if self.sessions.backend == SessionBackend::Redis {
+            validate_redis_url("sessions.redis.url", &self.sessions.redis.url)?;
+        }
+        if self.cache.enabled {
+            if self.cache.authorization_ttl_seconds == 0 {
+                return Err("cache.authorization_ttl_seconds must be greater than zero".to_string());
+            }
+            if self.cache.backend == CacheBackend::Redis {
+                validate_redis_url("cache.redis.url", &self.cache.redis.url)?;
+            }
+        }
+        if self.telemetry.enabled {
+            validate_http_url("telemetry.endpoint", &self.telemetry.endpoint)?;
             if self.telemetry.timeout_milliseconds == 0 {
                 return Err("telemetry.timeout_milliseconds must be greater than zero".to_string());
             }
@@ -581,11 +627,8 @@ impl AppConfig {
                     "search.task_timeout_milliseconds must be greater than zero".to_string()
                 );
             }
-            if self.search.backend == SearchBackend::Meilisearch
-                && !(self.search.meilisearch.url.starts_with("http://")
-                    || self.search.meilisearch.url.starts_with("https://"))
-            {
-                return Err("search.meilisearch.url must be an http(s) URL".to_string());
+            if self.search.backend == SearchBackend::Meilisearch {
+                validate_http_url("search.meilisearch.url", &self.search.meilisearch.url)?;
             }
         }
         if self.worker_operations.enabled {
@@ -599,45 +642,6 @@ impl AppConfig {
                 );
             }
         }
-        if !self.is_production() {
-            return Ok(());
-        }
-
-        if self.security.jwt_secret == "change-me-in-production"
-            || self.security.jwt_secret.len() < 32
-        {
-            return Err(
-                "production requires APP__SECURITY__JWT_SECRET with at least 32 characters"
-                    .to_string(),
-            );
-        }
-
-        if self.seed.seed_admin {
-            return Err("production must not enable seed.seed_admin".to_string());
-        }
-
-        if self.security.cors.enabled && self.security.cors.allowed_origins.is_empty() {
-            return Err("production CORS requires at least one allowed origin".to_string());
-        }
-
-        if self.openapi.enabled {
-            return Err("production must not enable OpenAPI/Swagger UI".to_string());
-        }
-
-        if self.mailer.enabled
-            && self.mailer.backend == MailerBackend::Smtp
-            && self.mailer.from.is_empty()
-        {
-            return Err("production SMTP mailer requires mailer.from".to_string());
-        }
-
-        if self.storage.enabled
-            && self.storage.backend == StorageBackend::S3
-            && self.storage.s3.bucket.is_empty()
-        {
-            return Err("production S3 storage requires storage.s3.bucket".to_string());
-        }
-
         if self.scheduler.enabled && self.scheduler.cleanup_expired_sessions_interval_seconds == 0 {
             return Err(
                 "scheduler.cleanup_expired_sessions_interval_seconds must be greater than zero"
@@ -685,11 +689,157 @@ impl AppConfig {
                 return Err("oauth.state_ttl_seconds must be greater than zero".to_string());
             }
 
-            validate_oauth_provider("google", &self.oauth.providers.google)?;
-            validate_oauth_provider("github", &self.oauth.providers.github)?;
+            if !self.oauth.providers.google.enabled && !self.oauth.providers.github.enabled {
+                return Err(
+                    "oauth.enabled requires at least one enabled oauth.providers entry".to_string(),
+                );
+            }
+
+            validate_oauth_provider("oauth.providers.google", &self.oauth.providers.google)?;
+            validate_oauth_provider("oauth.providers.github", &self.oauth.providers.github)?;
+        }
+
+        if self.mailer.enabled && self.mailer.backend == MailerBackend::Smtp {
+            if self.mailer.from.trim().is_empty() {
+                return Err("mailer.from must not be empty when SMTP is enabled".to_string());
+            }
+            if self.mailer.smtp.host.trim().is_empty() {
+                return Err("mailer.smtp.host must not be empty when SMTP is enabled".to_string());
+            }
+            if self.mailer.smtp.port == 0 {
+                return Err("mailer.smtp.port must be greater than zero".to_string());
+            }
+            if self.mailer.smtp.username.is_some() != self.mailer.smtp.password.is_some() {
+                return Err(
+                    "mailer.smtp.username and mailer.smtp.password must be configured together"
+                        .to_string(),
+                );
+            }
+        }
+
+        if self.storage.enabled && self.storage.backend == StorageBackend::S3 {
+            if self.storage.s3.bucket.trim().is_empty() {
+                return Err("storage.s3.bucket must not be empty when S3 is enabled".to_string());
+            }
+            if self.storage.s3.region.trim().is_empty() {
+                return Err("storage.s3.region must not be empty when S3 is enabled".to_string());
+            }
+            if let Some(endpoint) = &self.storage.s3.endpoint_url {
+                validate_http_url("storage.s3.endpoint_url", endpoint)?;
+            }
         }
 
         Ok(())
+    }
+
+    pub fn validate_production_policy(&self) -> Result<(), String> {
+        if !self.is_production() {
+            return Ok(());
+        }
+
+        if self.security.jwt_secret == "change-me-in-production"
+            || self.security.jwt_secret.len() < 32
+        {
+            return Err(
+                "production requires security.jwt_secret with at least 32 characters".to_string(),
+            );
+        }
+
+        if self.seed.seed_admin {
+            return Err("production must not enable seed.seed_admin".to_string());
+        }
+
+        validate_https_url("application.public_url", &self.application.public_url)?;
+
+        if self.security.cors.enabled {
+            if self.security.cors.allowed_origins.is_empty() {
+                return Err(
+                    "production security.cors.allowed_origins must not be empty".to_string()
+                );
+            }
+            for origin in &self.security.cors.allowed_origins {
+                validate_https_origin("security.cors.allowed_origins", origin)?;
+            }
+        }
+
+        if self.openapi.enabled {
+            return Err("production must not enable openapi.enabled".to_string());
+        }
+
+        if self.database.backend == DatabaseBackend::Sqlite && self.runtime.role != RuntimeRole::All
+        {
+            return Err(
+                "production database.backend=sqlite requires runtime.role=all; split runtimes cannot safely share a local database"
+                    .to_string(),
+            );
+        }
+
+        Ok(())
+    }
+
+    pub fn validate_capabilities(&self, compiled: CompiledCapabilities) -> Result<(), String> {
+        let mut missing = Vec::new();
+
+        match self.database.backend {
+            DatabaseBackend::Postgres if !compiled.db_postgres => {
+                missing.push("database.backend=postgres requires the db-postgres Cargo feature")
+            }
+            DatabaseBackend::Sqlite if !compiled.db_sqlite => {
+                missing.push("database.backend=sqlite requires the db-sqlite Cargo feature")
+            }
+            _ => {}
+        }
+        if self.sessions.backend == SessionBackend::Redis && !compiled.cache_redis {
+            missing.push("sessions.backend=redis requires the cache-redis Cargo feature");
+        }
+        if self.security.rate_limit.enabled
+            && self.security.rate_limit.backend == RateLimitBackend::Redis
+            && !compiled.cache_redis
+        {
+            missing
+                .push("security.rate_limit.backend=redis requires the cache-redis Cargo feature");
+        }
+        if self.cache.enabled && self.cache.backend == CacheBackend::Redis && !compiled.cache_redis
+        {
+            missing.push("cache.backend=redis requires the cache-redis Cargo feature");
+        }
+        if self.mailer.enabled
+            && self.mailer.backend == MailerBackend::Smtp
+            && !compiled.mailer_smtp
+        {
+            missing.push("mailer.backend=smtp requires the mailer-smtp Cargo feature");
+        }
+        if self.storage.enabled
+            && self.storage.backend == StorageBackend::S3
+            && !compiled.storage_s3
+        {
+            missing.push("storage.backend=s3 requires the storage-s3 Cargo feature");
+        }
+        if self.search.enabled
+            && self.search.backend == SearchBackend::Meilisearch
+            && !compiled.search_meilisearch
+        {
+            missing
+                .push("search.backend=meilisearch requires the search-meilisearch Cargo feature");
+        }
+        if self.metrics.enabled && !compiled.metrics_prometheus {
+            missing.push("metrics.enabled=true requires the metrics-prometheus Cargo feature");
+        }
+        if self.telemetry.enabled && !compiled.otel_otlp {
+            missing.push("telemetry.enabled=true requires the otel-otlp Cargo feature");
+        }
+        if self.openapi.enabled && !compiled.openapi {
+            missing.push("openapi.enabled=true requires the openapi Cargo feature");
+        }
+
+        if missing.is_empty() {
+            Ok(())
+        } else {
+            Err(format!(
+                "runtime configuration requires capabilities not present in the binary:\n- {}",
+                missing.join("\n- ")
+            ))
+        }
     }
 
     pub fn is_production(&self) -> bool {
@@ -704,12 +854,65 @@ fn validate_oauth_provider(name: &str, provider: &OAuthProviderConfig) -> Result
 
     if provider.client_id.is_empty() || provider.client_secret.is_empty() {
         return Err(format!(
-            "oauth provider {name} requires client_id and client_secret"
+            "{name}.client_id and {name}.client_secret must not be empty"
         ));
     }
 
     if provider.redirect_uri.is_empty() {
-        return Err(format!("oauth provider {name} requires redirect_uri"));
+        return Err(format!("{name}.redirect_uri must not be empty"));
+    }
+
+    validate_http_url(&format!("{name}.redirect_uri"), &provider.redirect_uri)?;
+    validate_http_url(
+        &format!("{name}.authorization_url"),
+        &provider.authorization_url,
+    )?;
+    validate_http_url(&format!("{name}.token_url"), &provider.token_url)?;
+    validate_http_url(&format!("{name}.userinfo_url"), &provider.userinfo_url)?;
+
+    Ok(())
+}
+
+fn validate_http_url(key: &str, value: &str) -> Result<reqwest::Url, String> {
+    let url =
+        reqwest::Url::parse(value).map_err(|_| format!("{key} must be a valid http(s) URL"))?;
+    if !matches!(url.scheme(), "http" | "https") || url.host_str().is_none() {
+        return Err(format!("{key} must be a valid http(s) URL"));
+    }
+
+    Ok(url)
+}
+
+fn validate_https_origin(key: &str, value: &str) -> Result<(), String> {
+    let url = validate_http_url(key, value)?;
+    if url.scheme() != "https"
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.path() != "/"
+        || url.query().is_some()
+        || url.fragment().is_some()
+    {
+        return Err(format!("{key} must contain an exact HTTPS origin"));
+    }
+
+    Ok(())
+}
+
+fn validate_https_url(key: &str, value: &str) -> Result<(), String> {
+    let url = validate_http_url(key, value)?;
+    if url.scheme() != "https" || !url.username().is_empty() || url.password().is_some() {
+        return Err(format!(
+            "{key} must be a valid HTTPS URL without credentials"
+        ));
+    }
+
+    Ok(())
+}
+
+fn validate_redis_url(key: &str, value: &str) -> Result<(), String> {
+    let url = reqwest::Url::parse(value).map_err(|_| format!("{key} must be a valid Redis URL"))?;
+    if !matches!(url.scheme(), "redis" | "rediss") || url.host_str().is_none() {
+        return Err(format!("{key} must be a valid redis:// or rediss:// URL"));
     }
 
     Ok(())
@@ -718,6 +921,18 @@ fn validate_oauth_provider(name: &str, provider: &OAuthProviderConfig) -> Result
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn committed_config(profile: &str) -> AppConfig {
+        let file = format!("{}/../../config/{profile}.yaml", env!("CARGO_MANIFEST_DIR"));
+        config::Config::builder()
+            .add_source(config::File::with_name(&file))
+            .set_override("environment", profile)
+            .expect("profile environment override should be valid")
+            .build()
+            .expect("committed profile should load")
+            .try_deserialize()
+            .expect("committed profile should deserialize")
+    }
 
     fn config(environment: &str) -> AppConfig {
         AppConfig {
@@ -753,6 +968,7 @@ mod tests {
             },
             security: SecurityConfig {
                 jwt_secret: "change-me-in-production".to_string(),
+                trusted_proxies: Vec::new(),
                 cors: CorsConfig {
                     enabled: true,
                     allowed_origins: vec!["https://example.com".to_string()],
@@ -900,32 +1116,169 @@ mod tests {
     fn production_rejects_default_jwt_secret() {
         let config = config("production");
 
-        assert!(config.validate_for_boot().is_err());
+        assert_eq!(
+            config.validate_production_policy(),
+            Err("production requires security.jwt_secret with at least 32 characters".to_string())
+        );
+    }
+
+    #[test]
+    fn committed_production_profile_matches_minimal_server_capabilities() {
+        let config = committed_config("production");
+
+        assert_eq!(config.database.backend, DatabaseBackend::Postgres);
+        assert_eq!(config.sessions.backend, SessionBackend::Database);
+        assert!(config.security.trusted_proxies.is_empty());
+        assert_eq!(config.security.rate_limit.backend, RateLimitBackend::Memory);
+        assert!(!config.mailer.enabled);
+        assert_eq!(config.mailer.backend, MailerBackend::Null);
+        assert!(!config.cache.enabled);
+        assert_eq!(config.cache.backend, CacheBackend::Null);
+        assert!(!config.storage.enabled);
+        assert_eq!(config.storage.backend, StorageBackend::Null);
+        assert!(!config.search.enabled);
+        assert_eq!(config.search.backend, SearchBackend::Null);
+        assert!(!config.metrics.enabled);
+        assert!(!config.telemetry.enabled);
+        assert!(!config.openapi.enabled);
+        assert!(!config.seed.seed_admin);
+    }
+
+    #[test]
+    fn capability_preflight_reports_every_missing_enabled_capability() {
+        let mut config = config("development");
+        config.database.backend = DatabaseBackend::Postgres;
+        config.sessions.backend = SessionBackend::Redis;
+        config.security.rate_limit.enabled = true;
+        config.security.rate_limit.backend = RateLimitBackend::Redis;
+        config.cache.enabled = true;
+        config.cache.backend = CacheBackend::Redis;
+        config.mailer.enabled = true;
+        config.mailer.backend = MailerBackend::Smtp;
+        config.storage.enabled = true;
+        config.storage.backend = StorageBackend::S3;
+        config.search.enabled = true;
+        config.search.backend = SearchBackend::Meilisearch;
+        config.metrics.enabled = true;
+        config.telemetry.enabled = true;
+        config.openapi.enabled = true;
+
+        let error = config
+            .validate_capabilities(CompiledCapabilities::default())
+            .expect_err("enabled capabilities should be rejected when absent");
+
+        for key in [
+            "database.backend=postgres",
+            "sessions.backend=redis",
+            "security.rate_limit.backend=redis",
+            "cache.backend=redis",
+            "mailer.backend=smtp",
+            "storage.backend=s3",
+            "search.backend=meilisearch",
+            "metrics.enabled=true",
+            "telemetry.enabled=true",
+            "openapi.enabled=true",
+        ] {
+            assert!(error.contains(key), "missing capability error for {key}");
+        }
+    }
+
+    #[test]
+    fn capability_preflight_ignores_disabled_optional_providers() {
+        let mut config = config("development");
+        config.database.backend = DatabaseBackend::Postgres;
+        config.cache.enabled = false;
+        config.cache.backend = CacheBackend::Redis;
+        config.security.rate_limit.enabled = false;
+        config.security.rate_limit.backend = RateLimitBackend::Redis;
+        config.mailer.enabled = false;
+        config.mailer.backend = MailerBackend::Smtp;
+        config.storage.enabled = false;
+        config.storage.backend = StorageBackend::S3;
+        config.search.enabled = false;
+        config.search.backend = SearchBackend::Meilisearch;
+        config.metrics.enabled = false;
+        config.telemetry.enabled = false;
+        config.openapi.enabled = false;
+
+        assert!(
+            config
+                .validate_capabilities(CompiledCapabilities {
+                    db_postgres: true,
+                    ..CompiledCapabilities::default()
+                })
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn capability_preflight_accepts_enabled_compiled_capabilities() {
+        let mut config = config("development");
+        config.database.backend = DatabaseBackend::Sqlite;
+        config.sessions.backend = SessionBackend::Redis;
+        config.security.rate_limit.enabled = true;
+        config.security.rate_limit.backend = RateLimitBackend::Redis;
+        config.cache.enabled = true;
+        config.cache.backend = CacheBackend::Redis;
+        config.mailer.enabled = true;
+        config.mailer.backend = MailerBackend::Smtp;
+        config.storage.enabled = true;
+        config.storage.backend = StorageBackend::S3;
+        config.search.enabled = true;
+        config.search.backend = SearchBackend::Meilisearch;
+        config.metrics.enabled = true;
+        config.telemetry.enabled = true;
+        config.openapi.enabled = true;
+
+        assert!(
+            config
+                .validate_capabilities(CompiledCapabilities {
+                    db_sqlite: true,
+                    cache_redis: true,
+                    mailer_smtp: true,
+                    storage_s3: true,
+                    search_meilisearch: true,
+                    metrics_prometheus: true,
+                    otel_otlp: true,
+                    openapi: true,
+                    ..CompiledCapabilities::default()
+                })
+                .is_ok()
+        );
     }
 
     #[test]
     fn production_rejects_seed_admin() {
         let mut config = config("production");
         config.security.jwt_secret = "a".repeat(32);
+        config.application.public_url = "https://example.com".to_string();
+        config.openapi.enabled = false;
         config.seed.seed_admin = true;
 
-        assert!(config.validate_for_boot().is_err());
+        assert_eq!(
+            config.validate_production_policy(),
+            Err("production must not enable seed.seed_admin".to_string())
+        );
     }
 
     #[test]
     fn development_allows_default_jwt_secret() {
         let config = config("development");
 
-        assert!(config.validate_for_boot().is_ok());
+        assert!(config.validate_production_policy().is_ok());
     }
 
     #[test]
     fn production_rejects_openapi() {
         let mut config = config("production");
         config.security.jwt_secret = "a".repeat(32);
+        config.application.public_url = "https://example.com".to_string();
         config.openapi.enabled = true;
 
-        assert!(config.validate_for_boot().is_err());
+        assert_eq!(
+            config.validate_production_policy(),
+            Err("production must not enable openapi.enabled".to_string())
+        );
     }
 
     #[test]
@@ -939,14 +1292,15 @@ mod tests {
     }
 
     #[test]
-    fn production_rejects_invalid_metrics_path_when_metrics_are_enabled() {
-        let mut config = config("production");
-        config.security.jwt_secret = "a".repeat(32);
-        config.openapi.enabled = false;
+    fn structural_validation_rejects_invalid_metrics_path_when_metrics_are_enabled() {
+        let mut config = config("development");
         config.metrics.enabled = true;
         config.metrics.path = "metrics".to_string();
 
-        assert!(config.validate_for_boot().is_err());
+        assert_eq!(
+            config.validate_structure(),
+            Err("metrics.path must start with /".to_string())
+        );
     }
 
     #[test]
@@ -955,7 +1309,7 @@ mod tests {
         config.health.readiness_timeout_milliseconds = 0;
 
         assert_eq!(
-            config.validate_for_boot(),
+            config.validate_structure(),
             Err("health.readiness_timeout_milliseconds must be greater than zero".to_string())
         );
     }
@@ -966,16 +1320,16 @@ mod tests {
         config.database.backend = DatabaseBackend::Sqlite;
 
         assert_eq!(
-            config.validate_for_boot(),
+            config.validate_structure(),
             Err("database.backend=sqlite requires a sqlite URL".to_string())
         );
 
         config.database.url = "sqlite://data/hegira.db".to_string();
-        assert!(config.validate_for_boot().is_ok());
+        assert!(config.validate_structure().is_ok());
 
         config.database.backend = DatabaseBackend::Postgres;
         assert_eq!(
-            config.validate_for_boot(),
+            config.validate_structure(),
             Err("database.backend=postgres requires a postgres URL".to_string())
         );
     }
@@ -986,7 +1340,7 @@ mod tests {
         config.database.max_connections = 0;
 
         assert_eq!(
-            config.validate_for_boot(),
+            config.validate_structure(),
             Err("database.max_connections must be greater than zero".to_string())
         );
     }
@@ -997,7 +1351,7 @@ mod tests {
         config.worker_operations.enabled = true;
 
         assert_eq!(
-            config.validate_for_boot(),
+            config.validate_structure(),
             Err("worker_operations.enabled requires runtime.role=worker".to_string())
         );
     }
@@ -1010,7 +1364,7 @@ mod tests {
         config.worker_operations.heartbeat_grace_seconds = 0;
 
         assert_eq!(
-            config.validate_for_boot(),
+            config.validate_structure(),
             Err("worker_operations.heartbeat_grace_seconds must be greater than zero".to_string())
         );
     }
@@ -1021,21 +1375,21 @@ mod tests {
         config.telemetry.enabled = true;
         config.telemetry.endpoint = "collector:4317".to_string();
         assert_eq!(
-            config.validate_for_boot(),
-            Err("telemetry.endpoint must be an http(s) URL".to_string())
+            config.validate_structure(),
+            Err("telemetry.endpoint must be a valid http(s) URL".to_string())
         );
 
         config.telemetry.endpoint = "http://collector:4317".to_string();
         config.telemetry.timeout_milliseconds = 0;
         assert_eq!(
-            config.validate_for_boot(),
+            config.validate_structure(),
             Err("telemetry.timeout_milliseconds must be greater than zero".to_string())
         );
 
         config.telemetry.timeout_milliseconds = 5_000;
         config.telemetry.sample_ratio = 1.1;
         assert_eq!(
-            config.validate_for_boot(),
+            config.validate_structure(),
             Err("telemetry.sample_ratio must be between 0.0 and 1.0".to_string())
         );
     }
@@ -1046,14 +1400,14 @@ mod tests {
         config.search.enabled = true;
         config.search.index_prefix.clear();
         assert_eq!(
-            config.validate_for_boot(),
+            config.validate_structure(),
             Err("search.index_prefix must not be empty".to_string())
         );
 
         config.search.index_prefix = "test".to_string();
         config.search.task_timeout_milliseconds = 0;
         assert_eq!(
-            config.validate_for_boot(),
+            config.validate_structure(),
             Err("search.task_timeout_milliseconds must be greater than zero".to_string())
         );
 
@@ -1061,8 +1415,167 @@ mod tests {
         config.search.backend = SearchBackend::Meilisearch;
         config.search.meilisearch.url = "localhost:7700".to_string();
         assert_eq!(
-            config.validate_for_boot(),
-            Err("search.meilisearch.url must be an http(s) URL".to_string())
+            config.validate_structure(),
+            Err("search.meilisearch.url must be a valid http(s) URL".to_string())
+        );
+    }
+
+    #[test]
+    fn committed_profiles_are_structurally_valid() {
+        for profile in ["development", "sqlite", "test", "production"] {
+            let config = committed_config(profile);
+            assert_eq!(
+                config.validate_structure(),
+                Ok(()),
+                "committed {profile} profile must be structurally valid"
+            );
+        }
+    }
+
+    #[test]
+    fn environment_overrides_are_applied_before_validation() {
+        let file = format!(
+            "{}/../../config/development.yaml",
+            env!("CARGO_MANIFEST_DIR")
+        );
+        let source = [(
+            "APP__SERVER__REQUEST_TIMEOUT_SECONDS".to_string(),
+            "0".to_string(),
+        )]
+        .into_iter()
+        .collect();
+        let config: AppConfig = config::Config::builder()
+            .add_source(config::File::with_name(&file))
+            .set_override("environment", "development")
+            .expect("environment override should be valid")
+            .add_source(
+                config::Environment::with_prefix("APP")
+                    .separator("__")
+                    .prefix_separator("__")
+                    .source(Some(source)),
+            )
+            .build()
+            .expect("configuration with environment source should load")
+            .try_deserialize()
+            .expect("configuration with environment source should deserialize");
+
+        assert_eq!(
+            config.validate_structure(),
+            Err("server.request_timeout_seconds must be greater than zero".to_string())
+        );
+    }
+
+    #[test]
+    fn committed_production_profile_passes_policy_with_secret_override() {
+        let mut config = committed_config("production");
+        config.security.jwt_secret = "a".repeat(32);
+
+        assert_eq!(config.validate_production_policy(), Ok(()));
+    }
+
+    #[test]
+    fn development_rejects_invalid_session_lifetime() {
+        let mut config = config("development");
+        config.sessions.max_lifetime_seconds = config.sessions.sliding_ttl_seconds - 1;
+
+        assert_eq!(
+            config.validate_structure(),
+            Err(
+                "sessions.max_lifetime_seconds must be greater than or equal to sessions.sliding_ttl_seconds"
+                    .to_string()
+            )
+        );
+
+        config.security.trusted_proxies = vec!["0.0.0.0/0".to_string()];
+        assert_eq!(
+            config.validate_structure(),
+            Err(
+                "security.trusted_proxies entry `0.0.0.0/0` must not trust every address"
+                    .to_string()
+            )
+        );
+    }
+
+    #[test]
+    fn trusted_proxies_require_valid_ipv4_or_ipv6_cidrs() {
+        let mut config = config("development");
+        config.security.trusted_proxies =
+            vec!["10.0.0.0/8".to_string(), "2001:db8::/32".to_string()];
+        assert_eq!(config.validate_structure(), Ok(()));
+
+        config.security.trusted_proxies = vec!["all-proxies".to_string()];
+        assert_eq!(
+            config.validate_structure(),
+            Err(
+                "security.trusted_proxies entry `all-proxies` must be a valid IPv4 or IPv6 CIDR"
+                    .to_string()
+            )
+        );
+    }
+
+    #[test]
+    fn test_profile_rejects_invalid_durable_job_settings() {
+        let mut config = config("test");
+        config.jobs.durable.enabled = true;
+        config.jobs.durable.batch_size = 0;
+
+        assert_eq!(
+            config.validate_structure(),
+            Err("jobs.durable.batch_size must be greater than zero".to_string())
+        );
+    }
+
+    #[test]
+    fn development_rejects_invalid_oauth_provider_settings() {
+        let mut config = config("development");
+        config.oauth.enabled = true;
+        config.oauth.providers.github.enabled = true;
+
+        assert_eq!(
+            config.validate_structure(),
+            Err(
+                "oauth.providers.github.client_id and oauth.providers.github.client_secret must not be empty"
+                    .to_string()
+            )
+        );
+    }
+
+    #[test]
+    fn production_requires_https_public_url_and_cors_origins() {
+        let mut config = config("production");
+        config.security.jwt_secret = "a".repeat(32);
+        config.openapi.enabled = false;
+
+        assert_eq!(
+            config.validate_production_policy(),
+            Err("application.public_url must be a valid HTTPS URL without credentials".to_string())
+        );
+
+        config.application.public_url = "https://example.com".to_string();
+        config.security.cors.allowed_origins = vec!["*".to_string()];
+        assert!(
+            config
+                .validate_production_policy()
+                .expect_err("wildcard CORS origin must be rejected")
+                .contains("security.cors.allowed_origins")
+        );
+    }
+
+    #[test]
+    fn production_rejects_split_sqlite_runtime_topology() {
+        let mut config = config("production");
+        config.security.jwt_secret = "a".repeat(32);
+        config.application.public_url = "https://example.com".to_string();
+        config.openapi.enabled = false;
+        config.database.backend = DatabaseBackend::Sqlite;
+        config.database.url = "sqlite://hegira.sqlite3".to_string();
+        config.runtime.role = RuntimeRole::Web;
+
+        assert!(
+            config
+                .validate_production_policy()
+                .expect_err("split SQLite runtimes must be rejected")
+                .contains("database.backend=sqlite requires runtime.role=all")
         );
     }
 }

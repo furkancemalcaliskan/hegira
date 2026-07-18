@@ -1,6 +1,6 @@
 [package]
 name = "hegira"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 default-run = "hegira"
 authors = ["Furkan Cemal Caliskan <github.chant290@passinbox.com>"]
@@ -63,14 +63,14 @@ ssr = [
     "web/ssr",
     "leptos/ssr",
 ]
-openapi = ["ssr", "application_contracts/openapi", "presentation/openapi"]
+openapi = ["ssr", "application_contracts/openapi", "presentation/openapi", "runtime/openapi"]
 wasm-split = ["web/wasm-split"]
-cache-redis = ["ssr", "infrastructure/cache-redis", "presentation/cache-redis"]
+cache-redis = ["ssr", "infrastructure/cache-redis", "presentation/cache-redis", "runtime/cache-redis"]
 metrics-prometheus = ["ssr", "presentation/metrics-prometheus", "runtime/metrics-prometheus"]
 otel-otlp = ["ssr", "presentation/otel-otlp", "runtime/otel-otlp"]
-search-meilisearch = ["ssr", "infrastructure/search-meilisearch"]
-storage-s3 = ["ssr", "infrastructure/storage-s3"]
-mailer-smtp = ["ssr", "infrastructure/mailer-smtp"]
+search-meilisearch = ["ssr", "infrastructure/search-meilisearch", "runtime/search-meilisearch"]
+storage-s3 = ["ssr", "infrastructure/storage-s3", "runtime/storage-s3"]
+mailer-smtp = ["ssr", "infrastructure/mailer-smtp", "runtime/mailer-smtp"]
 test-support = ["ssr", "application/test-support", "infrastructure/test-support"]
 
 [dev-dependencies]

@@ -69,7 +69,7 @@ async fn identity_mutations_and_search_outbox_are_atomic_and_revisioned() {
         3
     );
 
-    repository
+    let registered = repository
         .register_managed_user(RegisterManagedUser {
             username: "registered@example.com".to_string(),
             password_hash: "hash".to_string(),
@@ -95,7 +95,7 @@ async fn identity_mutations_and_search_outbox_are_atomic_and_revisioned() {
         "SELECT payload, idempotency_key
          FROM outbox_messages
          WHERE name = 'search.index.v1'
-           AND payload->'documents'->0->'fields'->>'username' = 'registered@example.com'
+           AND payload->'documents'->0->>'username' = 'registered@example.com'
          ORDER BY created_at, id",
     )
     .fetch_all(&pool)
@@ -105,11 +105,15 @@ async fn identity_mutations_and_search_outbox_are_atomic_and_revisioned() {
     assert_eq!(registration_messages[0].0["revision"], 0);
     assert_eq!(registration_messages[1].0["revision"], 1);
     assert_eq!(
-        registration_messages[0].0["documents"][0]["fields"]["is_verified"],
+        registration_messages[0].0["documents"][0]["id"],
+        registered.pid.to_string()
+    );
+    assert_eq!(
+        registration_messages[0].0["documents"][0]["is_verified"],
         false
     );
     assert_eq!(
-        registration_messages[1].0["documents"][0]["fields"]["is_verified"],
+        registration_messages[1].0["documents"][0]["is_verified"],
         true
     );
     assert_ne!(registration_messages[0].1, registration_messages[1].1);
@@ -189,7 +193,7 @@ async fn identity_mutations_and_search_outbox_are_atomic_and_revisioned() {
     let oauth_projection = sqlx::query_scalar::<_, serde_json::Value>(
         "SELECT payload FROM outbox_messages
          WHERE name = 'search.index.v1'
-           AND payload->'documents'->0->'fields'->>'username' = 'oauth@example.com'",
+           AND payload->'documents'->0->>'username' = 'oauth@example.com'",
     )
     .fetch_one(&pool)
     .await
@@ -251,8 +255,16 @@ async fn identity_mutations_and_search_outbox_are_atomic_and_revisioned() {
         "SELECT payload, idempotency_key
          FROM outbox_messages
          WHERE name = 'search.index.v1'
+           AND (
+               (payload->>'operation' = 'upsert'
+                AND payload->'documents'->0->>'id' = $1)
+               OR
+               (payload->>'operation' = 'delete'
+                AND payload->>'document_id' = $1)
+           )
          ORDER BY created_at, id",
     )
+    .bind(created.pid.to_string())
     .fetch_all(&pool)
     .await
     .unwrap();
@@ -260,6 +272,9 @@ async fn identity_mutations_and_search_outbox_are_atomic_and_revisioned() {
     assert_eq!(messages[0].0["operation"], "upsert");
     assert_eq!(messages[1].0["operation"], "upsert");
     assert_eq!(messages[2].0["operation"], "delete");
+    assert_eq!(messages[0].0["revision"], 0);
+    assert_eq!(messages[1].0["revision"], 1);
+    assert_eq!(messages[2].0["revision"], 2);
     assert_ne!(messages[0].1, messages[1].1);
     assert_ne!(messages[1].1, messages[2].1);
 
@@ -281,7 +296,7 @@ async fn identity_mutations_and_search_outbox_are_atomic_and_revisioned() {
     .unwrap();
     let message_count = sqlx::query_scalar::<_, i64>(
         "SELECT COUNT(*) FROM outbox_messages
-         WHERE payload->'documents'->0->'fields'->>'username' = 'rollback@example.com'",
+         WHERE payload->'documents'->0->>'username' = 'rollback@example.com'",
     )
     .fetch_one(&pool)
     .await

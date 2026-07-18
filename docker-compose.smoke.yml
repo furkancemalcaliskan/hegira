@@ -1,0 +1,38 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: hegira_smoke
+      POSTGRES_PASSWORD: hegira_smoke_password
+      POSTGRES_DB: hegira_smoke
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hegira_smoke -d hegira_smoke"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  migrate:
+    image: ${HEGIRA_SMOKE_IMAGE:-hegira-smoke:local}
+    entrypoint: ["/usr/local/bin/db_migrator"]
+    command: ["migrate"]
+    environment:
+      APP_ENV: production
+      APP__DATABASE__URL: postgres://hegira_smoke:hegira_smoke_password@postgres:5432/hegira_smoke
+      APP__SECURITY__JWT_SECRET: container-smoke-jwt-secret-32-characters
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    image: ${HEGIRA_SMOKE_IMAGE:-hegira-smoke:local}
+    environment:
+      APP_ENV: production
+      APP__DATABASE__URL: postgres://hegira_smoke:hegira_smoke_password@postgres:5432/hegira_smoke
+      APP__SECURITY__JWT_SECRET: container-smoke-jwt-secret-32-characters
+    ports:
+      - "127.0.0.1:${SMOKE_PORT:-38080}:3000"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:3000/healthz"]
+      interval: 2s
+      timeout: 3s
+      retries: 30

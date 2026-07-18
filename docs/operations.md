@@ -103,6 +103,46 @@ Monitor task completion before directing search traffic to the rebuilt index.
 - Alert on authentication failures, readiness failures, dead letters, and stale
   worker heartbeats.
 
+## Trusted Proxy and Client IP Contract
+
+Hegira uses the TCP peer address as the secure default for request rate-limit
+identity. It ignores `X-Forwarded-For` from every peer unless that peer belongs
+to an explicitly configured `security.trusted_proxies` CIDR.
+
+```yaml
+security:
+  trusted_proxies:
+    - 10.20.0.0/16
+    - 2001:db8:20::/48
+```
+
+List only networks used by proxies that connect directly to the application;
+never use broad public ranges as a convenience. Universal `0.0.0.0/0` and
+`::/0` trust entries are rejected. Each trusted proxy must append
+the address it received to `X-Forwarded-For` and replace untrusted inbound
+forwarding headers at the public edge. Hegira walks the chain from the direct
+peer toward the client and stops at the nearest untrusted address. Malformed or
+excessively long chains are rejected.
+
+The address seen on Hegira's TCP connection must belong to the expected direct
+proxy network. If several trusted proxy layers append to the chain, configure
+each trusted hop with the smallest practical CIDR; do not add client or public
+Internet ranges. Keep `security.trusted_proxies` empty when Hegira is directly
+Internet-facing.
+
+Failure behavior is intentionally fail-closed:
+
+- an untrusted peer's `X-Forwarded-For` is ignored, even when malformed;
+- a malformed or overlong chain from a trusted peer returns `400 Bad Request`;
+- missing TCP peer information returns an internal error instead of assigning a
+  shared fallback identity;
+- invalid or universal trusted-proxy CIDRs prevent startup.
+
+The memory rate limiter is local to one web process, so replicas enforce
+independent quotas. Select the Redis backend for a quota shared across web
+replicas. Both backends use the same trusted-proxy-aware resolved client
+identity when constructing their keys.
+
 ## Production Integration Tests
 
 Tests that reset PostgreSQL are ignored by default. Run them only against a

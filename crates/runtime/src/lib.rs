@@ -42,8 +42,14 @@ async fn serve() -> Result<(), String> {
     let app_config = infrastructure::config::AppConfig::load()
         .map_err(|err| format!("failed to load application configuration: {err}"))?;
     app_config
-        .validate_for_boot()
-        .map_err(|err| format!("invalid application configuration: {err}"))?;
+        .validate_structure()
+        .map_err(|err| format!("structurally invalid application configuration: {err}"))?;
+    app_config
+        .validate_capabilities(compiled_capabilities())
+        .map_err(|err| format!("invalid application capabilities: {err}"))?;
+    app_config
+        .validate_production_policy()
+        .map_err(|err| format!("application configuration violates production policy: {err}"))?;
 
     let telemetry = telemetry::init(&app_config)?;
     let result = serve_configured(app_config).await;
@@ -53,6 +59,20 @@ async fn serve() -> Result<(), String> {
         (Err(error), _) => Err(error),
         (Ok(()), Err(error)) => Err(error),
         (Ok(()), Ok(())) => Ok(()),
+    }
+}
+
+fn compiled_capabilities() -> infrastructure::config::CompiledCapabilities {
+    infrastructure::config::CompiledCapabilities {
+        db_postgres: cfg!(feature = "db-postgres"),
+        db_sqlite: cfg!(feature = "db-sqlite"),
+        cache_redis: cfg!(feature = "cache-redis"),
+        mailer_smtp: cfg!(feature = "mailer-smtp"),
+        storage_s3: cfg!(feature = "storage-s3"),
+        search_meilisearch: cfg!(feature = "search-meilisearch"),
+        metrics_prometheus: cfg!(feature = "metrics-prometheus"),
+        otel_otlp: cfg!(feature = "otel-otlp"),
+        openapi: cfg!(feature = "openapi"),
     }
 }
 
@@ -322,6 +342,7 @@ async fn serve_http(
         .map_err(|err| format!("invalid storage configuration: {err}"))?;
     let rate_limiter = presentation::http::middleware::rate_limit::RateLimiter::from_config(
         &app_config.security.rate_limit,
+        &app_config.security.trusted_proxies,
     )
     .map_err(|err| format!("invalid rate limiter configuration: {err}"))?;
 
@@ -341,16 +362,22 @@ async fn serve_http(
     let web_services = app_state.services.clone();
     let web_config = app_state.config.clone();
     let cors_layer = cors_layer(&app_config.security.cors)?;
+    let csrf_policy = presentation::http::middleware::csrf::CsrfPolicy::from_public_url(
+        &app_config.application.public_url,
+    )
+    .map_err(|err| format!("invalid CSRF configuration: {err}"))?;
 
-    let mut conf = get_configuration(Some("Cargo.toml"))
+    let mut conf = get_configuration(None)
         .map_err(|err| format!("failed to load leptos configuration: {err}"))?;
     conf.leptos_options.site_addr = app_config.server.addr;
     let addr = conf.leptos_options.site_addr;
     let leptos_options = conf.leptos_options;
     let routes = generate_route_list(App);
 
-    let app = Router::<LeptosOptions>::new()
-        .merge(presentation::http::routes::routes(app_state).with_state(()))
+    let operational_routes =
+        presentation::http::routes::operational_routes(app_state.clone()).with_state(());
+    let bearer_api_routes = presentation::http::routes::bearer_api_routes(app_state).with_state(());
+    let cookie_bff_routes = Router::<LeptosOptions>::new()
         .leptos_routes_with_context(
             &leptos_options,
             routes,
@@ -369,6 +396,13 @@ async fn serve_http(
         )
         .fallback(leptos_axum::file_and_error_handler(shell));
 
+    let app = compose_transport_routes(
+        operational_routes,
+        bearer_api_routes,
+        cookie_bff_routes,
+        csrf_policy,
+    );
+
     #[cfg(feature = "metrics-prometheus")]
     let app = if app_config.metrics.enabled {
         tracing::info!(path = %app_config.metrics.path, "prometheus metrics enabled");
@@ -384,7 +418,6 @@ async fn serve_http(
             app_config.is_production(),
             app_middleware::security_headers::set,
         ))
-        .layer(middleware::from_fn(app_middleware::csrf::validate))
         .layer(middleware::from_fn_with_state(
             rate_limiter,
             app_middleware::rate_limit::check_configured,
@@ -404,12 +437,35 @@ async fn serve_http(
     let listener = tokio::net::TcpListener::bind(&addr)
         .await
         .map_err(|err| format!("failed to bind to address {addr}: {err}"))?;
-    axum::serve(listener, app.into_make_service())
-        .with_graceful_shutdown(shutdown_signal())
-        .await
-        .map_err(|err| format!("server error: {err}"))?;
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    )
+    .with_graceful_shutdown(shutdown_signal())
+    .await
+    .map_err(|err| format!("server error: {err}"))?;
 
     Ok(())
+}
+
+fn compose_transport_routes<S>(
+    operational_routes: axum::Router<S>,
+    bearer_api_routes: axum::Router<S>,
+    cookie_bff_routes: axum::Router<S>,
+    csrf_policy: presentation::http::middleware::csrf::CsrfPolicy,
+) -> axum::Router<S>
+where
+    S: Clone + Send + Sync + 'static,
+{
+    use axum::middleware;
+
+    axum::Router::new()
+        .merge(operational_routes)
+        .merge(bearer_api_routes)
+        .merge(cookie_bff_routes.layer(middleware::from_fn_with_state(
+            csrf_policy,
+            presentation::http::middleware::csrf::validate,
+        )))
 }
 
 async fn shutdown_signal() {
@@ -464,4 +520,132 @@ fn cors_layer(
         .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE])
         .allow_credentials(config.allow_credentials)
         .max_age(Duration::from_secs(600)))
+}
+
+#[cfg(test)]
+mod transport_policy_tests {
+    use super::*;
+    use axum::{
+        Router,
+        body::Body,
+        http::{Request, StatusCode, header},
+        middleware,
+        routing::{delete, get, patch, post, put},
+    };
+    use presentation::http::middleware as app_middleware;
+    use tower::ServiceExt;
+
+    fn app() -> Router {
+        let operational = Router::new().route("/healthz", get(|| async { "ok" }));
+        let bearer_api = Router::new()
+            .route("/api/external-post", post(|| async { "ok" }))
+            .route("/api/external-put", put(|| async { "ok" }))
+            .route("/api/external-patch", patch(|| async { "ok" }))
+            .route("/api/external-delete", delete(|| async { "ok" }));
+        let cookie_bff = Router::new()
+            .route("/api/browser-post", post(|| async { "ok" }))
+            .route("/api/browser-put", put(|| async { "ok" }))
+            .route("/api/browser-patch", patch(|| async { "ok" }))
+            .route("/api/browser-delete", delete(|| async { "ok" }));
+        let csrf_policy =
+            app_middleware::csrf::CsrfPolicy::from_public_url("https://application.example")
+                .unwrap();
+
+        compose_transport_routes(operational, bearer_api, cookie_bff, csrf_policy)
+            .layer(middleware::from_fn(app_middleware::request_id::set))
+            .layer(middleware::from_fn_with_state(
+                false,
+                app_middleware::security_headers::set,
+            ))
+    }
+
+    #[tokio::test]
+    async fn bearer_api_mutation_does_not_require_browser_origin_headers() {
+        for (method, uri) in [
+            (axum::http::Method::POST, "/api/external-post"),
+            (axum::http::Method::PUT, "/api/external-put"),
+            (axum::http::Method::PATCH, "/api/external-patch"),
+            (axum::http::Method::DELETE, "/api/external-delete"),
+        ] {
+            let response = app()
+                .oneshot(
+                    Request::builder()
+                        .method(method)
+                        .uri(uri)
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(response.status(), StatusCode::OK, "{uri}");
+        }
+    }
+
+    #[tokio::test]
+    async fn cookie_bff_mutation_remains_csrf_protected() {
+        for (method, uri) in [
+            (axum::http::Method::POST, "/api/browser-post"),
+            (axum::http::Method::PUT, "/api/browser-put"),
+            (axum::http::Method::PATCH, "/api/browser-patch"),
+            (axum::http::Method::DELETE, "/api/browser-delete"),
+        ] {
+            let missing_origin = app()
+                .oneshot(
+                    Request::builder()
+                        .method(method.clone())
+                        .uri(uri)
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(missing_origin.status(), StatusCode::FORBIDDEN, "{uri}");
+
+            let same_origin = app()
+                .oneshot(
+                    Request::builder()
+                        .method(method)
+                        .uri(uri)
+                        .header(header::ORIGIN, "https://application.example")
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(same_origin.status(), StatusCode::OK, "{uri}");
+        }
+    }
+
+    #[tokio::test]
+    async fn common_middleware_wraps_bearer_and_cookie_transports() {
+        for uri in ["/api/external-post", "/api/browser-post"] {
+            let response = app()
+                .oneshot(
+                    Request::post(uri)
+                        .header(header::ORIGIN, "https://application.example")
+                        .header(
+                            app_middleware::request_id::REQUEST_ID_HEADER.clone(),
+                            "test-id",
+                        )
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(response.status(), StatusCode::OK);
+            assert_eq!(
+                response
+                    .headers()
+                    .get(&app_middleware::request_id::REQUEST_ID_HEADER)
+                    .unwrap(),
+                "test-id"
+            );
+            assert_eq!(
+                response.headers().get(header::X_FRAME_OPTIONS).unwrap(),
+                "DENY"
+            );
+        }
+    }
 }

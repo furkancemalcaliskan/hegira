@@ -29,6 +29,7 @@ database:
 
 security:
   jwt_secret: change-me-in-production
+  trusted_proxies: []
   cors:
     enabled: true
     allowed_origins:
@@ -137,7 +138,7 @@ settings:
   cache_ttl_seconds: 60
 
 openapi:
-  enabled: true
+  enabled: false
 
 metrics:
   enabled: false

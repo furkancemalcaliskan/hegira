@@ -1,9 +1,13 @@
 .git
 .github
+Dockerfile
+docker-compose*.yml
+scripts
 .env
 .env.*
 !.env.example
 target
+dist
 **/node_modules
 *.db
 *.sqlite

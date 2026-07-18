@@ -2,22 +2,27 @@ use crate::http::error_response::ErrorBody;
 use axum::{
     Json,
     body::Body,
-    extract::State,
+    extract::{ConnectInfo, State},
     http::{HeaderValue, Method, Request, StatusCode, header},
     middleware::Next,
     response::{IntoResponse, Response},
 };
 use infrastructure::config::{RateLimitBackend, RateLimitConfig};
+use ipnet::IpNet;
 #[cfg(feature = "cache-redis")]
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::{
     collections::HashMap,
-    net::IpAddr,
+    net::{IpAddr, SocketAddr},
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
 
+const MAX_FORWARDED_HOPS: usize = 32;
+
+#[cfg(test)]
 const MAX_REQUESTS: usize = 20;
+#[cfg(test)]
 const WINDOW: Duration = Duration::from_secs(60);
 
 #[derive(Debug, Clone)]
@@ -26,6 +31,18 @@ pub struct RateLimiter {
     max_requests: usize,
     window: Duration,
     backend: RateLimiterBackend,
+    client_ip_resolver: ClientIpResolver,
+}
+
+#[derive(Debug, Clone, Default)]
+struct ClientIpResolver {
+    trusted_proxies: Vec<IpNet>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ClientIpError {
+    MissingPeerAddress,
+    InvalidForwardedFor,
 }
 
 #[derive(Debug, Clone)]
@@ -56,7 +73,22 @@ struct RateLimitDecision {
 }
 
 impl RateLimiter {
-    pub fn from_config(config: &RateLimitConfig) -> Result<Self, String> {
+    pub fn from_config(
+        config: &RateLimitConfig,
+        trusted_proxies: &[String],
+    ) -> Result<Self, String> {
+        let client_ip_resolver = ClientIpResolver::from_config(trusted_proxies)?;
+
+        if !config.enabled {
+            return Ok(Self {
+                enabled: false,
+                max_requests: config.max_requests.max(1),
+                window: Duration::from_secs(config.window_seconds.max(1)),
+                backend: RateLimiterBackend::Memory(MemoryRateLimiter::default()),
+                client_ip_resolver,
+            });
+        }
+
         let backend = match config.backend {
             RateLimitBackend::Memory => RateLimiterBackend::Memory(MemoryRateLimiter::default()),
             RateLimitBackend::Redis => build_redis(&config.redis.url)?,
@@ -67,15 +99,18 @@ impl RateLimiter {
             max_requests: config.max_requests.max(1),
             window: Duration::from_secs(config.window_seconds.max(1)),
             backend,
+            client_ip_resolver,
         })
     }
 
+    #[cfg(test)]
     fn memory(max_requests: usize, window: Duration) -> Self {
         Self {
             enabled: true,
             max_requests,
             window,
             backend: RateLimiterBackend::Memory(MemoryRateLimiter::default()),
+            client_ip_resolver: ClientIpResolver::default(),
         }
     }
 
@@ -89,6 +124,90 @@ impl RateLimiter {
                 limiter.check(key, self.max_requests, self.window).await
             }
         }
+    }
+}
+
+impl ClientIpResolver {
+    fn from_config(networks: &[String]) -> Result<Self, String> {
+        let trusted_proxies = networks
+            .iter()
+            .map(|network| {
+                let parsed = network.parse::<IpNet>().map_err(|_| {
+                    format!(
+                        "security.trusted_proxies entry `{network}` must be a valid IPv4 or IPv6 CIDR"
+                    )
+                })?;
+                if parsed.prefix_len() == 0 {
+                    return Err(format!(
+                        "security.trusted_proxies entry `{network}` must not trust every address"
+                    ));
+                }
+                Ok(parsed)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(Self { trusted_proxies })
+    }
+
+    fn resolve(&self, req: &Request<Body>) -> Result<IpAddr, ClientIpError> {
+        let peer = req
+            .extensions()
+            .get::<ConnectInfo<SocketAddr>>()
+            .map(|connect_info| normalize_ip(connect_info.0.ip()))
+            .ok_or(ClientIpError::MissingPeerAddress)?;
+
+        if !self.is_trusted(peer) {
+            return Ok(peer);
+        }
+
+        let forwarded = parse_x_forwarded_for(req)?;
+        let mut resolved = peer;
+        for candidate in forwarded.into_iter().rev() {
+            if !self.is_trusted(resolved) {
+                break;
+            }
+            resolved = candidate;
+        }
+
+        Ok(resolved)
+    }
+
+    fn is_trusted(&self, address: IpAddr) -> bool {
+        self.trusted_proxies
+            .iter()
+            .any(|network| network.contains(&address))
+    }
+}
+
+fn parse_x_forwarded_for(req: &Request<Body>) -> Result<Vec<IpAddr>, ClientIpError> {
+    let mut addresses = Vec::new();
+    for value in req.headers().get_all("x-forwarded-for") {
+        let value = value
+            .to_str()
+            .map_err(|_| ClientIpError::InvalidForwardedFor)?;
+        for item in value.split(',') {
+            if addresses.len() >= MAX_FORWARDED_HOPS {
+                return Err(ClientIpError::InvalidForwardedFor);
+            }
+            let address = item
+                .trim()
+                .parse::<IpAddr>()
+                .map(normalize_ip)
+                .map_err(|_| ClientIpError::InvalidForwardedFor)?;
+            addresses.push(address);
+        }
+    }
+
+    Ok(addresses)
+}
+
+fn normalize_ip(address: IpAddr) -> IpAddr {
+    match address {
+        IpAddr::V6(address) => address
+            .to_ipv4_mapped()
+            .map(IpAddr::V4)
+            .unwrap_or(IpAddr::V6(address)),
+        address => address,
     }
 }
 
@@ -225,26 +344,13 @@ fn build_redis(_url: &str) -> Result<RateLimiterBackend, String> {
     )
 }
 
-fn rate_limit_key(req: &Request<Body>) -> String {
+fn rate_limit_key(req: &Request<Body>, client_ip: IpAddr) -> String {
     format!(
         "rate_limit:{}:{}:{}",
         req.method(),
         req.uri().path(),
-        extract_ip(req)
+        client_ip
     )
-}
-
-fn extract_ip(req: &Request<Body>) -> IpAddr {
-    req.headers()
-        .get("x-forwarded-for")
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.split(',').next())
-        .and_then(|value| value.trim().parse::<IpAddr>().ok())
-        .unwrap_or(IpAddr::from([127, 0, 0, 1]))
-}
-
-pub async fn check(req: Request<Body>, next: Next) -> Response {
-    check_with_limiter(State(RateLimiter::memory(MAX_REQUESTS, WINDOW)), req, next).await
 }
 
 pub async fn check_configured(
@@ -264,7 +370,32 @@ async fn check_with_limiter(
         return next.run(req).await;
     }
 
-    let decision = match limiter.check(&rate_limit_key(&req)).await {
+    let client_ip = match limiter.client_ip_resolver.resolve(&req) {
+        Ok(client_ip) => client_ip,
+        Err(ClientIpError::InvalidForwardedFor) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ErrorBody {
+                    code: "request:invalid_forwarded_for",
+                    message: "invalid forwarded client address".to_string(),
+                }),
+            )
+                .into_response();
+        }
+        Err(ClientIpError::MissingPeerAddress) => {
+            tracing::error!("rate limiter request is missing its TCP peer address");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorBody {
+                    code: "system:rate_limiter_error",
+                    message: "internal server error".to_string(),
+                }),
+            )
+                .into_response();
+        }
+    };
+
+    let decision = match limiter.check(&rate_limit_key(&req, client_ip)).await {
         Ok(decision) => decision,
         Err(error) => {
             tracing::error!(%error, "rate limiter failed");
@@ -325,22 +456,45 @@ fn insert_header(headers: &mut header::HeaderMap, name: &'static str, value: Str
 mod tests {
     use super::*;
     use axum::{Router, middleware, routing::get, routing::post};
+    use infrastructure::config::RedisRateLimitConfig;
     use tower::ServiceExt;
 
-    fn app() -> Router {
+    fn app_with_limiter(limiter: RateLimiter) -> Router {
         Router::new()
             .route("/test", post(|| async { "ok" }))
             .route("/get", get(|| async { "ok" }))
-            .layer(middleware::from_fn_with_state(
-                RateLimiter::memory(MAX_REQUESTS, WINDOW),
-                check_configured,
-            ))
+            .layer(middleware::from_fn_with_state(limiter, check_configured))
+    }
+
+    fn app() -> Router {
+        app_with_limiter(RateLimiter::memory(MAX_REQUESTS, WINDOW))
+    }
+
+    fn request(
+        method: Method,
+        path: &str,
+        peer: IpAddr,
+        forwarded_for: Option<&str>,
+    ) -> Request<Body> {
+        let mut builder = Request::builder()
+            .method(method)
+            .uri(path)
+            .extension(ConnectInfo(SocketAddr::new(peer, 54321)));
+        if let Some(forwarded_for) = forwarded_for {
+            builder = builder.header("x-forwarded-for", forwarded_for);
+        }
+        builder.body(Body::empty()).unwrap()
     }
 
     #[tokio::test]
     async fn get_requests_bypass_rate_limit() {
         let resp = app()
-            .oneshot(Request::get("/get").body(Body::empty()).unwrap())
+            .oneshot(request(
+                Method::GET,
+                "/get",
+                IpAddr::from([203, 0, 113, 10]),
+                None,
+            ))
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
@@ -348,29 +502,19 @@ mod tests {
 
     #[tokio::test]
     async fn post_requests_are_rate_limited() {
-        let ip = "10.99.99.99";
+        let peer = IpAddr::from([203, 0, 113, 10]);
         let app = app();
         for i in 0..MAX_REQUESTS {
             let resp = app
                 .clone()
-                .oneshot(
-                    Request::post("/test")
-                        .header("x-forwarded-for", ip)
-                        .body(Body::empty())
-                        .unwrap(),
-                )
+                .oneshot(request(Method::POST, "/test", peer, None))
                 .await
                 .unwrap();
             assert_eq!(resp.status(), StatusCode::OK, "request {i} should succeed");
         }
 
         let resp = app
-            .oneshot(
-                Request::post("/test")
-                    .header("x-forwarded-for", ip)
-                    .body(Body::empty())
-                    .unwrap(),
-            )
+            .oneshot(request(Method::POST, "/test", peer, None))
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::TOO_MANY_REQUESTS);
@@ -381,18 +525,138 @@ mod tests {
     }
 
     #[test]
-    fn extract_ip_from_forwarded_header() {
-        let req = Request::post("/test")
-            .header("x-forwarded-for", "192.168.1.1, 10.0.0.1")
-            .body(Body::empty())
-            .unwrap();
-        assert_eq!(extract_ip(&req), IpAddr::from([192, 168, 1, 1]));
+    fn direct_clients_cannot_spoof_forwarded_addresses() {
+        let resolver = ClientIpResolver::default();
+        let peer = IpAddr::from([203, 0, 113, 10]);
+        let req = request(Method::POST, "/test", peer, Some("198.51.100.99"));
+
+        assert_eq!(resolver.resolve(&req), Ok(peer));
     }
 
     #[test]
-    fn extract_ip_default_without_header() {
+    fn malformed_forwarding_header_from_an_untrusted_peer_is_ignored() {
+        let resolver = ClientIpResolver::default();
+        let peer = IpAddr::from([203, 0, 113, 10]);
+        let req = request(Method::POST, "/test", peer, Some("not-an-ip"));
+
+        assert_eq!(resolver.resolve(&req), Ok(peer));
+    }
+
+    #[test]
+    fn trusted_proxy_chain_stops_at_the_nearest_untrusted_address() {
+        let resolver = ClientIpResolver::from_config(&[
+            "10.0.0.0/8".to_string(),
+            "192.168.0.0/16".to_string(),
+        ])
+        .unwrap();
+        let req = request(
+            Method::POST,
+            "/test",
+            IpAddr::from([10, 0, 0, 2]),
+            Some("203.0.113.99, 198.51.100.7, 192.168.1.10"),
+        );
+
+        assert_eq!(resolver.resolve(&req), Ok(IpAddr::from([198, 51, 100, 7])));
+    }
+
+    #[test]
+    fn trusted_proxy_resolution_supports_ipv6() {
+        let resolver = ClientIpResolver::from_config(&["2001:db8:ffff::/48".to_string()]).unwrap();
+        let peer = "2001:db8:ffff::10".parse().unwrap();
+        let client = "2001:db8:1::42".parse().unwrap();
+        let req = request(Method::POST, "/test", peer, Some("2001:db8:1::42"));
+
+        assert_eq!(resolver.resolve(&req), Ok(client));
+    }
+
+    #[test]
+    fn malformed_forwarding_chain_from_a_trusted_proxy_fails_closed() {
+        let resolver = ClientIpResolver::from_config(&["10.0.0.0/8".to_string()]).unwrap();
+        let req = request(
+            Method::POST,
+            "/test",
+            IpAddr::from([10, 0, 0, 2]),
+            Some("not-an-ip"),
+        );
+
+        assert_eq!(
+            resolver.resolve(&req),
+            Err(ClientIpError::InvalidForwardedFor)
+        );
+    }
+
+    #[test]
+    fn universal_trusted_proxy_networks_are_rejected() {
+        assert!(ClientIpResolver::from_config(&["0.0.0.0/0".to_string()]).is_err());
+        assert!(ClientIpResolver::from_config(&["::/0".to_string()]).is_err());
+    }
+
+    #[test]
+    fn missing_peer_address_fails_closed() {
+        let resolver = ClientIpResolver::default();
         let req = Request::post("/test").body(Body::empty()).unwrap();
-        assert_eq!(extract_ip(&req), IpAddr::from([127, 0, 0, 1]));
+
+        assert_eq!(
+            resolver.resolve(&req),
+            Err(ClientIpError::MissingPeerAddress)
+        );
+    }
+
+    #[tokio::test]
+    async fn malformed_trusted_forwarding_chain_is_rejected_by_middleware() {
+        let limiter = RateLimiter {
+            client_ip_resolver: ClientIpResolver::from_config(&["10.0.0.0/8".to_string()]).unwrap(),
+            ..RateLimiter::memory(1, WINDOW)
+        };
+        let response = app_with_limiter(limiter)
+            .oneshot(request(
+                Method::POST,
+                "/test",
+                IpAddr::from([10, 0, 0, 2]),
+                Some("not-an-ip"),
+            ))
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn spoofed_headers_do_not_create_new_memory_quotas() {
+        let peer = IpAddr::from([203, 0, 113, 10]);
+        let app = app_with_limiter(RateLimiter::memory(1, WINDOW));
+
+        let first = app
+            .clone()
+            .oneshot(request(Method::POST, "/test", peer, Some("198.51.100.1")))
+            .await
+            .unwrap();
+        assert_eq!(first.status(), StatusCode::OK);
+
+        let second = app
+            .oneshot(request(Method::POST, "/test", peer, Some("198.51.100.2")))
+            .await
+            .unwrap();
+        assert_eq!(second.status(), StatusCode::TOO_MANY_REQUESTS);
+    }
+
+    #[tokio::test]
+    async fn trusted_proxy_clients_receive_independent_memory_quotas() {
+        let limiter = RateLimiter {
+            client_ip_resolver: ClientIpResolver::from_config(&["10.0.0.0/8".to_string()]).unwrap(),
+            ..RateLimiter::memory(1, WINDOW)
+        };
+        let app = app_with_limiter(limiter);
+        let peer = IpAddr::from([10, 0, 0, 2]);
+
+        for client in ["198.51.100.1", "198.51.100.2"] {
+            let response = app
+                .clone()
+                .oneshot(request(Method::POST, "/test", peer, Some(client)))
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK, "{client}");
+        }
     }
 
     #[test]
@@ -403,5 +667,25 @@ mod tests {
             assert!(limiter.check(key, MAX_REQUESTS, WINDOW).allowed);
         }
         assert!(!limiter.check(key, MAX_REQUESTS, WINDOW).allowed);
+    }
+
+    #[test]
+    fn disabled_limiter_does_not_initialize_selected_redis_backend() {
+        let limiter = RateLimiter::from_config(
+            &RateLimitConfig {
+                enabled: false,
+                backend: RateLimitBackend::Redis,
+                max_requests: 20,
+                window_seconds: 60,
+                redis: RedisRateLimitConfig {
+                    url: "not a redis URL".to_string(),
+                },
+            },
+            &[],
+        )
+        .expect("a disabled limiter should not initialize its selected backend");
+
+        assert!(!limiter.enabled);
+        assert!(matches!(limiter.backend, RateLimiterBackend::Memory(_)));
     }
 }

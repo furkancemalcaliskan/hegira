@@ -74,6 +74,7 @@ fn test_config() -> AppConfig {
         },
         security: SecurityConfig {
             jwt_secret: "test-secret".to_string(),
+            trusted_proxies: Vec::new(),
             cors: CorsConfig {
                 enabled: true,
                 allowed_origins: vec!["http://127.0.0.1:3000".to_string()],
@@ -255,14 +256,15 @@ async fn setup_sqlite() -> Router {
     ))
 }
 
-fn setup_without_database() -> Router {
-    setup_without_database_with_config(test_config())
+async fn setup_without_database() -> Router {
+    setup_without_database_with_config(test_config()).await
 }
 
-fn setup_without_database_with_config(config: AppConfig) -> Router {
+async fn setup_without_database_with_config(config: AppConfig) -> Router {
     let pool = sqlx::postgres::PgPoolOptions::new()
         .connect_lazy(&config.database.url)
         .expect("failed to create lazy test database pool");
+    pool.close().await;
     let state = AppState::new(
         config,
         infrastructure::db::DatabasePool::Postgres(pool),
@@ -484,7 +486,7 @@ async fn auth_login_me_and_logout_flow() {
 
 #[tokio::test]
 async fn protected_users_api_requires_bearer_token() {
-    let app = setup_without_database();
+    let app = setup_without_database().await;
 
     let response = request_empty(app, "GET", "/api/identity/users", None).await;
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
@@ -497,7 +499,7 @@ async fn protected_users_api_requires_bearer_token() {
 
 #[tokio::test]
 async fn protected_users_api_rejects_invalid_authorization_scheme() {
-    let app = setup_without_database();
+    let app = setup_without_database().await;
 
     let response =
         request_empty_with_authorization(app, "GET", "/api/identity/users", "Token abc").await;
@@ -510,7 +512,7 @@ async fn protected_users_api_rejects_invalid_authorization_scheme() {
 
 #[tokio::test]
 async fn register_validation_errors_use_standard_error_body() {
-    let app = setup_without_database();
+    let app = setup_without_database().await;
 
     let response = request_json(
         app,
@@ -532,7 +534,7 @@ async fn register_validation_errors_use_standard_error_body() {
 
 #[tokio::test]
 async fn health_endpoint_returns_operational_metadata() {
-    let app = setup_without_database();
+    let app = setup_without_database().await;
 
     let response = request_empty(app, "GET", "/healthz", None).await;
     assert_eq!(response.status(), StatusCode::OK);
@@ -545,7 +547,7 @@ async fn health_endpoint_returns_operational_metadata() {
 
 #[tokio::test]
 async fn readiness_reports_failed_database_and_skips_disabled_dependencies() {
-    let app = setup_without_database();
+    let app = setup_without_database().await;
 
     let response = request_empty(app, "GET", "/readyz", None).await;
     assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
@@ -568,7 +570,7 @@ async fn readiness_reports_failed_database_and_skips_disabled_dependencies() {
 #[tokio::test]
 #[cfg(feature = "openapi")]
 async fn openapi_is_available_outside_production() {
-    let app = setup_without_database();
+    let app = setup_without_database().await;
 
     let response = request_empty(app, "GET", "/api-docs/openapi.json", None).await;
     assert_eq!(response.status(), StatusCode::OK);
@@ -584,7 +586,7 @@ async fn openapi_is_not_available_in_production() {
     let mut config = test_config();
     config.environment = "production".to_string();
     config.openapi.enabled = true;
-    let app = setup_without_database_with_config(config);
+    let app = setup_without_database_with_config(config).await;
 
     let response = request_empty(app, "GET", "/api-docs/openapi.json", None).await;
     assert_eq!(response.status(), StatusCode::NOT_FOUND);

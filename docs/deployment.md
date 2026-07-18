@@ -26,15 +26,19 @@ must have one active executor.
 
 ## Release Build
 
-Build only the production database provider and required integrations:
+The committed production profile is the minimal PostgreSQL contract: database
+sessions, in-process rate limiting, and disabled optional external providers.
+It matches the Dockerfile's default `ssr,db-postgres` server feature set.
+
+Build that minimal profile with:
 
 ```sh
 cargo leptos build --release \
-  --bin-features ssr,db-postgres,mailer-smtp \
+  --bin-features ssr,db-postgres \
   --lib-features hydrate
 ```
 
-Optional distributed profile:
+Compile optional integrations explicitly for a distributed profile:
 
 ```sh
 cargo leptos build --release \
@@ -43,6 +47,20 @@ cargo leptos build --release \
 ```
 
 OpenAPI is intentionally omitted from production builds.
+Compiling a capability does not enable it at runtime. Override the matching
+configuration backend and credentials when enabling Redis, SMTP, S3,
+Meilisearch, Prometheus, or OTLP.
+
+The two supported production capability contracts are:
+
+| Contract | Server features | Runtime expectation |
+|---|---|---|
+| Minimal | `ssr,db-postgres` | Database sessions, in-process rate limiting, optional providers disabled |
+| Distributed | `ssr,db-postgres,cache-redis,mailer-smtp,storage-s3,search-meilisearch,metrics-prometheus,otel-otlp` | Enable only the external providers that are provisioned and configured |
+
+The distributed build makes adapters available; it does not turn them on.
+Runtime configuration that selects an adapter missing from the binary fails
+capability preflight before dependency initialization.
 
 ## Database Release Step
 
@@ -72,6 +90,27 @@ Build a normal web image:
 ```sh
 docker build -t hegira:latest .
 ```
+
+This image matches the committed minimal production profile and does not
+require Redis, SMTP, S3, Meilisearch, Prometheus, or an OTLP collector.
+
+### Production Container Smoke Test
+
+Run the release smoke test locally with:
+
+```sh
+sh scripts/container-smoke.sh
+```
+
+The test builds the default `ssr,db-postgres` production image, starts a
+disposable PostgreSQL database, applies migrations as a one-shot task, and
+verifies `/healthz`, `/readyz`, the application page, and generated CSS and
+JavaScript assets. Failure logs are printed before the complete stack and its
+volumes are removed.
+
+The smoke workflow validates the container contract only. It does not create a
+preview application, publish a public URL, use a GitHub Environment, or require
+deployment credentials.
 
 Build explicit role images with the same capability set:
 
