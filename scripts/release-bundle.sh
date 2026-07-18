@@ -21,11 +21,22 @@ bundle_dir="$dist_dir/bundle"
 archive="$dist_dir/hegira-$release_ref-linux-x86_64.tar.gz"
 checksum="$archive.sha256"
 packaged_notes="$dist_dir/hegira-$release_ref-release-notes.md"
+frontend_dir="crates/web/src"
+frontend_bin="$PWD/$frontend_dir/node_modules/.bin"
 
 rm -rf "$bundle_dir"
 rm -f "$archive" "$checksum" "$packaged_notes"
 
-npm ci --prefix crates/web/src
+npm ci --prefix "$frontend_dir"
+PATH="$frontend_bin:$PATH"
+export PATH
+
+tailwind_bin="$(command -v tailwindcss || true)"
+if [ "$tailwind_bin" != "$frontend_bin/tailwindcss" ]; then
+  echo "repository-local tailwindcss not found after npm ci: $frontend_bin/tailwindcss" >&2
+  exit 1
+fi
+
 cargo build --locked --release -p db_migrator \
   --no-default-features --features ssr,db-postgres
 cargo leptos build --release \
