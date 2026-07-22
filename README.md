@@ -1,21 +1,62 @@
-# Hegira
+<p align="center">
+  <img src="assets/branding/hegira-logo.png" width="320" alt="Hegira logo">
+</p>
 
-A production-oriented Full-Stack Rust web application template built with Axum, Leptos, SQLx,
-and an ABP-inspired layered architecture.
+<h1 align="center">Hegira</h1>
 
-The template supports a containers-free SQLite development profile and a
-PostgreSQL deployment profile. Redis, Meilisearch, S3, SMTP, Prometheus, and
-OpenTelemetry remain optional compile-time capabilities.
+<p align="center"><strong>Your destination. A proven path.</strong></p>
+
+<p align="center">
+  An opinionated full-stack application template for the journey from idea to production.
+</p>
+
+Hegira is a production-oriented, opinionated full-stack web application template built around
+Axum, Leptos, SQLx, an ABP-inspired layered architecture, and DDD-oriented layers. It provides
+more than an empty starter: authentication, authorization, persistence, observability,
+background work, deployment, and security are approached through sensible defaults and
+explicit conventions.
+
+The product and its destination remain yours. Hegira provides a proven path through recurring
+architectural and infrastructure decisions so that development can focus on the application
+itself rather than rebuilding the same foundation.
+
+## The Hegira Philosophy
+
+Every application begins as a journey into uncertain territory. Before developers can build
+what makes their product unique, they must repeatedly solve the same problems: architecture,
+authentication, authorization, persistence, observability, background work, deployment, and
+security.
+
+Hegira exists so that this journey does not have to begin from an empty map.
+
+Its philosophy is inspired by the caravan: a group of travelers following a route shaped by
+accumulated experience. A caravan does not choose the travelers' destination, nor does it
+prevent them from taking another path. It carries shared knowledge, reduces avoidable risk,
+and allows each traveler to focus on the purpose of the journey rather than the mechanics of
+survival.
+
+Hegira applies the same principle to software development. It provides a production-oriented
+path, sensible defaults, and explicit conventions for recurring architectural decisions. These
+conventions are guides, not walls. Applications remain free to evolve, replace components, and
+leave the established path whenever their requirements demand it.
+
+The destination belongs to the developer. Hegira simply makes the road clearer.
+
+**Your destination. A proven path.**
 
 ## Stack
 
 - Axum HTTP API and middleware
 - Leptos SSR with client hydration
 - SQLx with PostgreSQL and SQLite adapters
-- DDD-oriented domain and application layers
+- ABP-inspired layered architecture with DDD-oriented domain and application layers
 - RBAC, audit logging, OAuth, TOTP, and secure web sessions
 - Durable jobs, scheduler, health checks, metrics, and tracing
 - Single-process or separated web/worker deployment
+
+The template supports a containers-free SQLite development profile and a PostgreSQL deployment
+profile. Redis, Meilisearch, S3, SMTP, Prometheus, and OpenTelemetry remain optional compile-time
+capabilities.
 
 ## Quick Start
 

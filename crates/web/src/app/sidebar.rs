@@ -65,7 +65,12 @@ pub fn Sidebar(sidebar_open: RwSignal<bool>, sidebar_collapsed: RwSignal<bool>) 
         >
             <div class=shell_class>
                 <A href="/content" attr:class="brand-mark" attr:aria-label="hegira home">
-                    <span class="brand-logo">"M"</span>
+                    <img
+                        class="brand-logo"
+                        src="/assets/branding/hegira-logo.png"
+                        alt=""
+                        aria-hidden="true"
+                    />
                     <span class="brand-copy">
                         <strong>"Hegira"</strong>
                         <small>"Leptos Console"</small>
