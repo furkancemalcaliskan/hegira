@@ -2,6 +2,32 @@
 
 All notable changes are documented here. Releases follow Semantic Versioning.
 
+## [0.1.2] - 2026-07-22
+
+### Added
+
+- Established the Hegira identity and project narrative in the repository
+  landing section.
+- Documented the Hegira philosophy around production-oriented defaults,
+  explicit conventions, and a proven path from idea to production.
+- Added canonical repository and web-public branding asset locations.
+
+### Changed
+
+- Replaced temporary letter-based branding placeholders in the application
+  shell, boot loader, and authentication surfaces with the Hegira logo.
+- Optimized the public logo variant for web delivery while retaining the
+  original canonical branding asset.
+- Removed the stale version-pinned default from the manual release workflow so
+  maintainers must explicitly select the release ref being verified.
+
+### Operator Notes
+
+- This release does not change runtime configuration, database schemas,
+  authentication behavior, or deployment contracts.
+- No database migration or application configuration update is required when
+  upgrading from `v0.1.1`.
+
 ## [0.1.1] - 2026-07-18
 
 ### Fixed

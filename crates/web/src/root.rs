@@ -71,7 +71,12 @@ pub fn App() -> impl IntoView {
 fn BootLoader() -> impl IntoView {
     view! {
         <div id="wasm-boot-loader" class="wasm-boot-loader" aria-live="polite" aria-label="Loading application">
-            <div class="brand-logo">"M"</div>
+            <img
+                class="brand-logo"
+                src="/assets/branding/hegira-logo.png"
+                alt=""
+                aria-hidden="true"
+            />
             <div class="wasm-boot-spinner" aria-hidden="true"></div>
         </div>
     }

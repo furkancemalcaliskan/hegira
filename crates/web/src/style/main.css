@@ -31,14 +31,11 @@ a {
 }
 
 .brand-logo {
-    display: grid;
+    display: block;
     width: 2.5rem;
     height: 2.5rem;
-    place-items: center;
-    border-radius: 0.625rem;
-    background: var(--primary);
-    color: var(--primary-foreground);
-    font-weight: 800;
+    flex: 0 0 auto;
+    object-fit: contain;
 }
 
 .brand-copy {

@@ -9,7 +9,6 @@ on:
       release_ref:
         description: Release ref matching the Cargo package version
         required: true
-        default: v0.1.1
 
 permissions:
   contents: read
