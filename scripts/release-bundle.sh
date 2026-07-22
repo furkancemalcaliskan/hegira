@@ -21,11 +21,12 @@ bundle_dir="$dist_dir/bundle"
 archive="$dist_dir/hegira-$release_ref-linux-x86_64.tar.gz"
 checksum="$archive.sha256"
 packaged_notes="$dist_dir/hegira-$release_ref-release-notes.md"
+archive_contents="$dist_dir/hegira-$release_ref-archive-contents.txt"
 frontend_dir="crates/web/src"
 frontend_bin="$PWD/$frontend_dir/node_modules/.bin"
 
 rm -rf "$bundle_dir"
-rm -f "$archive" "$checksum" "$packaged_notes"
+rm -f "$archive" "$checksum" "$packaged_notes" "$archive_contents"
 
 npm ci --prefix "$frontend_dir"
 PATH="$frontend_bin:$PATH"
@@ -54,6 +55,7 @@ cp "$release_notes" "$packaged_notes"
 tar -C "$bundle_dir" -czf "$archive" .
 sha256sum "$archive" >"$checksum"
 sha256sum --check "$checksum"
+tar -tzf "$archive" >"$archive_contents"
 
 for required_path in \
   ./hegira \
@@ -61,11 +63,14 @@ for required_path in \
   ./config/production.yaml \
   ./target/site/pkg/hegira.css \
   ./target/site/pkg/hegira.js \
+  ./target/site/assets/branding/hegira-logo.png \
   ./README.md \
   ./CHANGELOG.md \
   "./docs/releases/$release_ref.md"
 do
-  tar -tzf "$archive" | grep -Fqx "$required_path"
+  grep -Fqx "$required_path" "$archive_contents"
 done
+
+rm -f "$archive_contents"
 
 echo "release bundle verified: $archive"
