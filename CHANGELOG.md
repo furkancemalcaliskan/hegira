@@ -20,6 +20,9 @@ All notable changes are documented here. Releases follow Semantic Versioning.
 - Aligned architecture, setup, deployment, operations, and maintainer
   documentation with the app-owned workspace and its root-level command
   contract.
+- Replaced platform-specific Linux application bundles and checksums with
+  source-first GitHub Releases backed by immutable SemVer tags, versioned
+  release notes, GitHub source archives, and a source-scoped SPDX SBOM.
 
 ## [0.1.2] - 2026-07-22
 

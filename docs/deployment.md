@@ -72,6 +72,20 @@ site under `target/site`. Frontend source, styles, and public assets remain
 under `crates/web`; they are inputs to the application-owned Cargo-Leptos
 package rather than independent deployment units.
 
+## Source Distribution
+
+Hegira is released as a source template rather than as a compiled application.
+Each stable release is identified by a signed `vMAJOR.MINOR.PATCH` tag and a
+GitHub Release. GitHub provides `.zip` and `.tar.gz` archives of the tagged
+source; the only custom release asset is an SPDX JSON SBOM generated from that
+source checkout.
+
+The release workflow still verifies the minimal PostgreSQL full-stack build and
+production container. Those are validation contracts for users building and
+deploying their own application, not published binaries or images. Hegira does
+not publish a platform-specific executable, Linux application bundle, official
+container image, preview application, or production deployment.
+
 ## Database Release Step
 
 Run migrations once before rolling out application replicas:

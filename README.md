@@ -139,10 +139,13 @@ integration boundaries plus relevant path filters. Plain feature-branch pushes
 do not run these gates unless they update an open pull request. Superseded runs
 for the same pull request or integration ref are cancelled.
 
-Release automation runs only for `v*` tags. CI validates repository changes;
-it does not deploy them. No workflow creates a preview application, public
-preview URL, or GitHub Environment. See the [maintainer workflow](docs/maintainers.md)
-for the complete trigger and release contract.
+Release automation publishes source-first GitHub Releases only for stable
+`vMAJOR.MINOR.PATCH` tags. GitHub provides the source archives, and the
+source-scoped SPDX SBOM is the only custom release asset. CI validates the
+full-stack build and production container; it does not publish an executable,
+container image, preview application, public URL, or GitHub Environment. See
+the [maintainer workflow](docs/maintainers.md) for the complete trigger and
+release contract.
 
 ## Project Policy
 
