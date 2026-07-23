@@ -61,13 +61,23 @@ authorized change requirements are defined in
 
 | Workflow | Pull request | Branch push | Manual | Tag | Side effect |
 |---|---|---|---|---|---|
+| `repository-policy` | Targets `develop` or `main` | No | No | No | Validation only |
 | `backend` | Targets `develop` or `main` | `develop` or `main` | Yes | No | Validation only |
 | `production-container-smoke` | Targets `develop` or `main`, with production path filters | `develop` or `main`, with production path filters | Yes | No | Disposable local containers only |
 | `release` | No | No | Yes, build only | Push matching `v*` | Manual: validation artifact; tag: GitHub Release |
 
+The `repository-policy` workflow validates every pull request to a protected
+integration branch. It checks documentation links, agent adapters, pull request
+metadata, issue-branch naming, and the supported Dependabot and release
+promotion exceptions. It uses no secrets and has read-only repository
+permission.
+
+Add the exact `repository-policy` status check to the required checks for both
+`develop` and `main`. The check must pass before merge.
+
 A plain push to an issue branch does not trigger the push-based validation
 workflows. Updating an open pull request triggers its `pull_request` checks.
-Both validation workflows cancel superseded runs for the same pull request or
+Validation workflows cancel superseded runs for the same pull request or
 integration ref.
 
 The backend workflow contains three gates:
@@ -84,6 +94,19 @@ configuration, Rust source, and smoke-test inputs. It builds the default
 health, readiness, HTML, CSS, and JavaScript, then removes the stack.
 
 ## Local Validation
+
+Validate repository documentation, agent adapters, and policy fixtures:
+
+```sh
+sh scripts/repository-policy.sh
+```
+
+To reproduce pull request metadata validation with a saved GitHub
+`pull_request` event:
+
+```sh
+sh scripts/repository-policy.sh --event path/to/pull-request-event.json
+```
 
 Run the backend gate without ignored PostgreSQL tests:
 

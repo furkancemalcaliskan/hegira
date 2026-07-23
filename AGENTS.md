@@ -109,9 +109,10 @@ enforcement, and current architecture documentation together.
 Use the smallest relevant checks while iterating, then run the checks required
 by the affected contract.
 
-Standard backend validation:
+Standard repository and backend validation:
 
 ```sh
+sh scripts/repository-policy.sh
 sh scripts/backend-check.sh
 ```
 

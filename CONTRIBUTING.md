@@ -94,7 +94,14 @@ before merge.
 
 ## Validation
 
-Run validation appropriate to the change. The standard backend gate is:
+Run validation appropriate to the change. The standard repository policy check
+is:
+
+```sh
+sh scripts/repository-policy.sh
+```
+
+The standard application backend gate is:
 
 ```sh
 sh scripts/backend-check.sh
