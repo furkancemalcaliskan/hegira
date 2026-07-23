@@ -130,8 +130,10 @@ for the complete trigger and release contract.
 ## Project Policy
 
 This project is published as open-source software, but external code
-contributions are not accepted. Security vulnerabilities should be reported
-privately according to [SECURITY.md](SECURITY.md).
+contributions are not currently accepted unless explicitly requested or
+approved by the maintainer. See [CONTRIBUTING.md](CONTRIBUTING.md) for the
+current policy. Security vulnerabilities should be reported privately
+according to [SECURITY.md](SECURITY.md).
 
 ## License
 
