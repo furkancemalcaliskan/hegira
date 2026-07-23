@@ -17,8 +17,12 @@ workspace entry point; the deployable package is located at `apps/hegira`.
 ```sh
 rustup target add wasm32-unknown-unknown
 cargo install cargo-leptos
-cd crates/web/src && npm ci && cd ../../..
+npm ci --prefix crates/web/src
 ```
+
+The npm command installs the lockfile-pinned frontend tooling used by
+Cargo-Leptos. Keep the working directory at the repository root for the
+remaining commands.
 
 ## SQLite Development
 

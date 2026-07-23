@@ -17,6 +17,9 @@ All notable changes are documented here. Releases follow Semantic Versioning.
 - Converted the repository root into a virtual Cargo workspace while
   preserving root-level development, validation, packaging, and container
   commands.
+- Aligned architecture, setup, deployment, operations, and maintainer
+  documentation with the app-owned workspace and its root-level command
+  contract.
 
 ## [0.1.2] - 2026-07-22
 

@@ -30,7 +30,12 @@ The committed production profile is the minimal PostgreSQL contract: database
 sessions, in-process rate limiting, and disabled optional external providers.
 It matches the Dockerfile's default `ssr,db-postgres` server feature set.
 
-Build that minimal profile with:
+Run release commands from the repository root. Cargo selects the deployable
+package at `apps/hegira` by its package name, `hegira`; Cargo-Leptos reads its
+build metadata there while writing outputs to the workspace-level `target`
+directory.
+
+Build the minimal profile with:
 
 ```sh
 cargo leptos build -p hegira --release \
@@ -61,6 +66,11 @@ The two supported production capability contracts are:
 The distributed build makes adapters available; it does not turn them on.
 Runtime configuration that selects an adapter missing from the binary fails
 capability preflight before dependency initialization.
+
+Both commands produce the server at `target/release/hegira` and the hydrated
+site under `target/site`. Frontend source, styles, and public assets remain
+under `crates/web`; they are inputs to the application-owned Cargo-Leptos
+package rather than independent deployment units.
 
 ## Database Release Step
 
