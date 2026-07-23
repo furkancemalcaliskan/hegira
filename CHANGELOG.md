@@ -2,6 +2,52 @@
 
 All notable changes are documented here. Releases follow Semantic Versioning.
 
+## [Unreleased]
+
+## [0.2.0] - 2026-07-23
+
+### Added
+
+- Added a canonical repository operating and contribution contract covering
+  issue, branch, commit, pull-request, integration, and release conventions.
+- Added shared repository instructions for AGENTS.md-compatible tools, Codex,
+  Claude Code, and Cursor without duplicating the canonical rules.
+- Added deterministic repository-policy validation for pull-request metadata,
+  documentation links, agent adapters, and release workflow invariants.
+- Added a reproducible full-stack packaging contract that verifies the server,
+  database migrator, hydrated WebAssembly, JavaScript, CSS, and branding
+  outputs without creating a platform archive.
+- Added a locked Cargo-metadata check that enforces the documented direct
+  dependency boundaries between workspace packages in local validation and
+  required CI.
+
+### Changed
+
+- Separated issue-prefixed commit titles from issue-free pull-request titles
+  and enforced the distinction in repository policy.
+- Moved the deployable `hegira` package, its entry points, Cargo-Leptos
+  metadata, and integration tests under `apps/hegira`.
+- Converted the repository root into a virtual Cargo workspace while
+  preserving root-level development, validation, packaging, and container
+  commands.
+- Aligned architecture, setup, deployment, operations, and maintainer
+  documentation with the app-owned workspace and its root-level command
+  contract.
+- Replaced platform-specific Linux application bundles and checksums with
+  source-first GitHub Releases backed by immutable SemVer tags, versioned
+  release notes, GitHub source archives, and a source-scoped SPDX SBOM.
+
+### Operator Notes
+
+- This release does not change runtime behavior, database schemas,
+  authentication, authorization, production configuration, or deployment
+  topology.
+- Commands documented from the repository root remain valid. Tooling that
+  directly referenced the former root `src/`, `tests/`, or package manifest
+  must use `apps/hegira`.
+- GitHub source archives replace the v0.1.x Linux application bundle as the
+  release distribution.
+
 ## [0.1.2] - 2026-07-22
 
 ### Added

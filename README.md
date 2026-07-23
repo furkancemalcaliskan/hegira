@@ -60,18 +60,23 @@ capabilities.
 
 ## Quick Start
 
-Install the Rust WASM target and `cargo-leptos`:
+Run the following commands from the repository root. The root coordinates the
+Cargo workspace, while the deployable package lives at `apps/hegira`.
+
+Install the Rust WASM target, `cargo-leptos`, and lockfile-pinned frontend
+tooling:
 
 ```sh
 rustup target add wasm32-unknown-unknown
 cargo install cargo-leptos
+npm ci --prefix crates/web/src
 ```
 
 Start with SQLite and no external services:
 
 ```sh
 APP_ENV=sqlite cargo run -p db_migrator --no-default-features --features ssr,db-sqlite -- migrate
-APP_ENV=sqlite cargo leptos watch --bin-features ssr,db-sqlite --lib-features hydrate
+APP_ENV=sqlite cargo leptos watch -p hegira --bin-features ssr,db-sqlite --lib-features hydrate
 ```
 
 Open `http://127.0.0.1:3000`. The SQLite profile seeds the development admin
@@ -91,6 +96,12 @@ configured in `config/sqlite.yaml`.
 
 ## Quality Gate
 
+Validate repository governance and workspace dependency boundaries:
+
+```sh
+sh scripts/repository-policy.sh
+```
+
 Run the same local backend gate used by CI:
 
 ```sh
@@ -98,8 +109,14 @@ sh scripts/backend-check.sh
 ```
 
 The CI quality job also sets `WITH_IGNORED_DB_TESTS=true` and supplies a
-disposable PostgreSQL `DATABASE_URL`. Verify the production container contract
-separately when Docker is available:
+disposable PostgreSQL `DATABASE_URL`. Verify the full-stack release outputs
+without creating a platform archive:
+
+```sh
+sh scripts/full-stack-build-check.sh
+```
+
+Verify the production container contract separately when Docker is available:
 
 ```sh
 sh scripts/container-smoke.sh
@@ -117,21 +134,26 @@ through a pull request before tagging a release.
 
 The backend workflow runs for pull requests targeting `develop` or `main`,
 post-merge pushes to those branches, and explicit manual dispatches. The
-production container smoke workflow uses the same integration boundaries plus
-production-relevant path filters. Plain feature-branch pushes do not run these
-gates unless they update an open pull request. Superseded runs for the same
-pull request or integration ref are cancelled.
+full-stack build and production container smoke workflows use the same
+integration boundaries plus relevant path filters. Plain feature-branch pushes
+do not run these gates unless they update an open pull request. Superseded runs
+for the same pull request or integration ref are cancelled.
 
-Release automation runs only for `v*` tags. CI validates repository changes;
-it does not deploy them. No workflow creates a preview application, public
-preview URL, or GitHub Environment. See the [maintainer workflow](docs/maintainers.md)
-for the complete trigger and release contract.
+Release automation publishes source-first GitHub Releases only for stable
+`vMAJOR.MINOR.PATCH` tags. GitHub provides the source archives, and the
+source-scoped SPDX SBOM is the only custom release asset. CI validates the
+full-stack build and production container; it does not publish an executable,
+container image, preview application, public URL, or GitHub Environment. See
+the [maintainer workflow](docs/maintainers.md) for the complete trigger and
+release contract.
 
 ## Project Policy
 
 This project is published as open-source software, but external code
-contributions are not accepted. Security vulnerabilities should be reported
-privately according to [SECURITY.md](SECURITY.md).
+contributions are not currently accepted unless explicitly requested or
+approved by the maintainer. See [CONTRIBUTING.md](CONTRIBUTING.md) for the
+current policy. Security vulnerabilities should be reported privately
+according to [SECURITY.md](SECURITY.md).
 
 ## License
 

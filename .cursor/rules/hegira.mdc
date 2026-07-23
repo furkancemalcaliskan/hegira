@@ -1,0 +1,11 @@
+---
+description: Canonical Hegira repository instructions
+globs:
+alwaysApply: true
+---
+
+The root `AGENTS.md` file is the canonical repository instruction contract.
+Read and follow it before planning, editing, validating, or performing an
+external action. This adapter adds no separate project rules.
+
+@AGENTS.md

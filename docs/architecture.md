@@ -6,38 +6,134 @@ scanning, ambient request transactions, and a universal repository.
 
 ## Dependency Direction
 
-```text
-web
-  -> presentation
-    -> application
-      -> domain
-        -> domain_shared
+The deployable package selects and composes reusable workspace packages. Within
+the reusable packages, dependencies point toward business rules. The direct
+dependency allowlist below is the normative workspace contract.
 
-infrastructure implements domain and application ports.
-runtime composes adapters, services, HTTP, and worker loops.
-db_migrator owns migration and seed commands.
+```text
+apps/hegira
+  -> runtime, web, presentation, infrastructure, application,
+     application_contracts, domain, domain_shared
+
+runtime
+  -> web, presentation, infrastructure
+
+web
+  -> presentation, application, application_contracts, domain_shared
+
+presentation
+  -> infrastructure, application, application_contracts, domain_shared
+
+infrastructure
+  -> application, application_contracts, domain, domain_shared
+
+application
+  -> application_contracts, domain, domain_shared
+
+application_contracts
+  -> domain, domain_shared
+
+domain
+  -> domain_shared
+
+db_migrator
+  -> infrastructure
 ```
 
-Dependencies point toward business rules. Domain and application code do not
-depend on Axum, Leptos, SQLx, Redis, or vendor SDKs.
+Domain and application code do not depend on Axum, Leptos, SQLx, Redis, or
+vendor SDKs. Infrastructure implements business-facing ports, while runtime
+constructs the configured adapters, HTTP application, and worker loops.
 
-## Workspace Crates
+### Enforced Workspace Dependencies
 
-| Crate | Responsibility |
+The following table is the allowlist for direct local Cargo dependencies.
+Entries are permitted edges, not required dependencies. Removing an edge does
+not violate the policy; adding an edge requires an architecture decision and a
+matching policy update.
+
+| Package | Permitted direct local dependencies |
 |---|---|
-| `domain_shared` | Shared errors, identifiers, and localization resources |
-| `domain` | Entities, invariants, repository ports, and business concepts |
-| `application_contracts` | DTOs, inputs, permissions, and feature metadata |
-| `application` | Use cases, authorization, validation, and transaction intent |
-| `infrastructure` | SQLx adapters, security, jobs, cache, mail, search, and storage |
-| `presentation` | Axum controllers, middleware, OpenAPI, sessions, and composition |
-| `web` | Leptos routes, pages, components, and server functions |
-| `runtime` | Process startup, web/worker roles, telemetry, and shutdown |
-| `db_migrator` | Migration, reset, seed, and search reindex commands |
+| `hegira` | `application`, `application_contracts`, `domain`, `domain_shared`, `infrastructure`, `presentation`, `runtime`, `web` |
+| `domain_shared` | None |
+| `domain` | `domain_shared` |
+| `application_contracts` | `domain`, `domain_shared` |
+| `application` | `application_contracts`, `domain`, `domain_shared` |
+| `infrastructure` | `application`, `application_contracts`, `domain`, `domain_shared` |
+| `presentation` | `application`, `application_contracts`, `domain_shared`, `infrastructure` |
+| `web` | `application`, `application_contracts`, `domain_shared`, `presentation` |
+| `runtime` | `infrastructure`, `presentation`, `web` |
+| `db_migrator` | `infrastructure` |
+
+The boundary check reads declared local dependencies from locked Cargo metadata,
+rejects edges outside this table, and prevents packages outside `apps/` from
+depending on deployable packages under `apps/`. It covers normal, development,
+optional, and build dependencies declared between workspace packages. General
+third-party dependency policy remains the responsibility of the supply-chain
+checks.
+
+## Repository Layout
+
+The repository root is a virtual Cargo workspace and remains the command entry
+point for development, validation, packaging, and container commands. It does
+not define a Rust package of its own.
+
+```text
+.
+├── apps/
+│   └── hegira/              deployable Axum/Leptos package
+│       ├── Cargo.toml       feature composition and Cargo-Leptos metadata
+│       ├── src/             server and hydration entry points
+│       └── tests/           full-stack integration tests
+├── crates/                  reusable layered workspace packages
+├── config/                  environment configuration profiles
+├── docs/                    current architecture and operations guides
+├── ops/                     local observability configuration
+├── scripts/                 validation, operations, and release helpers
+├── Cargo.toml               virtual workspace manifest
+└── Dockerfile               production image contract
+```
+
+The `apps/` directory contains deployable packages. Packages outside `apps/`
+must remain reusable and cannot depend on an application package.
+
+## Workspace Packages
+
+| Package | Location | Responsibility |
+|---|---|---|
+| `hegira` | `apps/hegira` | Deployable Axum/Leptos package and full-stack composition |
+| `domain_shared` | `crates/domain_shared` | Shared errors, identifiers, and localization resources |
+| `domain` | `crates/domain` | Entities, invariants, repository ports, and business concepts |
+| `application_contracts` | `crates/application_contracts` | DTOs, inputs, permissions, and feature metadata |
+| `application` | `crates/application` | Use cases, authorization, validation, and transaction intent |
+| `infrastructure` | `crates/infrastructure` | SQLx adapters, security, jobs, cache, mail, search, and storage |
+| `presentation` | `crates/presentation` | Axum controllers, middleware, OpenAPI, sessions, and composition |
+| `web` | `crates/web` | Leptos routes, pages, components, and server functions |
+| `runtime` | `crates/runtime` | Process startup, web/worker roles, telemetry, and shutdown |
+| `db_migrator` | `crates/db_migrator` | Migration, reset, seed, and search reindex commands |
 
 Code is grouped by bounded context and capability rather than by database
 table. `Catalog::Products` is the reference feature; Identity is the larger
 example covering users, roles, sessions, OAuth, and TOTP.
+
+## Application Composition And Build Ownership
+
+`apps/hegira/Cargo.toml` is the package-level composition root. It forwards
+database and optional capability features to the packages that implement them
+and owns the Cargo-Leptos metadata for the server binary, hydrated library,
+stylesheet, public assets, and workspace-defined WASM release profile.
+
+The server entry point at `apps/hegira/src/main.rs` delegates process startup to
+`runtime::run`. Runtime then validates configuration and compiled capabilities
+before constructing infrastructure adapters, presentation services, HTTP
+routes, telemetry, and worker loops. The hydrated entry point at
+`apps/hegira/src/lib.rs` mounts the `web` application. Full-stack integration
+tests remain beside the deployable package under `apps/hegira/tests`.
+
+Cargo commands are run from the repository root and select the application with
+`-p hegira`. Cargo-Leptos reads the package metadata from
+`apps/hegira/Cargo.toml`; frontend sources and public assets remain owned by
+`crates/web`, while generated server and site outputs are written to the
+workspace-level `target/release` and `target/site` directories.
 
 ## Request Boundaries
 

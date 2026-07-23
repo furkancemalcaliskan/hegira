@@ -1,0 +1,58 @@
+name: full-stack-build
+
+on:
+  push:
+    branches:
+      - develop
+      - main
+    paths:
+      - ".cargo/**"
+      - ".github/workflows/full-stack-build.yml"
+      - "apps/**"
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "crates/**"
+      - "rust-toolchain.toml"
+      - "scripts/full-stack-build-check.sh"
+  pull_request:
+    branches:
+      - develop
+      - main
+    paths:
+      - ".cargo/**"
+      - ".github/workflows/full-stack-build.yml"
+      - "apps/**"
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "crates/**"
+      - "rust-toolchain.toml"
+      - "scripts/full-stack-build-check.sh"
+  workflow_dispatch:
+
+concurrency:
+  group: full-stack-build-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  packaging-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.96.1
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-leptos@0.3.7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: crates/web/src/package-lock.json
+      - name: Verify the full-stack packaging contract
+        run: sh scripts/full-stack-build-check.sh
