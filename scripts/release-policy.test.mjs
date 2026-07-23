@@ -64,7 +64,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - run: gh release create --verify-tag
+      - run: gh release create --verify-tag --title "$RELEASE_REF"
 `;
 
 test("accepts consistent workspace versions", () => {
@@ -122,6 +122,20 @@ test("rejects missing versioned release notes", (context) => {
 
 test("accepts the source-first release workflow contract", () => {
   assert.deepEqual(validateReleaseWorkflow(validWorkflow), []);
+});
+
+test("rejects a prefixed GitHub Release title", () => {
+  const errors = validateReleaseWorkflow(
+    validWorkflow.replace(
+      '--title "$RELEASE_REF"',
+      '--title "Hegira $RELEASE_REF"',
+    ),
+  );
+  assert.ok(
+    errors.some((error) =>
+      error.includes("canonical SemVer release title"),
+    ),
+  );
 });
 
 test("rejects obsolete Linux bundle publication", () => {

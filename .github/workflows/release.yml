@@ -127,5 +127,5 @@ jobs:
           gh release create "$RELEASE_REF" \
             "dist/hegira-$RELEASE_REF.spdx.json#Source SPDX SBOM" \
             --verify-tag \
-            --title "Hegira $RELEASE_REF" \
+            --title "$RELEASE_REF" \
             --notes-file "docs/releases/$RELEASE_REF.md"
