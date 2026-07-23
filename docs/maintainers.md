@@ -12,10 +12,43 @@ Use the following path for milestone work:
 issue branch -> pull request -> develop -> promotion pull request -> main -> v* tag -> release
 ```
 
-Create each issue branch from the latest `develop` and merge it back through a
-pull request. Do not develop milestone work directly on `main`. Promote a
-completed milestone from `develop` to `main` only after its required issues and
-validation gates pass.
+Every maintainer-authored milestone change starts from an accepted GitHub issue
+assigned to one milestone. Move the issue to `In Progress` when its branch is
+created, `In Review` when its pull request is ready for review, and `Done` after
+merge.
+
+Create each issue branch from the latest `develop` using:
+
+```text
+<type>/<issue>-<short-description>
+```
+
+Supported types are `feat`, `fix`, `refactor`, `test`, `docs`, `ci`, `release`,
+and `chore`. Commit messages and ordinary issue pull request titles begin with:
+
+```text
+#<issue> <type>(<scope>): <description>
+```
+
+Ordinary issue pull requests target `develop` and use squash merge. Retain the
+issue-prefixed pull request title as the squash commit message. Dependabot pull
+requests are the standing exception to the issue, branch, and title
+requirements; they keep their generated titles but still require review and
+all checks required by `develop`.
+
+Promote a completed milestone from `develop` to `main` only after its required
+issues and validation gates pass. The promotion pull request uses a merge
+commit and the following title:
+
+```text
+release: promote hegira vX.Y.Z to main
+```
+
+Do not develop directly on `develop` or `main`. Commit, push, pull-request
+creation, merge, tag, release, deployment, and other external mutations require
+explicit maintainer authorization. The current contribution availability and
+authorized change requirements are defined in
+[CONTRIBUTING.md](../CONTRIBUTING.md).
 
 ## GitHub Actions Contract
 
