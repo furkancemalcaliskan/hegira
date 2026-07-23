@@ -24,17 +24,24 @@ Create each issue branch from the latest `develop` using:
 ```
 
 Supported types are `feat`, `fix`, `refactor`, `test`, `docs`, `ci`, `release`,
-and `chore`. Commit messages and ordinary issue pull request titles begin with:
+and `chore`. Commit messages begin with:
 
 ```text
 #<issue> <type>(<scope>): <description>
 ```
 
-Ordinary issue pull requests target `develop` and use squash merge. Retain the
-issue-prefixed pull request title as the squash commit message. Dependabot pull
-requests are the standing exception to the issue, branch, and title
-requirements; they keep their generated titles but still require review and
-all checks required by `develop`.
+Ordinary issue pull request titles omit the issue number:
+
+```text
+<type>(<scope>): <description>
+```
+
+Link the issue in the pull request body with `Closes #<issue>`. Ordinary issue
+pull requests target `develop` and use squash merge. Set the resulting squash
+commit title to the issue-prefixed commit format before merging. Dependabot
+pull requests are the standing exception to the issue and branch requirements;
+they keep their generated titles but still require review and all checks
+required by `develop`.
 
 Promote a completed milestone from `develop` to `main` only after its required
 issues and validation gates pass. The promotion pull request uses a merge
