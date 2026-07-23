@@ -122,6 +122,12 @@ Production container validation:
 sh scripts/container-smoke.sh
 ```
 
+Full-stack release-output validation:
+
+```sh
+sh scripts/full-stack-build-check.sh
+```
+
 Basic focused commands include:
 
 ```sh
