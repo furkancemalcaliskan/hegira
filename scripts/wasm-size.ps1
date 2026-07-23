@@ -5,7 +5,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $libFeatures = "hydrate"
-$args = @("leptos", "build", "--release")
+$args = @("leptos", "build", "-p", "hegira", "--release")
 if ($Split) {
     $args += "--split"
     $libFeatures = "hydrate,wasm-split"

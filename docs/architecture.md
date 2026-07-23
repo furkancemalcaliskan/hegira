@@ -23,8 +23,15 @@ depend on Axum, Leptos, SQLx, Redis, or vendor SDKs.
 
 ## Workspace Crates
 
+The repository root is a virtual Cargo workspace and remains the command entry
+point for development and validation. The deployable full-stack package lives
+at `apps/hegira`; it owns the server and hydration entry points, integration
+tests, application feature composition, and Cargo-Leptos metadata. Shared
+layers remain under `crates/`.
+
 | Crate | Responsibility |
 |---|---|
+| `apps/hegira` | Deployable Axum/Leptos package and full-stack composition |
 | `domain_shared` | Shared errors, identifiers, and localization resources |
 | `domain` | Entities, invariants, repository ports, and business concepts |
 | `application_contracts` | DTOs, inputs, permissions, and feature metadata |

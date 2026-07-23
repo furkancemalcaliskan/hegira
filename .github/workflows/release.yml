@@ -28,7 +28,7 @@ jobs:
       - id: release-ref
         name: Verify release identity
         run: |
-          package_version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -n 1)"
+          package_version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' apps/hegira/Cargo.toml | head -n 1)"
           test "$RELEASE_REF" = "v$package_version"
           test -s "docs/releases/$RELEASE_REF.md"
           if [ "$GITHUB_EVENT_NAME" = "push" ]; then

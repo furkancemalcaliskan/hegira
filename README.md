@@ -60,6 +60,9 @@ capabilities.
 
 ## Quick Start
 
+Run the following commands from the repository root. The root coordinates the
+Cargo workspace, while the deployable package lives at `apps/hegira`.
+
 Install the Rust WASM target and `cargo-leptos`:
 
 ```sh
@@ -71,7 +74,7 @@ Start with SQLite and no external services:
 
 ```sh
 APP_ENV=sqlite cargo run -p db_migrator --no-default-features --features ssr,db-sqlite -- migrate
-APP_ENV=sqlite cargo leptos watch --bin-features ssr,db-sqlite --lib-features hydrate
+APP_ENV=sqlite cargo leptos watch -p hegira --bin-features ssr,db-sqlite --lib-features hydrate
 ```
 
 Open `http://127.0.0.1:3000`. The SQLite profile seeds the development admin

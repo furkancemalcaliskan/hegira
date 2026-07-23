@@ -33,7 +33,7 @@ It matches the Dockerfile's default `ssr,db-postgres` server feature set.
 Build that minimal profile with:
 
 ```sh
-cargo leptos build --release \
+cargo leptos build -p hegira --release \
   --bin-features ssr,db-postgres \
   --lib-features hydrate
 ```
@@ -41,7 +41,7 @@ cargo leptos build --release \
 Compile optional integrations explicitly for a distributed profile:
 
 ```sh
-cargo leptos build --release \
+cargo leptos build -p hegira --release \
   --bin-features ssr,db-postgres,cache-redis,mailer-smtp,storage-s3,search-meilisearch,metrics-prometheus,otel-otlp \
   --lib-features hydrate
 ```
