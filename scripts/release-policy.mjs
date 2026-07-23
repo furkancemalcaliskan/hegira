@@ -15,6 +15,7 @@ const REQUIRED_WORKFLOW_CONTRACTS = [
   ["disabled implicit SBOM publication", "upload-release-assets: false"],
   ["existing-tag verification", "--verify-tag"],
   ["GitHub Release publication", "gh release create"],
+  ["canonical SemVer release title", '--title "$RELEASE_REF"'],
 ];
 
 const OBSOLETE_WORKFLOW_CONTRACTS = [
