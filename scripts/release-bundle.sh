@@ -1,6 +1,10 @@
 #!/usr/bin/env sh
 set -eu
 
+script_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+repo_root="$(CDPATH= cd -- "$script_dir/.." && pwd)"
+cd "$repo_root"
+
 package_version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -n 1)"
 expected_ref="v$package_version"
 release_ref="${1:-$expected_ref}"
@@ -22,27 +26,11 @@ archive="$dist_dir/hegira-$release_ref-linux-x86_64.tar.gz"
 checksum="$archive.sha256"
 packaged_notes="$dist_dir/hegira-$release_ref-release-notes.md"
 archive_contents="$dist_dir/hegira-$release_ref-archive-contents.txt"
-frontend_dir="crates/web/src"
-frontend_bin="$PWD/$frontend_dir/node_modules/.bin"
 
 rm -rf "$bundle_dir"
 rm -f "$archive" "$checksum" "$packaged_notes" "$archive_contents"
 
-npm ci --prefix "$frontend_dir"
-PATH="$frontend_bin:$PATH"
-export PATH
-
-tailwind_bin="$(command -v tailwindcss || true)"
-if [ "$tailwind_bin" != "$frontend_bin/tailwindcss" ]; then
-  echo "repository-local tailwindcss not found after npm ci: $frontend_bin/tailwindcss" >&2
-  exit 1
-fi
-
-cargo build --locked --release -p db_migrator \
-  --no-default-features --features ssr,db-postgres
-cargo leptos build --release \
-  --bin-features ssr,db-postgres \
-  --lib-features hydrate
+sh "$script_dir/full-stack-build-check.sh"
 
 mkdir -p "$bundle_dir/config" "$bundle_dir/target"
 cp target/release/hegira target/release/db_migrator "$bundle_dir/"

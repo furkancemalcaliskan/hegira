@@ -63,6 +63,7 @@ authorized change requirements are defined in
 |---|---|---|---|---|---|
 | `repository-policy` | Targets `develop` or `main` | No | No | No | Validation only |
 | `backend` | Targets `develop` or `main` | `develop` or `main` | Yes | No | Validation only |
+| `full-stack-build` | Targets `develop` or `main`, with packaging path filters | `develop` or `main`, with packaging path filters | Yes | No | Validation only |
 | `production-container-smoke` | Targets `develop` or `main`, with production path filters | `develop` or `main`, with production path filters | Yes | No | Disposable local containers only |
 | `release` | No | No | Yes, build only | Push matching `v*` | Manual: validation artifact; tag: GitHub Release |
 
@@ -88,6 +89,14 @@ The backend workflow contains three gates:
   ignored PostgreSQL integration tests against a disposable service;
 - `supply-chain` runs dependency policy and vulnerability checks.
 
+The full-stack build workflow is path-filtered to the deployable package,
+workspace crates, frontend inputs, and packaging configuration. It installs
+frontend dependencies from the committed npm lockfile, resolves Tailwind from
+the repository-local installation, builds the PostgreSQL server and database
+migrator, builds the hydrated frontend, and verifies the server, migrator,
+WebAssembly, JavaScript, CSS, and branding outputs. It does not create a
+platform archive or perform a deployment.
+
 The container workflow is deliberately path-filtered to production build,
 configuration, Rust source, and smoke-test inputs. It builds the default
 `ssr,db-postgres` image, migrates a disposable PostgreSQL database, verifies
@@ -112,6 +121,12 @@ Run the backend gate without ignored PostgreSQL tests:
 
 ```sh
 sh scripts/backend-check.sh
+```
+
+Verify the full-stack release outputs without creating a release archive:
+
+```sh
+sh scripts/full-stack-build-check.sh
 ```
 
 To match the CI quality job, provide a disposable PostgreSQL database and opt

@@ -98,8 +98,14 @@ sh scripts/backend-check.sh
 ```
 
 The CI quality job also sets `WITH_IGNORED_DB_TESTS=true` and supplies a
-disposable PostgreSQL `DATABASE_URL`. Verify the production container contract
-separately when Docker is available:
+disposable PostgreSQL `DATABASE_URL`. Verify the full-stack release outputs
+without creating a platform archive:
+
+```sh
+sh scripts/full-stack-build-check.sh
+```
+
+Verify the production container contract separately when Docker is available:
 
 ```sh
 sh scripts/container-smoke.sh
@@ -117,10 +123,10 @@ through a pull request before tagging a release.
 
 The backend workflow runs for pull requests targeting `develop` or `main`,
 post-merge pushes to those branches, and explicit manual dispatches. The
-production container smoke workflow uses the same integration boundaries plus
-production-relevant path filters. Plain feature-branch pushes do not run these
-gates unless they update an open pull request. Superseded runs for the same
-pull request or integration ref are cancelled.
+full-stack build and production container smoke workflows use the same
+integration boundaries plus relevant path filters. Plain feature-branch pushes
+do not run these gates unless they update an open pull request. Superseded runs
+for the same pull request or integration ref are cancelled.
 
 Release automation runs only for `v*` tags. CI validates repository changes;
 it does not deploy them. No workflow creates a preview application, public
