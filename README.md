@@ -63,11 +63,13 @@ capabilities.
 Run the following commands from the repository root. The root coordinates the
 Cargo workspace, while the deployable package lives at `apps/hegira`.
 
-Install the Rust WASM target and `cargo-leptos`:
+Install the Rust WASM target, `cargo-leptos`, and lockfile-pinned frontend
+tooling:
 
 ```sh
 rustup target add wasm32-unknown-unknown
 cargo install cargo-leptos
+npm ci --prefix crates/web/src
 ```
 
 Start with SQLite and no external services:

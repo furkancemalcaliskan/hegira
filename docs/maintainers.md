@@ -104,6 +104,10 @@ health, readiness, HTML, CSS, and JavaScript, then removes the stack.
 
 ## Local Validation
 
+Run the commands in this section from the repository root. The root virtual
+workspace coordinates validation for the deployable `apps/hegira` package and
+the reusable packages under `crates/`.
+
 Validate repository documentation, agent adapters, and policy fixtures:
 
 ```sh
