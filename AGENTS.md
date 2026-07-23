@@ -123,6 +123,12 @@ Focused workspace dependency-boundary validation:
 sh scripts/architecture-boundaries.sh
 ```
 
+Focused release identity and source-first workflow validation:
+
+```sh
+sh scripts/release-policy.sh
+```
+
 Production container validation:
 
 ```sh

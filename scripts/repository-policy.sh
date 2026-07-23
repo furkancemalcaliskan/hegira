@@ -7,6 +7,7 @@ node "$repository_root/scripts/repository-policy.mjs" \
   repository --root "$repository_root"
 node "$repository_root/scripts/repository-policy.test.mjs"
 sh "$repository_root/scripts/architecture-boundaries.sh"
+sh "$repository_root/scripts/release-policy.sh"
 
 if [ "$#" -eq 0 ]; then
   exit 0
