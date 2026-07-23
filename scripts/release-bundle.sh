@@ -5,7 +5,7 @@ script_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 repo_root="$(CDPATH= cd -- "$script_dir/.." && pwd)"
 cd "$repo_root"
 
-package_version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -n 1)"
+package_version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' apps/hegira/Cargo.toml | head -n 1)"
 expected_ref="v$package_version"
 release_ref="${1:-$expected_ref}"
 

@@ -12,8 +12,8 @@ do
   test -f "$path" || { echo "missing manual DX API: $path" >&2; exit 1; }
 done
 
-cargo check --no-default-features --features ssr,db-sqlite
-cargo check --no-default-features --features ssr,db-postgres
-cargo check --no-default-features --features hydrate,db-sqlite
+cargo check -p hegira --no-default-features --features ssr,db-sqlite
+cargo check -p hegira --no-default-features --features ssr,db-postgres
+cargo check -p hegira --no-default-features --features hydrate,db-sqlite
 
 echo "manual feature workflow contracts passed"

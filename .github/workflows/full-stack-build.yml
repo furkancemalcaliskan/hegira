@@ -8,12 +8,12 @@ on:
     paths:
       - ".cargo/**"
       - ".github/workflows/full-stack-build.yml"
+      - "apps/**"
       - "Cargo.lock"
       - "Cargo.toml"
       - "crates/**"
       - "rust-toolchain.toml"
       - "scripts/full-stack-build-check.sh"
-      - "src/**"
   pull_request:
     branches:
       - develop
@@ -21,12 +21,12 @@ on:
     paths:
       - ".cargo/**"
       - ".github/workflows/full-stack-build.yml"
+      - "apps/**"
       - "Cargo.lock"
       - "Cargo.toml"
       - "crates/**"
       - "rust-toolchain.toml"
       - "scripts/full-stack-build-check.sh"
-      - "src/**"
   workflow_dispatch:
 
 concurrency:

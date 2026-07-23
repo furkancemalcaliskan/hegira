@@ -25,9 +25,10 @@ commands change. Never describe planned work as implemented.
 
 ## Current Repository Shape
 
-- The repository root is both the Cargo workspace root and the deployable
-  `hegira` Axum/Leptos package.
-- `src/` contains the server binary and hydration entry points.
+- The repository root is a virtual Cargo workspace and the documented command
+  entry point.
+- `apps/hegira/` contains the deployable Axum/Leptos package, server binary,
+  hydration entry point, package metadata, and integration tests.
 - `crates/` contains the layered domain, application, infrastructure,
   presentation, web, runtime, and database-migrator packages.
 - `config/` contains environment profiles.
@@ -52,7 +53,7 @@ Start the current SQLite profile:
 
 ```sh
 APP_ENV=sqlite cargo run -p db_migrator --no-default-features --features ssr,db-sqlite -- migrate
-APP_ENV=sqlite cargo leptos watch --bin-features ssr,db-sqlite --lib-features hydrate
+APP_ENV=sqlite cargo leptos watch -p hegira --bin-features ssr,db-sqlite --lib-features hydrate
 ```
 
 The application listens on `http://127.0.0.1:3000`. See
@@ -132,10 +133,10 @@ Basic focused commands include:
 
 ```sh
 cargo fmt --all -- --check
-cargo check --features ssr
-cargo check --no-default-features --features hydrate --target wasm32-unknown-unknown
-cargo test --features ssr --lib
-cargo leptos build --release --bin-features ssr,db-postgres --lib-features hydrate
+cargo check -p hegira --features ssr
+cargo check -p hegira --no-default-features --features hydrate --target wasm32-unknown-unknown
+cargo test -p hegira --features ssr --lib
+cargo leptos build -p hegira --release --bin-features ssr,db-postgres --lib-features hydrate
 ```
 
 PostgreSQL tests marked `ignored` reset their target database. Run them only

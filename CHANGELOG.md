@@ -2,6 +2,16 @@
 
 All notable changes are documented here. Releases follow Semantic Versioning.
 
+## [Unreleased]
+
+### Changed
+
+- Moved the deployable `hegira` package, its entry points, Cargo-Leptos
+  metadata, and integration tests under `apps/hegira`.
+- Converted the repository root into a virtual Cargo workspace while
+  preserving root-level development, validation, packaging, and container
+  commands.
+
 ## [0.1.2] - 2026-07-22
 
 ### Added

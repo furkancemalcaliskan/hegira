@@ -41,7 +41,7 @@ fi
 
 cargo build --locked --release -p db_migrator \
   --no-default-features --features ssr,db-postgres
-cargo leptos build --release \
+cargo leptos build -p hegira --release \
   --bin-features ssr,db-postgres \
   --bin-cargo-args="--locked" \
   --lib-features hydrate \

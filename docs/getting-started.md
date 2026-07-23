@@ -4,6 +4,9 @@ This guide starts the complete Leptos and Axum application locally. Use SQLite
 for a zero-service development environment or PostgreSQL when database-specific
 behavior must match production.
 
+Run the commands in this guide from the repository root. It is the Cargo
+workspace entry point; the deployable package is located at `apps/hegira`.
+
 ## Prerequisites
 
 - Current stable Rust toolchain
@@ -24,7 +27,7 @@ start the Leptos development server:
 
 ```sh
 APP_ENV=sqlite cargo run -p db_migrator --no-default-features --features ssr,db-sqlite -- migrate
-APP_ENV=sqlite cargo leptos watch --bin-features ssr,db-sqlite --lib-features hydrate
+APP_ENV=sqlite cargo leptos watch -p hegira --bin-features ssr,db-sqlite --lib-features hydrate
 ```
 
 Open `http://127.0.0.1:3000` and sign in with the admin credentials configured
@@ -48,7 +51,7 @@ Create a PostgreSQL database and override its URL when necessary:
 ```sh
 export APP__DATABASE__URL=postgres://postgres:postgres@localhost:5432/hegira
 cargo run -p db_migrator --no-default-features --features ssr,db-postgres -- migrate
-cargo leptos watch --bin-features ssr,db-postgres --lib-features hydrate
+cargo leptos watch -p hegira --bin-features ssr,db-postgres --lib-features hydrate
 ```
 
 PostgreSQL and SQLite migrations are intentionally separate. Add and test both
@@ -68,7 +71,7 @@ Compile OpenAPI explicitly:
 
 ```sh
 APP__OPENAPI__ENABLED=true \
-cargo run --no-default-features --features ssr,db-sqlite,openapi
+cargo run -p hegira --no-default-features --features ssr,db-sqlite,openapi
 ```
 
 ## Verify The Workspace

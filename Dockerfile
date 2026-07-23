@@ -17,13 +17,13 @@ RUN cargo chef prepare --recipe-path recipe.json
 FROM chef AS builder
 ARG SERVER_FEATURES=ssr,db-postgres
 COPY --from=planner /app/recipe.json recipe.json
-RUN cargo chef cook --release --recipe-path recipe.json --no-default-features --features ${SERVER_FEATURES} && \
-    cargo chef cook --release --recipe-path recipe.json --target wasm32-unknown-unknown --no-default-features --features hydrate
+RUN cargo chef cook --release --recipe-path recipe.json --package hegira --no-default-features --features ${SERVER_FEATURES} && \
+    cargo chef cook --release --recipe-path recipe.json --package hegira --target wasm32-unknown-unknown --no-default-features --features hydrate
 COPY crates/web/src/package.json crates/web/src/package-lock.json crates/web/src/
 RUN npm ci --prefix crates/web/src
 COPY . .
 RUN cargo build --locked --release -p db_migrator --no-default-features --features ssr,db-postgres && \
-    cargo leptos build --release --bin-features ${SERVER_FEATURES} --lib-features hydrate
+    cargo leptos build -p hegira --release --bin-features ${SERVER_FEATURES} --lib-features hydrate
 
 FROM debian:bookworm-slim AS runtime-base
 

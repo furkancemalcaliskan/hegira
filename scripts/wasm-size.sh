@@ -8,7 +8,7 @@ if [ "${1:-}" = "--split" ]; then
   lib_features="hydrate,wasm-split"
 fi
 
-cargo leptos build --release --lib-features "$lib_features" $split_arg
+cargo leptos build -p hegira --release --lib-features "$lib_features" $split_arg
 
 pkg="target/site/pkg"
 if [ ! -d "$pkg" ]; then
