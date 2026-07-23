@@ -6,6 +6,7 @@ repository_root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 node "$repository_root/scripts/repository-policy.mjs" \
   repository --root "$repository_root"
 node "$repository_root/scripts/repository-policy.test.mjs"
+sh "$repository_root/scripts/architecture-boundaries.sh"
 
 if [ "$#" -eq 0 ]; then
   exit 0

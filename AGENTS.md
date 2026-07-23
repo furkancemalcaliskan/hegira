@@ -117,6 +117,12 @@ sh scripts/repository-policy.sh
 sh scripts/backend-check.sh
 ```
 
+Focused workspace dependency-boundary validation:
+
+```sh
+sh scripts/architecture-boundaries.sh
+```
+
 Production container validation:
 
 ```sh

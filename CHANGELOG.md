@@ -4,6 +4,12 @@ All notable changes are documented here. Releases follow Semantic Versioning.
 
 ## [Unreleased]
 
+### Added
+
+- Added a locked Cargo-metadata check that enforces the documented direct
+  dependency boundaries between workspace packages in local validation and
+  required CI.
+
 ### Changed
 
 - Moved the deployable `hegira` package, its entry points, Cargo-Leptos
