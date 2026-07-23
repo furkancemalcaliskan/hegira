@@ -24,7 +24,7 @@ Closes #
 - [ ] This work was requested or explicitly approved by the maintainer
 - [ ] The change is limited to the accepted issue scope
 - [ ] The pull request targets `develop`, or is the authorized `develop` to `main` release promotion
-- [ ] The title follows the issue-prefixed format, or an explicit Dependabot or release-promotion exception
+- [ ] The title follows `<type>(<scope>): <description>` without an issue number, or is an explicit Dependabot or release-promotion exception
 - [ ] Current documentation is updated where behavior, paths, or commands changed
 - [ ] Planned capabilities are not described as implemented
 - [ ] No unrelated user changes were removed or overwritten

@@ -159,15 +159,18 @@ request maintainer direction.
 
 ## Git And GitHub Authority
 
-Commit messages and ordinary issue pull request titles begin with:
+Commit messages begin with:
 
 ```text
 #<issue> <type>(<scope>): <description>
 ```
 
-Ordinary issue pull requests target `develop` and use squash merge. The
-verified milestone is promoted from `develop` to `main` with the release title
-and merge method documented in `CONTRIBUTING.md`.
+Ordinary issue pull request titles omit the issue number and use
+`<type>(<scope>): <description>`. Link the issue in the body with
+`Closes #<issue>`. Ordinary issue pull requests target `develop` and use squash
+merge; set the resulting squash commit title to the issue-prefixed commit
+format. The verified milestone is promoted from `develop` to `main` with the
+release title and merge method documented in `CONTRIBUTING.md`.
 
 Preparing local changes does not authorize publication. Do not commit, push,
 create or modify a pull request, merge, tag, release, deploy, change repository
@@ -193,9 +196,9 @@ Before handing work back:
 2. Confirm the issue scope and acceptance criteria are satisfied.
 3. Run and report the relevant checks, including anything not run.
 4. Summarize changed files, behavior impact, risks, and remaining decisions.
-5. Provide the issue-prefixed commit message and pull-request information when
-   requested, but leave external mutations to the maintainer unless explicitly
-   authorized.
+5. Provide separate issue-prefixed commit and issue-free pull-request titles
+   when requested, but leave external mutations to the maintainer unless
+   explicitly authorized.
 
 These instructions guide agent behavior. Deterministic repository rules remain
 enforced by scripts, tests, CI, and protected-branch settings where available.

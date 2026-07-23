@@ -40,8 +40,7 @@ release/<issue>-<short-description>
 chore/<issue>-<short-description>
 ```
 
-Commit messages and ordinary issue pull request titles must begin with the
-related issue number:
+Commit messages must begin with the related issue number:
 
 ```text
 #<issue> <type>(<scope>): <description>
@@ -53,21 +52,29 @@ For example:
 #53 docs(governance): define the repository operating contract
 ```
 
-Dependabot pull requests keep their generated titles. A release promotion from
-`develop` to `main` uses:
+Ordinary issue pull request titles omit the issue number and use:
+
+```text
+<type>(<scope>): <description>
+```
+
+The pull request body links the issue with `Closes #<issue>`. Dependabot pull
+requests keep their generated titles. A release promotion from `develop` to
+`main` uses:
 
 ```text
 release: promote hegira vX.Y.Z to main
 ```
 
-Dependabot updates are the only standing exception to the issue, branch, and
-title requirements. They still require review and all checks required by their
-target branch.
+Dependabot updates are the only standing exception to the issue and branch
+requirements. They still require review and all checks required by their target
+branch.
 
 ## Pull Requests
 
 Ordinary issue pull requests target `develop` and use squash merge. The squash
-commit must retain the issue-prefixed pull request title.
+commit title must be set to the issue-prefixed commit format even though the
+pull request title omits the issue number.
 
 Only the completed and verified milestone is promoted from `develop` to `main`.
 That promotion uses a pull request and a merge commit so the integration
