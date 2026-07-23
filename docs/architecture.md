@@ -21,6 +21,33 @@ db_migrator owns migration and seed commands.
 Dependencies point toward business rules. Domain and application code do not
 depend on Axum, Leptos, SQLx, Redis, or vendor SDKs.
 
+### Enforced Workspace Dependencies
+
+The following table is the allowlist for direct local Cargo dependencies.
+Entries are permitted edges, not required dependencies. Removing an edge does
+not violate the policy; adding an edge requires an architecture decision and a
+matching policy update.
+
+| Package | Permitted direct local dependencies |
+|---|---|
+| `hegira` | `application`, `application_contracts`, `domain`, `domain_shared`, `infrastructure`, `presentation`, `runtime`, `web` |
+| `domain_shared` | None |
+| `domain` | `domain_shared` |
+| `application_contracts` | `domain`, `domain_shared` |
+| `application` | `application_contracts`, `domain`, `domain_shared` |
+| `infrastructure` | `application`, `application_contracts`, `domain`, `domain_shared` |
+| `presentation` | `application`, `application_contracts`, `domain_shared`, `infrastructure` |
+| `web` | `application`, `application_contracts`, `domain_shared`, `presentation` |
+| `runtime` | `infrastructure`, `presentation`, `web` |
+| `db_migrator` | `infrastructure` |
+
+The boundary check reads declared local dependencies from locked Cargo metadata,
+rejects edges outside this table, and prevents packages outside `apps/` from
+depending on deployable packages under `apps/`. It covers normal, development,
+optional, and build dependencies declared between workspace packages. General
+third-party dependency policy remains the responsibility of the supply-chain
+checks.
+
 ## Workspace Crates
 
 The repository root is a virtual Cargo workspace and remains the command entry

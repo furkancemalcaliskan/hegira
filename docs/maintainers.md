@@ -69,9 +69,9 @@ authorized change requirements are defined in
 
 The `repository-policy` workflow validates every pull request to a protected
 integration branch. It checks documentation links, agent adapters, pull request
-metadata, issue-branch naming, and the supported Dependabot and release
-promotion exceptions. It uses no secrets and has read-only repository
-permission.
+metadata, issue-branch naming, workspace dependency boundaries, and the
+supported Dependabot and release promotion exceptions. It uses no secrets and
+has read-only repository permission.
 
 Add the exact `repository-policy` status check to the required checks for both
 `develop` and `main`. The check must pass before merge.
@@ -108,6 +108,13 @@ Validate repository documentation, agent adapters, and policy fixtures:
 
 ```sh
 sh scripts/repository-policy.sh
+```
+
+This standard repository check includes the workspace dependency boundary
+policy. Run that focused contract directly with:
+
+```sh
+sh scripts/architecture-boundaries.sh
 ```
 
 To reproduce pull request metadata validation with a saved GitHub

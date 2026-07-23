@@ -94,6 +94,12 @@ configured in `config/sqlite.yaml`.
 
 ## Quality Gate
 
+Validate repository governance and workspace dependency boundaries:
+
+```sh
+sh scripts/repository-policy.sh
+```
+
 Run the same local backend gate used by CI:
 
 ```sh
