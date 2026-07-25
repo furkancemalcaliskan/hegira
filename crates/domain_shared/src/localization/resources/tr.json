@@ -160,10 +160,5 @@
   "Permission.Identity.Users.Create": "Kimlik kullanıcısı oluştur",
   "Permission.Identity.Users.Update": "Kimlik kullanıcılarını güncelle",
   "Permission.Identity.Users.Delete": "Kimlik kullanıcılarını sil",
-  "Permission.Identity.Authorization": "Kimlik rolleri ve yetkilerini yönet",
-  "Permission.Catalog.Products": "Katalog ürünlerini görüntüle",
-  "Permission.Catalog.Products.Create": "Katalog ürünü oluştur",
-  "Permission.Catalog.Products.Update": "Katalog ürünlerini güncelle",
-  "Permission.Catalog.Products.Delete": "Katalog ürünlerini sil",
-  "Products": "Ürünler"
+  "Permission.Identity.Authorization": "Kimlik rolleri ve yetkilerini yönet"
 }

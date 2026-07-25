@@ -73,7 +73,6 @@ pub enum T {
     ToggleCompactSidebar,
     AllRightsReserved,
     User,
-    Products,
     Role,
     RoleName,
     Username,
@@ -204,10 +203,6 @@ pub enum T {
     PermissionIdentityUsersUpdate,
     PermissionIdentityUsersDelete,
     PermissionIdentityAuthorization,
-    PermissionCatalogProducts,
-    PermissionCatalogProductsCreate,
-    PermissionCatalogProductsUpdate,
-    PermissionCatalogProductsDelete,
 }
 
 impl T {
@@ -245,7 +240,6 @@ impl T {
             Self::ToggleCompactSidebar => "ToggleCompactSidebar",
             Self::AllRightsReserved => "AllRightsReserved",
             Self::User => "User",
-            Self::Products => "Products",
             Self::Role => "Role",
             Self::RoleName => "RoleName",
             Self::Username => "Username",
@@ -376,10 +370,6 @@ impl T {
             Self::PermissionIdentityUsersUpdate => "Permission.Identity.Users.Update",
             Self::PermissionIdentityUsersDelete => "Permission.Identity.Users.Delete",
             Self::PermissionIdentityAuthorization => "Permission.Identity.Authorization",
-            Self::PermissionCatalogProducts => "Permission.Catalog.Products",
-            Self::PermissionCatalogProductsCreate => "Permission.Catalog.Products.Create",
-            Self::PermissionCatalogProductsUpdate => "Permission.Catalog.Products.Update",
-            Self::PermissionCatalogProductsDelete => "Permission.Catalog.Products.Delete",
         }
     }
 }
