@@ -1,7 +1,4 @@
-use crate::{
-    application_contracts::{catalog::permissions as catalog_permissions, identity::permissions},
-    web::shared::i18n::T,
-};
+use crate::{application_contracts::identity::permissions, web::shared::i18n::T};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NavIcon {
@@ -9,7 +6,6 @@ pub enum NavIcon {
     Roles,
     Users,
     Profile,
-    Products,
     // hegira:nav-icons
     // hegira:nav-icons:end
 }
@@ -35,7 +31,7 @@ pub const WORKSPACE_NAV: &[NavSection] = &[NavSection {
         NavItem {
             key: "home",
             label: T::Home,
-            href: "/content",
+            href: "/dashboard",
             icon: NavIcon::Home,
             permission: None,
         },
@@ -54,13 +50,6 @@ pub const WORKSPACE_NAV: &[NavSection] = &[NavSection {
             permission: Some(permissions::USERS),
         },
         NavItem {
-            key: "products",
-            label: T::Products,
-            href: "/catalog/products",
-            icon: NavIcon::Products,
-            permission: Some(catalog_permissions::PRODUCTS),
-        },
-        NavItem {
             key: "profile",
             label: T::Profile,
             href: "/profile",
@@ -75,10 +64,9 @@ pub const WORKSPACE_NAV: &[NavSection] = &[NavSection {
 pub fn title_key_for_path(path: &str) -> T {
     match path {
         "/" | "/login" => T::Login,
-        "/content" => T::Home,
+        "/dashboard" => T::Home,
         "/admin/roles" => T::Roles,
         "/admin/users" => T::Users,
-        "/catalog/products" => T::Products,
         "/profile" => T::Profile,
 
         // hegira:nav-titles

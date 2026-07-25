@@ -112,8 +112,9 @@ must remain reusable and cannot depend on an application package.
 | `db_migrator` | `crates/db_migrator` | Migration, reset, seed, and search reindex commands |
 
 Code is grouped by bounded context and capability rather than by database
-table. `Catalog::Products` is the reference feature; Identity is the larger
-example covering users, roles, sessions, OAuth, and TOTP.
+table. Identity is the active application context and covers users, roles,
+sessions, OAuth, and TOTP. The authenticated web surface starts from a neutral
+dashboard instead of composing a sample business capability.
 
 ## Application Composition And Build Ownership
 
@@ -202,8 +203,6 @@ Feature descriptors are compile-time Rust values. They contribute permission
 discovery and Axum/OpenAPI registration without introducing runtime plugins.
 Concrete service composition, Leptos routes, and navigation remain explicit
 because Rust and the relevant proc macros require concrete types.
-
-The reference workflow is documented in [CRUD Tutorial](crud-tutorial.md).
 
 ## Frontend
 

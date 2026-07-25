@@ -126,7 +126,7 @@ pub fn Topbar(page_title: Signal<T>, sidebar_open: RwSignal<bool>) -> impl IntoV
                             {move || (page_title.get() != T::Home).then(|| {
                                 view! {
                                     <li>
-                                        <A href="/content">{move || i18n.t(T::Home)}</A>
+                                        <A href="/dashboard">{move || i18n.t(T::Home)}</A>
                                     </li>
                                     <li aria-hidden="true">
                                         <ChevronRight class="size-3" />

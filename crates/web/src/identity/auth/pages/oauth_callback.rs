@@ -65,7 +65,7 @@ pub fn OAuthCallbackRoute() -> impl IntoView {
                                 totp_token.set(login.totp_token);
                             } else {
                                 match establish_session(auth).await {
-                                    Ok(()) => navigate("/content", Default::default()),
+                                    Ok(()) => navigate("/dashboard", Default::default()),
                                     Err(message) => error.set(Some(message)),
                                 }
                             }
@@ -102,7 +102,7 @@ pub fn OAuthCallbackRoute() -> impl IntoView {
                 match verify_totp_login(token, code).await {
                     Ok(user) => {
                         auth.set_authenticated(Some(user.username), user.permissions);
-                        navigate("/content", Default::default());
+                        navigate("/dashboard", Default::default());
                     }
                     Err(err) => error.set(Some(err.to_string())),
                 }
@@ -132,7 +132,7 @@ pub fn OAuthCallbackRoute() -> impl IntoView {
                 match complete_oauth_signup(token, selected_username).await {
                     Ok(user) => {
                         auth.set_authenticated(Some(user.username), user.permissions);
-                        navigate("/content", Default::default());
+                        navigate("/dashboard", Default::default());
                     }
                     Err(err) => error.set(Some(err.to_string())),
                 }

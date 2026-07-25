@@ -184,4 +184,16 @@ mod tests {
             assert!(document.paths.paths.contains_key(path), "missing {path}");
         }
     }
+
+    #[test]
+    fn documented_paths_match_the_registered_identity_surface() {
+        let document = document();
+        assert!(
+            document
+                .paths
+                .paths
+                .keys()
+                .all(|path| path.starts_with("/api/identity/"))
+        );
+    }
 }

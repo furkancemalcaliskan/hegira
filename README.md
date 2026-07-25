@@ -86,7 +86,6 @@ configured in `config/sqlite.yaml`.
 
 - [Getting started](docs/getting-started.md)
 - [Architecture](docs/architecture.md)
-- [CRUD tutorial](docs/crud-tutorial.md)
 - [Configuration](docs/configuration.md)
 - [Deployment](docs/deployment.md)
 - [Operations](docs/operations.md)

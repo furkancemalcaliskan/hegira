@@ -7,16 +7,13 @@ use leptos_router::{
 };
 
 use crate::{
-    application_contracts::{catalog::permissions as catalog_permissions, identity::permissions},
+    application_contracts::identity::permissions,
     web::{
-        app::{protected::RequirePermission, shell::AppShell},
-        catalog::products::page::ProductsIndexRoute,
+        app::{dashboard::DashboardRoute, protected::RequirePermission, shell::AppShell},
         identity::{
             auth::pages::{login::LoginRoute, oauth_callback::OAuthCallbackRoute},
             roles::pages::roles_index::RolesIndexRoute,
-            users::pages::{
-                content::ContentRoute, profile::ProfileRoute, users_index::UsersIndexRoute,
-            },
+            users::pages::{profile::ProfileRoute, users_index::UsersIndexRoute},
         },
         shared::feedback::not_found::NotFound,
     },
@@ -38,7 +35,7 @@ pub fn WebRoutes() -> impl IntoView {
                         path=(StaticSegment("oauth"), ParamSegment("provider"), StaticSegment("callback"))
                         view=OAuthCallbackRoute
                     />
-                    <Route path=StaticSegment("content") view=ContentRoute/>
+                    <Route path=StaticSegment("dashboard") view=DashboardRoute/>
                     <Route
                         path=(StaticSegment("admin"), StaticSegment("roles"))
                         view=|| view! {
@@ -56,7 +53,6 @@ pub fn WebRoutes() -> impl IntoView {
                         }
                     />
                     <Route path=StaticSegment("profile") view=ProfileRoute/>
-                    <Route path=(StaticSegment("catalog"), StaticSegment("products")) view=|| view! { <RequirePermission permission=catalog_permissions::PRODUCTS><ProductsIndexRoute/></RequirePermission> }/>
 
                     // hegira:routes
                     // hegira:routes:end
@@ -79,7 +75,7 @@ pub fn WebRoutes() -> impl IntoView {
                         path=(StaticSegment("oauth"), ParamSegment("provider"), StaticSegment("callback"))
                         view=OAuthCallbackRoute
                     />
-                    <Route path=StaticSegment("content") view={Lazy::<ContentLazyRoute>::new()}/>
+                    <Route path=StaticSegment("dashboard") view={Lazy::<DashboardLazyRoute>::new()}/>
                     <Route
                         path=(StaticSegment("admin"), StaticSegment("roles"))
                         view={Lazy::<RolesLazyRoute>::new()}
@@ -89,7 +85,6 @@ pub fn WebRoutes() -> impl IntoView {
                         view={Lazy::<UsersLazyRoute>::new()}
                     />
                     <Route path=StaticSegment("profile") view={Lazy::<ProfileLazyRoute>::new()}/>
-                    <Route path=(StaticSegment("catalog"), StaticSegment("products")) view={Lazy::<ProductsLazyRoute>::new()}/>
 
                     // hegira:lazy-routes
                     // hegira:lazy-routes:end
@@ -101,7 +96,7 @@ pub fn WebRoutes() -> impl IntoView {
 
 #[derive(Debug)]
 #[cfg(feature = "wasm-split")]
-struct ContentLazyRoute;
+struct DashboardLazyRoute;
 
 #[derive(Debug)]
 #[cfg(feature = "wasm-split")]
@@ -115,22 +110,18 @@ struct UsersLazyRoute;
 #[cfg(feature = "wasm-split")]
 struct ProfileLazyRoute;
 
-#[derive(Debug)]
-#[cfg(feature = "wasm-split")]
-struct ProductsLazyRoute;
-
 // hegira:lazy-route-structs
 // hegira:lazy-route-structs:end
 
 #[lazy_route]
 #[cfg(feature = "wasm-split")]
-impl LazyRoute for ContentLazyRoute {
+impl LazyRoute for DashboardLazyRoute {
     fn data() -> Self {
         Self
     }
 
     fn view(_this: Self) -> AnyView {
-        view! { <ContentRoute/> }.into_any()
+        view! { <DashboardRoute/> }.into_any()
     }
 }
 
@@ -177,17 +168,6 @@ impl LazyRoute for ProfileLazyRoute {
 
     fn view(_this: Self) -> AnyView {
         view! { <ProfileRoute/> }.into_any()
-    }
-}
-
-#[lazy_route]
-#[cfg(feature = "wasm-split")]
-impl LazyRoute for ProductsLazyRoute {
-    fn data() -> Self {
-        Self
-    }
-    fn view(_this: Self) -> AnyView {
-        view! { <RequirePermission permission=catalog_permissions::PRODUCTS><ProductsIndexRoute/></RequirePermission> }.into_any()
     }
 }
 
