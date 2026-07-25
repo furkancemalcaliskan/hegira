@@ -14,6 +14,9 @@ pub use ::presentation;
 pub use ::runtime;
 pub use ::web;
 
+#[cfg(feature = "ssr")]
+pub mod server;
+
 #[cfg(feature = "hydrate")]
 #[wasm_bindgen::prelude::wasm_bindgen]
 pub fn hydrate() {

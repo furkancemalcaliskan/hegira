@@ -965,6 +965,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "configuration"
+version = "0.2.0"
+dependencies = [
+ "config",
+]
+
+[[package]]
 name = "console_error_panic_hook"
 version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1814,19 +1821,30 @@ dependencies = [
  "application_contracts",
  "axum",
  "chrono",
+ "configuration",
  "console_error_panic_hook",
  "domain",
  "domain_shared",
  "http-body-util",
  "infrastructure",
  "leptos",
+ "leptos_axum",
+ "opentelemetry",
+ "opentelemetry-otlp",
+ "opentelemetry_sdk",
+ "platform_core",
  "presentation",
+ "prometheus",
  "runtime",
  "serde",
  "serde_json",
  "sqlx",
  "tokio",
  "tower",
+ "tower-http 0.7.0",
+ "tracing",
+ "tracing-opentelemetry",
+ "tracing-subscriber",
  "uuid",
  "wasm-bindgen",
  "web",
@@ -2220,15 +2238,17 @@ dependencies = [
  "axum",
  "base64",
  "chrono",
- "config",
+ "configuration",
  "domain",
  "domain_shared",
  "hmac 0.13.0",
  "ipnet",
  "lettre",
+ "platform_core",
  "rand_core 0.6.4",
  "redis",
  "reqwest 0.12.28",
+ "runtime",
  "serde",
  "serde_json",
  "sha2 0.11.0",
@@ -3176,6 +3196,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b4596b6d070b27117e987119b4dac604f3c58cfb0b191112e24771b2faeac1a6"
 
 [[package]]
+name = "platform_core"
+version = "0.2.0"
+
+[[package]]
 name = "portable-atomic"
 version = "1.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3827,24 +3851,9 @@ dependencies = [
 name = "runtime"
 version = "0.2.0"
 dependencies = [
- "axum",
- "infrastructure",
- "leptos",
- "leptos_axum",
- "opentelemetry",
- "opentelemetry-otlp",
- "opentelemetry_sdk",
- "presentation",
- "prometheus",
  "serde",
- "sqlx",
  "tokio",
- "tower",
- "tower-http 0.7.0",
  "tracing",
- "tracing-opentelemetry",
- "tracing-subscriber",
- "web",
 ]
 
 [[package]]

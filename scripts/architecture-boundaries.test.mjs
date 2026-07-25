@@ -47,12 +47,14 @@ test("accepts the documented current workspace graph", () => {
   assert.deepEqual(validateWorkspaceMetadata(workspaceMetadata()), []);
 });
 
-test("accepts existing runtime and presentation composition edges", () => {
+test("accepts framework isolation and app-owned composition edges", () => {
   const metadata = workspaceMetadata();
   const errors = validateWorkspaceMetadata(metadata);
   assert.deepEqual(errors, []);
   assert.ok(
-    WORKSPACE_DEPENDENCY_POLICY.runtime.includes("web") &&
+    WORKSPACE_DEPENDENCY_POLICY.runtime.length === 0 &&
+      WORKSPACE_DEPENDENCY_POLICY.configuration.length === 0 &&
+      WORKSPACE_DEPENDENCY_POLICY.hegira.includes("infrastructure") &&
       WORKSPACE_DEPENDENCY_POLICY.presentation.includes("infrastructure"),
   );
 });

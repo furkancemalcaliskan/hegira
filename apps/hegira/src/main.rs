@@ -1,6 +1,6 @@
 #[cfg(feature = "ssr")]
 fn main() -> std::process::ExitCode {
-    hegira::runtime::run()
+    hegira::server::run()
 }
 
 #[cfg(not(feature = "ssr"))]

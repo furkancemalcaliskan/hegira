@@ -16,13 +16,28 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 application = { path = "../../crates/application", optional = true }
 application_contracts = { path = "../../crates/application_contracts" }
+configuration = { path = "../../crates/configuration", optional = true }
 domain = { path = "../../crates/domain" }
 domain_shared = { path = "../../crates/domain_shared" }
 infrastructure = { path = "../../crates/infrastructure", optional = true, default-features = false }
+platform_core = { path = "../../crates/platform_core", optional = true }
 presentation = { path = "../../crates/presentation", optional = true, default-features = false }
 runtime = { path = "../../crates/runtime", optional = true, default-features = false }
 web = { path = "../../crates/web", default-features = false }
 leptos = { version = "0.8.19" }
+axum = { version = "0.8.9", optional = true }
+leptos_axum = { version = "0.8.9", optional = true }
+opentelemetry = { version = "0.32.0", optional = true }
+opentelemetry-otlp = { version = "0.32.0", default-features = false, features = ["trace", "grpc-tonic", "http-proto", "reqwest-blocking-client", "tls-ring", "tls-roots"], optional = true }
+opentelemetry_sdk = { version = "0.32.0", features = ["trace", "rt-tokio"], optional = true }
+prometheus = { version = "0.14.0", optional = true }
+serde = { version = "1.0.228", features = ["derive"], optional = true }
+sqlx = { version = "0.8.6", features = ["runtime-tokio-rustls", "migrate", "chrono", "uuid"], optional = true }
+tokio = { version = "1.52.3", features = ["rt-multi-thread", "macros", "fs", "signal"], optional = true }
+tower-http = { version = "0.7.0", features = ["compression-br", "compression-gzip", "cors", "limit", "timeout"], optional = true }
+tracing = { version = "0.1.44", optional = true }
+tracing-opentelemetry = { version = "0.33.0", optional = true }
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"], optional = true }
 
 # Client dependencies
 console_error_panic_hook = { version = "0.1.7", optional = true }
@@ -30,8 +45,8 @@ wasm-bindgen = { version = "0.2.114", optional = true }
 
 [features]
 default = ["db-postgres", "db-sqlite"]
-db-postgres = ["infrastructure/db-postgres", "presentation/db-postgres", "runtime/db-postgres", "web/db-postgres"]
-db-sqlite = ["infrastructure/db-sqlite", "presentation/db-sqlite", "runtime/db-sqlite", "web/db-sqlite"]
+db-postgres = ["infrastructure/db-postgres", "presentation/db-postgres", "web/db-postgres", "sqlx/postgres"]
+db-sqlite = ["infrastructure/db-sqlite", "presentation/db-sqlite", "web/db-sqlite", "sqlx/sqlite"]
 hydrate = [
     "web/hydrate",
     "leptos/hydrate",
@@ -40,24 +55,33 @@ hydrate = [
 ]
 ssr = [
     "dep:application",
+    "dep:axum",
+    "dep:configuration",
     "dep:infrastructure",
+    "dep:leptos_axum",
+    "dep:platform_core",
     "dep:presentation",
     "dep:runtime",
+    "dep:serde",
+    "dep:sqlx",
+    "dep:tokio",
+    "dep:tower-http",
+    "dep:tracing",
+    "dep:tracing-subscriber",
     "application/ssr",
     "infrastructure/ssr",
     "presentation/ssr",
-    "runtime/ssr",
     "web/ssr",
     "leptos/ssr",
 ]
-openapi = ["ssr", "application_contracts/openapi", "presentation/openapi", "runtime/openapi"]
+openapi = ["ssr", "application_contracts/openapi", "presentation/openapi"]
 wasm-split = ["web/wasm-split"]
-cache-redis = ["ssr", "infrastructure/cache-redis", "presentation/cache-redis", "runtime/cache-redis"]
-metrics-prometheus = ["ssr", "presentation/metrics-prometheus", "runtime/metrics-prometheus"]
-otel-otlp = ["ssr", "presentation/otel-otlp", "runtime/otel-otlp"]
-search-meilisearch = ["ssr", "infrastructure/search-meilisearch", "runtime/search-meilisearch"]
-storage-s3 = ["ssr", "infrastructure/storage-s3", "runtime/storage-s3"]
-mailer-smtp = ["ssr", "infrastructure/mailer-smtp", "runtime/mailer-smtp"]
+cache-redis = ["ssr", "infrastructure/cache-redis", "presentation/cache-redis"]
+metrics-prometheus = ["ssr", "dep:prometheus", "presentation/metrics-prometheus"]
+otel-otlp = ["ssr", "dep:opentelemetry", "dep:opentelemetry-otlp", "dep:opentelemetry_sdk", "dep:tracing-opentelemetry", "presentation/otel-otlp"]
+search-meilisearch = ["ssr", "infrastructure/search-meilisearch"]
+storage-s3 = ["ssr", "infrastructure/storage-s3"]
+mailer-smtp = ["ssr", "infrastructure/mailer-smtp"]
 test-support = ["ssr", "application/test-support", "infrastructure/test-support"]
 
 [dev-dependencies]

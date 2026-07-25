@@ -243,7 +243,7 @@ async fn readyz(State(state): State<OperationsState>) -> (StatusCode, Json<Readi
 
 #[cfg(feature = "metrics-prometheus")]
 async fn metrics() -> Result<([(header::HeaderName, &'static str); 1], String), StatusCode> {
-    crate::worker_metrics::scrape()
+    super::worker_metrics::scrape()
         .map(|body| {
             (
                 [(
