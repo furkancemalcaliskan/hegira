@@ -27,10 +27,12 @@ commands change. Never describe planned work as implemented.
 
 - The repository root is a virtual Cargo workspace and the documented command
   entry point.
-- `apps/hegira/` contains the deployable Axum/Leptos package, server binary,
-  hydration entry point, package metadata, and integration tests.
-- `crates/` contains the layered domain, application, infrastructure,
-  presentation, web, runtime, and database-migrator packages.
+- `apps/hegira/` contains the deployable Axum/Leptos package, server
+  composition, binary and hydration entry points, package metadata, and
+  integration tests.
+- `crates/` contains application-independent platform core, configuration, and
+  runtime packages alongside the current layered domain, application,
+  infrastructure, presentation, web, and database-migrator packages.
 - `config/` contains environment profiles.
 - `scripts/` contains local validation, smoke, operations, and release helpers.
 - `.github/workflows/` contains validation and release automation.

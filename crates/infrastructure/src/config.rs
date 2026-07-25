@@ -1,5 +1,8 @@
 use serde::Deserialize;
-use std::{env, net::SocketAddr};
+use std::net::SocketAddr;
+
+pub use platform_core::CompiledCapabilities;
+pub use runtime::RuntimeRole;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct AppConfig {
@@ -29,19 +32,6 @@ pub struct AppConfig {
     pub logging: LoggingConfig,
 }
 
-#[derive(Debug, Clone, Copy, Default)]
-pub struct CompiledCapabilities {
-    pub db_postgres: bool,
-    pub db_sqlite: bool,
-    pub cache_redis: bool,
-    pub mailer_smtp: bool,
-    pub storage_s3: bool,
-    pub search_meilisearch: bool,
-    pub metrics_prometheus: bool,
-    pub otel_otlp: bool,
-    pub openapi: bool,
-}
-
 #[derive(Debug, Clone, Deserialize)]
 pub struct ApplicationConfig {
     pub name: String,
@@ -65,24 +55,6 @@ pub struct WorkerOperationsConfig {
     pub enabled: bool,
     pub addr: SocketAddr,
     pub heartbeat_grace_seconds: u64,
-}
-
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum RuntimeRole {
-    All,
-    Web,
-    Worker,
-}
-
-impl RuntimeRole {
-    pub fn runs_web(&self) -> bool {
-        matches!(self, Self::All | Self::Web)
-    }
-
-    pub fn runs_workers(&self) -> bool {
-        matches!(self, Self::All | Self::Worker)
-    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -382,12 +354,11 @@ pub struct LoggingConfig {
 }
 
 impl AppConfig {
-    pub fn load() -> Result<Self, config::ConfigError> {
-        let environment = env::var("APP_ENV").unwrap_or_else(|_| "development".to_string());
-        let file = format!("config/{environment}.yaml");
+    pub fn load() -> Result<Self, configuration::ConfigError> {
+        let profile = configuration::Profile::from_environment("APP_ENV", "development");
 
-        config::Config::builder()
-            .add_source(config::File::with_name(&file).required(false))
+        profile
+            .builder("config", "APP")
             .set_default("environment", "development")?
             .set_default("application.name", "Hegira")?
             .set_default("application.public_url", "http://127.0.0.1:3000")?
@@ -521,12 +492,7 @@ impl AppConfig {
             .set_default("seed.admin_username", "admin@example.com")?
             .set_default("seed.admin_password", "admin12345")?
             .set_default("logging.filter", "info")?
-            .set_override("environment", environment)?
-            .add_source(
-                config::Environment::with_prefix("APP")
-                    .separator("__")
-                    .prefix_separator("__"),
-            )
+            .set_override("environment", profile.name())?
             .build()?
             .try_deserialize()
     }
@@ -847,6 +813,22 @@ impl AppConfig {
     }
 }
 
+impl configuration::ValidateConfiguration for AppConfig {
+    type Capabilities = CompiledCapabilities;
+
+    fn validate_structure(&self) -> Result<(), String> {
+        AppConfig::validate_structure(self)
+    }
+
+    fn validate_capabilities(&self, capabilities: Self::Capabilities) -> Result<(), String> {
+        AppConfig::validate_capabilities(self, capabilities)
+    }
+
+    fn validate_production_policy(&self) -> Result<(), String> {
+        AppConfig::validate_production_policy(self)
+    }
+}
+
 fn validate_oauth_provider(name: &str, provider: &OAuthProviderConfig) -> Result<(), String> {
     if !provider.enabled {
         return Ok(());
@@ -924,8 +906,8 @@ mod tests {
 
     fn committed_config(profile: &str) -> AppConfig {
         let file = format!("{}/../../config/{profile}.yaml", env!("CARGO_MANIFEST_DIR"));
-        config::Config::builder()
-            .add_source(config::File::with_name(&file))
+        configuration::Config::builder()
+            .add_source(configuration::File::with_name(&file))
             .set_override("environment", profile)
             .expect("profile environment override should be valid")
             .build()
@@ -1444,12 +1426,12 @@ mod tests {
         )]
         .into_iter()
         .collect();
-        let config: AppConfig = config::Config::builder()
-            .add_source(config::File::with_name(&file))
+        let config: AppConfig = configuration::Config::builder()
+            .add_source(configuration::File::with_name(&file))
             .set_override("environment", "development")
             .expect("environment override should be valid")
             .add_source(
-                config::Environment::with_prefix("APP")
+                configuration::Environment::with_prefix("APP")
                     .separator("__")
                     .prefix_separator("__")
                     .source(Some(source)),

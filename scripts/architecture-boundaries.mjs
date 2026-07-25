@@ -7,13 +7,17 @@ export const WORKSPACE_DEPENDENCY_POLICY = Object.freeze({
   hegira: [
     "application",
     "application_contracts",
+    "configuration",
     "domain",
     "domain_shared",
     "infrastructure",
+    "platform_core",
     "presentation",
     "runtime",
     "web",
   ],
+  platform_core: [],
+  configuration: [],
   domain_shared: [],
   domain: ["domain_shared"],
   application_contracts: ["domain", "domain_shared"],
@@ -21,8 +25,11 @@ export const WORKSPACE_DEPENDENCY_POLICY = Object.freeze({
   infrastructure: [
     "application",
     "application_contracts",
+    "configuration",
     "domain",
     "domain_shared",
+    "platform_core",
+    "runtime",
   ],
   presentation: [
     "application",
@@ -36,7 +43,7 @@ export const WORKSPACE_DEPENDENCY_POLICY = Object.freeze({
     "domain_shared",
     "presentation",
   ],
-  runtime: ["infrastructure", "presentation", "web"],
+  runtime: [],
   db_migrator: ["infrastructure"],
 });
 
