@@ -46,7 +46,11 @@ mod tests {
     }
 
     #[test]
-    fn feature_registry_contains_identity() {
-        assert!(features::descriptor("identity").is_some());
+    fn feature_registry_contains_only_active_contexts() {
+        let keys = features::FEATURES
+            .iter()
+            .map(|feature| feature.key)
+            .collect::<Vec<_>>();
+        assert_eq!(keys, ["identity"]);
     }
 }

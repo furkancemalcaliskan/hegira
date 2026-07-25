@@ -6,16 +6,10 @@ pub struct FeatureDescriptor {
     pub permissions: &'static [PermissionDefinition],
 }
 
-pub const FEATURES: &[FeatureDescriptor] = &[
-    FeatureDescriptor {
-        key: "identity",
-        permissions: crate::identity::permissions::ALL,
-    },
-    FeatureDescriptor {
-        key: "catalog.products",
-        permissions: crate::catalog::permissions::ALL,
-    },
-];
+pub const FEATURES: &[FeatureDescriptor] = &[FeatureDescriptor {
+    key: "identity",
+    permissions: crate::identity::permissions::ALL,
+}];
 
 pub fn descriptor(key: &str) -> Option<&'static FeatureDescriptor> {
     FEATURES.iter().find(|feature| feature.key == key)

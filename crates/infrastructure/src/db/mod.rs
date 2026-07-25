@@ -12,6 +12,9 @@ use std::{str::FromStr, time::Duration};
 #[cfg(feature = "db-postgres")]
 pub mod transaction;
 
+#[cfg(test)]
+mod retirement_tests;
+
 #[derive(Debug, Clone)]
 pub enum DatabasePool {
     #[cfg(feature = "db-postgres")]
