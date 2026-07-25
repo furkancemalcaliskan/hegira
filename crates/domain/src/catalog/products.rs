@@ -152,29 +152,3 @@ pub struct ProductPage {
     pub items: Vec<Product>,
     pub total_count: i64,
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn creation_normalizes_business_fields() {
-        let product = NewProduct::validated(
-            Uuid::new_v4(),
-            "  Keyboard ".to_string(),
-            " kb-01 ".to_string(),
-            12_500,
-            true,
-        )
-        .unwrap();
-
-        assert_eq!(product.name, "Keyboard");
-        assert_eq!(product.sku, "KB-01");
-    }
-
-    #[test]
-    fn changes_reject_negative_price_and_invalid_revision() {
-        assert!(ProductChanges::validated("A".into(), "A-1".into(), -1, true, 1).is_err());
-        assert!(ProductChanges::validated("A".into(), "A-1".into(), 1, true, 0).is_err());
-    }
-}

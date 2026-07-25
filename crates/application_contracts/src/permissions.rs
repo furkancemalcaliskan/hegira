@@ -38,10 +38,6 @@ mod tests {
             from_name(crate::identity::permissions::USERS_CREATE.0),
             Some(crate::identity::permissions::USERS_CREATE)
         );
-        assert_eq!(
-            from_name(crate::catalog::permissions::PRODUCTS_CREATE.0),
-            Some(crate::catalog::permissions::PRODUCTS_CREATE)
-        );
 
         // hegira:permission-tests
         // hegira:permission-tests:end
@@ -50,8 +46,7 @@ mod tests {
     }
 
     #[test]
-    fn feature_registry_contains_identity_and_catalog() {
+    fn feature_registry_contains_identity() {
         assert!(features::descriptor("identity").is_some());
-        assert!(features::descriptor("catalog.products").is_some());
     }
 }

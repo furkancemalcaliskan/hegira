@@ -330,7 +330,7 @@ mod tests {
         .unwrap();
         let cache = Arc::new(CacheAdapter::Memory(MemoryCache::default()));
         let provider = SqliteSettingsProvider::new(pool, cache, Duration::from_secs(60));
-        let key = SettingKey::new("catalog.page_size").unwrap();
+        let key = SettingKey::new("test.records.page_size").unwrap();
 
         assert_eq!(provider.get_json(&key).await.unwrap(), None);
 
