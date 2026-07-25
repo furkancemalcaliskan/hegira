@@ -19,7 +19,7 @@ pub fn NotFound() -> impl IntoView {
     let is_authorized = Signal::derive(move || auth.is_authenticated());
     let target_href = move || {
         if is_authorized.get() {
-            "/content".to_string()
+            "/dashboard".to_string()
         } else {
             "/".to_string()
         }

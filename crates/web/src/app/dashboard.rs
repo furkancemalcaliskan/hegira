@@ -9,7 +9,7 @@ use crate::{
 };
 
 #[component]
-pub fn ContentRoute() -> impl IntoView {
+pub fn DashboardRoute() -> impl IntoView {
     let i18n = use_i18n();
     view! {
         <WorkspaceRouteLayout title=T::Home>

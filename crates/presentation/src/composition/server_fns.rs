@@ -1,6 +1,6 @@
 use crate::composition::services::{
-    AppServices, CatalogProductService, IdentityAuthService, IdentityOAuthService,
-    IdentityPermissionService, IdentityUserService,
+    AppServices, IdentityAuthService, IdentityOAuthService, IdentityPermissionService,
+    IdentityUserService,
 };
 use application::shared::errors::ApplicationError;
 
@@ -28,10 +28,6 @@ pub fn user_service() -> IdentityUserService {
 
 pub fn permission_service() -> IdentityPermissionService {
     services().permissions.clone()
-}
-
-pub fn product_service() -> CatalogProductService {
-    services().products.clone()
 }
 
 // hegira:server-fn-services
