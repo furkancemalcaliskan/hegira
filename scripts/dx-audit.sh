@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 set -eu
 
-manifest="${1:-scripts/fixtures/dx/catalog-products.manifest}"
+manifest="${1:-scripts/fixtures/dx/platform-contracts.manifest}"
 
 if [ ! -f "$manifest" ]; then
   echo "DX manifest not found: $manifest" >&2
@@ -24,11 +24,6 @@ max_central="$(read_limit max_central_touchpoints)"
 feature_paths="$(sed -n 's/^feature://p' "$manifest")"
 provider_paths="$(sed -n 's/^provider://p' "$manifest")"
 central_paths="$(sed -n 's/^central://p' "$manifest")"
-
-if [ -z "$feature_paths" ]; then
-  echo "DX target: files<=$max_files loc<=$max_loc central<=$max_central"
-  exit 0
-fi
 
 feature_files=0
 feature_loc=0

@@ -173,14 +173,15 @@ mod tests {
     }
 
     #[test]
-    fn catalog_product_paths_are_documented() {
+    fn identity_management_paths_are_documented() {
         let document = document();
-        assert!(document.paths.paths.contains_key("/api/catalog/products"));
-        assert!(
-            document
-                .paths
-                .paths
-                .contains_key("/api/catalog/products/{pid}")
-        );
+        for path in [
+            "/api/identity/users",
+            "/api/identity/users/{username}",
+            "/api/identity/authorization/roles",
+            "/api/identity/authorization/permissions",
+        ] {
+            assert!(document.paths.paths.contains_key(path), "missing {path}");
+        }
     }
 }
