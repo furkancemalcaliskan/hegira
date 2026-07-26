@@ -8,6 +8,7 @@ publish = false
 [dependencies]
 application = { path = "../application" }
 application_contracts = { path = "../application_contracts" }
+background_jobs = { path = "../background_jobs" }
 configuration = { path = "../configuration" }
 argon2 = "0.5.3"
 base64 = "0.22.1"
@@ -20,6 +21,7 @@ hmac = "0.13.0"
 ipnet = "2.12.0"
 lettre = { version = "0.11.22", default-features = false, features = ["builder", "smtp-transport", "tokio1-rustls-tls"], optional = true }
 platform_core = { path = "../platform_core" }
+persistence = { path = "../persistence", default-features = false }
 redis = { version = "1.2.3", features = ["tokio-comp"], optional = true }
 rand_core = { version = "0.6.4", features = ["getrandom"] }
 reqwest = { version = "0.12.28", default-features = false, features = ["json", "rustls-tls"] }
@@ -37,8 +39,8 @@ axum = "0.8.9"
 
 [features]
 default = ["db-postgres", "db-sqlite"]
-db-postgres = ["sqlx/postgres"]
-db-sqlite = ["sqlx/sqlite"]
+db-postgres = ["persistence/db-postgres", "sqlx/postgres"]
+db-sqlite = ["persistence/db-sqlite", "sqlx/sqlite"]
 ssr = []
 cache-redis = ["dep:redis"]
 storage-s3 = ["dep:aws-config", "dep:aws-sdk-s3"]

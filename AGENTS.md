@@ -30,9 +30,10 @@ commands change. Never describe planned work as implemented.
 - `apps/hegira/` contains the deployable Axum/Leptos package, server
   composition, binary and hydration entry points, package metadata, and
   integration tests.
-- `crates/` contains application-independent platform core, configuration, and
-  runtime packages alongside the current layered domain, application,
-  infrastructure, presentation, web, and database-migrator packages.
+- `crates/` contains application-independent platform core, configuration,
+  persistence, background-work, and runtime packages alongside the current
+  layered domain, application, infrastructure, presentation, web, and
+  database-migrator packages.
 - `config/` contains environment profiles.
 - `scripts/` contains local validation, smoke, operations, and release helpers.
 - `.github/workflows/` contains validation and release automation.

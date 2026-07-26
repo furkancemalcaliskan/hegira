@@ -8,7 +8,7 @@ use crate::{
     config::DurableJobsConfig,
     jobs::{ClaimedMessage, DurableQueueStats, JobObserver, NoopJobObserver},
 };
-use application::shared::jobs::{DurableJobOptions, DurableJobQueue};
+use background_jobs::{DurableJobOptions, DurableJobQueue};
 
 pub use crate::jobs::DurableJobRegistry;
 

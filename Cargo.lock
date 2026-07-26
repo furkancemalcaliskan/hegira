@@ -70,6 +70,7 @@ name = "application"
 version = "0.2.0"
 dependencies = [
  "application_contracts",
+ "background_jobs",
  "chrono",
  "domain",
  "domain_shared",
@@ -695,6 +696,16 @@ dependencies = [
  "tower-layer",
  "tower-service",
  "tracing",
+]
+
+[[package]]
+name = "background_jobs"
+version = "0.2.0"
+dependencies = [
+ "serde_json",
+ "tokio",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -1820,6 +1831,7 @@ dependencies = [
  "application",
  "application_contracts",
  "axum",
+ "background_jobs",
  "chrono",
  "configuration",
  "console_error_panic_hook",
@@ -2236,6 +2248,7 @@ dependencies = [
  "aws-config",
  "aws-sdk-s3",
  "axum",
+ "background_jobs",
  "base64",
  "chrono",
  "configuration",
@@ -2244,6 +2257,7 @@ dependencies = [
  "hmac 0.13.0",
  "ipnet",
  "lettre",
+ "persistence",
  "platform_core",
  "rand_core 0.6.4",
  "redis",
@@ -3087,6 +3101,15 @@ name = "percent-encoding"
 version = "2.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
+
+[[package]]
+name = "persistence"
+version = "0.2.0"
+dependencies = [
+ "serde",
+ "sqlx",
+ "tokio",
+]
 
 [[package]]
 name = "pest"

@@ -1,6 +1,7 @@
 use serde::Deserialize;
 use std::net::SocketAddr;
 
+pub use persistence::{DatabaseBackend, DatabaseConfig};
 pub use platform_core::CompiledCapabilities;
 pub use runtime::RuntimeRole;
 
@@ -63,40 +64,6 @@ pub struct StartupConfig {
     pub seed_identity: bool,
     pub scheduler: bool,
     pub durable_jobs: bool,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct DatabaseConfig {
-    pub backend: DatabaseBackend,
-    pub url: String,
-    pub max_connections: u32,
-    pub auto_migrate: bool,
-}
-
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum DatabaseBackend {
-    Postgres,
-    Sqlite,
-}
-
-impl DatabaseConfig {
-    pub fn safe_url(&self) -> String {
-        let Some(scheme_end) = self.url.find("://") else {
-            return "<redacted database url>".to_string();
-        };
-        let credentials_start = scheme_end + 3;
-        let Some(at_offset) = self.url[credentials_start..].find('@') else {
-            return self.url.clone();
-        };
-        let credentials_end = credentials_start + at_offset;
-
-        format!(
-            "{}<credentials>@{}",
-            &self.url[..credentials_start],
-            &self.url[(credentials_end + 1)..]
-        )
-    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
