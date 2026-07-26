@@ -1,4 +1,4 @@
-use infrastructure::jobs::{DurableQueueStats, JobObserver};
+use background_jobs::{DurableQueueStats, JobObserver};
 use prometheus::{
     Encoder, Gauge, HistogramOpts, HistogramVec, IntCounter, IntCounterVec, IntGaugeVec, Opts,
     TextEncoder, default_registry,

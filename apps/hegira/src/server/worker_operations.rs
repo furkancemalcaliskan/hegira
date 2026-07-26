@@ -1,7 +1,7 @@
 #[cfg(feature = "metrics-prometheus")]
 use axum::http::header;
 use axum::{Json, Router, extract::State, http::StatusCode, routing::get};
-use infrastructure::jobs::{DurableQueueStats, JobObserver};
+use background_jobs::{DurableQueueStats, JobObserver};
 use serde::Serialize;
 use std::{
     sync::{Arc, Mutex},
@@ -286,10 +286,8 @@ mod tests {
     fn active_worker_is_initially_ready_and_heartbeat_is_recorded() {
         let health = Arc::new(WorkerHealth::default());
         health.activate("durable", Duration::from_secs(1), Duration::from_secs(1));
-        let observer = RuntimeJobObserver::new(
-            health.clone(),
-            Arc::new(infrastructure::jobs::NoopJobObserver),
-        );
+        let observer =
+            RuntimeJobObserver::new(health.clone(), Arc::new(background_jobs::NoopJobObserver));
         observer.worker_heartbeat("durable");
 
         let workers = health.snapshot();

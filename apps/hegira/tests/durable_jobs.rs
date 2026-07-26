@@ -6,9 +6,7 @@ use std::sync::{
 };
 
 use hegira::{
-    application::shared::jobs::{
-        DurableJobFuture, DurableJobHandler, DurableJobOptions, DurableJobQueue,
-    },
+    background_jobs::{DurableJobFuture, DurableJobHandler, DurableJobOptions, DurableJobQueue},
     infrastructure::{
         config::DurableJobsConfig,
         jobs::durable::{DurableJobRegistry, DurableJobWorker, SqlxDurableJobQueue},

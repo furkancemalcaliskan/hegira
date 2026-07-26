@@ -12,10 +12,11 @@ dependency allowlist below is the normative workspace contract.
 
 ```text
 apps/hegira
-  -> platform_core, configuration, runtime, web, presentation,
-     infrastructure, application, application_contracts, domain, domain_shared
+  -> platform_core, configuration, background_jobs, runtime, web,
+     presentation, infrastructure, application, application_contracts,
+     domain, domain_shared
 
-platform_core, configuration, runtime
+platform_core, configuration, persistence, background_jobs, runtime
   -> no local application packages
 
 web
@@ -25,11 +26,11 @@ presentation
   -> infrastructure, application, application_contracts, domain_shared
 
 infrastructure
-  -> platform_core, configuration, runtime, application,
-     application_contracts, domain, domain_shared
+  -> platform_core, configuration, persistence, background_jobs, runtime,
+     application, application_contracts, domain, domain_shared
 
 application
-  -> application_contracts, domain, domain_shared
+  -> background_jobs, application_contracts, domain, domain_shared
 
 application_contracts
   -> domain, domain_shared
@@ -45,7 +46,8 @@ Domain and application code do not depend on Axum, Leptos, SQLx, Redis, or
 vendor SDKs. Infrastructure implements business-facing ports. The deployable
 application owns adapter, HTTP, telemetry, and worker composition, while the
 framework packages own capability identity, configuration orchestration,
-runtime roles, process execution, and shutdown signaling.
+provider-neutral persistence and background-work primitives, runtime roles,
+process execution, and shutdown signaling.
 
 ### Enforced Workspace Dependencies
 
@@ -56,14 +58,16 @@ matching policy update.
 
 | Package | Permitted direct local dependencies |
 |---|---|
-| `hegira` | `application`, `application_contracts`, `configuration`, `domain`, `domain_shared`, `infrastructure`, `platform_core`, `presentation`, `runtime`, `web` |
+| `hegira` | `application`, `application_contracts`, `background_jobs`, `configuration`, `domain`, `domain_shared`, `infrastructure`, `platform_core`, `presentation`, `runtime`, `web` |
 | `platform_core` | None |
 | `configuration` | None |
+| `persistence` | None |
+| `background_jobs` | None |
 | `domain_shared` | None |
 | `domain` | `domain_shared` |
 | `application_contracts` | `domain`, `domain_shared` |
-| `application` | `application_contracts`, `domain`, `domain_shared` |
-| `infrastructure` | `application`, `application_contracts`, `configuration`, `domain`, `domain_shared`, `platform_core`, `runtime` |
+| `application` | `application_contracts`, `background_jobs`, `domain`, `domain_shared` |
+| `infrastructure` | `application`, `application_contracts`, `background_jobs`, `configuration`, `domain`, `domain_shared`, `persistence`, `platform_core`, `runtime` |
 | `presentation` | `application`, `application_contracts`, `domain_shared`, `infrastructure` |
 | `web` | `application`, `application_contracts`, `domain_shared`, `presentation` |
 | `runtime` | None |
@@ -108,11 +112,13 @@ must remain reusable and cannot depend on an application package.
 | `hegira` | `apps/hegira` | Deployable Axum/Leptos package and full-stack composition |
 | `platform_core` | `crates/platform_core` | Application-independent compiled capability primitives |
 | `configuration` | `crates/configuration` | Configuration profile sources and ordered validation orchestration |
+| `persistence` | `crates/persistence` | Database provider selection, pools, health checks, and transaction primitives |
+| `background_jobs` | `crates/background_jobs` | Job contracts, handler registration, observation, and recurring execution |
 | `domain_shared` | `crates/domain_shared` | Shared errors, identifiers, and localization resources |
 | `domain` | `crates/domain` | Entities, invariants, repository ports, and business concepts |
 | `application_contracts` | `crates/application_contracts` | DTOs, inputs, permissions, and feature metadata |
 | `application` | `crates/application` | Use cases, authorization, validation, and transaction intent |
-| `infrastructure` | `crates/infrastructure` | SQLx adapters, security, jobs, cache, mail, search, and storage |
+| `infrastructure` | `crates/infrastructure` | Application migrations and SQLx adapters for Identity, jobs, security, cache, mail, search, and storage |
 | `presentation` | `crates/presentation` | Axum controllers, middleware, OpenAPI, sessions, and composition |
 | `web` | `crates/web` | Leptos routes, pages, components, and server functions |
 | `runtime` | `crates/runtime` | Runtime roles, Tokio process lifecycle, and shutdown signaling |
@@ -196,6 +202,12 @@ Repository traits describe business persistence without SQLx types. PostgreSQL
 and SQLite use separate adapters and migration directories so provider-specific
 behavior remains visible.
 
+The `persistence` framework package owns explicit database-provider selection,
+connection pools, health checks, and SQLx transaction types. It does not own
+application schemas, migrations, or repositories. The `infrastructure`
+package embeds the current application migrations and implements Identity
+repositories against the selected provider.
+
 Standard mutations follow this order:
 
 1. Resolve the current actor.
@@ -207,6 +219,13 @@ Standard mutations follow this order:
 Transactions are use-case boundaries, not HTTP-request middleware. Durable
 outbox records are committed with state changes when asynchronous work must be
 published reliably.
+
+The `background_jobs` framework package owns job dispatch, durable queue and
+handler contracts, handler registration, observation, and recurring execution.
+PostgreSQL and SQLite outbox workers remain infrastructure adapters because
+their SQL contract is backed by the application-owned migrations. This keeps
+framework primitives reusable without prematurely assigning module migration
+ownership.
 
 ## Feature Registration
 

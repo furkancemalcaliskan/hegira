@@ -4,6 +4,8 @@
 pub use ::application;
 pub use ::application_contracts;
 #[cfg(feature = "ssr")]
+pub use ::background_jobs;
+#[cfg(feature = "ssr")]
 pub use ::domain;
 pub use ::domain_shared;
 #[cfg(feature = "ssr")]

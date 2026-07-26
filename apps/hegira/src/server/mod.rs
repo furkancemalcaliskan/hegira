@@ -156,7 +156,7 @@ async fn serve_configured(app_config: infrastructure::config::AppConfig) -> Resu
 fn start_workers(
     db: infrastructure::db::DatabasePool,
     app_config: &infrastructure::config::AppConfig,
-    observer: std::sync::Arc<dyn infrastructure::jobs::JobObserver>,
+    observer: std::sync::Arc<dyn background_jobs::JobObserver>,
     health: std::sync::Arc<worker_operations::WorkerHealth>,
     search: std::sync::Arc<infrastructure::search::SearchAdapter>,
 ) -> Result<ActiveWorkers, String> {
@@ -204,7 +204,7 @@ fn start_workers(
             std::time::Duration::from_millis(app_config.jobs.durable.poll_interval_milliseconds),
             heartbeat_grace,
         );
-        let mut registry = infrastructure::jobs::DurableJobRegistry::default();
+        let mut registry = background_jobs::DurableJobRegistry::default();
         if app_config.mailer.enabled {
             registry.register(infrastructure::mail::jobs::SendMailJobHandler::new(
                 infrastructure::mail::MailerAdapter::from_config(app_config)?,
@@ -261,14 +261,14 @@ fn start_workers(
 
 fn metrics_job_observer(
     app_config: &infrastructure::config::AppConfig,
-) -> std::sync::Arc<dyn infrastructure::jobs::JobObserver> {
+) -> std::sync::Arc<dyn background_jobs::JobObserver> {
     #[cfg(feature = "metrics-prometheus")]
     if app_config.metrics.enabled {
         return std::sync::Arc::new(worker_metrics::PrometheusJobObserver::new());
     }
 
     let _ = app_config;
-    std::sync::Arc::new(infrastructure::jobs::NoopJobObserver)
+    std::sync::Arc::new(background_jobs::NoopJobObserver)
 }
 
 async fn serve_worker_operations(

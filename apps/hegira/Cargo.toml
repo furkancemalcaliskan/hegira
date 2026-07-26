@@ -16,6 +16,7 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 application = { path = "../../crates/application", optional = true }
 application_contracts = { path = "../../crates/application_contracts" }
+background_jobs = { path = "../../crates/background_jobs", optional = true }
 configuration = { path = "../../crates/configuration", optional = true }
 domain = { path = "../../crates/domain" }
 domain_shared = { path = "../../crates/domain_shared" }
@@ -56,6 +57,7 @@ hydrate = [
 ssr = [
     "dep:application",
     "dep:axum",
+    "dep:background_jobs",
     "dep:configuration",
     "dep:infrastructure",
     "dep:leptos_axum",
