@@ -50,6 +50,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: >-
           cargo check --locked --no-default-features
+          --package hegira
           --features "${{ matrix.features }}"
           ${{ matrix.target_args }}
 

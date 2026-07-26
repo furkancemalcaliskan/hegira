@@ -1,4 +1,5 @@
 pub mod auth_state;
+pub mod dashboard;
 pub mod layout;
 pub mod navigation;
 pub mod page;

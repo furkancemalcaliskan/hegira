@@ -57,7 +57,7 @@ pub fn LoginRoute() -> impl IntoView {
                 match current_user().await {
                     Ok(user) => {
                         auth.set_authenticated(Some(user.username), user.permissions);
-                        navigate("/content", Default::default());
+                        navigate("/dashboard", Default::default());
                     }
                     Err(_) => {
                         auth.clear();
@@ -106,7 +106,7 @@ pub fn LoginRoute() -> impl IntoView {
                 match login(username_value, password_value).await {
                     Ok(user) => {
                         auth.set_authenticated(Some(user.username), user.permissions);
-                        navigate("/content", Default::default());
+                        navigate("/dashboard", Default::default());
                     }
                     Err(_) => {
                         error.set(Some(i18n.t_untracked(T::InvalidCredentials).to_string()));
@@ -164,9 +164,11 @@ pub fn LoginRoute() -> impl IntoView {
                 <Card class="w-full max-w-md border-0 shadow-none sm:border sm:shadow-sm".to_string()>
                     <CardContent class="grid gap-6 px-6".to_string()>
                         <div class="grid gap-2 text-center">
-                            <div class="mx-auto grid size-10 place-items-center rounded-md bg-primary text-primary-foreground font-bold">
-                                "W"
-                            </div>
+                            <img
+                                class="mx-auto size-10 object-contain"
+                                src="/assets/branding/hegira-logo.png"
+                                alt="Hegira"
+                            />
                             <h1 class="text-2xl font-semibold tracking-tight">
                                 {move || if is_register.get() { i18n.t(T::CreateAccount) } else { i18n.t(T::WelcomeBack) }}
                             </h1>
@@ -294,9 +296,12 @@ pub fn LoginRoute() -> impl IntoView {
                     <div class="absolute inset-0 bg-card"></div>
                     <div class="absolute inset-0 bg-[linear-gradient(to_right,var(--border)_1px,transparent_1px),linear-gradient(to_bottom,var(--border)_1px,transparent_1px)] bg-[size:44px_44px] opacity-40"></div>
                     <div class="relative z-10 flex items-center gap-3 text-white">
-                        <div class="grid size-10 place-items-center rounded-md bg-white/10 font-bold ring-1 ring-white/20">
-                            "W"
-                        </div>
+                        <img
+                            class="size-10 object-contain"
+                            src="/assets/branding/hegira-logo.png"
+                            alt=""
+                            aria-hidden="true"
+                        />
                         <div class="grid">
                             <strong>"Hegira"</strong>
                             <span class="text-sm text-white/65">{move || i18n.t(T::LoginHeroKicker)}</span>

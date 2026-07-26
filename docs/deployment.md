@@ -30,10 +30,15 @@ The committed production profile is the minimal PostgreSQL contract: database
 sessions, in-process rate limiting, and disabled optional external providers.
 It matches the Dockerfile's default `ssr,db-postgres` server feature set.
 
-Build that minimal profile with:
+Run release commands from the repository root. Cargo selects the deployable
+package at `apps/hegira` by its package name, `hegira`; Cargo-Leptos reads its
+build metadata there while writing outputs to the workspace-level `target`
+directory.
+
+Build the minimal profile with:
 
 ```sh
-cargo leptos build --release \
+cargo leptos build -p hegira --release \
   --bin-features ssr,db-postgres \
   --lib-features hydrate
 ```
@@ -41,7 +46,7 @@ cargo leptos build --release \
 Compile optional integrations explicitly for a distributed profile:
 
 ```sh
-cargo leptos build --release \
+cargo leptos build -p hegira --release \
   --bin-features ssr,db-postgres,cache-redis,mailer-smtp,storage-s3,search-meilisearch,metrics-prometheus,otel-otlp \
   --lib-features hydrate
 ```
@@ -61,6 +66,25 @@ The two supported production capability contracts are:
 The distributed build makes adapters available; it does not turn them on.
 Runtime configuration that selects an adapter missing from the binary fails
 capability preflight before dependency initialization.
+
+Both commands produce the server at `target/release/hegira` and the hydrated
+site under `target/site`. Frontend source, styles, and public assets remain
+under `crates/web`; they are inputs to the application-owned Cargo-Leptos
+package rather than independent deployment units.
+
+## Source Distribution
+
+Hegira is released as a source template rather than as a compiled application.
+Each stable release is identified by a signed `vMAJOR.MINOR.PATCH` tag and a
+GitHub Release. GitHub provides `.zip` and `.tar.gz` archives of the tagged
+source; the only custom release asset is an SPDX JSON SBOM generated from that
+source checkout.
+
+The release workflow still verifies the minimal PostgreSQL full-stack build and
+production container. Those are validation contracts for users building and
+deploying their own application, not published binaries or images. Hegira does
+not publish a platform-specific executable, Linux application bundle, official
+container image, preview application, or production deployment.
 
 ## Database Release Step
 

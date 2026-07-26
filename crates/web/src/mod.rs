@@ -1,7 +1,6 @@
 #![recursion_limit = "256"]
 
 pub mod app;
-pub mod catalog;
 pub mod identity;
 pub mod root;
 pub mod routes;
@@ -15,5 +14,5 @@ pub use ::domain_shared;
 pub use ::presentation;
 
 pub mod web {
-    pub use crate::{app, catalog, identity, root, routes, shared};
+    pub use crate::{app, identity, root, routes, shared};
 }

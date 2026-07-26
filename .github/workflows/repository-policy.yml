@@ -1,0 +1,27 @@
+name: repository-policy
+
+on:
+  pull_request:
+    branches:
+      - develop
+      - main
+
+concurrency:
+  group: repository-policy-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  policy:
+    name: repository-policy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - uses: dtolnay/rust-toolchain@1.96.1
+      - name: Validate repository and pull request policy
+        run: sh scripts/repository-policy.sh --event "$GITHUB_EVENT_PATH"

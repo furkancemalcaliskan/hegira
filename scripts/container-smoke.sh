@@ -49,10 +49,16 @@ artifacts_dir="$(mktemp -d)"
 curl --fail --silent --show-error "$base_url/" --output "$artifacts_dir/index.html"
 curl --fail --silent --show-error "$base_url/pkg/hegira.css" --output "$artifacts_dir/hegira.css"
 curl --fail --silent --show-error "$base_url/pkg/hegira.js" --output "$artifacts_dir/hegira.js"
+curl --fail --silent --show-error \
+  "$base_url/assets/branding/hegira-logo.png" \
+  --output "$artifacts_dir/hegira-logo.png"
 
 grep -Eqi '<!doctype html|<html' "$artifacts_dir/index.html"
 test -s "$artifacts_dir/hegira.css"
 test -s "$artifacts_dir/hegira.js"
+cmp \
+  "$artifacts_dir/hegira-logo.png" \
+  crates/web/src/public/assets/branding/hegira-logo.png
 rm -rf "$artifacts_dir"
 
 echo "production container smoke passed at $base_url"

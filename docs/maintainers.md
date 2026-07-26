@@ -12,22 +12,74 @@ Use the following path for milestone work:
 issue branch -> pull request -> develop -> promotion pull request -> main -> v* tag -> release
 ```
 
-Create each issue branch from the latest `develop` and merge it back through a
-pull request. Do not develop milestone work directly on `main`. Promote a
-completed milestone from `develop` to `main` only after its required issues and
-validation gates pass.
+Every maintainer-authored milestone change starts from an accepted GitHub issue
+assigned to one milestone. Move the issue to `In Progress` when its branch is
+created, `In Review` when its pull request is ready for review, and `Done` after
+merge.
+
+Create each issue branch from the latest `develop` using:
+
+```text
+<type>/<issue>-<short-description>
+```
+
+Supported types are `feat`, `fix`, `refactor`, `test`, `docs`, `ci`, `release`,
+and `chore`. Commit messages begin with:
+
+```text
+#<issue> <type>(<scope>): <description>
+```
+
+Ordinary issue pull request titles omit the issue number:
+
+```text
+<type>(<scope>): <description>
+```
+
+Link the issue in the pull request body with `Closes #<issue>`. Ordinary issue
+pull requests target `develop` and use squash merge. Set the resulting squash
+commit title to the issue-prefixed commit format before merging. Dependabot
+pull requests are the standing exception to the issue and branch requirements;
+they keep their generated titles but still require review and all checks
+required by `develop`.
+
+Promote a completed milestone from `develop` to `main` only after its required
+issues and validation gates pass. The promotion pull request uses a merge
+commit and the following title:
+
+```text
+release: promote hegira vX.Y.Z to main
+```
+
+Do not develop directly on `develop` or `main`. Commit, push, pull-request
+creation, merge, tag, release, deployment, and other external mutations require
+explicit maintainer authorization. The current contribution availability and
+authorized change requirements are defined in
+[CONTRIBUTING.md](../CONTRIBUTING.md).
 
 ## GitHub Actions Contract
 
 | Workflow | Pull request | Branch push | Manual | Tag | Side effect |
 |---|---|---|---|---|---|
+| `repository-policy` | Targets `develop` or `main` | No | No | No | Validation only |
 | `backend` | Targets `develop` or `main` | `develop` or `main` | Yes | No | Validation only |
+| `full-stack-build` | Targets `develop` or `main`, with packaging path filters | `develop` or `main`, with packaging path filters | Yes | No | Validation only |
 | `production-container-smoke` | Targets `develop` or `main`, with production path filters | `develop` or `main`, with production path filters | Yes | No | Disposable local containers only |
-| `release` | No | No | Yes, build only | Push matching `v*` | Manual: validation artifact; tag: GitHub Release |
+| `release` | No | No | `main` only | Push matching `v*.*.*` | Manual: validation artifacts; tag: source-first GitHub Release |
+
+The `repository-policy` workflow validates every pull request to a protected
+integration branch. It checks documentation links, agent adapters, pull request
+metadata, issue-branch naming, workspace dependency boundaries, and the
+source-first release contract, together with the supported Dependabot and
+release promotion exceptions. It uses no secrets and has read-only repository
+permission.
+
+Add the exact `repository-policy` status check to the required checks for both
+`develop` and `main`. The check must pass before merge.
 
 A plain push to an issue branch does not trigger the push-based validation
 workflows. Updating an open pull request triggers its `pull_request` checks.
-Both validation workflows cancel superseded runs for the same pull request or
+Validation workflows cancel superseded runs for the same pull request or
 integration ref.
 
 The backend workflow contains three gates:
@@ -38,6 +90,14 @@ The backend workflow contains three gates:
   ignored PostgreSQL integration tests against a disposable service;
 - `supply-chain` runs dependency policy and vulnerability checks.
 
+The full-stack build workflow is path-filtered to the deployable package,
+workspace crates, frontend inputs, and packaging configuration. It installs
+frontend dependencies from the committed npm lockfile, resolves Tailwind from
+the repository-local installation, builds the PostgreSQL server and database
+migrator, builds the hydrated frontend, and verifies the server, migrator,
+WebAssembly, JavaScript, CSS, and branding outputs. It does not create a
+platform archive or perform a deployment.
+
 The container workflow is deliberately path-filtered to production build,
 configuration, Rust source, and smoke-test inputs. It builds the default
 `ssr,db-postgres` image, migrates a disposable PostgreSQL database, verifies
@@ -45,10 +105,41 @@ health, readiness, HTML, CSS, and JavaScript, then removes the stack.
 
 ## Local Validation
 
+Run the commands in this section from the repository root. The root virtual
+workspace coordinates validation for the deployable `apps/hegira` package and
+the reusable packages under `crates/`.
+
+Validate repository documentation, agent adapters, and policy fixtures:
+
+```sh
+sh scripts/repository-policy.sh
+```
+
+This standard repository check includes the workspace dependency boundary
+and source-first release policies. Run those focused contracts directly with:
+
+```sh
+sh scripts/architecture-boundaries.sh
+sh scripts/release-policy.sh
+```
+
+To reproduce pull request metadata validation with a saved GitHub
+`pull_request` event:
+
+```sh
+sh scripts/repository-policy.sh --event path/to/pull-request-event.json
+```
+
 Run the backend gate without ignored PostgreSQL tests:
 
 ```sh
 sh scripts/backend-check.sh
+```
+
+Verify the full-stack release outputs without creating a release archive:
+
+```sh
+sh scripts/full-stack-build-check.sh
 ```
 
 To match the CI quality job, provide a disposable PostgreSQL database and opt
@@ -71,21 +162,37 @@ Never point the ignored database tests at persistent or production data.
 
 ## Release Contract
 
-The `release` workflow supports manual release-candidate validation and
-tag-triggered publication. A manual run builds and verifies the bundle,
-checksum, SBOM, and release notes, but its publish job is skipped. A push to
-`develop` or `main` never creates a release, and a pull request never publishes
-an artifact. Before creating a `v*` tag, verify:
+Hegira is distributed as source. A release consists of an immutable signed
+stable SemVer tag, a GitHub Release, versioned release notes, GitHub-provided
+source archives, and a source-scoped SPDX JSON SBOM. It does not contain a
+platform executable, application bundle, official container image, or
+deployment.
+
+The `release` workflow supports manual release-candidate validation from
+`main` and publication from a pushed `vMAJOR.MINOR.PATCH` tag. Both paths:
+
+- verify that the release ref, every workspace package version, the dated
+  changelog entry, and the versioned release-note identity agree;
+- generate and verify an SPDX JSON SBOM from a clean checkout before build
+  outputs exist;
+- verify the full-stack PostgreSQL server, migrator, hydrated frontend, and
+  branding outputs;
+- build and smoke-test the production container against disposable PostgreSQL.
+
+A manual run uploads the source SBOM as a short-lived workflow artifact but
+cannot execute the publication job. A push to `develop` or `main` never creates
+a release, and a pull request never publishes an artifact. Before creating a
+tag, verify:
 
 - every release-gating milestone issue is closed;
 - required CI checks are successful on the release commit;
 - `develop` has been promoted to `main` through a pull request;
-- `CHANGELOG.md` and affected documentation are current;
-- release notes are ready.
+- `CHANGELOG.md`, every workspace package version, and affected documentation
+  are current;
+- `docs/releases/vX.Y.Z.md` is ready;
+- a manual release workflow run on the intended `main` commit succeeds.
 
-Run the workflow manually against the intended release commit before tagging
-and require its build job to succeed. This is release-candidate validation, not
-publication.
+This manual run is release-candidate validation, not publication.
 
 Create and verify a signed annotated tag only from the verified `main` release
 commit:
@@ -97,11 +204,21 @@ git push origin vX.Y.Z
 ```
 
 Pushing the tag is the publication boundary. Do not create or push it while a
-required check, checksum, SBOM, release note, or milestone gate is incomplete.
+required check, SBOM, release note, or milestone gate is incomplete. The tag
+workflow repeats the release validation and uses `gh release create
+--verify-tag` to publish the versioned notes and source SBOM. GitHub
+automatically provides `.zip` and `.tar.gz` source archives for the tagged
+source.
 
-The tag workflow builds the minimal PostgreSQL server and hydrated frontend,
-then publishes a Linux bundle, SHA-256 checksum, and SPDX JSON SBOM to a GitHub
-Release. It does not publish a container image.
+Enable GitHub's release immutability setting for the repository. Publication
+then locks the associated tag and uploaded SBOM asset. Published tags and
+releases must not be deleted, moved, recreated, or replaced. Correct a released
+defect with a new patch version. The workflow creates a new release and never
+updates an existing one.
+
+Versioned release notes are historical records. The v0.1.x notes continue to
+describe the platform bundle artifacts actually published for those versions;
+the source-first contract applies beginning with v0.2.0.
 
 ## No Preview Deployment
 

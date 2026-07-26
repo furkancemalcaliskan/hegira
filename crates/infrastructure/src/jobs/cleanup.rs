@@ -1,8 +1,8 @@
 use crate::config::SchedulerConfig;
 #[cfg(feature = "db-postgres")]
-use crate::jobs::NoopJobObserver;
-use crate::jobs::{JobObserver, recurring::spawn_recurring_with_observer};
-use application::shared::jobs::Job;
+use background_jobs::NoopJobObserver;
+#[cfg(any(feature = "db-postgres", feature = "db-sqlite"))]
+use background_jobs::{Job, JobObserver, spawn_recurring_with_observer};
 #[cfg(feature = "db-postgres")]
 use sqlx::PgPool;
 #[cfg(feature = "db-sqlite")]
