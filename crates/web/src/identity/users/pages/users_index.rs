@@ -19,12 +19,12 @@ use crate::{
             },
         },
         shared::{
-            data::mutation::MutationStatus,
             feedback::toast::use_toast,
             i18n::{T, use_i18n},
         },
     },
 };
+use leptos_support::mutation::MutationStatus;
 
 #[component]
 pub fn UsersIndexRoute() -> impl IntoView {

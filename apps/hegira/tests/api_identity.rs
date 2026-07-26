@@ -1,11 +1,6 @@
 #![cfg(feature = "ssr")]
 
-use axum::{
-    Router,
-    body::Body,
-    http::{Request, StatusCode, header},
-    middleware,
-};
+use axum::{Router, http::StatusCode, middleware};
 use hegira::{
     application_contracts::identity::users::{PagedUserResultDto, UserDto},
     infrastructure::{
@@ -30,11 +25,11 @@ use hegira::{
     },
     presentation::http::state::AppState,
 };
-use http_body_util::BodyExt;
-use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 use std::env;
-use tower::ServiceExt;
+use test_support::http::{
+    request_empty, request_empty_with_authorization, request_json, response_json,
+};
 
 static DB_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
@@ -275,84 +270,6 @@ async fn setup_without_database_with_config(config: AppConfig) -> Router {
         .layer(middleware::from_fn(hegira::http_support::request_id::set))
 }
 
-async fn request_json(
-    app: Router,
-    method: &str,
-    uri: &str,
-    body: Value,
-    token: Option<&str>,
-) -> axum::response::Response {
-    let mut builder = Request::builder()
-        .method(method)
-        .uri(uri)
-        .header(header::CONTENT_TYPE, "application/json");
-
-    if let Some(token) = token {
-        builder = builder.header(header::AUTHORIZATION, format!("Bearer {token}"));
-    }
-
-    app.oneshot(
-        builder
-            .body(Body::from(body.to_string()))
-            .expect("failed to build request"),
-    )
-    .await
-    .expect("request failed")
-}
-
-async fn request_empty(
-    app: Router,
-    method: &str,
-    uri: &str,
-    token: Option<&str>,
-) -> axum::response::Response {
-    let mut builder = Request::builder().method(method).uri(uri);
-
-    if let Some(token) = token {
-        builder = builder.header(header::AUTHORIZATION, format!("Bearer {token}"));
-    }
-
-    app.oneshot(
-        builder
-            .body(Body::empty())
-            .expect("failed to build request"),
-    )
-    .await
-    .expect("request failed")
-}
-
-async fn request_empty_with_authorization(
-    app: Router,
-    method: &str,
-    uri: &str,
-    authorization: &str,
-) -> axum::response::Response {
-    app.oneshot(
-        Request::builder()
-            .method(method)
-            .uri(uri)
-            .header(header::AUTHORIZATION, authorization)
-            .body(Body::empty())
-            .expect("failed to build request"),
-    )
-    .await
-    .expect("request failed")
-}
-
-async fn response_json<T>(response: axum::response::Response) -> T
-where
-    T: DeserializeOwned,
-{
-    let bytes = response
-        .into_body()
-        .collect()
-        .await
-        .expect("failed to read response body")
-        .to_bytes();
-
-    serde_json::from_slice(&bytes).expect("failed to parse json response")
-}
-
 async fn login_admin(app: Router) -> String {
     let response = request_json(
         app,
@@ -489,7 +406,8 @@ async fn protected_users_api_rejects_invalid_authorization_scheme() {
     let app = setup_without_database().await;
 
     let response =
-        request_empty_with_authorization(app, "GET", "/api/identity/users", "Token abc").await;
+        request_empty_with_authorization(app, "GET", "/api/identity/users", Some("Token abc"))
+            .await;
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 
     let body: Value = response_json(response).await;

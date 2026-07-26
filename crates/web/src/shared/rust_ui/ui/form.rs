@@ -5,10 +5,10 @@ use strum::Display;
 use tw_merge::tw_merge;
 use validator::Validate;
 
-use crate::shared::rust_ui::hooks::use_form::{FieldContext, Form as FormHook, FormContext};
 use crate::shared::rust_ui::ui::input::Input;
 use crate::shared::rust_ui::ui::label::Label;
 use crate::shared::rust_ui::ui::separator::Separator;
+use leptos_support::form::{FieldContext, Form as FormHook, FormContext};
 
 mod components {
     use super::*;
@@ -31,7 +31,7 @@ pub fn FormProvider<T>(form: FormHook<T>, children: Children) -> impl IntoView
 where
     T: Validate + Clone + Default + Serialize + for<'de> Deserialize<'de> + Send + Sync + 'static,
 {
-    use crate::shared::rust_ui::hooks::use_form::{FormContext, SetValueFn, TouchFieldFn};
+    use leptos_support::form::{FormContext, SetValueFn, TouchFieldFn};
 
     let set_value_fn: SetValueFn = Box::new(move |field: &str, value: String| {
         form.set_value(field, value);

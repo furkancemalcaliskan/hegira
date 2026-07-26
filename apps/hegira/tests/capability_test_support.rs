@@ -9,10 +9,10 @@ use hegira::application::shared::{
     mail::{MailAddress, MailMessage, Mailer},
     settings::{SettingKey, get_setting, set_setting},
     storage::{Storage, StoragePath},
-    testing::{
-        InMemoryCache, InMemorySettings, InMemoryStorage, RecordingAuditLogger,
-        RecordingJobDispatcher, RecordingMailer,
-    },
+};
+use hegira::test_support::{
+    InMemoryCache, InMemorySettings, InMemoryStorage, RecordingAuditLogger, RecordingJobDispatcher,
+    RecordingMailer,
 };
 
 #[derive(Clone)]

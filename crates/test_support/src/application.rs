@@ -4,7 +4,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::shared::{
+use application::shared::{
     audit::{AuditLogEntry, AuditLogger},
     cache::Cache,
     errors::ApplicationResult,

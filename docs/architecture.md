@@ -13,23 +13,27 @@ dependency allowlist below is the normative workspace contract.
 ```text
 apps/hegira
   -> platform_core, configuration, background_jobs, http_support,
-     observability, runtime, web,
+     observability, runtime, test_support, web,
      presentation, infrastructure, application, application_contracts,
      domain, domain_shared
 
 platform_core, configuration, persistence, background_jobs, http_support,
-runtime
+leptos_support, runtime
   -> no local application packages
 
 observability
   -> background_jobs
 
+test_support
+  -> application
+
 web
-  -> presentation, application, application_contracts, domain_shared
+  -> leptos_support, presentation, application, application_contracts,
+     domain_shared
 
 presentation
-  -> observability, infrastructure, application, application_contracts,
-     domain_shared
+  -> leptos_support, observability, infrastructure, application,
+     application_contracts, domain_shared
 
 infrastructure
   -> platform_core, configuration, persistence, background_jobs, runtime,
@@ -52,9 +56,9 @@ Domain and application code do not depend on Axum, Leptos, SQLx, Redis, or
 vendor SDKs. Infrastructure implements business-facing ports. The deployable
 application owns adapter, route, telemetry-settings, and worker composition.
 Framework packages own reusable HTTP security policy, telemetry and operational
-support, capability identity, configuration orchestration, provider-neutral
-persistence and background-work primitives, runtime roles, process execution,
-and shutdown signaling.
+support, reusable Leptos integration and test support, capability identity,
+configuration orchestration, provider-neutral persistence and background-work
+primitives, runtime roles, process execution, and shutdown signaling.
 
 ### Enforced Workspace Dependencies
 
@@ -65,20 +69,22 @@ matching policy update.
 
 | Package | Permitted direct local dependencies |
 |---|---|
-| `hegira` | `application`, `application_contracts`, `background_jobs`, `configuration`, `domain`, `domain_shared`, `http_support`, `infrastructure`, `observability`, `platform_core`, `presentation`, `runtime`, `web` |
+| `hegira` | `application`, `application_contracts`, `background_jobs`, `configuration`, `domain`, `domain_shared`, `http_support`, `infrastructure`, `observability`, `platform_core`, `presentation`, `runtime`, `test_support`, `web` |
 | `platform_core` | None |
 | `configuration` | None |
 | `persistence` | None |
 | `background_jobs` | None |
 | `http_support` | None |
+| `leptos_support` | None |
 | `observability` | `background_jobs` |
+| `test_support` | `application` |
 | `domain_shared` | None |
 | `domain` | `domain_shared` |
 | `application_contracts` | `domain`, `domain_shared` |
 | `application` | `application_contracts`, `background_jobs`, `domain`, `domain_shared` |
 | `infrastructure` | `application`, `application_contracts`, `background_jobs`, `configuration`, `domain`, `domain_shared`, `persistence`, `platform_core`, `runtime` |
-| `presentation` | `application`, `application_contracts`, `domain_shared`, `infrastructure`, `observability` |
-| `web` | `application`, `application_contracts`, `domain_shared`, `presentation` |
+| `presentation` | `application`, `application_contracts`, `domain_shared`, `infrastructure`, `leptos_support`, `observability` |
+| `web` | `application`, `application_contracts`, `domain_shared`, `leptos_support`, `presentation` |
 | `runtime` | None |
 | `db_migrator` | `infrastructure` |
 
@@ -124,7 +130,9 @@ must remain reusable and cannot depend on an application package.
 | `persistence` | `crates/persistence` | Database provider selection, pools, health checks, and transaction primitives |
 | `background_jobs` | `crates/background_jobs` | Job contracts, handler registration, observation, and recurring execution |
 | `http_support` | `crates/http_support` | Application-independent Axum middleware, transport-policy markers, CSRF, trusted-proxy resolution, and rate limiting |
+| `leptos_support` | `crates/leptos_support` | Product-neutral Leptos form state, mutation state, context access, and safe server-function errors |
 | `observability` | `crates/observability` | Tracing initialization, health/readiness primitives, HTTP and background-job metrics, and Prometheus exposure |
+| `test_support` | `crates/test_support` | Shared application-port test doubles and application-independent Axum request/response helpers |
 | `domain_shared` | `crates/domain_shared` | Shared errors, identifiers, and localization resources |
 | `domain` | `crates/domain` | Entities, invariants, repository ports, and business concepts |
 | `application_contracts` | `crates/application_contracts` | DTOs, inputs, permissions, and feature metadata |
@@ -256,10 +264,20 @@ because Rust and the relevant proc macros require concrete types.
 
 ## Frontend
 
-The `web` crate contains app shell, shared UI primitives, and bounded-context
-features. Feature-local server functions form the data boundary. Standard CRUD
-pages reuse `CrudListState`, `CrudDialog`, and `MutationStatus`; custom
-workflows may use ordinary Leptos signals and typed services.
+The `web` crate contains the app shell, branding, shared visual components, and
+bounded-context features. Feature-local server functions form the data
+boundary. Product-neutral form state, mutation state, server context access,
+and safe server-function error construction live in `leptos_support`; they do
+not grant authorization. Standard CRUD pages reuse `CrudListState`,
+`CrudDialog`, and `MutationStatus`; custom workflows may use ordinary Leptos
+signals and typed services.
+
+The `test_support` package owns reusable recording and in-memory implementations
+of application capability ports plus generic Axum request and JSON response
+helpers. It depends on the application interfaces it implements; production
+feature graphs do not enable it. Database reset, application migration, and
+Identity seed helpers remain in `infrastructure` because they operate on the
+current application schema rather than a framework-neutral test contract.
 
 SSR renders the initial route and hydration adds browser interaction. Release
 WASM uses the `wasm-release` profile with size optimization, LTO, one codegen
