@@ -12,18 +12,24 @@ dependency allowlist below is the normative workspace contract.
 
 ```text
 apps/hegira
-  -> platform_core, configuration, background_jobs, runtime, web,
+  -> platform_core, configuration, background_jobs, http_support,
+     observability, runtime, web,
      presentation, infrastructure, application, application_contracts,
      domain, domain_shared
 
-platform_core, configuration, persistence, background_jobs, runtime
+platform_core, configuration, persistence, background_jobs, http_support,
+runtime
   -> no local application packages
+
+observability
+  -> background_jobs
 
 web
   -> presentation, application, application_contracts, domain_shared
 
 presentation
-  -> infrastructure, application, application_contracts, domain_shared
+  -> observability, infrastructure, application, application_contracts,
+     domain_shared
 
 infrastructure
   -> platform_core, configuration, persistence, background_jobs, runtime,
@@ -44,10 +50,11 @@ db_migrator
 
 Domain and application code do not depend on Axum, Leptos, SQLx, Redis, or
 vendor SDKs. Infrastructure implements business-facing ports. The deployable
-application owns adapter, HTTP, telemetry, and worker composition, while the
-framework packages own capability identity, configuration orchestration,
-provider-neutral persistence and background-work primitives, runtime roles,
-process execution, and shutdown signaling.
+application owns adapter, route, telemetry-settings, and worker composition.
+Framework packages own reusable HTTP security policy, telemetry and operational
+support, capability identity, configuration orchestration, provider-neutral
+persistence and background-work primitives, runtime roles, process execution,
+and shutdown signaling.
 
 ### Enforced Workspace Dependencies
 
@@ -58,17 +65,19 @@ matching policy update.
 
 | Package | Permitted direct local dependencies |
 |---|---|
-| `hegira` | `application`, `application_contracts`, `background_jobs`, `configuration`, `domain`, `domain_shared`, `infrastructure`, `platform_core`, `presentation`, `runtime`, `web` |
+| `hegira` | `application`, `application_contracts`, `background_jobs`, `configuration`, `domain`, `domain_shared`, `http_support`, `infrastructure`, `observability`, `platform_core`, `presentation`, `runtime`, `web` |
 | `platform_core` | None |
 | `configuration` | None |
 | `persistence` | None |
 | `background_jobs` | None |
+| `http_support` | None |
+| `observability` | `background_jobs` |
 | `domain_shared` | None |
 | `domain` | `domain_shared` |
 | `application_contracts` | `domain`, `domain_shared` |
 | `application` | `application_contracts`, `background_jobs`, `domain`, `domain_shared` |
 | `infrastructure` | `application`, `application_contracts`, `background_jobs`, `configuration`, `domain`, `domain_shared`, `persistence`, `platform_core`, `runtime` |
-| `presentation` | `application`, `application_contracts`, `domain_shared`, `infrastructure` |
+| `presentation` | `application`, `application_contracts`, `domain_shared`, `infrastructure`, `observability` |
 | `web` | `application`, `application_contracts`, `domain_shared`, `presentation` |
 | `runtime` | None |
 | `db_migrator` | `infrastructure` |
@@ -114,12 +123,14 @@ must remain reusable and cannot depend on an application package.
 | `configuration` | `crates/configuration` | Configuration profile sources and ordered validation orchestration |
 | `persistence` | `crates/persistence` | Database provider selection, pools, health checks, and transaction primitives |
 | `background_jobs` | `crates/background_jobs` | Job contracts, handler registration, observation, and recurring execution |
+| `http_support` | `crates/http_support` | Application-independent Axum middleware, transport-policy markers, CSRF, trusted-proxy resolution, and rate limiting |
+| `observability` | `crates/observability` | Tracing initialization, health/readiness primitives, HTTP and background-job metrics, and Prometheus exposure |
 | `domain_shared` | `crates/domain_shared` | Shared errors, identifiers, and localization resources |
 | `domain` | `crates/domain` | Entities, invariants, repository ports, and business concepts |
 | `application_contracts` | `crates/application_contracts` | DTOs, inputs, permissions, and feature metadata |
 | `application` | `crates/application` | Use cases, authorization, validation, and transaction intent |
 | `infrastructure` | `crates/infrastructure` | Application migrations and SQLx adapters for Identity, jobs, security, cache, mail, search, and storage |
-| `presentation` | `crates/presentation` | Axum controllers, middleware, OpenAPI, sessions, and composition |
+| `presentation` | `crates/presentation` | Application Axum controllers, OpenAPI, sessions, operational probe composition, and route composition |
 | `web` | `crates/web` | Leptos routes, pages, components, and server functions |
 | `runtime` | `crates/runtime` | Runtime roles, Tokio process lifecycle, and shutdown signaling |
 | `db_migrator` | `crates/db_migrator` | Migration, reset, seed, and search reindex commands |
@@ -174,8 +185,9 @@ authorization, and concurrency policy stay in the application layer.
 
 ### Transport Middleware Contract
 
-Runtime composition keeps transport authentication policies separate instead
-of inferring them from URL prefixes:
+Runtime composition uses the `http_support` cookie-BFF and Bearer-API policy
+primitives to keep transport authentication policies separate instead of
+inferring them from URL prefixes:
 
 | Route group | Authentication model | CSRF policy |
 |---|---|---|
@@ -195,6 +207,14 @@ non-browser clients without browser-origin headers. Both transports still pass
 through the common request ID, security header, CORS, timeout, body-limit,
 compression, tracing, and configured rate-limit layers. Application-layer
 authorization remains mandatory for both.
+
+`http_support` owns request IDs, security headers, CSRF, trusted-proxy-aware
+client address resolution, rate limiting, and request tracing without depending
+on application packages. `observability` owns provider-neutral liveness and
+readiness response construction, tracing subscriber initialization, and the
+existing optional OTLP and Prometheus adapters. Application operational routes
+remain outside these framework packages because they select and probe concrete
+application dependencies.
 
 ## Persistence And Transactions
 

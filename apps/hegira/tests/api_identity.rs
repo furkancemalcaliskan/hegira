@@ -225,9 +225,8 @@ async fn setup() -> Router {
         SettingsAdapter::Null(Default::default()),
     );
 
-    hegira::presentation::http::routes::routes(state).layer(middleware::from_fn(
-        hegira::presentation::http::middleware::request_id::set,
-    ))
+    hegira::presentation::http::routes::routes(state)
+        .layer(middleware::from_fn(hegira::http_support::request_id::set))
 }
 
 #[cfg(feature = "db-sqlite")]
@@ -250,9 +249,8 @@ async fn setup_sqlite() -> Router {
         SearchAdapter::Null(Default::default()),
         SettingsAdapter::Null(Default::default()),
     );
-    hegira::presentation::http::routes::routes(state).layer(middleware::from_fn(
-        hegira::presentation::http::middleware::request_id::set,
-    ))
+    hegira::presentation::http::routes::routes(state)
+        .layer(middleware::from_fn(hegira::http_support::request_id::set))
 }
 
 async fn setup_without_database() -> Router {
@@ -273,9 +271,8 @@ async fn setup_without_database_with_config(config: AppConfig) -> Router {
         SettingsAdapter::Null(Default::default()),
     );
 
-    hegira::presentation::http::routes::routes(state).layer(middleware::from_fn(
-        hegira::presentation::http::middleware::request_id::set,
-    ))
+    hegira::presentation::http::routes::routes(state)
+        .layer(middleware::from_fn(hegira::http_support::request_id::set))
 }
 
 async fn request_json(

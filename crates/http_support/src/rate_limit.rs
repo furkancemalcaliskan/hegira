@@ -1,4 +1,3 @@
-use crate::http::error_response::ErrorBody;
 use axum::{
     Json,
     body::Body,
@@ -7,8 +6,8 @@ use axum::{
     middleware::Next,
     response::{IntoResponse, Response},
 };
-use infrastructure::config::{RateLimitBackend, RateLimitConfig};
 use ipnet::IpNet;
+use serde::Serialize;
 #[cfg(feature = "cache-redis")]
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::{
@@ -30,23 +29,37 @@ pub struct RateLimiter {
     enabled: bool,
     max_requests: usize,
     window: Duration,
-    backend: RateLimiterBackend,
+    backend: ConfiguredRateLimitBackend,
     client_ip_resolver: ClientIpResolver,
 }
 
+#[derive(Debug, Clone)]
+pub struct RateLimitOptions {
+    pub enabled: bool,
+    pub max_requests: usize,
+    pub window: Duration,
+    pub backend: RateLimitBackend,
+}
+
+#[derive(Debug, Clone)]
+pub enum RateLimitBackend {
+    Memory,
+    Redis { url: String },
+}
+
 #[derive(Debug, Clone, Default)]
-struct ClientIpResolver {
+pub struct ClientIpResolver {
     trusted_proxies: Vec<IpNet>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ClientIpError {
+pub enum ClientIpError {
     MissingPeerAddress,
     InvalidForwardedFor,
 }
 
 #[derive(Debug, Clone)]
-enum RateLimiterBackend {
+enum ConfiguredRateLimitBackend {
     Memory(MemoryRateLimiter),
     #[cfg(feature = "cache-redis")]
     Redis(RedisSlidingWindowRateLimiter),
@@ -73,31 +86,33 @@ struct RateLimitDecision {
 }
 
 impl RateLimiter {
-    pub fn from_config(
-        config: &RateLimitConfig,
+    pub fn from_options(
+        options: &RateLimitOptions,
         trusted_proxies: &[String],
     ) -> Result<Self, String> {
-        let client_ip_resolver = ClientIpResolver::from_config(trusted_proxies)?;
+        let client_ip_resolver = ClientIpResolver::from_trusted_proxies(trusted_proxies)?;
 
-        if !config.enabled {
+        if !options.enabled {
             return Ok(Self {
                 enabled: false,
-                max_requests: config.max_requests.max(1),
-                window: Duration::from_secs(config.window_seconds.max(1)),
-                backend: RateLimiterBackend::Memory(MemoryRateLimiter::default()),
+                max_requests: options.max_requests.max(1),
+                window: options.window.max(Duration::from_secs(1)),
+                backend: ConfiguredRateLimitBackend::Memory(MemoryRateLimiter::default()),
                 client_ip_resolver,
             });
         }
 
-        let backend = match config.backend {
-            RateLimitBackend::Memory => RateLimiterBackend::Memory(MemoryRateLimiter::default()),
-            RateLimitBackend::Redis => build_redis(&config.redis.url)?,
+        let backend = match &options.backend {
+            RateLimitBackend::Memory => {
+                ConfiguredRateLimitBackend::Memory(MemoryRateLimiter::default())
+            }
+            RateLimitBackend::Redis { url } => build_redis(url)?,
         };
 
         Ok(Self {
-            enabled: config.enabled,
-            max_requests: config.max_requests.max(1),
-            window: Duration::from_secs(config.window_seconds.max(1)),
+            enabled: options.enabled,
+            max_requests: options.max_requests.max(1),
+            window: options.window.max(Duration::from_secs(1)),
             backend,
             client_ip_resolver,
         })
@@ -109,18 +124,18 @@ impl RateLimiter {
             enabled: true,
             max_requests,
             window,
-            backend: RateLimiterBackend::Memory(MemoryRateLimiter::default()),
+            backend: ConfiguredRateLimitBackend::Memory(MemoryRateLimiter::default()),
             client_ip_resolver: ClientIpResolver::default(),
         }
     }
 
     async fn check(&self, key: &str) -> Result<RateLimitDecision, String> {
         match &self.backend {
-            RateLimiterBackend::Memory(limiter) => {
+            ConfiguredRateLimitBackend::Memory(limiter) => {
                 Ok(limiter.check(key, self.max_requests, self.window))
             }
             #[cfg(feature = "cache-redis")]
-            RateLimiterBackend::Redis(limiter) => {
+            ConfiguredRateLimitBackend::Redis(limiter) => {
                 limiter.check(key, self.max_requests, self.window).await
             }
         }
@@ -128,7 +143,7 @@ impl RateLimiter {
 }
 
 impl ClientIpResolver {
-    fn from_config(networks: &[String]) -> Result<Self, String> {
+    pub fn from_trusted_proxies(networks: &[String]) -> Result<Self, String> {
         let trusted_proxies = networks
             .iter()
             .map(|network| {
@@ -149,7 +164,7 @@ impl ClientIpResolver {
         Ok(Self { trusted_proxies })
     }
 
-    fn resolve(&self, req: &Request<Body>) -> Result<IpAddr, ClientIpError> {
+    pub fn resolve(&self, req: &Request<Body>) -> Result<IpAddr, ClientIpError> {
         let peer = req
             .extensions()
             .get::<ConnectInfo<SocketAddr>>()
@@ -330,14 +345,14 @@ return {1, count + 1, 0}
 "#;
 
 #[cfg(feature = "cache-redis")]
-fn build_redis(url: &str) -> Result<RateLimiterBackend, String> {
+fn build_redis(url: &str) -> Result<ConfiguredRateLimitBackend, String> {
     RedisSlidingWindowRateLimiter::new(url)
-        .map(RateLimiterBackend::Redis)
+        .map(ConfiguredRateLimitBackend::Redis)
         .map_err(|err| format!("failed to initialize Redis rate limiter: {err}"))
 }
 
 #[cfg(not(feature = "cache-redis"))]
-fn build_redis(_url: &str) -> Result<RateLimiterBackend, String> {
+fn build_redis(_url: &str) -> Result<ConfiguredRateLimitBackend, String> {
     Err(
         "security.rate_limit.backend=redis requires building with --features cache-redis"
             .to_string(),
@@ -351,6 +366,12 @@ fn rate_limit_key(req: &Request<Body>, client_ip: IpAddr) -> String {
         req.uri().path(),
         client_ip
     )
+}
+
+#[derive(Debug, Serialize)]
+struct ErrorBody {
+    code: &'static str,
+    message: String,
 }
 
 pub async fn check_configured(
@@ -456,7 +477,6 @@ fn insert_header(headers: &mut header::HeaderMap, name: &'static str, value: Str
 mod tests {
     use super::*;
     use axum::{Router, middleware, routing::get, routing::post};
-    use infrastructure::config::RedisRateLimitConfig;
     use tower::ServiceExt;
 
     fn app_with_limiter(limiter: RateLimiter) -> Router {
@@ -544,7 +564,7 @@ mod tests {
 
     #[test]
     fn trusted_proxy_chain_stops_at_the_nearest_untrusted_address() {
-        let resolver = ClientIpResolver::from_config(&[
+        let resolver = ClientIpResolver::from_trusted_proxies(&[
             "10.0.0.0/8".to_string(),
             "192.168.0.0/16".to_string(),
         ])
@@ -561,7 +581,8 @@ mod tests {
 
     #[test]
     fn trusted_proxy_resolution_supports_ipv6() {
-        let resolver = ClientIpResolver::from_config(&["2001:db8:ffff::/48".to_string()]).unwrap();
+        let resolver =
+            ClientIpResolver::from_trusted_proxies(&["2001:db8:ffff::/48".to_string()]).unwrap();
         let peer = "2001:db8:ffff::10".parse().unwrap();
         let client = "2001:db8:1::42".parse().unwrap();
         let req = request(Method::POST, "/test", peer, Some("2001:db8:1::42"));
@@ -571,7 +592,7 @@ mod tests {
 
     #[test]
     fn malformed_forwarding_chain_from_a_trusted_proxy_fails_closed() {
-        let resolver = ClientIpResolver::from_config(&["10.0.0.0/8".to_string()]).unwrap();
+        let resolver = ClientIpResolver::from_trusted_proxies(&["10.0.0.0/8".to_string()]).unwrap();
         let req = request(
             Method::POST,
             "/test",
@@ -587,8 +608,8 @@ mod tests {
 
     #[test]
     fn universal_trusted_proxy_networks_are_rejected() {
-        assert!(ClientIpResolver::from_config(&["0.0.0.0/0".to_string()]).is_err());
-        assert!(ClientIpResolver::from_config(&["::/0".to_string()]).is_err());
+        assert!(ClientIpResolver::from_trusted_proxies(&["0.0.0.0/0".to_string()]).is_err());
+        assert!(ClientIpResolver::from_trusted_proxies(&["::/0".to_string()]).is_err());
     }
 
     #[test]
@@ -605,7 +626,8 @@ mod tests {
     #[tokio::test]
     async fn malformed_trusted_forwarding_chain_is_rejected_by_middleware() {
         let limiter = RateLimiter {
-            client_ip_resolver: ClientIpResolver::from_config(&["10.0.0.0/8".to_string()]).unwrap(),
+            client_ip_resolver: ClientIpResolver::from_trusted_proxies(&["10.0.0.0/8".to_string()])
+                .unwrap(),
             ..RateLimiter::memory(1, WINDOW)
         };
         let response = app_with_limiter(limiter)
@@ -643,7 +665,8 @@ mod tests {
     #[tokio::test]
     async fn trusted_proxy_clients_receive_independent_memory_quotas() {
         let limiter = RateLimiter {
-            client_ip_resolver: ClientIpResolver::from_config(&["10.0.0.0/8".to_string()]).unwrap(),
+            client_ip_resolver: ClientIpResolver::from_trusted_proxies(&["10.0.0.0/8".to_string()])
+                .unwrap(),
             ..RateLimiter::memory(1, WINDOW)
         };
         let app = app_with_limiter(limiter);
@@ -671,13 +694,12 @@ mod tests {
 
     #[test]
     fn disabled_limiter_does_not_initialize_selected_redis_backend() {
-        let limiter = RateLimiter::from_config(
-            &RateLimitConfig {
+        let limiter = RateLimiter::from_options(
+            &RateLimitOptions {
                 enabled: false,
-                backend: RateLimitBackend::Redis,
                 max_requests: 20,
-                window_seconds: 60,
-                redis: RedisRateLimitConfig {
+                window: Duration::from_secs(60),
+                backend: RateLimitBackend::Redis {
                     url: "not a redis URL".to_string(),
                 },
             },
@@ -686,6 +708,9 @@ mod tests {
         .expect("a disabled limiter should not initialize its selected backend");
 
         assert!(!limiter.enabled);
-        assert!(matches!(limiter.backend, RateLimiterBackend::Memory(_)));
+        assert!(matches!(
+            limiter.backend,
+            ConfiguredRateLimitBackend::Memory(_)
+        ));
     }
 }

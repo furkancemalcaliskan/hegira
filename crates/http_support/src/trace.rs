@@ -1,4 +1,4 @@
-use crate::http::middleware::request_id::REQUEST_ID_HEADER;
+use crate::request_id::REQUEST_ID_HEADER;
 use axum::{body::Body, http::Request, middleware::Next, response::Response};
 use std::time::Instant;
 use tracing::Instrument;

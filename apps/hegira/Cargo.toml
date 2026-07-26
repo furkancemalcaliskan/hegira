@@ -21,6 +21,8 @@ configuration = { path = "../../crates/configuration", optional = true }
 domain = { path = "../../crates/domain" }
 domain_shared = { path = "../../crates/domain_shared" }
 infrastructure = { path = "../../crates/infrastructure", optional = true, default-features = false }
+http_support = { path = "../../crates/http_support", optional = true, default-features = false }
+observability = { path = "../../crates/observability", optional = true, default-features = false }
 platform_core = { path = "../../crates/platform_core", optional = true }
 presentation = { path = "../../crates/presentation", optional = true, default-features = false }
 runtime = { path = "../../crates/runtime", optional = true, default-features = false }
@@ -28,17 +30,11 @@ web = { path = "../../crates/web", default-features = false }
 leptos = { version = "0.8.19" }
 axum = { version = "0.8.9", optional = true }
 leptos_axum = { version = "0.8.9", optional = true }
-opentelemetry = { version = "0.32.0", optional = true }
-opentelemetry-otlp = { version = "0.32.0", default-features = false, features = ["trace", "grpc-tonic", "http-proto", "reqwest-blocking-client", "tls-ring", "tls-roots"], optional = true }
-opentelemetry_sdk = { version = "0.32.0", features = ["trace", "rt-tokio"], optional = true }
-prometheus = { version = "0.14.0", optional = true }
 serde = { version = "1.0.228", features = ["derive"], optional = true }
 sqlx = { version = "0.8.6", features = ["runtime-tokio-rustls", "migrate", "chrono", "uuid"], optional = true }
 tokio = { version = "1.52.3", features = ["rt-multi-thread", "macros", "fs", "signal"], optional = true }
 tower-http = { version = "0.7.0", features = ["compression-br", "compression-gzip", "cors", "limit", "timeout"], optional = true }
 tracing = { version = "0.1.44", optional = true }
-tracing-opentelemetry = { version = "0.33.0", optional = true }
-tracing-subscriber = { version = "0.3.23", features = ["env-filter"], optional = true }
 
 # Client dependencies
 console_error_panic_hook = { version = "0.1.7", optional = true }
@@ -60,7 +56,9 @@ ssr = [
     "dep:background_jobs",
     "dep:configuration",
     "dep:infrastructure",
+    "dep:http_support",
     "dep:leptos_axum",
+    "dep:observability",
     "dep:platform_core",
     "dep:presentation",
     "dep:runtime",
@@ -69,7 +67,6 @@ ssr = [
     "dep:tokio",
     "dep:tower-http",
     "dep:tracing",
-    "dep:tracing-subscriber",
     "application/ssr",
     "infrastructure/ssr",
     "presentation/ssr",
@@ -78,9 +75,9 @@ ssr = [
 ]
 openapi = ["ssr", "application_contracts/openapi", "presentation/openapi"]
 wasm-split = ["web/wasm-split"]
-cache-redis = ["ssr", "infrastructure/cache-redis", "presentation/cache-redis"]
-metrics-prometheus = ["ssr", "dep:prometheus", "presentation/metrics-prometheus"]
-otel-otlp = ["ssr", "dep:opentelemetry", "dep:opentelemetry-otlp", "dep:opentelemetry_sdk", "dep:tracing-opentelemetry", "presentation/otel-otlp"]
+cache-redis = ["ssr", "infrastructure/cache-redis", "http_support/cache-redis"]
+metrics-prometheus = ["ssr", "observability/metrics-prometheus", "presentation/metrics-prometheus"]
+otel-otlp = ["ssr", "http_support/otel-otlp", "observability/otel-otlp"]
 search-meilisearch = ["ssr", "infrastructure/search-meilisearch"]
 storage-s3 = ["ssr", "infrastructure/storage-s3"]
 mailer-smtp = ["ssr", "infrastructure/mailer-smtp"]
