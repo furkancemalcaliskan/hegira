@@ -1,18 +1,14 @@
-use application::{
-    catalog::products::ProductAppService,
-    identity::{
-        auth::{AuthAppService, SessionPolicy},
-        authorization::TokenCurrentUserProvider,
-        oauth::service::{OAuthAppService, OAuthProviderSettings, OAuthSettings},
-        permissions::service::PermissionAppService,
-        users::{UserAppService, UserSearch},
-    },
+use application::identity::{
+    auth::{AuthAppService, SessionPolicy},
+    authorization::TokenCurrentUserProvider,
+    oauth::service::{OAuthAppService, OAuthProviderSettings, OAuthSettings},
+    permissions::service::PermissionAppService,
+    users::{UserAppService, UserSearch},
 };
 use infrastructure::config::{AppConfig, OAuthProviderConfig};
 use infrastructure::{
     audit::AuditLoggerAdapter,
     cache::CacheAdapter,
-    catalog::ProductRepositoryAdapter,
     db::DatabasePool,
     identity::authorization::CachedAuthorization,
     identity::oauth::provider_client::ReqwestOAuthProviderClient,
@@ -64,12 +60,6 @@ pub type IdentityOAuthService = OAuthAppService<
     ReqwestOAuthProviderClient,
 >;
 
-pub type CatalogProductService = ProductAppService<
-    ProductRepositoryAdapter,
-    TokenCurrentUserProvider<SessionRepositoryAdapter, IdentityRepositoryAdapter, JwtTokenService>,
-    CachedAuthorization<IdentityRepositoryAdapter, CacheAdapter>,
->;
-
 // hegira:service-type-aliases
 // hegira:service-type-aliases:end
 
@@ -79,7 +69,6 @@ pub struct AppServices {
     pub oauth: IdentityOAuthService,
     pub users: IdentityUserService,
     pub permissions: IdentityPermissionService,
-    pub products: CatalogProductService,
     // hegira:service-fields
     // hegira:service-fields:end
 }
@@ -95,38 +84,11 @@ impl AppServices {
             auth: auth_service(pool.clone(), config),
             oauth: oauth_service(pool.clone(), config),
             users: user_service(pool.clone(), config, cache.clone(), search),
-            permissions: permission_service(pool.clone(), config, cache.clone()),
-            products: product_service(pool, config, cache),
+            permissions: permission_service(pool, config, cache),
             // hegira:service-init
             // hegira:service-init:end
         }
     }
-}
-
-pub fn product_service(
-    pool: DatabasePool,
-    config: &AppConfig,
-    cache: CacheAdapter,
-) -> CatalogProductService {
-    let products = ProductRepositoryAdapter::new(pool.clone());
-    let identity = IdentityRepositoryAdapter::new(pool.clone());
-    let sessions = SessionRepositoryAdapter::from_database(config, pool)
-        .expect("failed to initialize session store");
-    let max_lifetime = chrono::Duration::seconds(config.sessions.max_lifetime_seconds as i64);
-    let current_users = TokenCurrentUserProvider::new(
-        sessions,
-        identity.clone(),
-        JwtTokenService::new_with_lifetime(config.security.jwt_secret.clone(), max_lifetime),
-    );
-    ProductAppService::new(
-        products,
-        current_users,
-        CachedAuthorization::new(
-            identity,
-            cache,
-            std::time::Duration::from_secs(config.cache.authorization_ttl_seconds),
-        ),
-    )
 }
 
 pub fn auth_service(pool: DatabasePool, config: &AppConfig) -> IdentityAuthService {

@@ -4,6 +4,8 @@
 pub use ::application;
 pub use ::application_contracts;
 #[cfg(feature = "ssr")]
+pub use ::background_jobs;
+#[cfg(feature = "ssr")]
 pub use ::domain;
 pub use ::domain_shared;
 #[cfg(feature = "ssr")]
@@ -13,6 +15,9 @@ pub use ::presentation;
 #[cfg(feature = "ssr")]
 pub use ::runtime;
 pub use ::web;
+
+#[cfg(feature = "ssr")]
+pub mod server;
 
 #[cfg(feature = "hydrate")]
 #[wasm_bindgen::prelude::wasm_bindgen]

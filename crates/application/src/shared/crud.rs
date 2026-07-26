@@ -123,32 +123,24 @@ mod tests {
 
     #[tokio::test]
     async fn execution_authorizes_and_records_standard_audit_shape() {
+        const CREATE_RECORD: PermissionName = PermissionName("Test.Records.Create");
         let audit = RecordingAuditLogger::default();
-        let execution = CrudExecution::new(
-            TestCurrentUser,
-            ExpectedPermission(application_contracts::catalog::permissions::PRODUCTS_CREATE),
-        );
-        let actor = execution
-            .authorize(
-                "token",
-                application_contracts::catalog::permissions::PRODUCTS_CREATE,
-            )
-            .await
-            .unwrap();
+        let execution = CrudExecution::new(TestCurrentUser, ExpectedPermission(CREATE_RECORD));
+        let actor = execution.authorize("token", CREATE_RECORD).await.unwrap();
         record_standard_audit(
             &audit,
             actor.username,
-            "catalog.products.create",
-            "catalog.product",
-            Some("product-1".to_string()),
-            serde_json::json!({ "sku": "KB-01" }),
+            "test.records.create",
+            "test.record",
+            Some("record-1".to_string()),
+            serde_json::json!({ "source": "test" }),
         )
         .await;
 
         let entries = audit.entries();
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].actor, "operator@example.com");
-        assert_eq!(entries[0].action, "catalog.products.create");
-        assert_eq!(entries[0].entity_type, "catalog.product");
+        assert_eq!(entries[0].action, "test.records.create");
+        assert_eq!(entries[0].entity_type, "test.record");
     }
 }

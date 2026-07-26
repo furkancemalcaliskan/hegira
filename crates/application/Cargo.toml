@@ -7,6 +7,7 @@ publish = false
 
 [dependencies]
 application_contracts = { path = "../application_contracts" }
+background_jobs = { path = "../background_jobs" }
 chrono = { version = "0.4.44", features = ["serde"] }
 domain = { path = "../domain" }
 domain_shared = { path = "../domain_shared" }

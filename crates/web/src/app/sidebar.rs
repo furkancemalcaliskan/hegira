@@ -1,4 +1,4 @@
-use icons::{CircleUser, House, Package, PanelLeftClose, PanelLeftOpen, Search, Users};
+use icons::{CircleUser, House, PanelLeftClose, PanelLeftOpen, Search, Users};
 use leptos::prelude::*;
 use leptos_router::components::A;
 use leptos_router::hooks::use_location;
@@ -64,7 +64,7 @@ pub fn Sidebar(sidebar_open: RwSignal<bool>, sidebar_collapsed: RwSignal<bool>) 
             }
         >
             <div class=shell_class>
-                <A href="/content" attr:class="brand-mark" attr:aria-label="hegira home">
+                <A href="/dashboard" attr:class="brand-mark" attr:aria-label="hegira home">
                     <img
                         class="brand-logo"
                         src="/assets/branding/hegira-logo.png"
@@ -171,6 +171,5 @@ fn NavItemIcon(icon: NavIcon) -> impl IntoView {
         NavIcon::Roles => view! { <Users class="size-4" /> }.into_any(),
         NavIcon::Users => view! { <Users class="size-4" /> }.into_any(),
         NavIcon::Profile => view! { <CircleUser class="size-4" /> }.into_any(),
-        NavIcon::Products => view! { <Package class="size-4" /> }.into_any(),
     }
 }

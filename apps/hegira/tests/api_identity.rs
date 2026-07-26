@@ -7,7 +7,6 @@ use axum::{
     middleware,
 };
 use hegira::{
-    application_contracts::catalog::products::{ProductDto, ProductPageDto},
     application_contracts::identity::users::{PagedUserResultDto, UserDto},
     infrastructure::{
         cache::CacheAdapter,
@@ -380,71 +379,62 @@ async fn login_admin(app: Router) -> String {
 
 #[cfg(feature = "db-sqlite")]
 #[tokio::test]
-async fn admin_can_manage_catalog_products_on_sqlite() {
+async fn admin_can_manage_identity_users_on_sqlite() {
     let app = setup_sqlite().await;
     let token = login_admin(app.clone()).await;
 
     let response = request_json(
         app.clone(),
         "POST",
-        "/api/catalog/products",
+        "/api/identity/users",
         json!({
-            "name": "Keyboard", "sku": "KB-01", "price_minor": 12500, "is_active": true
+            "username": "operator@example.com",
+            "password": "operator12345",
+            "is_verified": false,
+            "roles": []
         }),
         Some(&token),
     )
     .await;
     assert_eq!(response.status(), StatusCode::CREATED);
-    let created: ProductDto = response_json(response).await;
-    assert_eq!(created.revision, 1);
+    let created: UserDto = response_json(response).await;
+    assert_eq!(created.username, "operator@example.com");
+    assert!(created.roles.is_empty());
+    assert!(!created.is_verified);
 
     let response = request_empty(
         app.clone(),
         "GET",
-        "/api/catalog/products?page=1&page_size=10&search=key&sorting=price_asc",
+        "/api/identity/users?page=1&page_size=10&search=operator",
         Some(&token),
     )
     .await;
     assert_eq!(response.status(), StatusCode::OK);
-    let page: ProductPageDto = response_json(response).await;
+    let page: PagedUserResultDto = response_json(response).await;
     assert_eq!(page.total_count, 1);
     assert_eq!(page.items[0].pid, created.pid);
 
     let response = request_json(
         app.clone(),
         "PUT",
-        &format!("/api/catalog/products/{}", created.pid),
+        "/api/identity/users/operator@example.com",
         json!({
-            "name": "Mechanical Keyboard", "sku": "KB-01", "price_minor": 15000,
-            "is_active": true, "expected_revision": created.revision
+            "password": null,
+            "is_verified": true,
+            "roles": []
         }),
         Some(&token),
     )
     .await;
     assert_eq!(response.status(), StatusCode::OK);
-    let updated: ProductDto = response_json(response).await;
-    assert_eq!(updated.revision, 2);
-
-    let response = request_json(
-        app.clone(),
-        "PUT",
-        &format!("/api/catalog/products/{}", created.pid),
-        json!({
-            "name": "Stale", "sku": "KB-01", "price_minor": 1,
-            "is_active": true, "expected_revision": created.revision
-        }),
-        Some(&token),
-    )
-    .await;
-    assert_eq!(response.status(), StatusCode::CONFLICT);
+    let updated: UserDto = response_json(response).await;
+    assert!(updated.is_verified);
+    assert!(updated.roles.is_empty());
 
     let response = request_empty(
         app.clone(),
         "DELETE",
-        &format!(
-            "/api/catalog/products/{}?expected_revision={}",
-            created.pid, updated.revision
-        ),
+        "/api/identity/users/operator@example.com",
         Some(&token),
     )
     .await;
@@ -452,7 +442,7 @@ async fn admin_can_manage_catalog_products_on_sqlite() {
     let response = request_empty(
         app,
         "GET",
-        &format!("/api/catalog/products/{}", created.pid),
+        "/api/identity/users/operator@example.com",
         Some(&token),
     )
     .await;

@@ -66,7 +66,7 @@ when a schema change belongs to a provider-independent feature.
 | URL | Purpose |
 |---|---|
 | `/` | Leptos application |
-| `/catalog/products` | Reference CRUD page |
+| `/dashboard` | Authenticated application dashboard |
 | `/healthz` | Process liveness |
 | `/readyz` | Dependency readiness |
 | `/swagger-ui` | OpenAPI UI when compiled and enabled |

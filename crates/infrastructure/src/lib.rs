@@ -2,8 +2,6 @@
 pub mod audit;
 #[cfg(feature = "ssr")]
 pub mod cache;
-#[cfg(feature = "ssr")]
-pub mod catalog;
 pub mod config;
 #[cfg(feature = "ssr")]
 pub mod db;

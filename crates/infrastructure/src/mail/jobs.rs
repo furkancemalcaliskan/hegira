@@ -1,10 +1,10 @@
 use super::MailerAdapter;
-#[cfg(feature = "db-postgres")]
-use application::shared::jobs::DurableJobOptions;
 use application::shared::{
     jobs::{DurableJobFuture, DurableJobHandler},
     mail::{Mailer, TransactionalMail},
 };
+#[cfg(feature = "db-postgres")]
+use background_jobs::DurableJobOptions;
 use serde::{Deserialize, Serialize};
 
 #[cfg(feature = "db-postgres")]

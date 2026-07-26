@@ -12,11 +12,12 @@ dependency allowlist below is the normative workspace contract.
 
 ```text
 apps/hegira
-  -> runtime, web, presentation, infrastructure, application,
-     application_contracts, domain, domain_shared
+  -> platform_core, configuration, background_jobs, runtime, web,
+     presentation, infrastructure, application, application_contracts,
+     domain, domain_shared
 
-runtime
-  -> web, presentation, infrastructure
+platform_core, configuration, persistence, background_jobs, runtime
+  -> no local application packages
 
 web
   -> presentation, application, application_contracts, domain_shared
@@ -25,10 +26,11 @@ presentation
   -> infrastructure, application, application_contracts, domain_shared
 
 infrastructure
-  -> application, application_contracts, domain, domain_shared
+  -> platform_core, configuration, persistence, background_jobs, runtime,
+     application, application_contracts, domain, domain_shared
 
 application
-  -> application_contracts, domain, domain_shared
+  -> background_jobs, application_contracts, domain, domain_shared
 
 application_contracts
   -> domain, domain_shared
@@ -41,8 +43,11 @@ db_migrator
 ```
 
 Domain and application code do not depend on Axum, Leptos, SQLx, Redis, or
-vendor SDKs. Infrastructure implements business-facing ports, while runtime
-constructs the configured adapters, HTTP application, and worker loops.
+vendor SDKs. Infrastructure implements business-facing ports. The deployable
+application owns adapter, HTTP, telemetry, and worker composition, while the
+framework packages own capability identity, configuration orchestration,
+provider-neutral persistence and background-work primitives, runtime roles,
+process execution, and shutdown signaling.
 
 ### Enforced Workspace Dependencies
 
@@ -53,15 +58,19 @@ matching policy update.
 
 | Package | Permitted direct local dependencies |
 |---|---|
-| `hegira` | `application`, `application_contracts`, `domain`, `domain_shared`, `infrastructure`, `presentation`, `runtime`, `web` |
+| `hegira` | `application`, `application_contracts`, `background_jobs`, `configuration`, `domain`, `domain_shared`, `infrastructure`, `platform_core`, `presentation`, `runtime`, `web` |
+| `platform_core` | None |
+| `configuration` | None |
+| `persistence` | None |
+| `background_jobs` | None |
 | `domain_shared` | None |
 | `domain` | `domain_shared` |
 | `application_contracts` | `domain`, `domain_shared` |
-| `application` | `application_contracts`, `domain`, `domain_shared` |
-| `infrastructure` | `application`, `application_contracts`, `domain`, `domain_shared` |
+| `application` | `application_contracts`, `background_jobs`, `domain`, `domain_shared` |
+| `infrastructure` | `application`, `application_contracts`, `background_jobs`, `configuration`, `domain`, `domain_shared`, `persistence`, `platform_core`, `runtime` |
 | `presentation` | `application`, `application_contracts`, `domain_shared`, `infrastructure` |
 | `web` | `application`, `application_contracts`, `domain_shared`, `presentation` |
-| `runtime` | `infrastructure`, `presentation`, `web` |
+| `runtime` | None |
 | `db_migrator` | `infrastructure` |
 
 The boundary check reads declared local dependencies from locked Cargo metadata,
@@ -101,19 +110,24 @@ must remain reusable and cannot depend on an application package.
 | Package | Location | Responsibility |
 |---|---|---|
 | `hegira` | `apps/hegira` | Deployable Axum/Leptos package and full-stack composition |
+| `platform_core` | `crates/platform_core` | Application-independent compiled capability primitives |
+| `configuration` | `crates/configuration` | Configuration profile sources and ordered validation orchestration |
+| `persistence` | `crates/persistence` | Database provider selection, pools, health checks, and transaction primitives |
+| `background_jobs` | `crates/background_jobs` | Job contracts, handler registration, observation, and recurring execution |
 | `domain_shared` | `crates/domain_shared` | Shared errors, identifiers, and localization resources |
 | `domain` | `crates/domain` | Entities, invariants, repository ports, and business concepts |
 | `application_contracts` | `crates/application_contracts` | DTOs, inputs, permissions, and feature metadata |
 | `application` | `crates/application` | Use cases, authorization, validation, and transaction intent |
-| `infrastructure` | `crates/infrastructure` | SQLx adapters, security, jobs, cache, mail, search, and storage |
+| `infrastructure` | `crates/infrastructure` | Application migrations and SQLx adapters for Identity, jobs, security, cache, mail, search, and storage |
 | `presentation` | `crates/presentation` | Axum controllers, middleware, OpenAPI, sessions, and composition |
 | `web` | `crates/web` | Leptos routes, pages, components, and server functions |
-| `runtime` | `crates/runtime` | Process startup, web/worker roles, telemetry, and shutdown |
+| `runtime` | `crates/runtime` | Runtime roles, Tokio process lifecycle, and shutdown signaling |
 | `db_migrator` | `crates/db_migrator` | Migration, reset, seed, and search reindex commands |
 
 Code is grouped by bounded context and capability rather than by database
-table. `Catalog::Products` is the reference feature; Identity is the larger
-example covering users, roles, sessions, OAuth, and TOTP.
+table. Identity is the active application context and covers users, roles,
+sessions, OAuth, and TOTP. The authenticated web surface starts from a neutral
+dashboard instead of composing a sample business capability.
 
 ## Application Composition And Build Ownership
 
@@ -122,12 +136,16 @@ database and optional capability features to the packages that implement them
 and owns the Cargo-Leptos metadata for the server binary, hydrated library,
 stylesheet, public assets, and workspace-defined WASM release profile.
 
-The server entry point at `apps/hegira/src/main.rs` delegates process startup to
-`runtime::run`. Runtime then validates configuration and compiled capabilities
-before constructing infrastructure adapters, presentation services, HTTP
-routes, telemetry, and worker loops. The hydrated entry point at
-`apps/hegira/src/lib.rs` mounts the `web` application. Full-stack integration
-tests remain beside the deployable package under `apps/hegira/tests`.
+The server entry point at `apps/hegira/src/main.rs` delegates application
+startup to `apps/hegira/src/server`. That composition root loads the concrete
+application configuration, runs the framework-owned structural, capability,
+and production validation pipeline, and only then constructs infrastructure
+adapters, presentation services, HTTP routes, telemetry, and worker loops. The
+framework `runtime` package supplies the Tokio process runner, runtime-role
+primitive, and operating-system shutdown signal without depending on
+application packages. The hydrated entry point at `apps/hegira/src/lib.rs`
+mounts the `web` application. Full-stack integration tests remain beside the
+deployable package under `apps/hegira/tests`.
 
 Cargo commands are run from the repository root and select the application with
 `-p hegira`. Cargo-Leptos reads the package metadata from
@@ -184,6 +202,12 @@ Repository traits describe business persistence without SQLx types. PostgreSQL
 and SQLite use separate adapters and migration directories so provider-specific
 behavior remains visible.
 
+The `persistence` framework package owns explicit database-provider selection,
+connection pools, health checks, and SQLx transaction types. It does not own
+application schemas, migrations, or repositories. The `infrastructure`
+package embeds the current application migrations and implements Identity
+repositories against the selected provider.
+
 Standard mutations follow this order:
 
 1. Resolve the current actor.
@@ -196,14 +220,19 @@ Transactions are use-case boundaries, not HTTP-request middleware. Durable
 outbox records are committed with state changes when asynchronous work must be
 published reliably.
 
+The `background_jobs` framework package owns job dispatch, durable queue and
+handler contracts, handler registration, observation, and recurring execution.
+PostgreSQL and SQLite outbox workers remain infrastructure adapters because
+their SQL contract is backed by the application-owned migrations. This keeps
+framework primitives reusable without prematurely assigning module migration
+ownership.
+
 ## Feature Registration
 
 Feature descriptors are compile-time Rust values. They contribute permission
 discovery and Axum/OpenAPI registration without introducing runtime plugins.
 Concrete service composition, Leptos routes, and navigation remain explicit
 because Rust and the relevant proc macros require concrete types.
-
-The reference workflow is documented in [CRUD Tutorial](crud-tutorial.md).
 
 ## Frontend
 

@@ -57,7 +57,7 @@ pub fn LoginRoute() -> impl IntoView {
                 match current_user().await {
                     Ok(user) => {
                         auth.set_authenticated(Some(user.username), user.permissions);
-                        navigate("/content", Default::default());
+                        navigate("/dashboard", Default::default());
                     }
                     Err(_) => {
                         auth.clear();
@@ -106,7 +106,7 @@ pub fn LoginRoute() -> impl IntoView {
                 match login(username_value, password_value).await {
                     Ok(user) => {
                         auth.set_authenticated(Some(user.username), user.permissions);
-                        navigate("/content", Default::default());
+                        navigate("/dashboard", Default::default());
                     }
                     Err(_) => {
                         error.set(Some(i18n.t_untracked(T::InvalidCredentials).to_string()));

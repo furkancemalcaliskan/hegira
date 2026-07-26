@@ -173,14 +173,27 @@ mod tests {
     }
 
     #[test]
-    fn catalog_product_paths_are_documented() {
+    fn identity_management_paths_are_documented() {
         let document = document();
-        assert!(document.paths.paths.contains_key("/api/catalog/products"));
+        for path in [
+            "/api/identity/users",
+            "/api/identity/users/{username}",
+            "/api/identity/authorization/roles",
+            "/api/identity/authorization/permissions",
+        ] {
+            assert!(document.paths.paths.contains_key(path), "missing {path}");
+        }
+    }
+
+    #[test]
+    fn documented_paths_match_the_registered_identity_surface() {
+        let document = document();
         assert!(
             document
                 .paths
                 .paths
-                .contains_key("/api/catalog/products/{pid}")
+                .keys()
+                .all(|path| path.starts_with("/api/identity/"))
         );
     }
 }

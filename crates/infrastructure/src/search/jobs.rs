@@ -230,15 +230,15 @@ mod tests {
     #[test]
     fn command_payload_has_stable_revisioned_contract() {
         let payload = serde_json::to_value(SearchIndexCommand::Delete {
-            index: "products".to_string(),
-            document_id: "product-1".to_string(),
+            index: "records".to_string(),
+            document_id: "record-1".to_string(),
             revision: Some(3),
         })
         .unwrap();
 
         assert_eq!(payload["operation"], "delete");
-        assert_eq!(payload["index"], "products");
-        assert_eq!(payload["document_id"], "product-1");
+        assert_eq!(payload["index"], "records");
+        assert_eq!(payload["document_id"], "record-1");
         assert_eq!(payload["revision"], 3);
     }
 }

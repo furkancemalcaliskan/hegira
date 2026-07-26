@@ -2,6 +2,10 @@
 resolver = "3"
 members = [
     "apps/hegira",
+    "crates/platform_core",
+    "crates/configuration",
+    "crates/persistence",
+    "crates/background_jobs",
     "crates/domain_shared",
     "crates/domain",
     "crates/application_contracts",
