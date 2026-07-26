@@ -57,7 +57,9 @@ test("accepts framework isolation and app-owned composition edges", () => {
       WORKSPACE_DEPENDENCY_POLICY.persistence.length === 0 &&
       WORKSPACE_DEPENDENCY_POLICY.background_jobs.length === 0 &&
       WORKSPACE_DEPENDENCY_POLICY.http_support.length === 0 &&
+      WORKSPACE_DEPENDENCY_POLICY.leptos_support.length === 0 &&
       WORKSPACE_DEPENDENCY_POLICY.observability.includes("background_jobs") &&
+      WORKSPACE_DEPENDENCY_POLICY.test_support.includes("application") &&
       WORKSPACE_DEPENDENCY_POLICY.hegira.includes("infrastructure") &&
       WORKSPACE_DEPENDENCY_POLICY.presentation.includes("infrastructure"),
   );

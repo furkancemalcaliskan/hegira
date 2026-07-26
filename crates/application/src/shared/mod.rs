@@ -8,6 +8,3 @@ pub mod search;
 pub mod security;
 pub mod settings;
 pub mod storage;
-
-#[cfg(any(test, feature = "test-support"))]
-pub mod testing;

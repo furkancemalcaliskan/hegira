@@ -4,11 +4,9 @@ use crate::{
     application_contracts::identity::authorization::{
         CreateRoleInput, ListRolesInput, PermissionDto, RoleDto, UpdateRoleInput,
     },
-    web::shared::{
-        data::mutation::MutationStatus,
-        i18n::{I18n, T},
-    },
+    web::shared::i18n::{I18n, T},
 };
+use leptos_support::mutation::MutationStatus;
 
 pub const ROLES_PAGE_SIZE: u32 = 20;
 

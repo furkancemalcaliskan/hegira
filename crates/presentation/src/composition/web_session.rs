@@ -1,7 +1,7 @@
 use axum::http::{HeaderMap, HeaderValue, header};
 use cookie::{Cookie, SameSite, time::Duration};
-use leptos::prelude::{ServerFnError, expect_context};
 use leptos_axum::ResponseOptions;
+use leptos_support::server::{Error as ServerFnError, context};
 
 use infrastructure::config::AppConfig;
 use std::sync::Arc;
@@ -30,7 +30,7 @@ pub async fn token() -> Result<Option<String>, ServerFnError> {
 }
 
 pub fn set(token: &str) -> Result<(), ServerFnError> {
-    let config = expect_context::<Arc<AppConfig>>();
+    let config = context::<Arc<AppConfig>>();
     append(build_session_cookie(
         token,
         config.is_production(),
@@ -52,7 +52,7 @@ pub fn clear() -> Result<(), ServerFnError> {
     let cookie = Cookie::build((SESSION_COOKIE, ""))
         .path("/")
         .http_only(true)
-        .secure(expect_context::<Arc<AppConfig>>().is_production())
+        .secure(context::<Arc<AppConfig>>().is_production())
         .same_site(SameSite::Lax)
         .max_age(Duration::ZERO)
         .build();
@@ -62,7 +62,7 @@ pub fn clear() -> Result<(), ServerFnError> {
 fn append(cookie: Cookie<'static>) -> Result<(), ServerFnError> {
     let value = HeaderValue::from_str(&cookie.to_string())
         .map_err(|_| ServerFnError::new("invalid session cookie"))?;
-    expect_context::<ResponseOptions>().append_header(header::SET_COOKIE, value);
+    context::<ResponseOptions>().append_header(header::SET_COOKIE, value);
     Ok(())
 }
 

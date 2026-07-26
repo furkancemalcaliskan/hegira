@@ -5,11 +5,9 @@ use crate::{
         authorization::RoleDto,
         users::{CreateUserInput, ListUsersInput, UpdateUserInput, UserDto},
     },
-    web::shared::{
-        data::mutation::MutationStatus,
-        i18n::{I18n, T},
-    },
+    web::shared::i18n::{I18n, T},
 };
+use leptos_support::mutation::MutationStatus;
 
 pub const USERS_PAGE_SIZE: u32 = 20;
 

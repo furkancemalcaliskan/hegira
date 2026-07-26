@@ -1855,6 +1855,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sqlx",
+ "test_support",
  "tokio",
  "tower",
  "tower-http 0.7.0",
@@ -2609,6 +2610,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "leptos_support"
+version = "0.2.0"
+dependencies = [
+ "leptos",
+ "serde",
+ "serde_json",
+ "tracing",
+ "validator",
+]
+
+[[package]]
 name = "leptos_ui"
 version = "0.3.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3306,8 +3318,8 @@ dependencies = [
  "domain_shared",
  "http-body-util",
  "infrastructure",
- "leptos",
  "leptos_axum",
+ "leptos_support",
  "observability",
  "serde",
  "serde_json",
@@ -4746,6 +4758,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "test_support"
+version = "0.2.0"
+dependencies = [
+ "application",
+ "axum",
+ "http-body-util",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tower",
+]
+
+[[package]]
 name = "thiserror"
 version = "1.0.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5585,6 +5610,7 @@ dependencies = [
  "leptos",
  "leptos_meta",
  "leptos_router",
+ "leptos_support",
  "leptos_ui",
  "presentation",
  "serde",

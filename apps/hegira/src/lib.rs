@@ -18,6 +18,8 @@ pub use ::observability;
 pub use ::presentation;
 #[cfg(feature = "ssr")]
 pub use ::runtime;
+#[cfg(feature = "test-support")]
+pub use ::test_support;
 pub use ::web;
 
 #[cfg(feature = "ssr")]
