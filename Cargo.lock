@@ -1844,15 +1844,13 @@ dependencies = [
  "domain",
  "domain_shared",
  "http-body-util",
+ "http_support",
  "infrastructure",
  "leptos",
  "leptos_axum",
- "opentelemetry",
- "opentelemetry-otlp",
- "opentelemetry_sdk",
+ "observability",
  "platform_core",
  "presentation",
- "prometheus",
  "runtime",
  "serde",
  "serde_json",
@@ -1861,8 +1859,6 @@ dependencies = [
  "tower",
  "tower-http 0.7.0",
  "tracing",
- "tracing-opentelemetry",
- "tracing-subscriber",
  "uuid",
  "wasm-bindgen",
  "web",
@@ -1976,6 +1972,26 @@ name = "http-range-header"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9171a2ea8a68358193d15dd5d70c1c10a2afc3e7e4c5bc92bc9f025cebd7359c"
+
+[[package]]
+name = "http_support"
+version = "0.2.0"
+dependencies = [
+ "axum",
+ "http-body-util",
+ "ipnet",
+ "opentelemetry",
+ "opentelemetry-http",
+ "opentelemetry_sdk",
+ "redis",
+ "serde",
+ "tokio",
+ "tower",
+ "tracing",
+ "tracing-opentelemetry",
+ "url",
+ "uuid",
+]
 
 [[package]]
 name = "httparse"
@@ -2921,6 +2937,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "observability"
+version = "0.2.0"
+dependencies = [
+ "axum",
+ "background_jobs",
+ "http-body-util",
+ "opentelemetry",
+ "opentelemetry-otlp",
+ "opentelemetry_sdk",
+ "prometheus",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tower",
+ "tracing",
+ "tracing-opentelemetry",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "oco_ref"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3270,21 +3306,14 @@ dependencies = [
  "domain_shared",
  "http-body-util",
  "infrastructure",
- "ipnet",
  "leptos",
  "leptos_axum",
- "opentelemetry",
- "opentelemetry-http",
- "opentelemetry_sdk",
- "prometheus",
- "redis",
+ "observability",
  "serde",
  "serde_json",
  "tokio",
  "tower",
  "tracing",
- "tracing-opentelemetry",
- "url",
  "utoipa",
  "utoipa-swagger-ui",
  "uuid",

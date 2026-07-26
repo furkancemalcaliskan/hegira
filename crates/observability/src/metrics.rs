@@ -66,6 +66,37 @@ pub fn scrape() -> Result<String, String> {
     String::from_utf8(buffer).map_err(|err| format!("failed to encode metrics as utf-8: {err}"))
 }
 
+pub fn routes<S>(path: &str) -> axum::Router<S>
+where
+    S: Clone + Send + Sync + 'static,
+{
+    use axum::routing::get;
+
+    axum::Router::new().route(path, get(scrape_response))
+}
+
+pub async fn scrape_response() -> Response {
+    use axum::http::{StatusCode, header};
+
+    match scrape() {
+        Ok(body) => Response::builder()
+            .status(StatusCode::OK)
+            .header(
+                header::CONTENT_TYPE,
+                "text/plain; version=0.0.4; charset=utf-8",
+            )
+            .body(Body::from(body))
+            .expect("metrics response should be valid"),
+        Err(error) => {
+            tracing::error!(%error, "failed to encode Prometheus metrics");
+            Response::builder()
+                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                .body(Body::from(error))
+                .expect("metrics error response should be valid")
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -95,5 +126,27 @@ mod tests {
         assert!(body.contains("http_requests_total"));
         assert!(body.contains("method=\"GET\""));
         assert!(body.contains("path=\"/test\""));
+    }
+
+    #[tokio::test]
+    async fn metrics_route_exposes_prometheus_text() {
+        let response = routes::<()>("/metrics")
+            .oneshot(
+                Request::builder()
+                    .uri("/metrics")
+                    .body(Body::empty())
+                    .expect("failed to build request"),
+            )
+            .await
+            .expect("request failed");
+
+        assert!(response.status().is_success());
+        assert_eq!(
+            response
+                .headers()
+                .get(axum::http::header::CONTENT_TYPE)
+                .unwrap(),
+            "text/plain; version=0.0.4; charset=utf-8"
+        );
     }
 }

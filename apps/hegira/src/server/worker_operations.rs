@@ -2,6 +2,7 @@
 use axum::http::header;
 use axum::{Json, Router, extract::State, http::StatusCode, routing::get};
 use background_jobs::{DurableQueueStats, JobObserver};
+use observability::health::{LivenessResponse, ReadinessCheck, ReadinessResponse};
 use serde::Serialize;
 use std::{
     sync::{Arc, Mutex},
@@ -140,27 +141,8 @@ impl OperationsState {
 }
 
 #[derive(Debug, Serialize)]
-struct LivenessResponse {
-    status: &'static str,
-    service: String,
-    version: &'static str,
-    role: &'static str,
-}
-
-#[derive(Debug, Serialize)]
-struct ReadinessResponse {
-    status: &'static str,
-    service: String,
-    version: &'static str,
-    checks: Vec<ReadinessCheck>,
+struct WorkerReadinessExtension {
     workers: Vec<WorkerCheck>,
-}
-
-#[derive(Debug, Serialize)]
-struct ReadinessCheck {
-    name: &'static str,
-    status: &'static str,
-    latency_ms: u64,
 }
 
 #[derive(Debug, Serialize)]
@@ -187,63 +169,53 @@ pub fn routes(state: OperationsState) -> Router {
 }
 
 async fn healthz(State(state): State<OperationsState>) -> Json<LivenessResponse> {
-    Json(LivenessResponse {
-        status: "ok",
-        service: state.config.application.name.clone(),
-        version: env!("CARGO_PKG_VERSION"),
-        role: "worker",
-    })
+    Json(
+        LivenessResponse::new(
+            state.config.application.name.clone(),
+            env!("CARGO_PKG_VERSION"),
+        )
+        .with_role("worker"),
+    )
 }
 
-async fn readyz(State(state): State<OperationsState>) -> (StatusCode, Json<ReadinessResponse>) {
+async fn readyz(
+    State(state): State<OperationsState>,
+) -> (
+    StatusCode,
+    Json<ReadinessResponse<WorkerReadinessExtension>>,
+) {
     let probe_timeout = Duration::from_millis(state.config.health.readiness_timeout_milliseconds);
-    let started_at = Instant::now();
-    let database_result = tokio::time::timeout(probe_timeout, state.db.health_check()).await;
-    let database_ok = matches!(database_result, Ok(Ok(())));
-    match database_result {
-        Ok(Err(error)) => tracing::warn!(%error, "worker readiness database probe failed"),
-        Err(_) => tracing::warn!(
-            timeout_ms = probe_timeout.as_millis(),
-            "worker readiness database probe timed out"
-        ),
-        Ok(Ok(())) => {}
-    }
+    let database =
+        observability::health::check("database", true, probe_timeout, state.db.health_check())
+            .await;
 
     let workers = state.health.snapshot();
     let workers_ok = !workers.is_empty() && workers.iter().all(|worker| worker.status == "ok");
-    let ready = database_ok && workers_ok;
-    let checks = vec![
-        ReadinessCheck {
-            name: "database",
-            status: if database_ok { "ok" } else { "unavailable" },
-            latency_ms: millis(started_at.elapsed()),
-        },
-        ReadinessCheck {
-            name: "worker_loops",
-            status: if workers_ok { "ok" } else { "unavailable" },
-            latency_ms: 0,
-        },
-    ];
+    let worker_loops = if workers_ok {
+        ReadinessCheck::available("worker_loops", Duration::ZERO)
+    } else {
+        ReadinessCheck::unavailable("worker_loops", Duration::ZERO)
+    };
+    let response = ReadinessResponse::new(
+        state.config.application.name.clone(),
+        env!("CARGO_PKG_VERSION"),
+        vec![database, worker_loops],
+    )
+    .with_extension(WorkerReadinessExtension { workers });
 
     (
-        if ready {
+        if response.is_ready() {
             StatusCode::OK
         } else {
             StatusCode::SERVICE_UNAVAILABLE
         },
-        Json(ReadinessResponse {
-            status: if ready { "ok" } else { "unavailable" },
-            service: state.config.application.name.clone(),
-            version: env!("CARGO_PKG_VERSION"),
-            checks,
-            workers,
-        }),
+        Json(response),
     )
 }
 
 #[cfg(feature = "metrics-prometheus")]
 async fn metrics() -> Result<([(header::HeaderName, &'static str); 1], String), StatusCode> {
-    super::worker_metrics::scrape()
+    observability::job_metrics::scrape()
         .map(|body| {
             (
                 [(
@@ -314,7 +286,7 @@ mod tests {
 
         assert_eq!(response.0.status, "ok");
         assert_eq!(response.0.service, "worker-test");
-        assert_eq!(response.0.role, "worker");
+        assert_eq!(response.0.role, Some("worker"));
     }
 
     #[tokio::test]
@@ -323,7 +295,7 @@ mod tests {
 
         assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
         assert_eq!(response.0.status, "unavailable");
-        assert!(response.0.workers.is_empty());
+        assert!(response.0.extension.workers.is_empty());
         assert_eq!(response.0.checks[1].name, "worker_loops");
         assert_eq!(response.0.checks[1].status, "unavailable");
     }
@@ -354,7 +326,7 @@ mod tests {
     #[cfg(feature = "metrics-prometheus")]
     #[tokio::test]
     async fn metrics_use_prometheus_content_type() {
-        let observer = crate::worker_metrics::PrometheusJobObserver::new();
+        let observer = observability::job_metrics::PrometheusJobObserver::new();
         observer.worker_heartbeat("test");
         let (headers, body) = metrics().await.expect("metrics should encode");
 

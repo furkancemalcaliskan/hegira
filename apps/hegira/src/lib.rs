@@ -9,7 +9,11 @@ pub use ::background_jobs;
 pub use ::domain;
 pub use ::domain_shared;
 #[cfg(feature = "ssr")]
+pub use ::http_support;
+#[cfg(feature = "ssr")]
 pub use ::infrastructure;
+#[cfg(feature = "ssr")]
+pub use ::observability;
 #[cfg(feature = "ssr")]
 pub use ::presentation;
 #[cfg(feature = "ssr")]

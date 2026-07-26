@@ -6,6 +6,8 @@ members = [
     "crates/configuration",
     "crates/persistence",
     "crates/background_jobs",
+    "crates/http_support",
+    "crates/observability",
     "crates/domain_shared",
     "crates/domain",
     "crates/application_contracts",

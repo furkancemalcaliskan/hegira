@@ -1,6 +1,3 @@
-mod telemetry;
-#[cfg(feature = "metrics-prometheus")]
-mod worker_metrics;
 mod worker_operations;
 
 #[derive(Debug, Default)]
@@ -24,7 +21,7 @@ async fn serve() -> Result<(), String> {
         .map_err(|err| format!("failed to load application configuration: {err}"))?;
     configuration::validate(&app_config, compiled_capabilities()).map_err(|err| err.to_string())?;
 
-    let telemetry = telemetry::init(&app_config)?;
+    let telemetry = observability::telemetry::init(&telemetry_settings(&app_config))?;
     let result = serve_configured(app_config).await;
     let shutdown_result = telemetry.shutdown();
 
@@ -32,6 +29,36 @@ async fn serve() -> Result<(), String> {
         (Err(error), _) => Err(error),
         (Ok(()), Err(error)) => Err(error),
         (Ok(()), Ok(())) => Ok(()),
+    }
+}
+
+fn telemetry_settings(
+    config: &infrastructure::config::AppConfig,
+) -> observability::telemetry::TelemetrySettings {
+    let exporter = config.telemetry.enabled.then(|| {
+        let protocol = match config.telemetry.protocol {
+            infrastructure::config::OtlpProtocol::Grpc => {
+                observability::telemetry::OtlpProtocol::Grpc
+            }
+            infrastructure::config::OtlpProtocol::HttpProtobuf => {
+                observability::telemetry::OtlpProtocol::HttpProtobuf
+            }
+        };
+        observability::telemetry::OtlpExporterSettings {
+            protocol,
+            endpoint: config.telemetry.endpoint.clone(),
+            timeout: std::time::Duration::from_millis(config.telemetry.timeout_milliseconds),
+            sample_ratio: config.telemetry.sample_ratio,
+        }
+    });
+
+    observability::telemetry::TelemetrySettings {
+        service_name: config.application.name.clone(),
+        service_version: env!("CARGO_PKG_VERSION"),
+        environment: config.environment.clone(),
+        role: format!("{:?}", config.runtime.role).to_lowercase(),
+        logging_filter: config.logging.filter.clone(),
+        exporter,
     }
 }
 
@@ -264,7 +291,7 @@ fn metrics_job_observer(
 ) -> std::sync::Arc<dyn background_jobs::JobObserver> {
     #[cfg(feature = "metrics-prometheus")]
     if app_config.metrics.enabled {
-        return std::sync::Arc::new(worker_metrics::PrometheusJobObserver::new());
+        return std::sync::Arc::new(observability::job_metrics::PrometheusJobObserver::new());
     }
 
     let _ = app_config;
@@ -296,9 +323,9 @@ async fn serve_http(
     search: infrastructure::search::SearchAdapter,
 ) -> Result<(), String> {
     use axum::{Router, middleware};
+    use http_support as app_middleware;
     use leptos::prelude::*;
     use leptos_axum::{LeptosRoutes, generate_route_list};
-    use presentation::http::middleware as app_middleware;
     use tower_http::compression::CompressionLayer;
     use tower_http::{limit::RequestBodyLimitLayer, timeout::TimeoutLayer};
     use web::root::{App, shell};
@@ -313,8 +340,23 @@ async fn serve_http(
     let storage = infrastructure::storage::StorageAdapter::from_config(&app_config)
         .await
         .map_err(|err| format!("invalid storage configuration: {err}"))?;
-    let rate_limiter = presentation::http::middleware::rate_limit::RateLimiter::from_config(
-        &app_config.security.rate_limit,
+    let rate_limit_backend = match app_config.security.rate_limit.backend {
+        infrastructure::config::RateLimitBackend::Memory => {
+            app_middleware::rate_limit::RateLimitBackend::Memory
+        }
+        infrastructure::config::RateLimitBackend::Redis => {
+            app_middleware::rate_limit::RateLimitBackend::Redis {
+                url: app_config.security.rate_limit.redis.url.clone(),
+            }
+        }
+    };
+    let rate_limiter = app_middleware::rate_limit::RateLimiter::from_options(
+        &app_middleware::rate_limit::RateLimitOptions {
+            enabled: app_config.security.rate_limit.enabled,
+            max_requests: app_config.security.rate_limit.max_requests,
+            window: std::time::Duration::from_secs(app_config.security.rate_limit.window_seconds),
+            backend: rate_limit_backend,
+        },
         &app_config.security.trusted_proxies,
     )
     .map_err(|err| format!("invalid rate limiter configuration: {err}"))?;
@@ -335,7 +377,7 @@ async fn serve_http(
     let web_services = app_state.services.clone();
     let web_config = app_state.config.clone();
     let cors_layer = cors_layer(&app_config.security.cors)?;
-    let csrf_policy = presentation::http::middleware::csrf::CsrfPolicy::from_public_url(
+    let cookie_policy = app_middleware::policy::CookieBffPolicy::from_public_url(
         &app_config.application.public_url,
     )
     .map_err(|err| format!("invalid CSRF configuration: {err}"))?;
@@ -373,13 +415,14 @@ async fn serve_http(
         operational_routes,
         bearer_api_routes,
         cookie_bff_routes,
-        csrf_policy,
+        cookie_policy,
+        app_middleware::policy::BearerApiPolicy,
     );
 
     #[cfg(feature = "metrics-prometheus")]
     let app = if app_config.metrics.enabled {
         tracing::info!(path = %app_config.metrics.path, "prometheus metrics enabled");
-        app.layer(middleware::from_fn(app_middleware::metrics::record))
+        app.layer(middleware::from_fn(observability::metrics::record))
     } else {
         app
     };
@@ -425,7 +468,8 @@ fn compose_transport_routes<S>(
     operational_routes: axum::Router<S>,
     bearer_api_routes: axum::Router<S>,
     cookie_bff_routes: axum::Router<S>,
-    csrf_policy: presentation::http::middleware::csrf::CsrfPolicy,
+    cookie_policy: http_support::policy::CookieBffPolicy,
+    _bearer_policy: http_support::policy::BearerApiPolicy,
 ) -> axum::Router<S>
 where
     S: Clone + Send + Sync + 'static,
@@ -436,8 +480,8 @@ where
         .merge(operational_routes)
         .merge(bearer_api_routes)
         .merge(cookie_bff_routes.layer(middleware::from_fn_with_state(
-            csrf_policy,
-            presentation::http::middleware::csrf::validate,
+            cookie_policy.csrf(),
+            http_support::csrf::validate,
         )))
 }
 
@@ -480,7 +524,7 @@ mod transport_policy_tests {
         middleware,
         routing::{delete, get, patch, post, put},
     };
-    use presentation::http::middleware as app_middleware;
+    use http_support as app_middleware;
     use tower::ServiceExt;
 
     fn app() -> Router {
@@ -495,16 +539,22 @@ mod transport_policy_tests {
             .route("/api/browser-put", put(|| async { "ok" }))
             .route("/api/browser-patch", patch(|| async { "ok" }))
             .route("/api/browser-delete", delete(|| async { "ok" }));
-        let csrf_policy =
-            app_middleware::csrf::CsrfPolicy::from_public_url("https://application.example")
+        let cookie_policy =
+            app_middleware::policy::CookieBffPolicy::from_public_url("https://application.example")
                 .unwrap();
 
-        compose_transport_routes(operational, bearer_api, cookie_bff, csrf_policy)
-            .layer(middleware::from_fn(app_middleware::request_id::set))
-            .layer(middleware::from_fn_with_state(
-                false,
-                app_middleware::security_headers::set,
-            ))
+        compose_transport_routes(
+            operational,
+            bearer_api,
+            cookie_bff,
+            cookie_policy,
+            app_middleware::policy::BearerApiPolicy,
+        )
+        .layer(middleware::from_fn(app_middleware::request_id::set))
+        .layer(middleware::from_fn_with_state(
+            false,
+            app_middleware::security_headers::set,
+        ))
     }
 
     #[tokio::test]
