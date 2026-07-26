@@ -11,7 +11,7 @@ application_contracts = { path = "../application_contracts" }
 background_jobs = { path = "../background_jobs" }
 configuration = { path = "../configuration" }
 argon2 = "0.5.3"
-base64 = "0.22.1"
+base64 = "0.23.0"
 aws-config = { version = "1.8.18", default-features = false, features = ["behavior-version-latest", "default-https-client", "rt-tokio"], optional = true }
 aws-sdk-s3 = { version = "1.137.0", default-features = false, features = ["default-https-client", "rt-tokio"], optional = true }
 chrono = { version = "0.4.44", features = ["serde"] }
