@@ -46,7 +46,7 @@ mod tests {
     }
 
     async fn pool() -> SqlitePool {
-        crate::db::connect_sqlite(&DatabaseConfig {
+        crate::db::connect_sqlite_with_application_migrations(&DatabaseConfig {
             backend: DatabaseBackend::Sqlite,
             url: "sqlite::memory:".to_string(),
             max_connections: 4,

@@ -87,7 +87,8 @@ The backend workflow contains three gates:
 - `feature-matrix` compiles SQLite, PostgreSQL, WASM hydration, observability,
   and distributed-provider capability sets;
 - `quality` runs formatting, DX, Clippy, provider checks, library tests, and
-  ignored PostgreSQL integration tests against a disposable service;
+  ignored PostgreSQL migration compatibility and integration tests against a
+  disposable service;
 - `supply-chain` runs dependency policy and vulnerability checks.
 
 The full-stack build workflow is path-filtered to the deployable package,

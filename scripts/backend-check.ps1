@@ -41,6 +41,17 @@ if ($WithIgnoredDbTests) {
         throw "DATABASE_URL must be set when -WithIgnoredDbTests is used"
     }
 
+    Run-Step "DB-backed migration compatibility tests" @(
+        "cargo",
+        "test",
+        "-p",
+        "infrastructure",
+        "--features",
+        "ssr",
+        "postgres_v020_upgrade_retires_catalog_state_and_preserves_history",
+        "--",
+        "--ignored"
+    )
     Run-Step "DB-backed API identity tests" @(
         "cargo",
         "test",

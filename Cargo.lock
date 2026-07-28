@@ -1269,6 +1269,7 @@ name = "db_migrator"
 version = "0.2.0"
 dependencies = [
  "infrastructure",
+ "persistence",
  "tokio",
 ]
 
@@ -1849,6 +1850,7 @@ dependencies = [
  "leptos",
  "leptos_axum",
  "observability",
+ "persistence",
  "platform_core",
  "presentation",
  "runtime",

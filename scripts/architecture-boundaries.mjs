@@ -14,6 +14,7 @@ export const WORKSPACE_DEPENDENCY_POLICY = Object.freeze({
     "http_support",
     "infrastructure",
     "observability",
+    "persistence",
     "platform_core",
     "presentation",
     "runtime",
@@ -64,7 +65,7 @@ export const WORKSPACE_DEPENDENCY_POLICY = Object.freeze({
     "presentation",
   ],
   runtime: [],
-  db_migrator: ["infrastructure"],
+  db_migrator: ["infrastructure", "persistence"],
 });
 
 export const REPOSITORY_OWNERSHIP_POLICY = Object.freeze({

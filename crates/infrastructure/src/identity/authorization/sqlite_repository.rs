@@ -382,7 +382,7 @@ mod tests {
     use domain::identity::users::UserRepository;
 
     async fn repository() -> (SqlitePool, SqliteAuthorizationRepository) {
-        let pool = db::connect_sqlite(&DatabaseConfig {
+        let pool = db::connect_sqlite_with_application_migrations(&DatabaseConfig {
             backend: DatabaseBackend::Sqlite,
             url: "sqlite::memory:".to_string(),
             max_connections: 4,

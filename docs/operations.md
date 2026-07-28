@@ -16,6 +16,12 @@ Use the dedicated migrator:
 APP_ENV=production cargo run -p db_migrator --release --no-default-features --features ssr,db-postgres -- migrate
 ```
 
+The selected application host assembles module-owned migration sources into one
+deterministic plan before SQL reaches the database. Invalid or duplicate module
+identities, duplicate global migration numbers, and checksum conflicts stop the
+command before execution. Applied migration files are immutable; do not edit or
+renumber them after release.
+
 Production identity seed is disabled by default. `reset` and `recreate` require
 `APP_ENV=test` or the explicit `ALLOW_DB_RESET=true` guard and must never be
 used against production.

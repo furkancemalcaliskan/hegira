@@ -1,5 +1,7 @@
 use serde::Deserialize;
 
+pub mod migrations;
+
 #[cfg(feature = "db-postgres")]
 use sqlx::PgPool;
 #[cfg(feature = "db-sqlite")]
