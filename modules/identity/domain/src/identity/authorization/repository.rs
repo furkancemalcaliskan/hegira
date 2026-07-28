@@ -1,5 +1,5 @@
 use crate::identity::authorization::{PermissionName, Role};
-use domain_shared::common::errors::DomainError;
+use identity_domain_shared::common::errors::DomainError;
 
 pub trait AuthorizationRepository: Send + Sync {
     fn user_has_permission(

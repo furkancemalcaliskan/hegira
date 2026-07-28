@@ -1,0 +1,9 @@
+[package]
+name = "identity_domain_shared"
+version = "0.2.0"
+edition = "2024"
+license = "Apache-2.0"
+publish = false
+
+[lib]
+path = "src/lib.rs"

@@ -4,7 +4,7 @@ set -eu
 ./scripts/dx-audit.sh scripts/fixtures/dx/platform-contracts.manifest
 
 for path in \
-  crates/application_contracts/src/features.rs \
+  modules/identity/application_contracts/src/features.rs \
   crates/presentation/src/http/feature.rs \
   crates/web/src/shared/crud/dialog.rs \
   crates/web/src/shared/crud/state.rs

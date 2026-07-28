@@ -11,3 +11,18 @@ pub fn is_protected_admin_role(role_name: &str) -> bool {
         .trim()
         .eq_ignore_ascii_case(DEFAULT_ADMIN_ROLE_NAME)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn protected_identity_names_remain_case_insensitive_and_trimmed() {
+        assert!(is_protected_admin_username(" admin@example.com "));
+        assert!(is_protected_admin_username("ADMIN"));
+        assert!(!is_protected_admin_username("administrator@example.com"));
+
+        assert!(is_protected_admin_role(" ADMIN "));
+        assert!(!is_protected_admin_role("administrator"));
+    }
+}

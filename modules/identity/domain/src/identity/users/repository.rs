@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 use crate::identity::users::User;
-use domain_shared::common::errors::DomainError;
+use identity_domain_shared::common::errors::DomainError;
 
 pub trait UserRepository: Send + Sync {
     fn find_by_username(

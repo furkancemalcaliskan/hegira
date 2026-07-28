@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 
 use crate::identity::two_factor::TwoFactorCredential;
-use domain_shared::common::errors::DomainError;
+use identity_domain_shared::common::errors::DomainError;
 
 pub trait TwoFactorRepository: Send + Sync {
     fn credential_by_username(

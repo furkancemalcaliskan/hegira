@@ -19,11 +19,36 @@ function Run-Step {
 
 Run-Step "Format" @("cargo", "fmt", "--all", "--", "--check")
 Run-Step "Clippy" @("cargo", "clippy", "-p", "hegira", "--features", "ssr,test-support", "--", "-D", "warnings")
+Run-Step "Identity module Clippy" @(
+    "cargo",
+    "clippy",
+    "--all-features",
+    "-p",
+    "identity_domain_shared",
+    "-p",
+    "identity_domain",
+    "-p",
+    "identity_application_contracts",
+    "--",
+    "-D",
+    "warnings"
+)
 Run-Step "SSR check" @("cargo", "check", "-p", "hegira", "--features", "ssr")
 Run-Step "Hydrate check" @("cargo", "check", "-p", "hegira", "--features", "hydrate", "--target", "wasm32-unknown-unknown")
 Run-Step "OpenAPI check" @("cargo", "check", "-p", "hegira", "--features", "openapi")
 Run-Step "DbMigrator check" @("cargo", "check", "-p", "db_migrator", "--features", "ssr")
 Run-Step "Library tests" @("cargo", "test", "-p", "hegira", "--features", "ssr", "--lib")
+Run-Step "Identity module contract tests" @(
+    "cargo",
+    "test",
+    "--all-features",
+    "-p",
+    "identity_domain_shared",
+    "-p",
+    "identity_domain",
+    "-p",
+    "identity_application_contracts"
+)
 Run-Step "Capability test support" @(
     "cargo",
     "test",

@@ -4,7 +4,7 @@ max_feature_loc=0
 max_provider_loc=0
 max_central_touchpoints=9
 
-central:crates/application_contracts/src/features.rs
+central:modules/identity/application_contracts/src/features.rs
 central:crates/presentation/src/composition/services.rs
 central:crates/presentation/src/composition/server_fns.rs
 central:crates/presentation/src/http/controllers/mod.rs

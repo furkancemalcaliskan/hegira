@@ -34,6 +34,10 @@ commands change. Never describe planned work as implemented.
   persistence, background-work, and runtime packages alongside the current
   layered domain, application, infrastructure, presentation, web, and
   database-migrator packages.
+- `modules/identity/` contains the canonical Identity Domain Shared, Domain,
+  and Application Contracts packages. The current layered compatibility
+  packages compile these sources, while current consumers retain their existing
+  package imports.
 - `config/` contains environment profiles.
 - `scripts/` contains local validation, smoke, operations, and release helpers.
 - `.github/workflows/` contains validation and release automation.
