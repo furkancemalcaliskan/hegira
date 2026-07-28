@@ -67,6 +67,22 @@ export const WORKSPACE_DEPENDENCY_POLICY = Object.freeze({
   db_migrator: ["infrastructure"],
 });
 
+export const REPOSITORY_OWNERSHIP_POLICY = Object.freeze({
+  app: Object.freeze(["app", "framework", "module"]),
+  framework: Object.freeze(["framework"]),
+  module: Object.freeze(["framework", "module"]),
+  template: Object.freeze(["framework", "module", "template"]),
+  tool: Object.freeze(["framework", "module", "template", "tool"]),
+});
+
+const REPOSITORY_PACKAGE_ROOTS = Object.freeze([
+  Object.freeze({ directory: "apps", ownership: "app" }),
+  Object.freeze({ directory: "crates", ownership: "framework" }),
+  Object.freeze({ directory: "modules", ownership: "module" }),
+  Object.freeze({ directory: "templates", ownership: "template" }),
+  Object.freeze({ directory: "tools", ownership: "tool" }),
+]);
+
 function isInside(parent, candidate) {
   const relative = path.relative(parent, candidate);
   return (
@@ -79,6 +95,18 @@ function isInside(parent, candidate) {
 
 function packageDirectory(packageMetadata) {
   return path.dirname(path.resolve(packageMetadata.manifest_path));
+}
+
+function packageOwnership(workspaceRoot, packageMetadata) {
+  const directory = packageDirectory(packageMetadata);
+
+  for (const root of REPOSITORY_PACKAGE_ROOTS) {
+    if (isInside(path.join(workspaceRoot, root.directory), directory)) {
+      return root.ownership;
+    }
+  }
+
+  return undefined;
 }
 
 function workspaceGraph(metadata) {
@@ -120,7 +148,6 @@ export function validateWorkspaceMetadata(
 ) {
   const errors = [];
   const workspaceRoot = path.resolve(metadata.workspace_root);
-  const appsRoot = path.join(workspaceRoot, "apps");
   const { packages, edges } = workspaceGraph(metadata);
   const packageNames = new Set(
     packages.map((packageMetadata) => packageMetadata.name),
@@ -128,6 +155,13 @@ export function validateWorkspaceMetadata(
   const checkedEdges = new Set();
 
   for (const packageMetadata of packages) {
+    const ownership = packageOwnership(workspaceRoot, packageMetadata);
+    if (ownership === undefined) {
+      errors.push(
+        `workspace package is outside an owned repository location: ${packageMetadata.name} (${packageDirectory(packageMetadata)})`,
+      );
+    }
+
     if (!Object.hasOwn(policy, packageMetadata.name)) {
       errors.push(
         `workspace package has no architecture policy entry: ${packageMetadata.name}`,
@@ -169,11 +203,16 @@ export function validateWorkspaceMetadata(
     }
     checkedEdges.add(edgeName);
 
-    const fromIsApp = isInside(appsRoot, packageDirectory(edge.from));
-    const toIsApp = isInside(appsRoot, packageDirectory(edge.target));
-    if (!fromIsApp && toIsApp) {
+    const fromOwnership = packageOwnership(workspaceRoot, edge.from);
+    const toOwnership = packageOwnership(workspaceRoot, edge.target);
+    const allowedOwnerships =
+      REPOSITORY_OWNERSHIP_POLICY[fromOwnership] ?? [];
+    if (
+      toOwnership !== undefined &&
+      !allowedOwnerships.includes(toOwnership)
+    ) {
       errors.push(
-        `invalid workspace dependency edge: ${edgeName} (packages outside apps/ must not depend on deployable packages under apps/)`,
+        `invalid repository ownership edge: ${edgeName} (${fromOwnership ?? "unknown"} packages may not depend on ${toOwnership} packages)`,
       );
       continue;
     }

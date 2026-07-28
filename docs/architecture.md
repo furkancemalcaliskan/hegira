@@ -89,11 +89,25 @@ matching policy update.
 | `db_migrator` | `infrastructure` |
 
 The boundary check reads declared local dependencies from locked Cargo metadata,
-rejects edges outside this table, and prevents packages outside `apps/` from
-depending on deployable packages under `apps/`. It covers normal, development,
-optional, and build dependencies declared between workspace packages. General
-third-party dependency policy remains the responsibility of the supply-chain
-checks.
+classifies every workspace package by its repository location, and then applies
+both the location ownership matrix and the package-specific table above.
+
+| Package location | Ownership | May depend on ownership |
+|---|---|---|
+| `apps/` | Application composition | Application, framework, module |
+| `crates/` | Framework | Framework |
+| `modules/` | Official module | Framework, module |
+| `templates/` | Application template | Framework, module, template |
+| `tools/` | Repository tooling | Framework, module, template, tooling |
+
+The checker does not require an unimplemented repository directory to exist.
+An ownership rule becomes active when locked Cargo metadata contains a workspace
+package under that location. Consequently, framework packages cannot depend on
+modules, templates, tools, or deployable applications; module packages cannot
+depend on templates, tools, or deployable applications. The same rules cover
+normal, optional, development, and build dependencies, so dependency kind
+cannot bypass the boundary. General third-party dependency policy remains the
+responsibility of the supply-chain checks.
 
 ## Repository Layout
 
