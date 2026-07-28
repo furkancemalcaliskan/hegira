@@ -30,6 +30,7 @@ if [ "$with_ignored_db_tests" = "true" ]; then
     exit 1
   fi
 
+  run_step "DB-backed migration compatibility tests" cargo test -p infrastructure --features ssr postgres_v020_upgrade_retires_catalog_state_and_preserves_history -- --ignored
   run_step "DB-backed API identity tests" cargo test -p hegira --features ssr --test api_identity -- --ignored
   run_step "DB-backed identity persistence tests" cargo test -p hegira --features ssr --test identity_persistence -- --ignored
   run_step "DB-backed durable jobs tests" cargo test -p hegira --features ssr --test durable_jobs -- --ignored

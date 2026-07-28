@@ -32,7 +32,10 @@ pub async fn reset_database(database_url: &str) -> Result<PgPool, String> {
     db::reset_schema(&pool)
         .await
         .map_err(|err| format!("failed to reset test database schema: {err}"))?;
-    db::migrate(&pool)
+    db::application_migration_source(&crate::config::DatabaseBackend::Postgres)
+        .expect("PostgreSQL tests require the db-postgres migration source")
+        .migrator()
+        .run(&pool)
         .await
         .map_err(|err| format!("failed to run test database migrations: {err}"))?;
 

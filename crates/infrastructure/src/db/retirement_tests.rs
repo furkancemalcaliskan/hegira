@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 
+use persistence::migrations::MigrationPlan;
 use sqlx::migrate::Migrator;
 
 fn migrations_through(migrator: &Migrator, version: i64) -> Migrator {
@@ -30,7 +31,11 @@ async fn sqlite_v020_upgrade_retires_catalog_state_and_preserves_history() {
     })
     .await
     .unwrap();
-    let migrator = sqlx::migrate!("src/db/migrations_sqlite");
+    let plan = MigrationPlan::new([
+        super::application_migration_source(&DatabaseBackend::Sqlite).unwrap(),
+    ])
+    .unwrap();
+    let migrator = plan.migrator();
     migrations_through(&migrator, 8).run(&pool).await.unwrap();
 
     sqlx::raw_sql(
@@ -140,7 +145,12 @@ async fn postgres_v020_upgrade_retires_catalog_state_and_preserves_history() {
     let pool = super::connect_without_migrations(&config).await.unwrap();
     super::reset_schema(&pool).await.unwrap();
 
-    let migrator = sqlx::migrate!("src/db/migrations");
+    let plan =
+        MigrationPlan::new([
+            super::application_migration_source(&DatabaseBackend::Postgres).unwrap(),
+        ])
+        .unwrap();
+    let migrator = plan.migrator();
     migrations_through(&migrator, 21).run(&pool).await.unwrap();
     sqlx::raw_sql(
         r#"

@@ -109,6 +109,8 @@ test("accepts framework isolation and app-owned composition edges", () => {
       WORKSPACE_DEPENDENCY_POLICY.observability.includes("background_jobs") &&
       WORKSPACE_DEPENDENCY_POLICY.test_support.includes("application") &&
       WORKSPACE_DEPENDENCY_POLICY.hegira.includes("infrastructure") &&
+      WORKSPACE_DEPENDENCY_POLICY.hegira.includes("persistence") &&
+      WORKSPACE_DEPENDENCY_POLICY.db_migrator.includes("persistence") &&
       WORKSPACE_DEPENDENCY_POLICY.presentation.includes("infrastructure"),
   );
   assert.deepEqual(REPOSITORY_OWNERSHIP_POLICY.framework, ["framework"]);

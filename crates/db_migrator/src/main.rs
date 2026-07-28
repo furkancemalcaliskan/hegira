@@ -6,6 +6,8 @@ use infrastructure::{
     config::{AppConfig, DatabaseBackend},
     db,
 };
+#[cfg(feature = "ssr")]
+use persistence::migrations::MigrationPlan;
 
 #[cfg(all(feature = "ssr", feature = "db-postgres"))]
 use infrastructure::identity::{SqlxIdentityRepository, seed::seed_identity};
@@ -37,9 +39,11 @@ async fn run() -> Result<(), String> {
 
     match command.as_str() {
         "migrate" => {
+            let migration_plan = application_migration_plan(&config)?;
             ensure_database_exists_if_allowed(&config).await?;
             let pool = connect_database(&config).await?;
-            db::migrate_database(&pool)
+            migration_plan
+                .run(&pool)
                 .await
                 .map_err(|err| format!("failed to run migrations: {err}"))?;
             println!("migrations applied");
@@ -60,12 +64,14 @@ async fn run() -> Result<(), String> {
         }
         "recreate" => {
             require_reset_allowed()?;
+            let migration_plan = application_migration_plan(&config)?;
             ensure_database_exists_if_allowed(&config).await?;
             let pool = connect_database(&config).await?;
             db::reset_database(&pool)
                 .await
                 .map_err(|err| format!("failed to reset schema: {err}"))?;
-            db::migrate_database(&pool)
+            migration_plan
+                .run(&pool)
                 .await
                 .map_err(|err| format!("failed to run migrations: {err}"))?;
             seed(&config, pool).await?;
@@ -85,7 +91,7 @@ async fn run() -> Result<(), String> {
                 if !config.search.enabled {
                     return Err("reindex-search requires search.enabled=true".to_string());
                 }
-                let pool = db::connect(&config.database)
+                let pool = persistence::connect_postgres(&config.database)
                     .await
                     .map_err(|err| format!("failed to initialize database: {err}"))?;
                 let search = infrastructure::search::SearchAdapter::from_config(&config)?;
@@ -124,21 +130,29 @@ async fn ensure_database_exists_if_allowed(config: &AppConfig) -> Result<(), Str
 }
 
 #[cfg(feature = "ssr")]
-async fn connect_database(config: &AppConfig) -> Result<db::DatabasePool, String> {
-    db::connect_database(&config.database)
+async fn connect_database(config: &AppConfig) -> Result<persistence::DatabasePool, String> {
+    persistence::connect_database(&config.database)
         .await
         .map_err(|error| format!("failed to initialize database: {error}"))
 }
 
 #[cfg(feature = "ssr")]
-async fn seed(config: &AppConfig, pool: db::DatabasePool) -> Result<(), String> {
+fn application_migration_plan(config: &AppConfig) -> Result<MigrationPlan, String> {
+    let source = db::application_migration_source(&config.database.backend)
+        .map_err(|error| format!("failed to select application migrations: {error}"))?;
+    MigrationPlan::new([source])
+        .map_err(|error| format!("invalid application migration plan: {error}"))
+}
+
+#[cfg(feature = "ssr")]
+async fn seed(config: &AppConfig, pool: persistence::DatabasePool) -> Result<(), String> {
     match pool {
         #[cfg(feature = "db-postgres")]
-        db::DatabasePool::Postgres(pool) => {
+        persistence::DatabasePool::Postgres(pool) => {
             seed_identity(&SqlxIdentityRepository::new(pool), &config.seed).await
         }
         #[cfg(feature = "db-sqlite")]
-        db::DatabasePool::Sqlite(pool) => seed_sqlite_identity(pool, &config.seed).await,
+        persistence::DatabasePool::Sqlite(pool) => seed_sqlite_identity(pool, &config.seed).await,
     }
     .map_err(|error| format!("failed to seed identity data: {error}"))
 }

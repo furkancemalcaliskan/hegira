@@ -24,6 +24,7 @@ infrastructure = { path = "../../crates/infrastructure", optional = true, defaul
 http_support = { path = "../../crates/http_support", optional = true, default-features = false }
 observability = { path = "../../crates/observability", optional = true, default-features = false }
 platform_core = { path = "../../crates/platform_core", optional = true }
+persistence = { path = "../../crates/persistence", optional = true, default-features = false }
 presentation = { path = "../../crates/presentation", optional = true, default-features = false }
 runtime = { path = "../../crates/runtime", optional = true, default-features = false }
 test_support = { path = "../../crates/test_support", optional = true }
@@ -43,8 +44,8 @@ wasm-bindgen = { version = "0.2.114", optional = true }
 
 [features]
 default = ["db-postgres", "db-sqlite"]
-db-postgres = ["infrastructure/db-postgres", "presentation/db-postgres", "web/db-postgres", "sqlx/postgres"]
-db-sqlite = ["infrastructure/db-sqlite", "presentation/db-sqlite", "web/db-sqlite", "sqlx/sqlite"]
+db-postgres = ["infrastructure/db-postgres", "persistence/db-postgres", "presentation/db-postgres", "web/db-postgres", "sqlx/postgres"]
+db-sqlite = ["infrastructure/db-sqlite", "persistence/db-sqlite", "presentation/db-sqlite", "web/db-sqlite", "sqlx/sqlite"]
 hydrate = [
     "web/hydrate",
     "leptos/hydrate",
@@ -60,6 +61,7 @@ ssr = [
     "dep:http_support",
     "dep:leptos_axum",
     "dep:observability",
+    "dep:persistence",
     "dep:platform_core",
     "dep:presentation",
     "dep:runtime",

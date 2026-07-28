@@ -12,7 +12,7 @@ dependency allowlist below is the normative workspace contract.
 
 ```text
 apps/hegira
-  -> platform_core, configuration, background_jobs, http_support,
+  -> platform_core, configuration, persistence, background_jobs, http_support,
      observability, runtime, test_support, web,
      presentation, infrastructure, application, application_contracts,
      domain, domain_shared
@@ -49,7 +49,7 @@ domain
   -> domain_shared
 
 db_migrator
-  -> infrastructure
+  -> infrastructure, persistence
 ```
 
 Domain and application code do not depend on Axum, Leptos, SQLx, Redis, or
@@ -69,7 +69,7 @@ matching policy update.
 
 | Package | Permitted direct local dependencies |
 |---|---|
-| `hegira` | `application`, `application_contracts`, `background_jobs`, `configuration`, `domain`, `domain_shared`, `http_support`, `infrastructure`, `observability`, `platform_core`, `presentation`, `runtime`, `test_support`, `web` |
+| `hegira` | `application`, `application_contracts`, `background_jobs`, `configuration`, `domain`, `domain_shared`, `http_support`, `infrastructure`, `observability`, `persistence`, `platform_core`, `presentation`, `runtime`, `test_support`, `web` |
 | `platform_core` | None |
 | `configuration` | None |
 | `persistence` | None |
@@ -86,7 +86,7 @@ matching policy update.
 | `presentation` | `application`, `application_contracts`, `domain_shared`, `infrastructure`, `leptos_support`, `observability` |
 | `web` | `application`, `application_contracts`, `domain_shared`, `leptos_support`, `presentation` |
 | `runtime` | None |
-| `db_migrator` | `infrastructure` |
+| `db_migrator` | `infrastructure`, `persistence` |
 
 The boundary check reads declared local dependencies from locked Cargo metadata,
 classifies every workspace package by its repository location, and then applies
@@ -141,7 +141,7 @@ must remain reusable and cannot depend on an application package.
 | `hegira` | `apps/hegira` | Deployable Axum/Leptos package and full-stack composition |
 | `platform_core` | `crates/platform_core` | Application-independent compiled capability primitives |
 | `configuration` | `crates/configuration` | Configuration profile sources and ordered validation orchestration |
-| `persistence` | `crates/persistence` | Database provider selection, pools, health checks, and transaction primitives |
+| `persistence` | `crates/persistence` | Database provider selection, pools, health checks, transaction primitives, and host-owned migration planning and execution |
 | `background_jobs` | `crates/background_jobs` | Job contracts, handler registration, observation, and recurring execution |
 | `http_support` | `crates/http_support` | Application-independent Axum middleware, transport-policy markers, CSRF, trusted-proxy resolution, and rate limiting |
 | `leptos_support` | `crates/leptos_support` | Product-neutral Leptos form state, mutation state, context access, and safe server-function errors |
@@ -165,9 +165,10 @@ dashboard instead of composing a sample business capability.
 ## Application Composition And Build Ownership
 
 `apps/hegira/Cargo.toml` is the package-level composition root. It forwards
-database and optional capability features to the packages that implement them
-and owns the Cargo-Leptos metadata for the server binary, hydrated library,
-stylesheet, public assets, and workspace-defined WASM release profile.
+database and optional capability features to the packages that implement them,
+selects the application migration sources used for startup migration, and owns
+the Cargo-Leptos metadata for the server binary, hydrated library, stylesheet,
+public assets, and workspace-defined WASM release profile.
 
 The server entry point at `apps/hegira/src/main.rs` delegates application
 startup to `apps/hegira/src/server`. That composition root loads the concrete
@@ -245,10 +246,22 @@ and SQLite use separate adapters and migration directories so provider-specific
 behavior remains visible.
 
 The `persistence` framework package owns explicit database-provider selection,
-connection pools, health checks, and SQLx transaction types. It does not own
-application schemas, migrations, or repositories. The `infrastructure`
-package embeds the current application migrations and implements Identity
-repositories against the selected provider.
+connection pools, health checks, SQLx transaction types, and the reusable
+migration contribution and execution contract. It does not own application
+schemas, migration SQL, or repositories. A migration source has a stable
+lowercase module identity and contributes immutable SQLx migration identities
+and checksums. The host sorts selected migrations by their global numeric
+identity and rejects invalid or duplicate module identities, duplicate
+migration identities, and checksum conflicts before database execution.
+
+The `infrastructure` package embeds the current PostgreSQL and SQLite
+application migration sources and implements Identity repositories against the
+selected provider. The deployable application and the dedicated `db_migrator`
+are hosts: each explicitly selects the application source, builds the validated
+plan, and delegates execution to `persistence`. Existing migration numbers, SQL,
+and checksums remain immutable so databases created by v0.2.0 retain valid SQLx
+history. New module sources must use globally unique migration numbers across
+the complete host plan.
 
 Standard mutations follow this order:
 

@@ -306,7 +306,7 @@ mod tests {
         config.database.backend = infrastructure::config::DatabaseBackend::Sqlite;
         config.database.url = "sqlite::memory:".to_string();
         config.database.max_connections = 1;
-        let pool = infrastructure::db::connect_sqlite(&config.database)
+        let pool = infrastructure::db::connect_sqlite_with_application_migrations(&config.database)
             .await
             .expect("SQLite should initialize");
         let health = Arc::new(WorkerHealth::default());

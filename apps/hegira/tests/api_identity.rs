@@ -230,9 +230,10 @@ async fn setup_sqlite() -> Router {
     config.database.backend = infrastructure::config::DatabaseBackend::Sqlite;
     config.database.url = "sqlite::memory:".to_string();
     config.database.max_connections = 1;
-    let pool = hegira::infrastructure::db::connect_sqlite(&config.database)
-        .await
-        .unwrap();
+    let pool =
+        hegira::infrastructure::db::connect_sqlite_with_application_migrations(&config.database)
+            .await
+            .unwrap();
     seed_sqlite_identity(pool.clone(), &config.seed)
         .await
         .unwrap();

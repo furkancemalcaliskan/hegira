@@ -101,7 +101,19 @@ async fn serve_configured(app_config: infrastructure::config::AppConfig) -> Resu
         }
     }
 
-    let db = infrastructure::db::connect_database(&app_config.database)
+    let migration_plan = app_config
+        .database
+        .auto_migrate
+        .then(|| {
+            let migration_source =
+                infrastructure::db::application_migration_source(&app_config.database.backend)
+                    .map_err(|error| format!("failed to select application migrations: {error}"))?;
+            persistence::migrations::MigrationPlan::new([migration_source])
+                .map_err(|error| format!("invalid application migration plan: {error}"))
+        })
+        .transpose()?;
+
+    let db = persistence::connect_database(&app_config.database)
         .await
         .map_err(|err| {
             format!(
@@ -109,6 +121,12 @@ async fn serve_configured(app_config: infrastructure::config::AppConfig) -> Resu
                 app_config.database.safe_url()
             )
         })?;
+    if let Some(migration_plan) = migration_plan {
+        migration_plan
+            .run(&db)
+            .await
+            .map_err(|error| format!("failed to run application migrations: {error}"))?;
+    }
     infrastructure::identity::sessions::SessionRepositoryAdapter::from_database(
         &app_config,
         db.clone(),
