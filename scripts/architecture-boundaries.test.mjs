@@ -8,6 +8,17 @@ import {
   validateWorkspaceMetadata,
 } from "./architecture-boundaries.mjs";
 
+const PACKAGE_LOCATIONS = Object.freeze({
+  hegira: "apps/hegira",
+  identity_domain_shared: "modules/identity/domain_shared",
+  identity_domain: "modules/identity/domain",
+  identity_application_contracts: "modules/identity/application_contracts",
+});
+
+function packageLocation(name) {
+  return PACKAGE_LOCATIONS[name] ?? `crates/${name}`;
+}
+
 function workspaceMetadata(extraEdges = []) {
   const root = path.resolve("/workspace");
   const packageNames = Object.keys(WORKSPACE_DEPENDENCY_POLICY);
@@ -22,10 +33,7 @@ function workspaceMetadata(extraEdges = []) {
     workspace_root: root,
     workspace_members: packageNames.map((name) => `workspace#${name}`),
     packages: packageNames.map((name) => {
-      const directory =
-        name === "hegira"
-          ? path.join(root, "apps", name)
-          : path.join(root, "crates", name);
+      const directory = path.join(root, packageLocation(name));
       return {
         id: `workspace#${name}`,
         name,
@@ -34,10 +42,7 @@ function workspaceMetadata(extraEdges = []) {
           .filter((edge) => edge.from === name)
           .map((edge) => ({
             name: edge.to,
-            path:
-              edge.to === "hegira"
-                ? path.join(root, "apps", edge.to)
-                : path.join(root, "crates", edge.to),
+            path: path.join(root, packageLocation(edge.to)),
           })),
       };
     }),
@@ -111,6 +116,12 @@ test("accepts framework isolation and app-owned composition edges", () => {
       WORKSPACE_DEPENDENCY_POLICY.hegira.includes("infrastructure") &&
       WORKSPACE_DEPENDENCY_POLICY.hegira.includes("persistence") &&
       WORKSPACE_DEPENDENCY_POLICY.db_migrator.includes("persistence") &&
+      WORKSPACE_DEPENDENCY_POLICY.identity_domain.includes(
+        "identity_domain_shared",
+      ) &&
+      WORKSPACE_DEPENDENCY_POLICY.identity_application_contracts.includes(
+        "identity_domain",
+      ) &&
       WORKSPACE_DEPENDENCY_POLICY.presentation.includes("infrastructure"),
   );
   assert.deepEqual(REPOSITORY_OWNERSHIP_POLICY.framework, ["framework"]);

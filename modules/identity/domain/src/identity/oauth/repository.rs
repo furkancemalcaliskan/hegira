@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 
 use crate::identity::oauth::{OAuthConnection, OAuthState, OAuthUnlinkResult, PendingOAuthSignup};
-use domain_shared::common::errors::DomainError;
+use identity_domain_shared::common::errors::DomainError;
 
 pub trait OAuthRepository: Send + Sync {
     fn insert_state(

@@ -1,6 +1,6 @@
 use crate::features;
-pub use domain::identity::authorization::PermissionName;
 use domain_shared::localization::T;
+pub use identity_domain::identity::authorization::PermissionName;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PermissionDefinition {

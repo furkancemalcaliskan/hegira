@@ -1,5 +1,5 @@
 [package]
-name = "domain"
+name = "identity_domain"
 version = "0.2.0"
 edition = "2024"
 license = "Apache-2.0"
@@ -7,5 +7,5 @@ publish = false
 
 [dependencies]
 chrono = { version = "0.4.44", features = ["serde"] }
-identity_domain_shared = { package = "domain_shared", path = "../domain_shared" }
+identity_domain_shared = { path = "../domain_shared" }
 uuid = { version = "1.23.2", features = ["v4", "serde", "js"] }

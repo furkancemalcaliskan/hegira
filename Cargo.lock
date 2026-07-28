@@ -2231,6 +2231,33 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b9e0384b61958566e926dc50660321d12159025e767c18e043daf26b70104c39"
 
 [[package]]
+name = "identity_application_contracts"
+version = "0.2.0"
+dependencies = [
+ "chrono",
+ "domain_shared",
+ "identity_domain",
+ "identity_domain_shared",
+ "serde",
+ "serde_json",
+ "utoipa",
+ "uuid",
+]
+
+[[package]]
+name = "identity_domain"
+version = "0.2.0"
+dependencies = [
+ "chrono",
+ "identity_domain_shared",
+ "uuid",
+]
+
+[[package]]
+name = "identity_domain_shared"
+version = "0.2.0"
+
+[[package]]
 name = "idna"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

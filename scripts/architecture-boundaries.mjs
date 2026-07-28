@@ -66,6 +66,13 @@ export const WORKSPACE_DEPENDENCY_POLICY = Object.freeze({
   ],
   runtime: [],
   db_migrator: ["infrastructure", "persistence"],
+  identity_domain_shared: [],
+  identity_domain: ["identity_domain_shared"],
+  identity_application_contracts: [
+    "domain_shared",
+    "identity_domain",
+    "identity_domain_shared",
+  ],
 });
 
 export const REPOSITORY_OWNERSHIP_POLICY = Object.freeze({

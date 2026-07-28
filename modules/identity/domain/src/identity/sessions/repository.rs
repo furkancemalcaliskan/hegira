@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 
 use crate::identity::sessions::Session;
-use domain_shared::common::errors::DomainError;
+use identity_domain_shared::common::errors::DomainError;
 
 pub trait SessionRepository: Send + Sync {
     fn find_by_token(

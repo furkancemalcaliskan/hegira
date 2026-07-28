@@ -19,6 +19,9 @@ members = [
     "crates/web",
     "crates/db_migrator",
     "crates/runtime",
+    "modules/identity/domain_shared",
+    "modules/identity/domain",
+    "modules/identity/application_contracts",
 ]
 default-members = ["apps/hegira"]
 
