@@ -3,6 +3,7 @@ import path from "node:path";
 import test from "node:test";
 
 import {
+  REPOSITORY_OWNERSHIP_POLICY,
   WORKSPACE_DEPENDENCY_POLICY,
   validateWorkspaceMetadata,
 } from "./architecture-boundaries.mjs";
@@ -43,6 +44,53 @@ function workspaceMetadata(extraEdges = []) {
   };
 }
 
+function ownershipFixture(packageLocations, dependencies) {
+  const root = path.resolve("/workspace");
+  const policy = Object.fromEntries(
+    packageLocations.map(({ name }) => [
+      name,
+      [
+        ...new Set(
+          dependencies
+            .filter((dependency) => dependency.from === name)
+            .map((dependency) => dependency.to),
+        ),
+      ],
+    ]),
+  );
+  const locationByName = new Map(
+    packageLocations.map(({ name, location }) => [name, location]),
+  );
+
+  return {
+    policy,
+    metadata: {
+      workspace_root: root,
+      workspace_members: packageLocations.map(
+        ({ name }) => `workspace#${name}`,
+      ),
+      packages: packageLocations.map(({ name, location }) => ({
+        id: `workspace#${name}`,
+        name,
+        manifest_path: path.join(root, location, "Cargo.toml"),
+        dependencies: dependencies
+          .filter((dependency) => dependency.from === name)
+          .map((dependency) => ({
+            name: dependency.to,
+            path: path.join(root, locationByName.get(dependency.to)),
+            kind: dependency.kind ?? null,
+            optional: dependency.optional ?? false,
+          })),
+      })),
+    },
+  };
+}
+
+function validateOwnershipFixture(packageLocations, dependencies) {
+  const fixture = ownershipFixture(packageLocations, dependencies);
+  return validateWorkspaceMetadata(fixture.metadata, fixture.policy);
+}
+
 test("accepts the documented current workspace graph", () => {
   assert.deepEqual(validateWorkspaceMetadata(workspaceMetadata()), []);
 });
@@ -63,6 +111,11 @@ test("accepts framework isolation and app-owned composition edges", () => {
       WORKSPACE_DEPENDENCY_POLICY.hegira.includes("infrastructure") &&
       WORKSPACE_DEPENDENCY_POLICY.presentation.includes("infrastructure"),
   );
+  assert.deepEqual(REPOSITORY_OWNERSHIP_POLICY.framework, ["framework"]);
+  assert.deepEqual(REPOSITORY_OWNERSHIP_POLICY.module, [
+    "framework",
+    "module",
+  ]);
 });
 
 test("rejects a dependency from a reusable crate to the deployable app", () => {
@@ -73,9 +126,105 @@ test("rejects a dependency from a reusable crate to the deployable app", () => {
     errors.some(
       (error) =>
         error.includes("web -> hegira") &&
-        error.includes("must not depend on deployable packages"),
+        error.includes("framework packages may not depend on app packages"),
     ),
   );
+});
+
+test("accepts valid framework module template tool and app directions", () => {
+  const packages = [
+    { name: "framework_core", location: "crates/framework_core" },
+    { name: "framework_http", location: "crates/framework_http" },
+    { name: "identity_domain", location: "modules/identity/domain" },
+    { name: "identity_http", location: "modules/identity/http" },
+    { name: "app_template", location: "templates/app/server" },
+    { name: "template_renderer", location: "tools/template_renderer" },
+    { name: "example_app", location: "apps/example" },
+  ];
+  const dependencies = [
+    { from: "framework_http", to: "framework_core" },
+    { from: "identity_domain", to: "framework_core" },
+    { from: "identity_http", to: "identity_domain" },
+    { from: "identity_http", to: "framework_http" },
+    { from: "app_template", to: "identity_http" },
+    { from: "app_template", to: "framework_core" },
+    { from: "template_renderer", to: "app_template" },
+    { from: "example_app", to: "identity_http" },
+    { from: "example_app", to: "framework_http" },
+  ];
+
+  assert.deepEqual(validateOwnershipFixture(packages, dependencies), []);
+});
+
+for (const target of [
+  { ownership: "module", location: "modules/identity" },
+  { ownership: "template", location: "templates/app" },
+  { ownership: "tool", location: "tools/cli" },
+]) {
+  test(`rejects a framework dependency on a ${target.ownership} package`, () => {
+    const errors = validateOwnershipFixture(
+      [
+        { name: "framework", location: "crates/framework" },
+        { name: "downstream", location: target.location },
+      ],
+      [{ from: "framework", to: "downstream" }],
+    );
+
+    assert.deepEqual(errors, [
+      `invalid repository ownership edge: framework -> downstream (framework packages may not depend on ${target.ownership} packages)`,
+    ]);
+  });
+}
+
+for (const target of [
+  { ownership: "template", location: "templates/app" },
+  { ownership: "tool", location: "tools/cli" },
+]) {
+  test(`rejects a module dependency on a ${target.ownership} package`, () => {
+    const errors = validateOwnershipFixture(
+      [
+        { name: "identity", location: "modules/identity" },
+        { name: "downstream", location: target.location },
+      ],
+      [{ from: "identity", to: "downstream" }],
+    );
+
+    assert.deepEqual(errors, [
+      `invalid repository ownership edge: identity -> downstream (module packages may not depend on ${target.ownership} packages)`,
+    ]);
+  });
+}
+
+for (const dependency of [
+  { label: "normal", kind: null, optional: false },
+  { label: "optional", kind: null, optional: true },
+  { label: "development", kind: "dev", optional: false },
+  { label: "build", kind: "build", optional: false },
+]) {
+  test(`rejects a forbidden ${dependency.label} dependency`, () => {
+    const errors = validateOwnershipFixture(
+      [
+        { name: "framework", location: "crates/framework" },
+        { name: "identity", location: "modules/identity" },
+      ],
+      [{ from: "framework", to: "identity", ...dependency }],
+    );
+
+    assert.deepEqual(errors, [
+      "invalid repository ownership edge: framework -> identity (framework packages may not depend on module packages)",
+    ]);
+  });
+}
+
+test("rejects a workspace package outside an owned repository location", () => {
+  const errors = validateOwnershipFixture(
+    [{ name: "unknown", location: "vendor/unknown" }],
+    [],
+  );
+
+  assert.deepEqual(errors, [
+    "workspace package is outside an owned repository location: unknown (/workspace/vendor/unknown)",
+  ]);
 });
 
 test("rejects an outward dependency from the domain layer", () => {

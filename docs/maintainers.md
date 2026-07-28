@@ -115,8 +115,9 @@ Validate repository documentation, agent adapters, and policy fixtures:
 sh scripts/repository-policy.sh
 ```
 
-This standard repository check includes the workspace dependency boundary
-and source-first release policies. Run those focused contracts directly with:
+This standard repository check includes the locked-metadata package allowlist,
+repository-location ownership boundary, and source-first release policies. Run
+those focused contracts directly with:
 
 ```sh
 sh scripts/architecture-boundaries.sh
