@@ -2276,6 +2276,22 @@ name = "identity_domain_shared"
 version = "0.2.0"
 
 [[package]]
+name = "identity_sqlx"
+version = "0.2.0"
+dependencies = [
+ "chrono",
+ "identity_application",
+ "identity_application_contracts",
+ "identity_domain",
+ "identity_domain_shared",
+ "persistence",
+ "serde_json",
+ "sqlx",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
 name = "idna"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

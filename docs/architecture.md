@@ -63,6 +63,10 @@ identity_application_contracts
 identity_application
   -> identity_application_contracts, identity_domain, identity_domain_shared,
      domain_shared
+
+identity_sqlx
+  -> identity_application, identity_application_contracts, identity_domain,
+     identity_domain_shared, persistence
 ```
 
 Domain and application code do not depend on Axum, Leptos, SQLx, Redis, or
@@ -104,6 +108,7 @@ matching policy update.
 | `identity_domain` | `identity_domain_shared` |
 | `identity_application_contracts` | `domain_shared`, `identity_domain`, `identity_domain_shared` |
 | `identity_application` | `domain_shared`, `identity_application_contracts`, `identity_domain`, `identity_domain_shared` |
+| `identity_sqlx` | `identity_application`, `identity_application_contracts`, `identity_domain`, `identity_domain_shared`, `persistence` |
 
 The boundary check reads declared local dependencies from locked Cargo metadata,
 classifies every workspace package by its repository location, and then applies
@@ -154,11 +159,12 @@ The `apps/` directory contains deployable packages. Packages outside `apps/`
 must remain reusable and cannot depend on an application package.
 
 The `modules/identity/` directory owns the canonical Identity Domain Shared,
-Domain, Application Contracts, and Application sources. The existing
-`domain_shared`, `domain`, `application_contracts`, and `application` packages
-compile those canonical files as compatibility views for current consumers
-without adding a forbidden framework dependency on a module package. General
-background-job, settings, and storage application ports remain framework-owned.
+Domain, Application Contracts, Application, and SQLx adapter sources. The
+existing `domain_shared`, `domain`, `application_contracts`, `application`, and
+`infrastructure` packages compile the applicable canonical files as
+compatibility views for current consumers without adding a forbidden framework
+dependency on a module package. General background-job, settings, and storage
+application ports remain framework-owned.
 
 ## Workspace Packages
 
@@ -177,7 +183,7 @@ background-job, settings, and storage application ports remain framework-owned.
 | `domain` | `crates/domain` | Current compatibility view of Identity entities and repository ports |
 | `application_contracts` | `crates/application_contracts` | Current compatibility view of Identity DTOs, inputs, permissions, and feature metadata |
 | `application` | `crates/application` | Current compatibility view of Identity use cases and provider-facing ports, plus framework-owned background-job, settings, and storage application ports |
-| `infrastructure` | `crates/infrastructure` | Application migrations and SQLx adapters for Identity, jobs, security, cache, mail, search, and storage |
+| `infrastructure` | `crates/infrastructure` | Host infrastructure composition and adapters for jobs, security, cache, mail, search, storage, and the current Identity SQLx compatibility view |
 | `presentation` | `crates/presentation` | Application Axum controllers, OpenAPI, sessions, operational probe composition, and route composition |
 | `web` | `crates/web` | Leptos routes, pages, components, and server functions |
 | `runtime` | `crates/runtime` | Runtime roles, Tokio process lifecycle, and shutdown signaling |
@@ -186,14 +192,15 @@ background-job, settings, and storage application ports remain framework-owned.
 | `identity_domain` | `modules/identity/domain` | Identity entities, value objects, and provider-neutral repository ports |
 | `identity_application_contracts` | `modules/identity/application_contracts` | Identity DTOs, inputs, permission registry, and serialized application contracts |
 | `identity_application` | `modules/identity/application` | Transport-independent Identity use cases, authorization, validation, transaction intent, and provider-facing ports |
+| `identity_sqlx` | `modules/identity/sqlx` | PostgreSQL and SQLite Identity repositories, migrations, seeds, cleanup, reset, and search projection reads |
 
 Code is grouped by bounded context and capability rather than by database
 table. Identity is the first official layered module and its domain and
-application layers cover users, roles, sessions, OAuth, and TOTP. These
-packages depend only inward on Identity layers and reusable localization; they
-do not expose Axum, Leptos, SQLx, or provider types. The authenticated web
-surface starts from a neutral dashboard instead of composing a sample business
-capability.
+application layers cover users, roles, sessions, OAuth, and TOTP without
+exposing Axum, Leptos, SQLx, or provider types. `identity_sqlx` is the explicit
+outward adapter that implements those ports for PostgreSQL and SQLite. The
+authenticated web surface starts from a neutral dashboard instead of composing
+a sample business capability.
 
 ## Application Composition And Build Ownership
 
@@ -287,14 +294,23 @@ and checksums. The host sorts selected migrations by their global numeric
 identity and rejects invalid or duplicate module identities, duplicate
 migration identities, and checksum conflicts before database execution.
 
-The `infrastructure` package embeds the current PostgreSQL and SQLite
-application migration sources and implements Identity repositories against the
-selected provider. The deployable application and the dedicated `db_migrator`
-are hosts: each explicitly selects the application source, builds the validated
-plan, and delegates execution to `persistence`. Existing migration numbers, SQL,
-and checksums remain immutable so databases created by v0.2.0 retain valid SQLx
-history. New module sources must use globally unique migration numbers across
-the complete host plan.
+`identity_sqlx` owns the PostgreSQL and SQLite Identity repositories,
+provider-specific migration sources, seed behavior, cleanup queries, reset
+behavior, and search projection reads. The remaining host migrations own
+application settings, durable messaging, search projection state, audit
+storage, and the frozen Catalog creation history. The immutable PostgreSQL 22
+and SQLite 9 retirement migrations remain with the Identity source because
+they remove retired permissions; their cleanup of host outbox, projection, and
+Catalog state is a historical compatibility exception whose bytes and
+checksums cannot be split. The current `infrastructure` compatibility view
+compiles the module-owned adapter sources for existing consumers.
+
+The deployable application and the dedicated `db_migrator` are hosts: each
+explicitly selects both the host and Identity sources, builds one validated
+plan, and delegates execution to `persistence`. Existing migration numbers,
+SQL, and checksums remain immutable so databases created by v0.2.0 retain valid
+SQLx history. New module sources must use globally unique migration numbers
+across the complete host plan.
 
 Standard mutations follow this order:
 
@@ -310,10 +326,10 @@ published reliably.
 
 The `background_jobs` framework package owns job dispatch, durable queue and
 handler contracts, handler registration, observation, and recurring execution.
-PostgreSQL and SQLite outbox workers remain infrastructure adapters because
-their SQL contract is backed by the application-owned migrations. This keeps
-framework primitives reusable without prematurely assigning module migration
-ownership.
+PostgreSQL and SQLite outbox workers remain host infrastructure adapters because
+their SQL contract is backed by host-owned durable-message migrations. Identity
+mutations publish the stable mail and search payload contracts into that outbox
+inside the same SQLx transaction as the Identity state change.
 
 ## Feature Registration
 
@@ -335,9 +351,9 @@ signals and typed services.
 The `test_support` package owns reusable recording and in-memory implementations
 of application capability ports plus generic Axum request and JSON response
 helpers. It depends on the application interfaces it implements; production
-feature graphs do not enable it. Database reset, application migration, and
-Identity seed helpers remain in `infrastructure` because they operate on the
-current application schema rather than a framework-neutral test contract.
+feature graphs do not enable it. Host database helpers remain in
+`infrastructure`; canonical Identity migrations, focused provider tests, and
+seed behavior live with `identity_sqlx`.
 
 SSR renders the initial route and hydration adds browser interaction. Release
 WASM uses the `wasm-release` profile with size optimization, LTO, one codegen

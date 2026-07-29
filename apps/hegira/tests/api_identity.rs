@@ -208,9 +208,13 @@ async fn setup() -> Router {
         .await
         .expect("failed to reset api test database");
     let repository = SqlxIdentityRepository::new(pool.clone());
-    seed_identity(&repository, &config.seed)
-        .await
-        .expect("failed to seed api test identity data");
+    seed_identity(
+        &repository,
+        &infrastructure::security::password_hasher::Argon2PasswordHasher,
+        &config.seed,
+    )
+    .await
+    .expect("failed to seed api test identity data");
     let state = AppState::new(
         config,
         infrastructure::db::DatabasePool::Postgres(pool),
@@ -234,9 +238,13 @@ async fn setup_sqlite() -> Router {
         hegira::infrastructure::db::connect_sqlite_with_application_migrations(&config.database)
             .await
             .unwrap();
-    seed_sqlite_identity(pool.clone(), &config.seed)
-        .await
-        .unwrap();
+    seed_sqlite_identity(
+        pool.clone(),
+        &infrastructure::security::password_hasher::Argon2PasswordHasher,
+        &config.seed,
+    )
+    .await
+    .unwrap();
     let state = AppState::new(
         config,
         infrastructure::db::DatabasePool::Sqlite(pool),

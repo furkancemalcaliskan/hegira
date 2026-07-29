@@ -2,39 +2,17 @@
 use super::{SEARCH_REBUILD_LOCK, SearchAdapter};
 #[cfg(feature = "db-postgres")]
 use crate::jobs::{JobObserver, NoopJobObserver};
+use application::shared::jobs::{DurableJobOptions, DurableJobQueue};
+pub use application::shared::search::{SEARCH_INDEX_JOB, SearchIndexCommand};
 #[cfg(feature = "db-postgres")]
 use application::shared::{
     jobs::{DurableJobFuture, DurableJobHandler},
     search::SearchIndex,
 };
-use application::shared::{
-    jobs::{DurableJobOptions, DurableJobQueue},
-    search::SearchDocument,
-};
-use serde::{Deserialize, Serialize};
 #[cfg(feature = "db-postgres")]
 use sqlx::PgPool;
 #[cfg(feature = "db-postgres")]
 use std::sync::Arc;
-
-pub const SEARCH_INDEX_JOB: &str = "search.index.v1";
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "operation", rename_all = "snake_case")]
-pub enum SearchIndexCommand {
-    Upsert {
-        index: String,
-        documents: Vec<SearchDocument>,
-        #[serde(default)]
-        revision: Option<i64>,
-    },
-    Delete {
-        index: String,
-        document_id: String,
-        #[serde(default)]
-        revision: Option<i64>,
-    },
-}
 
 pub async fn enqueue<Q>(
     queue: &Q,

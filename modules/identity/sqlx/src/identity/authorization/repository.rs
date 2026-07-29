@@ -19,7 +19,8 @@ impl AuditedRoleWriter for SqlxIdentityRepository {
         let mut transaction = self.pool.begin().await.map_err(app_error)?;
         sqlx::query("INSERT INTO roles (name, deleted_at) VALUES ($1, NULL) ON CONFLICT (name) DO UPDATE SET deleted_at = NULL")
             .bind(role_name).execute(&mut *transaction).await.map_err(app_error)?;
-        crate::audit::insert_postgres_transaction(&mut transaction, audit.into_entry()).await?;
+        crate::identity::audit::insert_postgres_transaction(&mut transaction, audit.into_entry())
+            .await?;
         transaction.commit().await.map_err(app_error)
     }
 }

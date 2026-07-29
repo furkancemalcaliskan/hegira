@@ -22,6 +22,25 @@ pub struct SearchResults {
     pub estimated_total_hits: usize,
 }
 
+pub const SEARCH_INDEX_JOB: &str = "search.index.v1";
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "operation", rename_all = "snake_case")]
+pub enum SearchIndexCommand {
+    Upsert {
+        index: String,
+        documents: Vec<SearchDocument>,
+        #[serde(default)]
+        revision: Option<i64>,
+    },
+    Delete {
+        index: String,
+        document_id: String,
+        #[serde(default)]
+        revision: Option<i64>,
+    },
+}
+
 pub trait SearchIndex: Send + Sync {
     fn upsert(
         &self,

@@ -31,6 +31,8 @@ Run-Step "Identity module Clippy" @(
     "identity_application_contracts",
     "-p",
     "identity_application",
+    "-p",
+    "identity_sqlx",
     "--",
     "-D",
     "warnings"
@@ -51,7 +53,9 @@ Run-Step "Identity module contract tests" @(
     "-p",
     "identity_application_contracts",
     "-p",
-    "identity_application"
+    "identity_application",
+    "-p",
+    "identity_sqlx"
 )
 Run-Step "Capability test support" @(
     "cargo",
@@ -74,9 +78,8 @@ if ($WithIgnoredDbTests) {
         "cargo",
         "test",
         "-p",
-        "infrastructure",
-        "--features",
-        "ssr",
+        "identity_sqlx",
+        "--all-features",
         "postgres_v020_upgrade_retires_catalog_state_and_preserves_history",
         "--",
         "--ignored"

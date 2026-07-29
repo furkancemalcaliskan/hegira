@@ -5,6 +5,7 @@ import test from "node:test";
 import {
   REPOSITORY_OWNERSHIP_POLICY,
   WORKSPACE_DEPENDENCY_POLICY,
+  validateIdentitySqlOwnership,
   validateWorkspaceMetadata,
 } from "./architecture-boundaries.mjs";
 
@@ -14,6 +15,7 @@ const PACKAGE_LOCATIONS = Object.freeze({
   identity_domain: "modules/identity/domain",
   identity_application_contracts: "modules/identity/application_contracts",
   identity_application: "modules/identity/application",
+  identity_sqlx: "modules/identity/sqlx",
 });
 
 function packageLocation(name) {
@@ -126,6 +128,7 @@ test("accepts framework isolation and app-owned composition edges", () => {
       WORKSPACE_DEPENDENCY_POLICY.identity_application.includes(
         "identity_application_contracts",
       ) &&
+      WORKSPACE_DEPENDENCY_POLICY.identity_sqlx.includes("persistence") &&
       WORKSPACE_DEPENDENCY_POLICY.presentation.includes("infrastructure"),
   );
   assert.deepEqual(REPOSITORY_OWNERSHIP_POLICY.framework, ["framework"]);
@@ -308,5 +311,27 @@ test("rejects a local dependency target outside the workspace", () => {
     errors.some((error) =>
       error.includes("domain -> unregistered"),
     ),
+  );
+});
+
+test("requires Identity SQL to remain module-owned", () => {
+  assert.deepEqual(
+    validateIdentitySqlOwnership([
+      {
+        location: "crates/infrastructure/src/users.rs",
+        content: "SELECT id FROM users WHERE deleted_at IS NULL",
+      },
+      {
+        location: "modules/identity/sqlx/src/users.rs",
+        content: "SELECT id FROM users WHERE deleted_at IS NULL",
+      },
+      {
+        location: "crates/storage/src/path.rs",
+        content: 'StoragePath::from_segments(["identity", "users"])',
+      },
+    ]),
+    [
+      "Identity SQL must be module-owned under modules/identity/sqlx: crates/infrastructure/src/users.rs",
+    ],
   );
 });

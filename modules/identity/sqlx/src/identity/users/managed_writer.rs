@@ -4,19 +4,15 @@ use application::{
     },
     shared::{
         errors::{ApplicationError, ApplicationResult},
-        jobs::DurableJobOptions,
-        search::SearchDocument,
+        mail::{SEND_MAIL_JOB, SendMailJob, TransactionalMail},
+        search::{SEARCH_INDEX_JOB, SearchDocument, SearchIndexCommand},
     },
 };
 use domain::identity::users::User;
 
-use crate::{
-    identity::{
-        repository::SqlxIdentityRepository,
-        users::{mapper::map_user, queries::user_select},
-    },
-    jobs::durable::SqlxDurableJobQueue,
-    search::jobs::{SEARCH_INDEX_JOB, SearchIndexCommand},
+use crate::identity::{
+    repository::SqlxIdentityRepository,
+    users::{mapper::map_user, queries::user_select},
 };
 
 const USER_INDEX: &str = "identity_users";
@@ -389,19 +385,24 @@ impl ManagedUserWriter for SqlxIdentityRepository {
 
 async fn enqueue_mail(
     transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-    mail: application::shared::mail::TransactionalMail,
+    mail: TransactionalMail,
     purpose: &str,
     username: &str,
     timestamp: chrono::DateTime<chrono::Utc>,
 ) -> ApplicationResult<()> {
-    crate::mail::jobs::enqueue_in(
+    let payload = serde_json::to_value(SendMailJob { mail })
+        .map_err(|error| ApplicationError::Unexpected(error.to_string()))?;
+    enqueue_outbox(
         transaction,
-        mail,
-        format!("mail:{purpose}:{username}:{}", timestamp.timestamp_micros()),
+        SEND_MAIL_JOB,
+        payload,
+        Some(format!(
+            "mail:{purpose}:{username}:{}",
+            timestamp.timestamp_micros()
+        )),
     )
     .await
     .map(|_| ())
-    .map_err(ApplicationError::Infrastructure)
 }
 
 async fn fetch_roles(
@@ -514,18 +515,38 @@ async fn enqueue_command(
 ) -> ApplicationResult<()> {
     let payload = serde_json::to_value(command)
         .map_err(|err| ApplicationError::Unexpected(err.to_string()))?;
-    SqlxDurableJobQueue::enqueue_in(
+    enqueue_outbox(
         transaction,
         SEARCH_INDEX_JOB,
         payload,
-        DurableJobOptions {
-            idempotency_key: Some(format!("{USER_INDEX}:{pid}:{revision}")),
-            max_attempts: 5,
-        },
+        Some(format!("{USER_INDEX}:{pid}:{revision}")),
     )
     .await
     .map(|_| ())
-    .map_err(ApplicationError::Infrastructure)
+}
+
+async fn enqueue_outbox(
+    connection: &mut sqlx::PgConnection,
+    name: &str,
+    payload: serde_json::Value,
+    idempotency_key: Option<String>,
+) -> ApplicationResult<uuid::Uuid> {
+    let id = uuid::Uuid::new_v4();
+    sqlx::query_scalar(
+        "INSERT INTO outbox_messages
+         (id, name, payload, idempotency_key, max_attempts)
+         VALUES ($1, $2, $3, $4, 5)
+         ON CONFLICT (name, idempotency_key) WHERE idempotency_key IS NOT NULL
+         DO UPDATE SET name = EXCLUDED.name
+         RETURNING id",
+    )
+    .bind(id)
+    .bind(name)
+    .bind(payload)
+    .bind(idempotency_key)
+    .fetch_one(connection)
+    .await
+    .map_err(db_error)
 }
 
 fn db_error(error: sqlx::Error) -> ApplicationError {

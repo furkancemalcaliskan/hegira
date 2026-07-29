@@ -49,6 +49,13 @@ pub enum TransactionalMail {
     },
 }
 
+pub const SEND_MAIL_JOB: &str = "mail.send.v1";
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SendMailJob {
+    pub mail: TransactionalMail,
+}
+
 impl TransactionalMail {
     pub fn recipient(&self) -> &str {
         match self {
