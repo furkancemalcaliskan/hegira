@@ -6,17 +6,15 @@ use axum::{
 };
 use serde::Deserialize;
 
-use crate::{
-    composition::services::IdentityPermissionService,
-    http::{error_response::ApiResult, extractors::auth::BearerToken, state::AppState},
-};
+use crate::{error_response::ApiResult, extractors::auth::BearerToken, state::IdentityHttpState};
 use application_contracts::identity::authorization::{
     AssignUserRoleInput, CreateRoleInput, ListRolesInput, PagedRoleResultDto, PermissionDto,
     SetRolePermissionsInput, UpdateRoleInput,
 };
+use presentation::composition::services::IdentityPermissionService;
 
 #[cfg(feature = "openapi")]
-use crate::http::error_response::ErrorBody;
+use crate::error_response::ErrorBody;
 
 #[derive(Debug, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::IntoParams))]
@@ -52,7 +50,7 @@ where
     tag = "Identity Authorization"
 ))]
 pub(crate) async fn list_permissions(
-    Extension(state): Extension<AppState>,
+    Extension(state): Extension<IdentityHttpState>,
     BearerToken(token): BearerToken,
 ) -> ApiResult<Json<Vec<PermissionDto>>> {
     let permissions = service(&state).list_permissions(token).await?;
@@ -72,7 +70,7 @@ pub(crate) async fn list_permissions(
     tag = "Identity Authorization"
 ))]
 pub(crate) async fn list_roles(
-    Extension(state): Extension<AppState>,
+    Extension(state): Extension<IdentityHttpState>,
     BearerToken(token): BearerToken,
     Query(query): Query<ListRolesQuery>,
 ) -> ApiResult<Json<PagedRoleResultDto>> {
@@ -105,7 +103,7 @@ pub(crate) async fn list_roles(
     tag = "Identity Authorization"
 ))]
 pub(crate) async fn create_role(
-    Extension(state): Extension<AppState>,
+    Extension(state): Extension<IdentityHttpState>,
     BearerToken(token): BearerToken,
     Json(input): Json<CreateRoleInput>,
 ) -> ApiResult<StatusCode> {
@@ -129,7 +127,7 @@ pub(crate) async fn create_role(
     tag = "Identity Authorization"
 ))]
 pub(crate) async fn update_role(
-    Extension(state): Extension<AppState>,
+    Extension(state): Extension<IdentityHttpState>,
     BearerToken(token): BearerToken,
     Path(role_name): Path<String>,
     Json(mut input): Json<UpdateRoleInput>,
@@ -153,7 +151,7 @@ pub(crate) async fn update_role(
     tag = "Identity Authorization"
 ))]
 pub(crate) async fn delete_role(
-    Extension(state): Extension<AppState>,
+    Extension(state): Extension<IdentityHttpState>,
     BearerToken(token): BearerToken,
     Path(role_name): Path<String>,
 ) -> ApiResult<StatusCode> {
@@ -176,7 +174,7 @@ pub(crate) async fn delete_role(
     tag = "Identity Authorization"
 ))]
 pub(crate) async fn set_role_permissions(
-    Extension(state): Extension<AppState>,
+    Extension(state): Extension<IdentityHttpState>,
     BearerToken(token): BearerToken,
     Path(role_name): Path<String>,
     Json(mut input): Json<SetRolePermissionsInput>,
@@ -200,7 +198,7 @@ pub(crate) async fn set_role_permissions(
     tag = "Identity Authorization"
 ))]
 pub(crate) async fn assign_user_role(
-    Extension(state): Extension<AppState>,
+    Extension(state): Extension<IdentityHttpState>,
     BearerToken(token): BearerToken,
     Json(input): Json<AssignUserRoleInput>,
 ) -> ApiResult<StatusCode> {
@@ -208,6 +206,6 @@ pub(crate) async fn assign_user_role(
     Ok(StatusCode::NO_CONTENT)
 }
 
-fn service(state: &AppState) -> IdentityPermissionService {
+fn service(state: &IdentityHttpState) -> IdentityPermissionService {
     state.services.permissions.clone()
 }

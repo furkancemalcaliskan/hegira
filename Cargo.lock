@@ -1846,6 +1846,7 @@ dependencies = [
  "domain_shared",
  "http-body-util",
  "http_support",
+ "identity_http",
  "infrastructure",
  "leptos",
  "leptos_axum",
@@ -2274,6 +2275,28 @@ dependencies = [
 [[package]]
 name = "identity_domain_shared"
 version = "0.2.0"
+
+[[package]]
+name = "identity_http"
+version = "0.2.0"
+dependencies = [
+ "application",
+ "application_contracts",
+ "axum",
+ "cookie",
+ "domain_shared",
+ "http-body-util",
+ "http_support",
+ "leptos_axum",
+ "leptos_support",
+ "presentation",
+ "serde",
+ "tower",
+ "tracing",
+ "utoipa",
+ "utoipa-swagger-ui",
+ "uuid",
+]
 
 [[package]]
 name = "identity_sqlx"
@@ -3389,8 +3412,6 @@ dependencies = [
  "tokio",
  "tower",
  "tracing",
- "utoipa",
- "utoipa-swagger-ui",
  "uuid",
 ]
 

@@ -3,7 +3,7 @@ use axum::{
     http::{StatusCode, header, request::Parts},
 };
 
-use crate::http::error_response::{ApiError, ApiResult};
+use crate::error_response::{ApiError, ApiResult};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BearerToken(pub String);

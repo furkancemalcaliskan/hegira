@@ -16,6 +16,7 @@ const PACKAGE_LOCATIONS = Object.freeze({
   identity_application_contracts: "modules/identity/application_contracts",
   identity_application: "modules/identity/application",
   identity_sqlx: "modules/identity/sqlx",
+  identity_http: "modules/identity/http",
 });
 
 function packageLocation(name) {
@@ -129,6 +130,7 @@ test("accepts framework isolation and app-owned composition edges", () => {
         "identity_application_contracts",
       ) &&
       WORKSPACE_DEPENDENCY_POLICY.identity_sqlx.includes("persistence") &&
+      WORKSPACE_DEPENDENCY_POLICY.identity_http.includes("http_support") &&
       WORKSPACE_DEPENDENCY_POLICY.presentation.includes("infrastructure"),
   );
   assert.deepEqual(REPOSITORY_OWNERSHIP_POLICY.framework, ["framework"]);

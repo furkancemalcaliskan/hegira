@@ -3,10 +3,13 @@ use cookie::{Cookie, SameSite, time::Duration};
 use leptos_axum::ResponseOptions;
 use leptos_support::server::{Error as ServerFnError, context};
 
-use infrastructure::config::AppConfig;
-use std::sync::Arc;
-
 pub const SESSION_COOKIE: &str = "hegira-session";
+
+#[derive(Debug, Clone, Copy)]
+pub struct IdentityCookieSettings {
+    pub secure: bool,
+    pub max_lifetime_seconds: i64,
+}
 
 pub async fn require_token() -> Result<String, ServerFnError> {
     token()
@@ -30,11 +33,11 @@ pub async fn token() -> Result<Option<String>, ServerFnError> {
 }
 
 pub fn set(token: &str) -> Result<(), ServerFnError> {
-    let config = context::<Arc<AppConfig>>();
+    let settings = context::<IdentityCookieSettings>();
     append(build_session_cookie(
         token,
-        config.is_production(),
-        config.sessions.max_lifetime_seconds as i64,
+        settings.secure,
+        settings.max_lifetime_seconds,
     ))
 }
 
@@ -52,7 +55,7 @@ pub fn clear() -> Result<(), ServerFnError> {
     let cookie = Cookie::build((SESSION_COOKIE, ""))
         .path("/")
         .http_only(true)
-        .secure(context::<Arc<AppConfig>>().is_production())
+        .secure(context::<IdentityCookieSettings>().secure)
         .same_site(SameSite::Lax)
         .max_age(Duration::ZERO)
         .build();

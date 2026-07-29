@@ -11,6 +11,8 @@ pub use ::domain_shared;
 #[cfg(feature = "ssr")]
 pub use ::http_support;
 #[cfg(feature = "ssr")]
+pub use ::identity_http;
+#[cfg(feature = "ssr")]
 pub use ::infrastructure;
 #[cfg(feature = "ssr")]
 pub use ::observability;

@@ -7,7 +7,7 @@ max_central_touchpoints=9
 central:modules/identity/application_contracts/src/features.rs
 central:crates/presentation/src/composition/services.rs
 central:crates/presentation/src/composition/server_fns.rs
-central:crates/presentation/src/http/controllers/mod.rs
+central:modules/identity/http/src/controllers/mod.rs
 central:crates/web/src/mod.rs
 central:crates/web/src/routes.rs
 central:crates/web/src/app/navigation.rs

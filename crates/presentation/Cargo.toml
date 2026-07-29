@@ -21,8 +21,6 @@ serde_json = "1.0.145"
 tokio = { version = "1.52.3", features = ["rt-multi-thread", "macros", "fs", "signal", "time"] }
 tower = "0.5.3"
 tracing = "0.1.44"
-utoipa = { version = "5.4.0", features = ["chrono", "uuid"], optional = true }
-utoipa-swagger-ui = { version = "9.0.2", features = ["axum"], optional = true }
 uuid = { version = "1.23.2", features = ["v4", "serde", "js"] }
 
 [features]
@@ -30,7 +28,6 @@ default = ["db-postgres", "db-sqlite"]
 db-postgres = ["infrastructure/db-postgres"]
 db-sqlite = ["infrastructure/db-sqlite"]
 ssr = []
-openapi = ["dep:utoipa", "dep:utoipa-swagger-ui", "application_contracts/openapi"]
 metrics-prometheus = ["observability/metrics-prometheus"]
 
 [dev-dependencies]
