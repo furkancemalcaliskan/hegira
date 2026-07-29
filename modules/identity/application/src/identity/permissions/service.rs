@@ -4,6 +4,7 @@ use crate::{
         permissions::cache as permission_cache,
         validation,
     },
+    identity_shared::is_protected_admin_role,
     shared::{
         audit::{AuditLogEntry, AuditLogger},
         cache::Cache,
@@ -11,7 +12,8 @@ use crate::{
         errors::{ApplicationError, ApplicationResult},
     },
 };
-use application_contracts::{
+use domain_shared::localization::{Locale, T, translate};
+use identity_application_contracts::{
     identity::{
         authorization::{
             AssignUserRoleInput, CreateRoleInput, ListRolesInput, PagedRoleResultDto,
@@ -21,11 +23,7 @@ use application_contracts::{
     },
     permissions::{self, PermissionName},
 };
-use domain::identity::authorization::AuthorizationRepository;
-use domain_shared::{
-    identity::is_protected_admin_role,
-    localization::{Locale, T, translate},
-};
+use identity_domain::identity::authorization::AuthorizationRepository;
 
 pub trait AuditedRoleWriter: Send + Sync {
     fn create_role_with_audit(
@@ -299,7 +297,7 @@ where
 
     async fn roles_dto(
         &self,
-        roles: Vec<domain::identity::authorization::Role>,
+        roles: Vec<identity_domain::identity::authorization::Role>,
     ) -> ApplicationResult<Vec<RoleDto>> {
         let mut result = Vec::with_capacity(roles.len());
         for role in roles {
@@ -310,7 +308,7 @@ where
 
     async fn role_dto(
         &self,
-        role: domain::identity::authorization::Role,
+        role: identity_domain::identity::authorization::Role,
     ) -> ApplicationResult<RoleDto> {
         let permissions = self
             .repository

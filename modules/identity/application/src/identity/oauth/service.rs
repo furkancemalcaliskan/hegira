@@ -13,11 +13,11 @@ use crate::{
         security::{PasswordHasher, TokenService},
     },
 };
-use application_contracts::identity::auth::{
+use identity_application_contracts::identity::auth::{
     CompleteOAuthSignupInput, LoginResultDto, OAuthAuthorizeDto, OAuthCallbackDto,
     OAuthConnectionDto,
 };
-use domain::identity::{
+use identity_domain::identity::{
     oauth::{OAuthFlow, OAuthRepository, OAuthState, OAuthUnlinkResult, PendingOAuthSignup},
     sessions::SessionRepository,
     two_factor::TwoFactorRepository,

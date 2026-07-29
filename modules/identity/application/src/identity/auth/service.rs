@@ -3,25 +3,26 @@ use crate::{
         users::writer::{ManagedUserWriter, RegisterManagedUser},
         validation,
     },
+    identity_shared as identity,
     shared::{
         errors::{ApplicationError, ApplicationResult},
         mail::{Mailer, TransactionalMail},
         security::{PasswordHasher, TokenService},
     },
 };
-use application_contracts::identity::auth::{
+use chrono::{Duration, Utc};
+use domain_shared::localization::T;
+use identity_application_contracts::identity::auth::{
     dto::{CurrentUserDto, LoginResultDto, SessionDto, TotpEnableDto, TotpSetupDto, TotpStatusDto},
     inputs::{
         ChangeEmailInput, ChangePasswordInput, DeleteAccountInput, ForgotPasswordInput, LoginInput,
         MagicLinkInput, RegisterInput, ResetPasswordInput, TotpCodeInput, VerifyTotpLoginInput,
     },
 };
-use chrono::{Duration, Utc};
-use domain::identity::{
+use identity_domain::identity::{
     authorization::AuthorizationRepository, sessions::SessionRepository,
     two_factor::TwoFactorRepository, users::UserRepository,
 };
-use domain_shared::{identity, localization::T};
 use uuid::Uuid;
 
 const MAGIC_LINK_EXPIRATION_MINUTES: i64 = 5;
@@ -684,7 +685,7 @@ where
 
     async fn verify_totp_or_backup_code(
         &self,
-        credential: &domain::identity::two_factor::TwoFactorCredential,
+        credential: &identity_domain::identity::two_factor::TwoFactorCredential,
         code: &str,
     ) -> ApplicationResult<bool> {
         if verify_totp_code(
@@ -724,7 +725,7 @@ where
 
     async fn refresh_session_if_needed(
         &self,
-        session: &domain::identity::sessions::Session,
+        session: &identity_domain::identity::sessions::Session,
     ) -> ApplicationResult<()> {
         let ttl_seconds = (session.expires_at - Utc::now()).num_seconds();
         let refresh_at_or_below = self.session_policy.sliding_ttl.num_seconds()

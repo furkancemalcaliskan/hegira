@@ -1,6 +1,6 @@
 use crate::shared::{errors::ApplicationResult, mail::TransactionalMail};
 use chrono::{DateTime, Utc};
-use domain::identity::users::User;
+use identity_domain::identity::users::User;
 use std::future::Future;
 
 #[derive(Debug, Clone)]

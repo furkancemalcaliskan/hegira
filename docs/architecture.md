@@ -59,6 +59,10 @@ identity_domain
 
 identity_application_contracts
   -> identity_domain, identity_domain_shared, domain_shared
+
+identity_application
+  -> identity_application_contracts, identity_domain, identity_domain_shared,
+     domain_shared
 ```
 
 Domain and application code do not depend on Axum, Leptos, SQLx, Redis, or
@@ -99,6 +103,7 @@ matching policy update.
 | `identity_domain_shared` | None |
 | `identity_domain` | `identity_domain_shared` |
 | `identity_application_contracts` | `domain_shared`, `identity_domain`, `identity_domain_shared` |
+| `identity_application` | `domain_shared`, `identity_application_contracts`, `identity_domain`, `identity_domain_shared` |
 
 The boundary check reads declared local dependencies from locked Cargo metadata,
 classifies every workspace package by its repository location, and then applies
@@ -136,7 +141,7 @@ not define a Rust package of its own.
 │       └── tests/           full-stack integration tests
 ├── crates/                  reusable layered workspace packages
 ├── modules/
-│   └── identity/            official Identity domain and contract packages
+│   └── identity/            official Identity domain and application packages
 ├── config/                  environment configuration profiles
 ├── docs/                    current architecture and operations guides
 ├── ops/                     local observability configuration
@@ -149,10 +154,11 @@ The `apps/` directory contains deployable packages. Packages outside `apps/`
 must remain reusable and cannot depend on an application package.
 
 The `modules/identity/` directory owns the canonical Identity Domain Shared,
-Domain, and Application Contracts sources. The existing `domain_shared`,
-`domain`, and `application_contracts` packages compile those canonical files as
-compatibility views for current consumers without adding a forbidden framework
-dependency on a module package.
+Domain, Application Contracts, and Application sources. The existing
+`domain_shared`, `domain`, `application_contracts`, and `application` packages
+compile those canonical files as compatibility views for current consumers
+without adding a forbidden framework dependency on a module package. General
+background-job, settings, and storage application ports remain framework-owned.
 
 ## Workspace Packages
 
@@ -170,7 +176,7 @@ dependency on a module package.
 | `domain_shared` | `crates/domain_shared` | Current compatibility view of Identity shared contracts plus application localization resources |
 | `domain` | `crates/domain` | Current compatibility view of Identity entities and repository ports |
 | `application_contracts` | `crates/application_contracts` | Current compatibility view of Identity DTOs, inputs, permissions, and feature metadata |
-| `application` | `crates/application` | Use cases, authorization, validation, and transaction intent |
+| `application` | `crates/application` | Current compatibility view of Identity use cases and provider-facing ports, plus framework-owned background-job, settings, and storage application ports |
 | `infrastructure` | `crates/infrastructure` | Application migrations and SQLx adapters for Identity, jobs, security, cache, mail, search, and storage |
 | `presentation` | `crates/presentation` | Application Axum controllers, OpenAPI, sessions, operational probe composition, and route composition |
 | `web` | `crates/web` | Leptos routes, pages, components, and server functions |
@@ -179,13 +185,14 @@ dependency on a module package.
 | `identity_domain_shared` | `modules/identity/domain_shared` | Identity errors, protected principal names, and shared security values |
 | `identity_domain` | `modules/identity/domain` | Identity entities, value objects, and provider-neutral repository ports |
 | `identity_application_contracts` | `modules/identity/application_contracts` | Identity DTOs, inputs, permission registry, and serialized application contracts |
+| `identity_application` | `modules/identity/application` | Transport-independent Identity use cases, authorization, validation, transaction intent, and provider-facing ports |
 
 Code is grouped by bounded context and capability rather than by database
 table. Identity is the first official layered module and its domain and
-application contracts cover users, roles, sessions, OAuth, and TOTP. These
+application layers cover users, roles, sessions, OAuth, and TOTP. These
 packages depend only inward on Identity layers and reusable localization; they
-do not expose Axum, SQLx, or provider types. The authenticated web surface
-starts from a neutral dashboard instead of composing a sample business
+do not expose Axum, Leptos, SQLx, or provider types. The authenticated web
+surface starts from a neutral dashboard instead of composing a sample business
 capability.
 
 ## Application Composition And Build Ownership

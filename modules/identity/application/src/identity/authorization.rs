@@ -2,8 +2,8 @@ use crate::shared::{
     errors::{ApplicationError, ApplicationResult},
     security::TokenService,
 };
-use application_contracts::permissions::PermissionName;
-use domain::identity::{sessions::SessionRepository, users::UserRepository};
+use identity_application_contracts::permissions::PermissionName;
+use identity_domain::identity::{sessions::SessionRepository, users::UserRepository};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CurrentUser {
