@@ -4,7 +4,7 @@ use leptos_router::components::A;
 use leptos_router::hooks::use_location;
 
 use crate::{
-    app::navigation::{NavIcon, WORKSPACE_NAV},
+    app::navigation::{NavIcon, WORKSPACE_NAV, workspace_nav_items},
     shared::{
         authorization,
         i18n::{T, use_i18n},
@@ -120,9 +120,7 @@ pub fn Sidebar(sidebar_open: RwSignal<bool>, sidebar_collapsed: RwSignal<bool>) 
                             <section class="sidebar-section">
                                 <h2>{move || i18n.t(section.label)}</h2>
                                 <div class="sidebar-items">
-                                    {section
-                                        .items
-                                        .iter()
+                                    {workspace_nav_items(section)
                                         .filter(|item| authorization::can_access_untracked(item.permission))
                                         .map(|item| {
                                             let is_active = move || location.pathname.get() == item.href;

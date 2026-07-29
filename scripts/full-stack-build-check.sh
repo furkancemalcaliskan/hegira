@@ -29,6 +29,17 @@ require_executable() {
   fi
 }
 
+require_text() {
+  path="$1"
+  text="$2"
+  description="$3"
+
+  if ! grep -Fq "$text" "$path"; then
+    echo "missing $description in $path" >&2
+    exit 1
+  fi
+}
+
 npm ci --prefix "$frontend_dir"
 PATH="$frontend_bin:$PATH"
 export PATH
@@ -52,6 +63,10 @@ require_executable "target/release/db_migrator" "release database migrator"
 require_file "target/site/pkg/hegira.wasm" "hydrated WebAssembly bundle"
 require_file "target/site/pkg/hegira.js" "hydration JavaScript bundle"
 require_file "target/site/pkg/hegira.css" "compiled stylesheet"
+require_text \
+  "target/site/pkg/hegira.css" \
+  '.max-h-\[50vh\]' \
+  "Identity adapter Tailwind utilities"
 require_file \
   "target/site/assets/branding/hegira-logo.png" \
   "branded Hegira asset"

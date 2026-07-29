@@ -17,6 +17,7 @@ const PACKAGE_LOCATIONS = Object.freeze({
   identity_application: "modules/identity/application",
   identity_sqlx: "modules/identity/sqlx",
   identity_http: "modules/identity/http",
+  identity_leptos: "modules/identity/leptos",
 });
 
 function packageLocation(name) {
@@ -104,6 +105,17 @@ test("accepts the documented current workspace graph", () => {
   assert.deepEqual(validateWorkspaceMetadata(workspaceMetadata()), []);
 });
 
+test("rejects SQLx from the Identity Leptos adapter", () => {
+  const metadata = workspaceMetadata();
+  metadata.packages
+    .find((packageMetadata) => packageMetadata.name === "identity_leptos")
+    .dependencies.push({ name: "sqlx", path: null });
+
+  assert.deepEqual(validateWorkspaceMetadata(metadata), [
+    "identity_leptos must depend on Identity contracts and application services, not SQLx",
+  ]);
+});
+
 test("accepts framework isolation and app-owned composition edges", () => {
   const metadata = workspaceMetadata();
   const errors = validateWorkspaceMetadata(metadata);
@@ -131,6 +143,8 @@ test("accepts framework isolation and app-owned composition edges", () => {
       ) &&
       WORKSPACE_DEPENDENCY_POLICY.identity_sqlx.includes("persistence") &&
       WORKSPACE_DEPENDENCY_POLICY.identity_http.includes("http_support") &&
+      WORKSPACE_DEPENDENCY_POLICY.identity_leptos.includes("web") &&
+      !WORKSPACE_DEPENDENCY_POLICY.identity_leptos.includes("persistence") &&
       WORKSPACE_DEPENDENCY_POLICY.presentation.includes("infrastructure"),
   );
   assert.deepEqual(REPOSITORY_OWNERSHIP_POLICY.framework, ["framework"]);

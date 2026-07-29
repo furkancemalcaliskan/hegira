@@ -35,11 +35,14 @@ commands change. Never describe planned work as implemented.
   layered domain, application, infrastructure, presentation, web, and
   database-migrator packages.
 - `modules/identity/` contains the canonical Identity Domain Shared, Domain,
-  Application Contracts, Application, SQLx, and Axum HTTP adapter packages.
+  Application Contracts, Application, SQLx, Axum HTTP, and Leptos adapter
+  packages.
   The HTTP adapter contributes Identity routes, OpenAPI, Bearer extraction,
   secure session-cookie handling, and explicit cookie/Bearer security policies
-  to the host. Current compatibility packages compile the applicable canonical
-  layer and session-cookie sources without depending on a module package.
+  to the host. The Leptos adapter owns Identity pages, server functions, and
+  explicit route and navigation contributions. Current compatibility packages
+  compile the applicable canonical sources without depending on a module
+  package.
 - `config/` contains environment profiles.
 - `scripts/` contains local validation, smoke, operations, and release helpers.
 - `.github/workflows/` contains validation and release automation.

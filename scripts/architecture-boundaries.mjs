@@ -14,6 +14,7 @@ export const WORKSPACE_DEPENDENCY_POLICY = Object.freeze({
     "domain_shared",
     "http_support",
     "identity_http",
+    "identity_leptos",
     "infrastructure",
     "observability",
     "persistence",
@@ -95,6 +96,14 @@ export const WORKSPACE_DEPENDENCY_POLICY = Object.freeze({
     "http_support",
     "leptos_support",
     "presentation",
+  ],
+  identity_leptos: [
+    "application",
+    "application_contracts",
+    "domain_shared",
+    "leptos_support",
+    "presentation",
+    "web",
   ],
 });
 
@@ -231,6 +240,17 @@ export function validateWorkspaceMetadata(
     if (!Object.hasOwn(policy, packageMetadata.name)) {
       errors.push(
         `workspace package has no architecture policy entry: ${packageMetadata.name}`,
+      );
+    }
+
+    if (
+      packageMetadata.name === "identity_leptos" &&
+      (packageMetadata.dependencies ?? []).some(
+        (dependency) => dependency.name === "sqlx",
+      )
+    ) {
+      errors.push(
+        "identity_leptos must depend on Identity contracts and application services, not SQLx",
       );
     }
   }

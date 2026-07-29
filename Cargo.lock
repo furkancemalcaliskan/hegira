@@ -2299,6 +2299,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "identity_leptos"
+version = "0.2.0"
+dependencies = [
+ "application",
+ "application_contracts",
+ "domain_shared",
+ "icons",
+ "leptos",
+ "leptos_router",
+ "leptos_support",
+ "presentation",
+ "uuid",
+ "web",
+ "web-sys",
+]
+
+[[package]]
 name = "identity_sqlx"
 version = "0.2.0"
 dependencies = [
