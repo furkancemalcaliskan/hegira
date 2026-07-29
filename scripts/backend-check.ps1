@@ -75,6 +75,16 @@ Run-Step "Capability test support" @(
     "--test",
     "capability_test_support"
 )
+Run-Step "Identity composition parity" @(
+    "cargo",
+    "test",
+    "-p",
+    "hegira",
+    "--features",
+    "ssr",
+    "--test",
+    "identity_composition"
+)
 Run-Step "API identity tests" @("cargo", "test", "-p", "hegira", "--features", "ssr", "--test", "api_identity")
 
 if ($WithIgnoredDbTests) {

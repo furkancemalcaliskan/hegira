@@ -2,6 +2,7 @@
 
 use axum::{Router, http::StatusCode, middleware};
 use hegira::{
+    application_contracts::identity::permissions,
     application_contracts::identity::users::{PagedUserResultDto, UserDto},
     infrastructure::{
         cache::CacheAdapter,
@@ -277,29 +278,24 @@ async fn setup_without_database_with_config(config: AppConfig) -> Router {
 }
 
 fn test_routes(state: AppState) -> Router {
-    let identity_state =
-        hegira::identity_http::state::IdentityHttpState::new(state.services.clone());
     let router = hegira::presentation::http::routes::operational_routes(state.clone())
-        .merge(hegira::identity_http::bearer_api_routes(identity_state));
-
-    #[cfg(feature = "openapi")]
-    let router = if state.config.openapi.enabled && !state.config.is_production() {
-        router.merge(hegira::identity_http::openapi::routes())
-    } else {
-        router
-    };
+        .merge(hegira::server::identity_api_routes(state));
 
     router
 }
 
 async fn login_admin(app: Router) -> String {
+    login_as(app, "admin@example.com", "admin12345").await
+}
+
+async fn login_as(app: Router, username: &str, password: &str) -> String {
     let response = request_json(
         app,
         "POST",
         "/api/identity/auth/login",
         json!({
-            "username": "admin@example.com",
-            "password": "admin12345"
+            "username": username,
+            "password": password
         }),
         None,
     )
@@ -311,6 +307,189 @@ async fn login_admin(app: Router) -> String {
         .as_str()
         .expect("login response must contain token")
         .to_string()
+}
+
+async fn assert_identity_composition_and_security_parity(app: Router) {
+    let admin_token = login_admin(app.clone()).await;
+
+    let response = request_empty(
+        app.clone(),
+        "GET",
+        "/api/identity/auth/me",
+        Some(&admin_token),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let current_user: Value = response_json(response).await;
+    assert_eq!(current_user["username"], "admin@example.com");
+    let current_permissions = current_user["permissions"]
+        .as_array()
+        .expect("current user permissions must be an array")
+        .iter()
+        .filter_map(Value::as_str)
+        .collect::<std::collections::BTreeSet<_>>();
+    assert!(current_permissions.contains(permissions::USERS.0));
+    assert!(current_permissions.contains(permissions::AUTHORIZATION.0));
+
+    let response = request_empty(
+        app.clone(),
+        "GET",
+        "/api/identity/auth/sessions",
+        Some(&admin_token),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let sessions: Value = response_json(response).await;
+    assert!(
+        !sessions
+            .as_array()
+            .expect("sessions must be an array")
+            .is_empty()
+    );
+
+    let response = request_empty(
+        app.clone(),
+        "GET",
+        "/api/identity/auth/totp/status",
+        Some(&admin_token),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let totp_status: Value = response_json(response).await;
+    assert_eq!(totp_status["enabled"], false);
+
+    let response = request_empty(
+        app.clone(),
+        "POST",
+        "/api/identity/auth/totp/setup",
+        Some(&admin_token),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let totp_setup: Value = response_json(response).await;
+    assert!(
+        totp_setup["secret"]
+            .as_str()
+            .is_some_and(|secret| !secret.is_empty())
+    );
+    assert!(
+        totp_setup["otpauth_url"]
+            .as_str()
+            .is_some_and(|uri| uri.starts_with("otpauth://"))
+    );
+
+    let response = request_empty(
+        app.clone(),
+        "GET",
+        "/api/identity/auth/oauth/connections",
+        Some(&admin_token),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let connections: Value = response_json(response).await;
+    assert_eq!(connections, json!([]));
+
+    let response = request_empty(
+        app.clone(),
+        "GET",
+        "/api/identity/authorization/permissions",
+        Some(&admin_token),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let permission_registry: Value = response_json(response).await;
+    let permission_names = permission_registry
+        .as_array()
+        .expect("permission registry must be an array")
+        .iter()
+        .filter_map(|permission| permission["name"].as_str())
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(
+        permission_names,
+        permissions::ALL
+            .iter()
+            .map(|permission| permission.name.0)
+            .collect()
+    );
+
+    let response = request_json(
+        app.clone(),
+        "POST",
+        "/api/identity/authorization/roles",
+        json!({ "name": "parity-auditor" }),
+        Some(&admin_token),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+
+    let response = request_json(
+        app.clone(),
+        "PUT",
+        "/api/identity/authorization/roles/parity-auditor/permissions",
+        json!({
+            "role_name": "ignored-by-route",
+            "permissions": [permissions::USERS.0]
+        }),
+        Some(&admin_token),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+
+    let response = request_empty(
+        app.clone(),
+        "GET",
+        "/api/identity/authorization/roles?page=1&page_size=20&search=parity-auditor",
+        Some(&admin_token),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let roles: Value = response_json(response).await;
+    assert_eq!(roles["total_count"], 1);
+    assert_eq!(roles["items"][0]["name"], "parity-auditor");
+    assert_eq!(
+        roles["items"][0]["permissions"],
+        json!([permissions::USERS.0])
+    );
+
+    let response = request_json(
+        app.clone(),
+        "POST",
+        "/api/identity/users",
+        json!({
+            "username": "parity-member@example.com",
+            "password": "member12345",
+            "is_verified": true,
+            "roles": []
+        }),
+        Some(&admin_token),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::CREATED);
+
+    let member_token = login_as(app.clone(), "parity-member@example.com", "member12345").await;
+    let response = request_empty(
+        app,
+        "GET",
+        "/api/identity/authorization/permissions",
+        Some(&member_token),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    let forbidden: Value = response_json(response).await;
+    assert_eq!(forbidden["code"], "general:forbidden");
+}
+
+#[cfg(feature = "db-sqlite")]
+#[tokio::test]
+async fn identity_composition_and_security_parity_holds_on_sqlite() {
+    assert_identity_composition_and_security_parity(setup_sqlite().await).await;
+}
+
+#[tokio::test]
+#[ignore = "requires a reachable PostgreSQL DATABASE_URL and resets the test database"]
+async fn identity_composition_and_security_parity_holds_on_postgres() {
+    let _guard = DB_TEST_LOCK.lock().await;
+    assert_identity_composition_and_security_parity(setup().await).await;
 }
 
 #[cfg(feature = "db-sqlite")]

@@ -24,6 +24,7 @@ run_step "Library tests" cargo test -p hegira --features ssr --lib
 run_step "Identity module contract tests" cargo test --all-features -p identity_domain_shared -p identity_domain -p identity_application_contracts -p identity_application -p identity_sqlx -p identity_http -p identity_leptos
 run_step "SQLite provider contracts" cargo test -p infrastructure --features ssr sqlite_
 run_step "Capability test support" cargo test -p hegira --features ssr,test-support --test capability_test_support
+run_step "Identity composition parity" cargo test -p hegira --features ssr --test identity_composition
 run_step "API identity tests" cargo test -p hegira --features ssr --test api_identity
 
 if [ "$with_ignored_db_tests" = "true" ]; then

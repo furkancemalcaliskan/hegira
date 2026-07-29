@@ -154,6 +154,23 @@ test("accepts framework isolation and app-owned composition edges", () => {
   ]);
 });
 
+test("framework policy exposes no dependency on an Identity module package", () => {
+  const identityPackages = new Set(
+    Object.entries(PACKAGE_LOCATIONS)
+      .filter(([, location]) => location.startsWith("modules/identity/"))
+      .map(([name]) => name),
+  );
+  const violations = Object.entries(WORKSPACE_DEPENDENCY_POLICY)
+    .filter(([name]) => packageLocation(name).startsWith("crates/"))
+    .flatMap(([name, dependencies]) =>
+      dependencies
+        .filter((dependency) => identityPackages.has(dependency))
+        .map((dependency) => `${name} -> ${dependency}`),
+    );
+
+  assert.deepEqual(violations, []);
+});
+
 test("rejects a dependency from a reusable crate to the deployable app", () => {
   const errors = validateWorkspaceMetadata(
     workspaceMetadata([{ from: "web", to: "hegira" }]),
