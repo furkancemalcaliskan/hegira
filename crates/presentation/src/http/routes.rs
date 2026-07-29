@@ -4,29 +4,13 @@ use observability::health::{LivenessResponse, ReadinessResponse};
 use std::time::Duration;
 
 pub fn routes(state: AppState) -> Router {
-    operational_routes(state.clone()).merge(bearer_api_routes(state))
-}
-
-pub fn bearer_api_routes(state: AppState) -> Router {
-    Router::new()
-        .nest("/api", crate::http::controllers::routes())
-        .layer(Extension(state))
+    operational_routes(state)
 }
 
 pub fn operational_routes(state: AppState) -> Router {
     let router = Router::new()
         .route("/healthz", get(healthz))
         .route("/readyz", get(readyz));
-
-    #[cfg(feature = "openapi")]
-    let router = {
-        let mut router = router;
-        let expose_openapi = state.config.openapi.enabled && !state.config.is_production();
-        if expose_openapi {
-            router = router.merge(crate::http::openapi::routes());
-        }
-        router
-    };
 
     #[cfg(feature = "metrics-prometheus")]
     let router = {

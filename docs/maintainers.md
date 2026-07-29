@@ -86,7 +86,7 @@ The backend workflow contains three gates:
 
 - `feature-matrix` compiles SQLite, PostgreSQL, WASM hydration, observability,
   and distributed-provider capability sets;
-- `quality` runs formatting, DX, Clippy, Identity module and SQLx adapter tests,
+- `quality` runs formatting, DX, Clippy, Identity module, SQLx, and HTTP adapter tests,
   provider checks, library tests, and ignored PostgreSQL migration
   compatibility and integration tests against a disposable service;
 - `supply-chain` runs dependency policy and vulnerability checks.

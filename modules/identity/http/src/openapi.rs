@@ -5,8 +5,8 @@ use utoipa::{
 };
 use utoipa_swagger_ui::SwaggerUi;
 
-use crate::http::{
-    controllers::identity::{
+use crate::{
+    controllers::{
         auth::{TokenInput, TokenResponse},
         users::UpdateUserRequest,
     },
@@ -16,12 +16,12 @@ use application_contracts::identity::{
     auth::{
         dto::{
             CurrentUserDto, OAuthAuthorizeDto, OAuthCallbackDto, OAuthConnectionDto, SessionDto,
-            TotpEnableDto,
+            TotpEnableDto, TotpSetupDto, TotpStatusDto,
         },
         inputs::{
             ChangeEmailInput, ChangePasswordInput, CompleteOAuthSignupInput, DeleteAccountInput,
             ForgotPasswordInput, LoginInput, MagicLinkInput, OAuthCallbackInput, RegisterInput,
-            ResetPasswordInput, TotpCodeInput, UnlinkOAuthConnectionInput,
+            ResetPasswordInput, TotpCodeInput, UnlinkOAuthConnectionInput, VerifyTotpLoginInput,
         },
     },
     authorization::{
@@ -34,42 +34,47 @@ use application_contracts::identity::{
 #[derive(OpenApi)]
 #[openapi(
     paths(
-        crate::http::controllers::identity::auth::register,
-        crate::http::controllers::identity::auth::login,
-        crate::http::controllers::identity::auth::current_user,
-        crate::http::controllers::identity::auth::logout,
-        crate::http::controllers::identity::auth::renew_session,
-        crate::http::controllers::identity::auth::verify_email,
-        crate::http::controllers::identity::auth::forgot_password,
-        crate::http::controllers::identity::auth::reset_password,
-        crate::http::controllers::identity::auth::change_password,
-        crate::http::controllers::identity::auth::request_email_change,
-        crate::http::controllers::identity::auth::confirm_email_change,
-        crate::http::controllers::identity::auth::resend_verification,
-        crate::http::controllers::identity::auth::delete_account,
-        crate::http::controllers::identity::auth::list_sessions,
-        crate::http::controllers::identity::auth::revoke_session,
-        crate::http::controllers::identity::auth::regenerate_totp_backup_codes,
-        crate::http::controllers::identity::auth::request_magic_link,
-        crate::http::controllers::identity::auth::verify_magic_link,
-        crate::http::controllers::identity::auth::oauth_authorize,
-        crate::http::controllers::identity::auth::oauth_link_authorize,
-        crate::http::controllers::identity::auth::oauth_callback,
-        crate::http::controllers::identity::auth::complete_oauth_signup,
-        crate::http::controllers::identity::auth::oauth_connections,
-        crate::http::controllers::identity::auth::unlink_oauth_connection,
-        crate::http::controllers::identity::permissions::list_permissions,
-        crate::http::controllers::identity::permissions::list_roles,
-        crate::http::controllers::identity::permissions::create_role,
-        crate::http::controllers::identity::permissions::update_role,
-        crate::http::controllers::identity::permissions::delete_role,
-        crate::http::controllers::identity::permissions::set_role_permissions,
-        crate::http::controllers::identity::permissions::assign_user_role,
-        crate::http::controllers::identity::users::list_users,
-        crate::http::controllers::identity::users::get_user,
-        crate::http::controllers::identity::users::create_user,
-        crate::http::controllers::identity::users::update_user,
-        crate::http::controllers::identity::users::delete_user
+        crate::controllers::auth::register,
+        crate::controllers::auth::login,
+        crate::controllers::auth::current_user,
+        crate::controllers::auth::logout,
+        crate::controllers::auth::renew_session,
+        crate::controllers::auth::verify_email,
+        crate::controllers::auth::forgot_password,
+        crate::controllers::auth::reset_password,
+        crate::controllers::auth::change_password,
+        crate::controllers::auth::request_email_change,
+        crate::controllers::auth::confirm_email_change,
+        crate::controllers::auth::resend_verification,
+        crate::controllers::auth::delete_account,
+        crate::controllers::auth::list_sessions,
+        crate::controllers::auth::revoke_session,
+        crate::controllers::auth::regenerate_totp_backup_codes,
+        crate::controllers::auth::setup_totp,
+        crate::controllers::auth::enable_totp,
+        crate::controllers::auth::disable_totp,
+        crate::controllers::auth::totp_status,
+        crate::controllers::auth::verify_totp_login,
+        crate::controllers::auth::request_magic_link,
+        crate::controllers::auth::verify_magic_link,
+        crate::controllers::auth::oauth_authorize,
+        crate::controllers::auth::oauth_link_authorize,
+        crate::controllers::auth::oauth_callback,
+        crate::controllers::auth::complete_oauth_signup,
+        crate::controllers::auth::oauth_connections,
+        crate::controllers::auth::unlink_oauth_connection,
+        crate::controllers::permissions::list_permissions,
+        crate::controllers::permissions::list_roles,
+        crate::controllers::permissions::create_role,
+        crate::controllers::permissions::update_role,
+        crate::controllers::permissions::delete_role,
+        crate::controllers::permissions::set_role_permissions,
+        crate::controllers::permissions::assign_user_role,
+        crate::controllers::users::list_users,
+        crate::controllers::users::get_user,
+        crate::controllers::users::create_user,
+        crate::controllers::users::update_user,
+        crate::controllers::users::delete_user
     ),
     components(schemas(
         CurrentUserDto,
@@ -88,6 +93,9 @@ use application_contracts::identity::{
         SessionDto,
         TotpCodeInput,
         TotpEnableDto,
+        TotpSetupDto,
+        TotpStatusDto,
+        VerifyTotpLoginInput,
         MagicLinkInput,
         UnlinkOAuthConnectionInput,
         OAuthAuthorizeDto,
@@ -115,13 +123,7 @@ use application_contracts::identity::{
 pub struct ApiDoc;
 
 pub fn document() -> utoipa::openapi::OpenApi {
-    let mut document = ApiDoc::openapi();
-    for feature in crate::http::controllers::FEATURES {
-        if let Some(contribution) = feature.openapi {
-            document.merge(contribution());
-        }
-    }
-    document
+    ApiDoc::openapi()
 }
 
 struct SecurityAddon;
@@ -167,6 +169,11 @@ mod tests {
             "/api/identity/auth/sessions",
             "/api/identity/auth/sessions/{session_id}",
             "/api/identity/auth/totp/backup-codes/regenerate",
+            "/api/identity/auth/totp/setup",
+            "/api/identity/auth/totp/enable",
+            "/api/identity/auth/totp/disable",
+            "/api/identity/auth/totp/status",
+            "/api/identity/auth/totp/verify-login",
         ] {
             assert!(document.paths.paths.contains_key(path), "missing {path}");
         }

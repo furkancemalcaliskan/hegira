@@ -224,8 +224,7 @@ async fn setup() -> Router {
         SettingsAdapter::Null(Default::default()),
     );
 
-    hegira::presentation::http::routes::routes(state)
-        .layer(middleware::from_fn(hegira::http_support::request_id::set))
+    test_routes(state).layer(middleware::from_fn(hegira::http_support::request_id::set))
 }
 
 #[cfg(feature = "db-sqlite")]
@@ -253,8 +252,7 @@ async fn setup_sqlite() -> Router {
         SearchAdapter::Null(Default::default()),
         SettingsAdapter::Null(Default::default()),
     );
-    hegira::presentation::http::routes::routes(state)
-        .layer(middleware::from_fn(hegira::http_support::request_id::set))
+    test_routes(state).layer(middleware::from_fn(hegira::http_support::request_id::set))
 }
 
 async fn setup_without_database() -> Router {
@@ -275,8 +273,23 @@ async fn setup_without_database_with_config(config: AppConfig) -> Router {
         SettingsAdapter::Null(Default::default()),
     );
 
-    hegira::presentation::http::routes::routes(state)
-        .layer(middleware::from_fn(hegira::http_support::request_id::set))
+    test_routes(state).layer(middleware::from_fn(hegira::http_support::request_id::set))
+}
+
+fn test_routes(state: AppState) -> Router {
+    let identity_state =
+        hegira::identity_http::state::IdentityHttpState::new(state.services.clone());
+    let router = hegira::presentation::http::routes::operational_routes(state.clone())
+        .merge(hegira::identity_http::bearer_api_routes(identity_state));
+
+    #[cfg(feature = "openapi")]
+    let router = if state.config.openapi.enabled && !state.config.is_production() {
+        router.merge(hegira::identity_http::openapi::routes())
+    } else {
+        router
+    };
+
+    router
 }
 
 async fn login_admin(app: Router) -> String {

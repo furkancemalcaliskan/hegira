@@ -6,10 +6,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    composition::services::{IdentityAuthService, IdentityOAuthService},
-    http::{error_response::ApiResult, extractors::auth::BearerToken, state::AppState},
-};
+use crate::{error_response::ApiResult, extractors::auth::BearerToken, state::IdentityHttpState};
 use application_contracts::identity::auth::{
     dto::{
         CurrentUserDto, LoginResultDto, OAuthAuthorizeDto, OAuthCallbackDto, OAuthConnectionDto,
@@ -21,9 +18,10 @@ use application_contracts::identity::auth::{
         ResetPasswordInput, TotpCodeInput, UnlinkOAuthConnectionInput, VerifyTotpLoginInput,
     },
 };
+use presentation::composition::services::{IdentityAuthService, IdentityOAuthService};
 
 #[cfg(feature = "openapi")]
-use crate::http::error_response::ErrorBody;
+use crate::error_response::ErrorBody;
 
 #[derive(Debug, Serialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
@@ -81,7 +79,7 @@ where
 
 #[cfg_attr(feature = "openapi", utoipa::path(post, path = "/api/identity/auth/change-password", request_body = ChangePasswordInput, responses((status = 204), (status = 401, body = ErrorBody)), security(("bearer_auth" = [])), tag = "Identity Auth"))]
 pub(crate) async fn change_password(
-    Extension(state): Extension<AppState>,
+    Extension(state): Extension<IdentityHttpState>,
     BearerToken(token): BearerToken,
     Json(input): Json<ChangePasswordInput>,
 ) -> ApiResult<StatusCode> {
@@ -91,7 +89,7 @@ pub(crate) async fn change_password(
 
 #[cfg_attr(feature = "openapi", utoipa::path(post, path = "/api/identity/auth/change-email", request_body = ChangeEmailInput, responses((status = 204), (status = 401, body = ErrorBody), (status = 409, body = ErrorBody)), security(("bearer_auth" = [])), tag = "Identity Auth"))]
 pub(crate) async fn request_email_change(
-    Extension(state): Extension<AppState>,
+    Extension(state): Extension<IdentityHttpState>,
     BearerToken(token): BearerToken,
     Json(input): Json<ChangeEmailInput>,
 ) -> ApiResult<StatusCode> {
@@ -101,7 +99,7 @@ pub(crate) async fn request_email_change(
 
 #[cfg_attr(feature = "openapi", utoipa::path(post, path = "/api/identity/auth/confirm-email-change", request_body = TokenInput, responses((status = 204), (status = 404, body = ErrorBody)), tag = "Identity Auth"))]
 pub(crate) async fn confirm_email_change(
-    Extension(state): Extension<AppState>,
+    Extension(state): Extension<IdentityHttpState>,
     Json(input): Json<TokenInput>,
 ) -> ApiResult<StatusCode> {
     service(&state).confirm_email_change(input.token).await?;
@@ -110,7 +108,7 @@ pub(crate) async fn confirm_email_change(
 
 #[cfg_attr(feature = "openapi", utoipa::path(post, path = "/api/identity/auth/verify-email/resend", responses((status = 204), (status = 401, body = ErrorBody)), security(("bearer_auth" = [])), tag = "Identity Auth"))]
 pub(crate) async fn resend_verification(
-    Extension(state): Extension<AppState>,
+    Extension(state): Extension<IdentityHttpState>,
     BearerToken(token): BearerToken,
 ) -> ApiResult<StatusCode> {
     service(&state).resend_verification(token).await?;
@@ -119,7 +117,7 @@ pub(crate) async fn resend_verification(
 
 #[cfg_attr(feature = "openapi", utoipa::path(delete, path = "/api/identity/auth/account", request_body = DeleteAccountInput, responses((status = 204), (status = 401, body = ErrorBody), (status = 403, body = ErrorBody)), security(("bearer_auth" = [])), tag = "Identity Auth"))]
 pub(crate) async fn delete_account(
-    Extension(state): Extension<AppState>,
+    Extension(state): Extension<IdentityHttpState>,
     BearerToken(token): BearerToken,
     Json(input): Json<DeleteAccountInput>,
 ) -> ApiResult<StatusCode> {
@@ -129,7 +127,7 @@ pub(crate) async fn delete_account(
 
 #[cfg_attr(feature = "openapi", utoipa::path(get, path = "/api/identity/auth/sessions", responses((status = 200, body = [SessionDto]), (status = 401, body = ErrorBody)), security(("bearer_auth" = [])), tag = "Identity Auth"))]
 pub(crate) async fn list_sessions(
-    Extension(state): Extension<AppState>,
+    Extension(state): Extension<IdentityHttpState>,
     BearerToken(token): BearerToken,
 ) -> ApiResult<Json<Vec<SessionDto>>> {
     Ok(Json(service(&state).list_sessions(token).await?))
@@ -137,7 +135,7 @@ pub(crate) async fn list_sessions(
 
 #[cfg_attr(feature = "openapi", utoipa::path(delete, path = "/api/identity/auth/sessions/{session_id}", params(("session_id" = uuid::Uuid, Path)), responses((status = 204), (status = 401, body = ErrorBody), (status = 404, body = ErrorBody)), security(("bearer_auth" = [])), tag = "Identity Auth"))]
 pub(crate) async fn revoke_session(
-    Extension(state): Extension<AppState>,
+    Extension(state): Extension<IdentityHttpState>,
     Path(session_id): Path<uuid::Uuid>,
     BearerToken(token): BearerToken,
 ) -> ApiResult<StatusCode> {
@@ -147,7 +145,7 @@ pub(crate) async fn revoke_session(
 
 #[cfg_attr(feature = "openapi", utoipa::path(post, path = "/api/identity/auth/totp/backup-codes/regenerate", request_body = TotpCodeInput, responses((status = 200, body = TotpEnableDto), (status = 401, body = ErrorBody)), security(("bearer_auth" = [])), tag = "Identity Auth"))]
 pub(crate) async fn regenerate_totp_backup_codes(
-    Extension(state): Extension<AppState>,
+    Extension(state): Extension<IdentityHttpState>,
     BearerToken(token): BearerToken,
     Json(input): Json<TotpCodeInput>,
 ) -> ApiResult<Json<TotpEnableDto>> {
@@ -170,7 +168,7 @@ pub(crate) async fn regenerate_totp_backup_codes(
     tag = "Identity Auth"
 ))]
 pub(crate) async fn register(
-    Extension(state): Extension<AppState>,
+    Extension(state): Extension<IdentityHttpState>,
     Json(input): Json<RegisterInput>,
 ) -> ApiResult<StatusCode> {
     service(&state).register(input).await?;
@@ -188,7 +186,7 @@ pub(crate) async fn register(
     tag = "Identity Auth"
 ))]
 pub(crate) async fn login(
-    Extension(state): Extension<AppState>,
+    Extension(state): Extension<IdentityHttpState>,
     Json(input): Json<LoginInput>,
 ) -> ApiResult<Json<LoginResultDto>> {
     let result = service(&state).login(input).await?;
@@ -207,7 +205,7 @@ pub(crate) async fn login(
     tag = "Identity Auth"
 ))]
 pub(crate) async fn current_user(
-    Extension(state): Extension<AppState>,
+    Extension(state): Extension<IdentityHttpState>,
     BearerToken(token): BearerToken,
 ) -> ApiResult<Json<CurrentUserDto>> {
     let user = service(&state).current_user(token).await?;
@@ -226,7 +224,7 @@ pub(crate) async fn current_user(
     tag = "Identity Auth"
 ))]
 pub(crate) async fn logout(
-    Extension(state): Extension<AppState>,
+    Extension(state): Extension<IdentityHttpState>,
     BearerToken(token): BearerToken,
 ) -> ApiResult<StatusCode> {
     service(&state).logout(token).await?;
@@ -245,7 +243,7 @@ pub(crate) async fn logout(
     tag = "Identity Auth"
 ))]
 pub(crate) async fn renew_session(
-    Extension(state): Extension<AppState>,
+    Extension(state): Extension<IdentityHttpState>,
     BearerToken(token): BearerToken,
 ) -> ApiResult<Json<TokenResponse>> {
     let token = service(&state).renew_session(token).await?;
@@ -263,7 +261,7 @@ pub(crate) async fn renew_session(
     tag = "Identity Auth"
 ))]
 pub(crate) async fn verify_email(
-    Extension(state): Extension<AppState>,
+    Extension(state): Extension<IdentityHttpState>,
     Json(input): Json<TokenInput>,
 ) -> ApiResult<StatusCode> {
     service(&state).verify_email(input.token).await?;
@@ -278,7 +276,7 @@ pub(crate) async fn verify_email(
     tag = "Identity Auth"
 ))]
 pub(crate) async fn forgot_password(
-    Extension(state): Extension<AppState>,
+    Extension(state): Extension<IdentityHttpState>,
     Json(input): Json<ForgotPasswordInput>,
 ) -> ApiResult<StatusCode> {
     service(&state).forgot_password(input).await?;
@@ -297,7 +295,7 @@ pub(crate) async fn forgot_password(
     tag = "Identity Auth"
 ))]
 pub(crate) async fn reset_password(
-    Extension(state): Extension<AppState>,
+    Extension(state): Extension<IdentityHttpState>,
     Json(input): Json<ResetPasswordInput>,
 ) -> ApiResult<StatusCode> {
     service(&state).reset_password(input).await?;
@@ -312,7 +310,7 @@ pub(crate) async fn reset_password(
     tag = "Identity Auth"
 ))]
 pub(crate) async fn request_magic_link(
-    Extension(state): Extension<AppState>,
+    Extension(state): Extension<IdentityHttpState>,
     Json(input): Json<MagicLinkInput>,
 ) -> ApiResult<StatusCode> {
     service(&state).request_magic_link(input).await?;
@@ -330,23 +328,44 @@ pub(crate) async fn request_magic_link(
     tag = "Identity Auth"
 ))]
 pub(crate) async fn verify_magic_link(
-    Extension(state): Extension<AppState>,
+    Extension(state): Extension<IdentityHttpState>,
     Json(input): Json<TokenInput>,
 ) -> ApiResult<Json<TokenResponse>> {
     let token = service(&state).verify_magic_link(input.token).await?;
     Ok(Json(TokenResponse { token }))
 }
 
+#[cfg_attr(feature = "openapi", utoipa::path(
+    post,
+    path = "/api/identity/auth/totp/setup",
+    responses(
+        (status = 200, body = TotpSetupDto),
+        (status = 401, body = ErrorBody)
+    ),
+    security(("bearer_auth" = [])),
+    tag = "Identity Auth"
+))]
 pub(crate) async fn setup_totp(
-    Extension(state): Extension<AppState>,
+    Extension(state): Extension<IdentityHttpState>,
     BearerToken(token): BearerToken,
 ) -> ApiResult<Json<TotpSetupDto>> {
     let setup = service(&state).setup_totp(token).await?;
     Ok(Json(setup))
 }
 
+#[cfg_attr(feature = "openapi", utoipa::path(
+    post,
+    path = "/api/identity/auth/totp/enable",
+    request_body = TotpCodeInput,
+    responses(
+        (status = 200, body = TotpEnableDto),
+        (status = 401, body = ErrorBody)
+    ),
+    security(("bearer_auth" = [])),
+    tag = "Identity Auth"
+))]
 pub(crate) async fn enable_totp(
-    Extension(state): Extension<AppState>,
+    Extension(state): Extension<IdentityHttpState>,
     BearerToken(token): BearerToken,
     Json(input): Json<TotpCodeInput>,
 ) -> ApiResult<Json<TotpEnableDto>> {
@@ -354,8 +373,19 @@ pub(crate) async fn enable_totp(
     Ok(Json(result))
 }
 
+#[cfg_attr(feature = "openapi", utoipa::path(
+    post,
+    path = "/api/identity/auth/totp/disable",
+    request_body = TotpCodeInput,
+    responses(
+        (status = 204),
+        (status = 401, body = ErrorBody)
+    ),
+    security(("bearer_auth" = [])),
+    tag = "Identity Auth"
+))]
 pub(crate) async fn disable_totp(
-    Extension(state): Extension<AppState>,
+    Extension(state): Extension<IdentityHttpState>,
     BearerToken(token): BearerToken,
     Json(input): Json<TotpCodeInput>,
 ) -> ApiResult<StatusCode> {
@@ -363,16 +393,36 @@ pub(crate) async fn disable_totp(
     Ok(StatusCode::NO_CONTENT)
 }
 
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/api/identity/auth/totp/status",
+    responses(
+        (status = 200, body = TotpStatusDto),
+        (status = 401, body = ErrorBody)
+    ),
+    security(("bearer_auth" = [])),
+    tag = "Identity Auth"
+))]
 pub(crate) async fn totp_status(
-    Extension(state): Extension<AppState>,
+    Extension(state): Extension<IdentityHttpState>,
     BearerToken(token): BearerToken,
 ) -> ApiResult<Json<TotpStatusDto>> {
     let status = service(&state).totp_status(token).await?;
     Ok(Json(status))
 }
 
+#[cfg_attr(feature = "openapi", utoipa::path(
+    post,
+    path = "/api/identity/auth/totp/verify-login",
+    request_body = VerifyTotpLoginInput,
+    responses(
+        (status = 200, body = TokenResponse),
+        (status = 401, body = ErrorBody)
+    ),
+    tag = "Identity Auth"
+))]
 pub(crate) async fn verify_totp_login(
-    Extension(state): Extension<AppState>,
+    Extension(state): Extension<IdentityHttpState>,
     Json(input): Json<VerifyTotpLoginInput>,
 ) -> ApiResult<Json<TokenResponse>> {
     let token = service(&state).verify_totp_login(input).await?;
@@ -391,7 +441,7 @@ pub(crate) async fn verify_totp_login(
     tag = "Identity Auth"
 ))]
 pub(crate) async fn oauth_authorize(
-    Extension(state): Extension<AppState>,
+    Extension(state): Extension<IdentityHttpState>,
     Path(provider): Path<String>,
 ) -> ApiResult<Json<OAuthAuthorizeDto>> {
     let result = oauth(&state).authorize_url(provider).await?;
@@ -407,7 +457,7 @@ pub(crate) async fn oauth_authorize(
     tag = "Identity Auth"
 ))]
 pub(crate) async fn oauth_link_authorize(
-    Extension(state): Extension<AppState>,
+    Extension(state): Extension<IdentityHttpState>,
     Path(provider): Path<String>,
     BearerToken(token): BearerToken,
 ) -> ApiResult<Json<OAuthAuthorizeDto>> {
@@ -424,7 +474,7 @@ pub(crate) async fn oauth_link_authorize(
     tag = "Identity Auth"
 ))]
 pub(crate) async fn oauth_callback(
-    Extension(state): Extension<AppState>,
+    Extension(state): Extension<IdentityHttpState>,
     Path(provider): Path<String>,
     Query(input): Query<OAuthCallbackInput>,
 ) -> ApiResult<Json<OAuthCallbackDto>> {
@@ -443,7 +493,7 @@ pub(crate) async fn oauth_callback(
     tag = "Identity Auth"
 ))]
 pub(crate) async fn complete_oauth_signup(
-    Extension(state): Extension<AppState>,
+    Extension(state): Extension<IdentityHttpState>,
     Json(input): Json<CompleteOAuthSignupInput>,
 ) -> ApiResult<Json<LoginResultDto>> {
     Ok(Json(oauth(&state).complete_signup(input).await?))
@@ -460,7 +510,7 @@ pub(crate) async fn complete_oauth_signup(
     tag = "Identity Auth"
 ))]
 pub(crate) async fn oauth_connections(
-    Extension(state): Extension<AppState>,
+    Extension(state): Extension<IdentityHttpState>,
     BearerToken(token): BearerToken,
 ) -> ApiResult<Json<Vec<OAuthConnectionDto>>> {
     let result = oauth(&state).list_connections(token).await?;
@@ -480,7 +530,7 @@ pub(crate) async fn oauth_connections(
     tag = "Identity Auth"
 ))]
 pub(crate) async fn unlink_oauth_connection(
-    Extension(state): Extension<AppState>,
+    Extension(state): Extension<IdentityHttpState>,
     BearerToken(token): BearerToken,
     Json(input): Json<UnlinkOAuthConnectionInput>,
 ) -> ApiResult<StatusCode> {
@@ -490,10 +540,10 @@ pub(crate) async fn unlink_oauth_connection(
     Ok(StatusCode::NO_CONTENT)
 }
 
-fn service(state: &AppState) -> IdentityAuthService {
+fn service(state: &IdentityHttpState) -> IdentityAuthService {
     state.services.auth.clone()
 }
 
-fn oauth(state: &AppState) -> IdentityOAuthService {
+fn oauth(state: &IdentityHttpState) -> IdentityOAuthService {
     state.services.oauth.clone()
 }

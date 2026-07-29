@@ -13,7 +13,7 @@ dependency allowlist below is the normative workspace contract.
 ```text
 apps/hegira
   -> platform_core, configuration, persistence, background_jobs, http_support,
-     observability, runtime, test_support, web,
+     identity_http, observability, runtime, test_support, web,
      presentation, infrastructure, application, application_contracts,
      domain, domain_shared
 
@@ -67,6 +67,10 @@ identity_application
 identity_sqlx
   -> identity_application, identity_application_contracts, identity_domain,
      identity_domain_shared, persistence
+
+identity_http
+  -> application, application_contracts, domain_shared, http_support,
+     leptos_support, presentation
 ```
 
 Domain and application code do not depend on Axum, Leptos, SQLx, Redis, or
@@ -86,7 +90,7 @@ matching policy update.
 
 | Package | Permitted direct local dependencies |
 |---|---|
-| `hegira` | `application`, `application_contracts`, `background_jobs`, `configuration`, `domain`, `domain_shared`, `http_support`, `infrastructure`, `observability`, `persistence`, `platform_core`, `presentation`, `runtime`, `test_support`, `web` |
+| `hegira` | `application`, `application_contracts`, `background_jobs`, `configuration`, `domain`, `domain_shared`, `http_support`, `identity_http`, `infrastructure`, `observability`, `persistence`, `platform_core`, `presentation`, `runtime`, `test_support`, `web` |
 | `platform_core` | None |
 | `configuration` | None |
 | `persistence` | None |
@@ -109,6 +113,7 @@ matching policy update.
 | `identity_application_contracts` | `domain_shared`, `identity_domain`, `identity_domain_shared` |
 | `identity_application` | `domain_shared`, `identity_application_contracts`, `identity_domain`, `identity_domain_shared` |
 | `identity_sqlx` | `identity_application`, `identity_application_contracts`, `identity_domain`, `identity_domain_shared`, `persistence` |
+| `identity_http` | `application`, `application_contracts`, `domain_shared`, `http_support`, `leptos_support`, `presentation` |
 
 The boundary check reads declared local dependencies from locked Cargo metadata,
 classifies every workspace package by its repository location, and then applies
@@ -159,12 +164,15 @@ The `apps/` directory contains deployable packages. Packages outside `apps/`
 must remain reusable and cannot depend on an application package.
 
 The `modules/identity/` directory owns the canonical Identity Domain Shared,
-Domain, Application Contracts, Application, and SQLx adapter sources. The
-existing `domain_shared`, `domain`, `application_contracts`, `application`, and
-`infrastructure` packages compile the applicable canonical files as
-compatibility views for current consumers without adding a forbidden framework
-dependency on a module package. General background-job, settings, and storage
-application ports remain framework-owned.
+Domain, Application Contracts, Application, SQLx, and Axum HTTP adapter
+sources. The existing `domain_shared`, `domain`, `application_contracts`,
+`application`, and `infrastructure` packages compile the applicable canonical
+layer files as compatibility views for current consumers without adding a
+forbidden framework dependency on a module package. The host explicitly
+selects the Identity HTTP adapter. `presentation` compiles the module-owned
+session-cookie source as a compatibility view for the current Leptos server
+functions, again without a framework-to-module Cargo dependency. General
+background-job, settings, and storage application ports remain framework-owned.
 
 ## Workspace Packages
 
@@ -184,7 +192,7 @@ application ports remain framework-owned.
 | `application_contracts` | `crates/application_contracts` | Current compatibility view of Identity DTOs, inputs, permissions, and feature metadata |
 | `application` | `crates/application` | Current compatibility view of Identity use cases and provider-facing ports, plus framework-owned background-job, settings, and storage application ports |
 | `infrastructure` | `crates/infrastructure` | Host infrastructure composition and adapters for jobs, security, cache, mail, search, storage, and the current Identity SQLx compatibility view |
-| `presentation` | `crates/presentation` | Application Axum controllers, OpenAPI, sessions, operational probe composition, and route composition |
+| `presentation` | `crates/presentation` | Current service construction, host state, Leptos server-service context, and operational probe composition |
 | `web` | `crates/web` | Leptos routes, pages, components, and server functions |
 | `runtime` | `crates/runtime` | Runtime roles, Tokio process lifecycle, and shutdown signaling |
 | `db_migrator` | `crates/db_migrator` | Migration, reset, seed, and search reindex commands |
@@ -193,14 +201,17 @@ application ports remain framework-owned.
 | `identity_application_contracts` | `modules/identity/application_contracts` | Identity DTOs, inputs, permission registry, and serialized application contracts |
 | `identity_application` | `modules/identity/application` | Transport-independent Identity use cases, authorization, validation, transaction intent, and provider-facing ports |
 | `identity_sqlx` | `modules/identity/sqlx` | PostgreSQL and SQLite Identity repositories, migrations, seeds, cleanup, reset, and search projection reads |
+| `identity_http` | `modules/identity/http` | Identity Axum controllers, Bearer extraction, secure session-cookie handling, OpenAPI document, route contribution, and explicit cookie/Bearer transport-policy contribution |
 
 Code is grouped by bounded context and capability rather than by database
 table. Identity is the first official layered module and its domain and
 application layers cover users, roles, sessions, OAuth, and TOTP without
 exposing Axum, Leptos, SQLx, or provider types. `identity_sqlx` is the explicit
-outward adapter that implements those ports for PostgreSQL and SQLite. The
-authenticated web surface starts from a neutral dashboard instead of composing
-a sample business capability.
+outward adapter that implements those ports for PostgreSQL and SQLite.
+`identity_http` is the separately selected Axum adapter; its controller state
+contains application services rather than host configuration or persistence.
+The authenticated web surface starts from a neutral dashboard instead of
+composing a sample business capability.
 
 ## Application Composition And Build Ownership
 
@@ -242,15 +253,18 @@ Bearer-authenticated Axum API:
 Client -> Axum controller -> application service
 ```
 
-Both entry points use the same service instance from `AppServices`. Controllers
-and server functions deserialize and delegate; business validation,
-authorization, and concurrency policy stay in the application layer.
+Both entry points use the same service instance from `AppServices`.
+`identity_http` receives an `IdentityHttpState` containing only those services;
+controllers cannot reach the host database or provider adapters directly.
+Controllers and server functions deserialize and delegate; business
+validation, authorization, and concurrency policy stay in the application
+layer.
 
 ### Transport Middleware Contract
 
-Runtime composition uses the `http_support` cookie-BFF and Bearer-API policy
-primitives to keep transport authentication policies separate instead of
-inferring them from URL prefixes:
+Runtime composition uses the explicit `identity_http` cookie-BFF and Bearer-API
+policy contribution, backed by `http_support` primitives, to keep transport
+authentication policies separate instead of inferring them from URL prefixes:
 
 | Route group | Authentication model | CSRF policy |
 |---|---|---|
@@ -333,10 +347,11 @@ inside the same SQLx transaction as the Identity state change.
 
 ## Feature Registration
 
-Feature descriptors are compile-time Rust values. They contribute permission
-discovery and Axum/OpenAPI registration without introducing runtime plugins.
-Concrete service composition, Leptos routes, and navigation remain explicit
-because Rust and the relevant proc macros require concrete types.
+Permission descriptors are compile-time Rust values. The host explicitly
+selects the `identity_http` route and OpenAPI contributions; there is no runtime
+plugin discovery or automatic endpoint publication. Concrete service
+composition, Leptos routes, and navigation remain explicit because Rust and the
+relevant proc macros require concrete types.
 
 ## Frontend
 

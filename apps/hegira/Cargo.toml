@@ -22,6 +22,7 @@ domain = { path = "../../crates/domain" }
 domain_shared = { path = "../../crates/domain_shared" }
 infrastructure = { path = "../../crates/infrastructure", optional = true, default-features = false }
 http_support = { path = "../../crates/http_support", optional = true, default-features = false }
+identity_http = { path = "../../modules/identity/http", optional = true, default-features = false }
 observability = { path = "../../crates/observability", optional = true, default-features = false }
 platform_core = { path = "../../crates/platform_core", optional = true }
 persistence = { path = "../../crates/persistence", optional = true, default-features = false }
@@ -44,8 +45,8 @@ wasm-bindgen = { version = "0.2.114", optional = true }
 
 [features]
 default = ["db-postgres", "db-sqlite"]
-db-postgres = ["infrastructure/db-postgres", "persistence/db-postgres", "presentation/db-postgres", "web/db-postgres", "sqlx/postgres"]
-db-sqlite = ["infrastructure/db-sqlite", "persistence/db-sqlite", "presentation/db-sqlite", "web/db-sqlite", "sqlx/sqlite"]
+db-postgres = ["identity_http/db-postgres", "infrastructure/db-postgres", "persistence/db-postgres", "presentation/db-postgres", "web/db-postgres", "sqlx/postgres"]
+db-sqlite = ["identity_http/db-sqlite", "infrastructure/db-sqlite", "persistence/db-sqlite", "presentation/db-sqlite", "web/db-sqlite", "sqlx/sqlite"]
 hydrate = [
     "web/hydrate",
     "leptos/hydrate",
@@ -59,6 +60,7 @@ ssr = [
     "dep:configuration",
     "dep:infrastructure",
     "dep:http_support",
+    "dep:identity_http",
     "dep:leptos_axum",
     "dep:observability",
     "dep:persistence",
@@ -76,7 +78,7 @@ ssr = [
     "web/ssr",
     "leptos/ssr",
 ]
-openapi = ["ssr", "application_contracts/openapi", "presentation/openapi"]
+openapi = ["ssr", "application_contracts/openapi", "identity_http/openapi"]
 wasm-split = ["web/wasm-split"]
 cache-redis = ["ssr", "infrastructure/cache-redis", "http_support/cache-redis"]
 metrics-prometheus = ["ssr", "observability/metrics-prometheus", "presentation/metrics-prometheus"]

@@ -13,6 +13,7 @@ export const WORKSPACE_DEPENDENCY_POLICY = Object.freeze({
     "domain",
     "domain_shared",
     "http_support",
+    "identity_http",
     "infrastructure",
     "observability",
     "persistence",
@@ -86,6 +87,14 @@ export const WORKSPACE_DEPENDENCY_POLICY = Object.freeze({
     "identity_domain",
     "identity_domain_shared",
     "persistence",
+  ],
+  identity_http: [
+    "application",
+    "application_contracts",
+    "domain_shared",
+    "http_support",
+    "leptos_support",
+    "presentation",
   ],
 });
 

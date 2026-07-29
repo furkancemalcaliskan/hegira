@@ -6,16 +6,14 @@ use axum::{
 };
 use serde::Deserialize;
 
-use crate::{
-    composition::services::IdentityUserService,
-    http::{error_response::ApiResult, extractors::auth::BearerToken, state::AppState},
-};
+use crate::{error_response::ApiResult, extractors::auth::BearerToken, state::IdentityHttpState};
 use application_contracts::identity::users::{
     CreateUserInput, ListUsersInput, PagedUserResultDto, UpdateUserInput, UserDto,
 };
+use presentation::composition::services::IdentityUserService;
 
 #[cfg(feature = "openapi")]
-use crate::http::error_response::ErrorBody;
+use crate::error_response::ErrorBody;
 
 #[derive(Debug, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::IntoParams))]
@@ -60,7 +58,7 @@ where
     tag = "Identity Users"
 ))]
 pub(crate) async fn list_users(
-    Extension(state): Extension<AppState>,
+    Extension(state): Extension<IdentityHttpState>,
     BearerToken(token): BearerToken,
     Query(query): Query<ListUsersQuery>,
 ) -> ApiResult<Json<PagedUserResultDto>> {
@@ -89,7 +87,7 @@ pub(crate) async fn list_users(
     tag = "Identity Users"
 ))]
 pub(crate) async fn get_user(
-    Extension(state): Extension<AppState>,
+    Extension(state): Extension<IdentityHttpState>,
     BearerToken(token): BearerToken,
     Path(username): Path<String>,
 ) -> ApiResult<Json<UserDto>> {
@@ -113,7 +111,7 @@ pub(crate) async fn get_user(
     tag = "Identity Users"
 ))]
 pub(crate) async fn create_user(
-    Extension(state): Extension<AppState>,
+    Extension(state): Extension<IdentityHttpState>,
     BearerToken(token): BearerToken,
     Json(input): Json<CreateUserInput>,
 ) -> ApiResult<(StatusCode, Json<UserDto>)> {
@@ -138,7 +136,7 @@ pub(crate) async fn create_user(
     tag = "Identity Users"
 ))]
 pub(crate) async fn update_user(
-    Extension(state): Extension<AppState>,
+    Extension(state): Extension<IdentityHttpState>,
     BearerToken(token): BearerToken,
     Path(username): Path<String>,
     Json(input): Json<UpdateUserRequest>,
@@ -172,7 +170,7 @@ pub(crate) async fn update_user(
     tag = "Identity Users"
 ))]
 pub(crate) async fn delete_user(
-    Extension(state): Extension<AppState>,
+    Extension(state): Extension<IdentityHttpState>,
     BearerToken(token): BearerToken,
     Path(username): Path<String>,
 ) -> ApiResult<StatusCode> {
@@ -181,6 +179,6 @@ pub(crate) async fn delete_user(
     Ok(StatusCode::NO_CONTENT)
 }
 
-fn service(state: &AppState) -> IdentityUserService {
+fn service(state: &IdentityHttpState) -> IdentityUserService {
     state.services.users.clone()
 }

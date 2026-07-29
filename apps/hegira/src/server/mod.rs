@@ -398,11 +398,16 @@ async fn serve_http(
     );
     let web_services = app_state.services.clone();
     let web_config = app_state.config.clone();
+    let identity_cookie_settings = identity_http::cookie::IdentityCookieSettings {
+        secure: app_config.is_production(),
+        max_lifetime_seconds: app_config.sessions.max_lifetime_seconds as i64,
+    };
     let cors_layer = cors_layer(&app_config.security.cors)?;
-    let cookie_policy = app_middleware::policy::CookieBffPolicy::from_public_url(
-        &app_config.application.public_url,
-    )
-    .map_err(|err| format!("invalid CSRF configuration: {err}"))?;
+    let identity_transport_policies =
+        identity_http::policy::IdentityTransportPolicies::from_public_url(
+            &app_config.application.public_url,
+        )
+        .map_err(|err| format!("invalid CSRF configuration: {err}"))?;
 
     let mut conf = get_configuration(None)
         .map_err(|err| format!("failed to load leptos configuration: {err}"))?;
@@ -413,7 +418,16 @@ async fn serve_http(
 
     let operational_routes =
         presentation::http::routes::operational_routes(app_state.clone()).with_state(());
-    let bearer_api_routes = presentation::http::routes::bearer_api_routes(app_state).with_state(());
+    #[cfg(feature = "openapi")]
+    let operational_routes = if app_config.openapi.enabled && !app_config.is_production() {
+        operational_routes.merge(identity_http::openapi::routes())
+    } else {
+        operational_routes
+    };
+    let bearer_api_routes = identity_http::bearer_api_routes(
+        identity_http::state::IdentityHttpState::new(web_services.clone()),
+    )
+    .with_state(());
     let cookie_bff_routes = Router::<LeptosOptions>::new()
         .leptos_routes_with_context(
             &leptos_options,
@@ -424,6 +438,7 @@ async fn serve_http(
                 move || {
                     provide_context(services.clone());
                     provide_context(config.clone());
+                    provide_context(identity_cookie_settings);
                 }
             },
             {
@@ -437,8 +452,8 @@ async fn serve_http(
         operational_routes,
         bearer_api_routes,
         cookie_bff_routes,
-        cookie_policy,
-        app_middleware::policy::BearerApiPolicy,
+        identity_transport_policies.cookie_bff,
+        identity_transport_policies.bearer_api,
     );
 
     #[cfg(feature = "metrics-prometheus")]
