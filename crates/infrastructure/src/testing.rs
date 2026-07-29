@@ -29,7 +29,7 @@ pub async fn reset_database(database_url: &str) -> Result<PgPool, String> {
             )
         })?;
 
-    db::reset_schema(&pool)
+    db::reset_database(&db::DatabasePool::Postgres(pool.clone()))
         .await
         .map_err(|err| format!("failed to reset test database schema: {err}"))?;
     persistence::migrations::MigrationPlan::new(
