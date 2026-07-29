@@ -2231,6 +2231,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b9e0384b61958566e926dc50660321d12159025e767c18e043daf26b70104c39"
 
 [[package]]
+name = "identity_application"
+version = "0.2.0"
+dependencies = [
+ "chrono",
+ "domain_shared",
+ "identity_application_contracts",
+ "identity_domain",
+ "identity_domain_shared",
+ "serde",
+ "serde_json",
+ "tokio",
+ "totp-rs",
+ "tracing",
+ "urlencoding",
+ "uuid",
+]
+
+[[package]]
 name = "identity_application_contracts"
 version = "0.2.0"
 dependencies = [

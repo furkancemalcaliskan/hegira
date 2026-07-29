@@ -1,16 +1,16 @@
 [package]
-name = "application"
+name = "identity_application"
 version = "0.2.0"
 edition = "2024"
 license = "Apache-2.0"
 publish = false
 
 [dependencies]
-background_jobs = { path = "../background_jobs" }
 chrono = { version = "0.4.44", features = ["serde"] }
-domain_shared = { path = "../domain_shared" }
-identity_application_contracts = { package = "application_contracts", path = "../application_contracts" }
-identity_domain = { package = "domain", path = "../domain" }
+domain_shared = { path = "../../../crates/domain_shared" }
+identity_application_contracts = { path = "../application_contracts" }
+identity_domain = { path = "../domain" }
+identity_domain_shared = { path = "../domain_shared" }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
 totp-rs = { version = "5.7.1", features = ["gen_secret", "otpauth"] }

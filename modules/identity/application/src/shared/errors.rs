@@ -1,7 +1,5 @@
-use domain_shared::{
-    common::errors::DomainError,
-    localization::{Locale, T, translate},
-};
+use crate::identity_common::errors::DomainError;
+use domain_shared::localization::{Locale, T, translate};
 use std::fmt::{Display, Formatter};
 
 #[derive(Debug)]

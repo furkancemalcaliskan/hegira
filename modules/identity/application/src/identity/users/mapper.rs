@@ -1,5 +1,5 @@
-use application_contracts::identity::users::UserDto;
-use domain::identity::users::User;
+use identity_application_contracts::identity::users::UserDto;
+use identity_domain::identity::users::User;
 
 pub fn user_dto(user: User, roles: Vec<String>) -> UserDto {
     UserDto {

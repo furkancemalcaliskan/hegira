@@ -73,6 +73,12 @@ export const WORKSPACE_DEPENDENCY_POLICY = Object.freeze({
     "identity_domain",
     "identity_domain_shared",
   ],
+  identity_application: [
+    "domain_shared",
+    "identity_application_contracts",
+    "identity_domain",
+    "identity_domain_shared",
+  ],
 });
 
 export const REPOSITORY_OWNERSHIP_POLICY = Object.freeze({

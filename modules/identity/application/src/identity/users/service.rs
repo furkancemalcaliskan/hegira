@@ -6,6 +6,7 @@ use crate::{
     identity::users::mapper::user_dto,
     identity::users::writer::{CreateManagedUser, ManagedUserWriter, UpdateManagedUser},
     identity::validation,
+    identity_shared::{self as identity, DEFAULT_ADMIN_ROLE_NAME},
     shared::{
         audit::AuditLogger,
         cache::Cache,
@@ -14,17 +15,14 @@ use crate::{
         security::PasswordHasher,
     },
 };
-use application_contracts::{
+use domain_shared::localization::T;
+use identity_application_contracts::{
     identity::permissions,
     identity::users::{
         CreateUserInput, ListUsersInput, PagedUserResultDto, UpdateUserInput, UserDto,
     },
 };
-use domain::identity::users::UserRepository;
-use domain_shared::{
-    identity::{self, DEFAULT_ADMIN_ROLE_NAME},
-    localization::T,
-};
+use identity_domain::identity::users::UserRepository;
 
 #[derive(Debug, Clone)]
 pub struct UserAppService<Users, Hasher, CurrentUsers, Authorization, CacheAdapter, Audit, Search> {
@@ -283,7 +281,7 @@ where
 
     async fn users_dto(
         &self,
-        users: Vec<domain::identity::users::User>,
+        users: Vec<identity_domain::identity::users::User>,
     ) -> ApplicationResult<Vec<UserDto>> {
         let mut items = Vec::with_capacity(users.len());
 
@@ -300,7 +298,7 @@ where
         page: u32,
         page_size: u32,
         text: &str,
-    ) -> ApplicationResult<(Vec<domain::identity::users::User>, i64)> {
+    ) -> ApplicationResult<(Vec<identity_domain::identity::users::User>, i64)> {
         let result = self
             .search
             .adapter

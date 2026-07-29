@@ -13,6 +13,7 @@ const PACKAGE_LOCATIONS = Object.freeze({
   identity_domain_shared: "modules/identity/domain_shared",
   identity_domain: "modules/identity/domain",
   identity_application_contracts: "modules/identity/application_contracts",
+  identity_application: "modules/identity/application",
 });
 
 function packageLocation(name) {
@@ -121,6 +122,9 @@ test("accepts framework isolation and app-owned composition edges", () => {
       ) &&
       WORKSPACE_DEPENDENCY_POLICY.identity_application_contracts.includes(
         "identity_domain",
+      ) &&
+      WORKSPACE_DEPENDENCY_POLICY.identity_application.includes(
+        "identity_application_contracts",
       ) &&
       WORKSPACE_DEPENDENCY_POLICY.presentation.includes("infrastructure"),
   );

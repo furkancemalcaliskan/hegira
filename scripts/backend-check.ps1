@@ -29,6 +29,8 @@ Run-Step "Identity module Clippy" @(
     "identity_domain",
     "-p",
     "identity_application_contracts",
+    "-p",
+    "identity_application",
     "--",
     "-D",
     "warnings"
@@ -47,7 +49,9 @@ Run-Step "Identity module contract tests" @(
     "-p",
     "identity_domain",
     "-p",
-    "identity_application_contracts"
+    "identity_application_contracts",
+    "-p",
+    "identity_application"
 )
 Run-Step "Capability test support" @(
     "cargo",

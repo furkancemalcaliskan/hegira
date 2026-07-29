@@ -1,4 +1,4 @@
-use application_contracts::permissions::PermissionName;
+use identity_application_contracts::permissions::PermissionName;
 use serde_json::Value;
 
 use crate::{
@@ -92,8 +92,27 @@ mod tests {
     use super::*;
     use crate::{
         identity::authorization::{AuthorizationService, CurrentUser, CurrentUserProvider},
-        shared::{errors::ApplicationResult, testing::RecordingAuditLogger},
+        shared::errors::ApplicationResult,
     };
+    use std::sync::{Arc, Mutex};
+
+    #[derive(Clone, Default)]
+    struct RecordingAuditLogger {
+        entries: Arc<Mutex<Vec<AuditLogEntry>>>,
+    }
+
+    impl RecordingAuditLogger {
+        fn entries(&self) -> Vec<AuditLogEntry> {
+            self.entries.lock().unwrap().clone()
+        }
+    }
+
+    impl AuditLogger for RecordingAuditLogger {
+        async fn record(&self, entry: AuditLogEntry) -> ApplicationResult<()> {
+            self.entries.lock().unwrap().push(entry);
+            Ok(())
+        }
+    }
 
     #[derive(Clone)]
     struct TestCurrentUser;
