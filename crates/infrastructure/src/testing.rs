@@ -29,15 +29,18 @@ pub async fn reset_database(database_url: &str) -> Result<PgPool, String> {
             )
         })?;
 
-    db::reset_schema(&pool)
+    db::reset_database(&db::DatabasePool::Postgres(pool.clone()))
         .await
         .map_err(|err| format!("failed to reset test database schema: {err}"))?;
-    db::application_migration_source(&crate::config::DatabaseBackend::Postgres)
-        .expect("PostgreSQL tests require the db-postgres migration source")
-        .migrator()
-        .run(&pool)
-        .await
-        .map_err(|err| format!("failed to run test database migrations: {err}"))?;
+    persistence::migrations::MigrationPlan::new(
+        db::application_migration_sources(&crate::config::DatabaseBackend::Postgres)
+            .expect("PostgreSQL tests require the db-postgres migration sources"),
+    )
+    .expect("the test migration plan must remain valid")
+    .migrator()
+    .run(&pool)
+    .await
+    .map_err(|err| format!("failed to run test database migrations: {err}"))?;
 
     Ok(pool)
 }
@@ -54,9 +57,13 @@ pub async fn reset_and_seed_database_from_env() -> Result<PgPool, String> {
     let config = AppConfig::load().map_err(|err| format!("failed to load test config: {err}"))?;
     let repository = SqlxIdentityRepository::new(pool.clone());
 
-    seed_identity(&repository, &config.seed)
-        .await
-        .map_err(|err| format!("failed to seed identity test data: {err}"))?;
+    seed_identity(
+        &repository,
+        &crate::security::password_hasher::Argon2PasswordHasher,
+        &config.seed,
+    )
+    .await
+    .map_err(|err| format!("failed to seed identity test data: {err}"))?;
 
     Ok(pool)
 }

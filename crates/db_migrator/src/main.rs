@@ -138,9 +138,9 @@ async fn connect_database(config: &AppConfig) -> Result<persistence::DatabasePoo
 
 #[cfg(feature = "ssr")]
 fn application_migration_plan(config: &AppConfig) -> Result<MigrationPlan, String> {
-    let source = db::application_migration_source(&config.database.backend)
+    let sources = db::application_migration_sources(&config.database.backend)
         .map_err(|error| format!("failed to select application migrations: {error}"))?;
-    MigrationPlan::new([source])
+    MigrationPlan::new(sources)
         .map_err(|error| format!("invalid application migration plan: {error}"))
 }
 
@@ -149,10 +149,22 @@ async fn seed(config: &AppConfig, pool: persistence::DatabasePool) -> Result<(),
     match pool {
         #[cfg(feature = "db-postgres")]
         persistence::DatabasePool::Postgres(pool) => {
-            seed_identity(&SqlxIdentityRepository::new(pool), &config.seed).await
+            seed_identity(
+                &SqlxIdentityRepository::new(pool),
+                &infrastructure::security::password_hasher::Argon2PasswordHasher,
+                &config.seed,
+            )
+            .await
         }
         #[cfg(feature = "db-sqlite")]
-        persistence::DatabasePool::Sqlite(pool) => seed_sqlite_identity(pool, &config.seed).await,
+        persistence::DatabasePool::Sqlite(pool) => {
+            seed_sqlite_identity(
+                pool,
+                &infrastructure::security::password_hasher::Argon2PasswordHasher,
+                &config.seed,
+            )
+            .await
+        }
     }
     .map_err(|error| format!("failed to seed identity data: {error}"))
 }

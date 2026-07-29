@@ -23,6 +23,7 @@ members = [
     "modules/identity/domain",
     "modules/identity/application_contracts",
     "modules/identity/application",
+    "modules/identity/sqlx",
 ]
 default-members = ["apps/hegira"]
 

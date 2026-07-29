@@ -4,19 +4,15 @@ use application::{
     },
     shared::{
         errors::{ApplicationError, ApplicationResult},
-        mail::TransactionalMail,
-        search::SearchDocument,
+        mail::{SEND_MAIL_JOB, SendMailJob, TransactionalMail},
+        search::{SEARCH_INDEX_JOB, SearchDocument, SearchIndexCommand},
     },
 };
 use chrono::{DateTime, Duration, Utc};
 use domain::identity::users::User;
 use sqlx::{Row, SqliteConnection};
 
-use crate::{
-    identity::users::SqliteUserRepository,
-    mail::jobs::{SEND_MAIL_JOB, SendMailJob},
-    search::jobs::{SEARCH_INDEX_JOB, SearchIndexCommand},
-};
+use crate::identity::users::SqliteUserRepository;
 
 const USER_INDEX: &str = "identity_users";
 

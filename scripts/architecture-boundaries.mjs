@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
@@ -79,6 +80,13 @@ export const WORKSPACE_DEPENDENCY_POLICY = Object.freeze({
     "identity_domain",
     "identity_domain_shared",
   ],
+  identity_sqlx: [
+    "identity_application",
+    "identity_application_contracts",
+    "identity_domain",
+    "identity_domain_shared",
+    "persistence",
+  ],
 });
 
 export const REPOSITORY_OWNERSHIP_POLICY = Object.freeze({
@@ -88,6 +96,41 @@ export const REPOSITORY_OWNERSHIP_POLICY = Object.freeze({
   template: Object.freeze(["framework", "module", "template"]),
   tool: Object.freeze(["framework", "module", "template", "tool"]),
 });
+
+const IDENTITY_SQL_PATTERN =
+  /\b(?:select|from|join|insert\s+into|update|delete\s+from|create\s+table|alter\s+table|drop\s+table)\b[^\n]*\b(?:users|sessions|roles|permissions|user_roles|role_permissions|oauth_states|user_oauth_connections|oauth_pending_signups)\b/i;
+
+export function validateIdentitySqlOwnership(files) {
+  return files
+    .filter(
+      ({ location, content }) =>
+        location.startsWith("crates/") && IDENTITY_SQL_PATTERN.test(content),
+    )
+    .map(
+      ({ location }) =>
+        `Identity SQL must be module-owned under modules/identity/sqlx: ${location}`,
+    );
+}
+
+function repositorySourceFiles(root) {
+  const files = [];
+  const visit = (directory) => {
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      const location = path.join(directory, entry.name);
+      if (entry.isDirectory()) {
+        visit(location);
+      } else if (entry.isFile() && /\.(?:rs|sql)$/.test(entry.name)) {
+        files.push({
+          location: path.relative(root, location).split(path.sep).join("/"),
+          content: fs.readFileSync(location, "utf8"),
+        });
+      }
+    }
+  };
+
+  visit(path.join(root, "crates"));
+  return files;
+}
 
 const REPOSITORY_PACKAGE_ROOTS = Object.freeze([
   Object.freeze({ directory: "apps", ownership: "app" }),
@@ -290,7 +333,10 @@ function runCli() {
     return;
   }
 
-  const errors = validateWorkspaceMetadata(metadata);
+  const errors = [
+    ...validateWorkspaceMetadata(metadata),
+    ...validateIdentitySqlOwnership(repositorySourceFiles(root)),
+  ];
   if (errors.length > 0) {
     for (const error of errors) {
       console.error(`architecture boundary violation: ${error}`);

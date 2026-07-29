@@ -9,30 +9,27 @@ use sqlx::migrate::Migrator;
 #[cfg(feature = "db-postgres")]
 pub mod transaction;
 
-#[cfg(test)]
-mod retirement_tests;
-
 pub use persistence::DatabasePool;
 
 #[cfg(feature = "db-postgres")]
-static POSTGRES_APPLICATION_MIGRATIONS: Migrator = sqlx::migrate!("src/db/migrations");
+static POSTGRES_HOST_MIGRATIONS: Migrator = sqlx::migrate!("src/db/migrations");
 #[cfg(feature = "db-sqlite")]
-static SQLITE_APPLICATION_MIGRATIONS: Migrator = sqlx::migrate!("src/db/migrations_sqlite");
+static SQLITE_HOST_MIGRATIONS: Migrator = sqlx::migrate!("src/db/migrations_sqlite");
 
-pub fn application_migration_source(
+pub fn application_migration_sources(
     backend: &DatabaseBackend,
-) -> Result<ModuleMigrationSource, &'static str> {
+) -> Result<Vec<ModuleMigrationSource>, &'static str> {
     match backend {
         #[cfg(feature = "db-postgres")]
-        DatabaseBackend::Postgres => Ok(ModuleMigrationSource::new(
-            "application",
-            &POSTGRES_APPLICATION_MIGRATIONS,
-        )),
+        DatabaseBackend::Postgres => Ok(vec![
+            ModuleMigrationSource::new("application", &POSTGRES_HOST_MIGRATIONS),
+            crate::identity::migrations::postgres_migration_source(),
+        ]),
         #[cfg(feature = "db-sqlite")]
-        DatabaseBackend::Sqlite => Ok(ModuleMigrationSource::new(
-            "application",
-            &SQLITE_APPLICATION_MIGRATIONS,
-        )),
+        DatabaseBackend::Sqlite => Ok(vec![
+            ModuleMigrationSource::new("application", &SQLITE_HOST_MIGRATIONS),
+            crate::identity::migrations::sqlite_migration_source(),
+        ]),
         #[allow(unreachable_patterns)]
         _ => Err("the selected database migration source is not included in this build"),
     }
@@ -53,8 +50,10 @@ pub async fn connect_sqlite_with_application_migrations(
     config: &DatabaseConfig,
 ) -> Result<SqlitePool, sqlx::Error> {
     let pool = connect_sqlite(config).await?;
-    MigrationPlan::new([application_migration_source(&DatabaseBackend::Sqlite)
-        .expect("SQLite tests require the db-sqlite migration source")])
+    MigrationPlan::new(
+        application_migration_sources(&DatabaseBackend::Sqlite)
+            .expect("SQLite tests require the db-sqlite migration sources"),
+    )
     .expect("the application migration source must remain internally valid")
     .migrator()
     .run(&pool)
@@ -68,6 +67,7 @@ pub async fn ensure_database(config: &DatabaseConfig) -> Result<(), sqlx::Error>
 }
 
 pub async fn reset_database(pool: &DatabasePool) -> Result<(), sqlx::Error> {
+    crate::identity::reset::reset_identity_schema(pool).await?;
     match pool {
         #[cfg(feature = "db-postgres")]
         DatabasePool::Postgres(pool) => reset_schema(pool).await,
@@ -88,15 +88,6 @@ async fn reset_sqlite_schema(pool: &SqlitePool) -> Result<(), sqlx::Error> {
         "inbox_messages",
         "outbox_messages",
         "audit_logs",
-        "oauth_pending_signups",
-        "user_oauth_connections",
-        "oauth_states",
-        "sessions",
-        "role_permissions",
-        "user_roles",
-        "permissions",
-        "roles",
-        "users",
         "app_settings",
         "_sqlx_migrations",
     ] {
@@ -124,37 +115,10 @@ pub async fn reset_schema(pool: &PgPool) -> Result<(), sqlx::Error> {
     sqlx::query("DROP TABLE IF EXISTS outbox_messages")
         .execute(pool)
         .await?;
-    sqlx::query("DROP TABLE IF EXISTS oauth_pending_signups")
-        .execute(pool)
-        .await?;
-    sqlx::query("DROP TABLE IF EXISTS user_oauth_connections")
-        .execute(pool)
-        .await?;
-    sqlx::query("DROP TABLE IF EXISTS oauth_states")
-        .execute(pool)
-        .await?;
     sqlx::query("DROP TABLE IF EXISTS app_settings")
         .execute(pool)
         .await?;
     sqlx::query("DROP TABLE IF EXISTS audit_logs")
-        .execute(pool)
-        .await?;
-    sqlx::query("DROP TABLE IF EXISTS role_permissions")
-        .execute(pool)
-        .await?;
-    sqlx::query("DROP TABLE IF EXISTS user_roles")
-        .execute(pool)
-        .await?;
-    sqlx::query("DROP TABLE IF EXISTS permissions")
-        .execute(pool)
-        .await?;
-    sqlx::query("DROP TABLE IF EXISTS roles")
-        .execute(pool)
-        .await?;
-    sqlx::query("DROP TABLE IF EXISTS sessions")
-        .execute(pool)
-        .await?;
-    sqlx::query("DROP TABLE IF EXISTS users")
         .execute(pool)
         .await?;
     sqlx::query("DROP TABLE IF EXISTS _sqlx_migrations")

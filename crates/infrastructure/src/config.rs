@@ -315,6 +315,20 @@ pub struct SeedConfig {
     pub admin_password: String,
 }
 
+impl crate::identity::seed::IdentitySeedSettings for SeedConfig {
+    fn seed_admin(&self) -> bool {
+        self.seed_admin
+    }
+
+    fn admin_username(&self) -> &str {
+        &self.admin_username
+    }
+
+    fn admin_password(&self) -> &str {
+        &self.admin_password
+    }
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct LoggingConfig {
     pub filter: String,

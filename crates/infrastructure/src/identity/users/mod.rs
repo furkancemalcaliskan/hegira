@@ -1,13 +1,19 @@
 #[cfg(feature = "db-postgres")]
+#[path = "../../../../../modules/identity/sqlx/src/identity/users/managed_writer.rs"]
 pub mod managed_writer;
 #[cfg(feature = "db-postgres")]
+#[path = "../../../../../modules/identity/sqlx/src/identity/users/mapper.rs"]
 pub mod mapper;
+#[path = "../../../../../modules/identity/sqlx/src/identity/users/queries.rs"]
 pub mod queries;
 #[cfg(feature = "db-postgres")]
+#[path = "../../../../../modules/identity/sqlx/src/identity/users/repository.rs"]
 pub mod repository;
 #[cfg(feature = "db-sqlite")]
+#[path = "../../../../../modules/identity/sqlx/src/identity/users/sqlite_managed_writer.rs"]
 pub mod sqlite_managed_writer;
 #[cfg(feature = "db-sqlite")]
+#[path = "../../../../../modules/identity/sqlx/src/identity/users/sqlite_repository.rs"]
 pub mod sqlite_repository;
 
 #[cfg(feature = "db-sqlite")]

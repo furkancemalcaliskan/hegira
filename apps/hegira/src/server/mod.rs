@@ -105,10 +105,10 @@ async fn serve_configured(app_config: infrastructure::config::AppConfig) -> Resu
         .database
         .auto_migrate
         .then(|| {
-            let migration_source =
-                infrastructure::db::application_migration_source(&app_config.database.backend)
+            let migration_sources =
+                infrastructure::db::application_migration_sources(&app_config.database.backend)
                     .map_err(|error| format!("failed to select application migrations: {error}"))?;
-            persistence::migrations::MigrationPlan::new([migration_source])
+            persistence::migrations::MigrationPlan::new(migration_sources)
                 .map_err(|error| format!("invalid application migration plan: {error}"))
         })
         .transpose()?;
@@ -149,9 +149,13 @@ async fn serve_configured(app_config: infrastructure::config::AppConfig) -> Resu
     if app_config.startup.seed_identity {
         tracing::info!("running identity seed at startup");
         let seed_repository = infrastructure::identity::IdentityRepositoryAdapter::new(db.clone());
-        infrastructure::identity::seed::seed_identity(&seed_repository, &app_config.seed)
-            .await
-            .map_err(|err| format!("failed to seed identity data: {err}"))?;
+        infrastructure::identity::seed::seed_identity(
+            &seed_repository,
+            &infrastructure::security::password_hasher::Argon2PasswordHasher,
+            &app_config.seed,
+        )
+        .await
+        .map_err(|err| format!("failed to seed identity data: {err}"))?;
     }
 
     let worker_health = std::sync::Arc::new(worker_operations::WorkerHealth::default());

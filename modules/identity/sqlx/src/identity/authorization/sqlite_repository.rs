@@ -40,7 +40,8 @@ impl AuditedRoleWriter for SqliteAuthorizationRepository {
         let mut transaction = self.pool.begin().await.map_err(app_error)?;
         sqlx::query("INSERT INTO roles (name, created_at, deleted_at) VALUES (?1, ?2, NULL) ON CONFLICT (name) DO UPDATE SET deleted_at = NULL")
             .bind(role_name).bind(Utc::now()).execute(&mut *transaction).await.map_err(app_error)?;
-        crate::audit::insert_sqlite_transaction(&mut transaction, audit.into_entry()).await?;
+        crate::identity::audit::insert_sqlite_transaction(&mut transaction, audit.into_entry())
+            .await?;
         transaction.commit().await.map_err(app_error)
     }
 }
