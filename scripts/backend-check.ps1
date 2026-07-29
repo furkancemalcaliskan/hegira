@@ -35,6 +35,8 @@ Run-Step "Identity module Clippy" @(
     "identity_sqlx",
     "-p",
     "identity_http",
+    "-p",
+    "identity_leptos",
     "--",
     "-D",
     "warnings"
@@ -59,7 +61,9 @@ Run-Step "Identity module contract tests" @(
     "-p",
     "identity_sqlx",
     "-p",
-    "identity_http"
+    "identity_http",
+    "-p",
+    "identity_leptos"
 )
 Run-Step "Capability test support" @(
     "cargo",

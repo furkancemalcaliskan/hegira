@@ -13,7 +13,7 @@ dependency allowlist below is the normative workspace contract.
 ```text
 apps/hegira
   -> platform_core, configuration, persistence, background_jobs, http_support,
-     identity_http, observability, runtime, test_support, web,
+     identity_http, identity_leptos, observability, runtime, test_support, web,
      presentation, infrastructure, application, application_contracts,
      domain, domain_shared
 
@@ -71,6 +71,10 @@ identity_sqlx
 identity_http
   -> application, application_contracts, domain_shared, http_support,
      leptos_support, presentation
+
+identity_leptos
+  -> application, application_contracts, domain_shared, leptos_support,
+     presentation, web
 ```
 
 Domain and application code do not depend on Axum, Leptos, SQLx, Redis, or
@@ -90,7 +94,7 @@ matching policy update.
 
 | Package | Permitted direct local dependencies |
 |---|---|
-| `hegira` | `application`, `application_contracts`, `background_jobs`, `configuration`, `domain`, `domain_shared`, `http_support`, `identity_http`, `infrastructure`, `observability`, `persistence`, `platform_core`, `presentation`, `runtime`, `test_support`, `web` |
+| `hegira` | `application`, `application_contracts`, `background_jobs`, `configuration`, `domain`, `domain_shared`, `http_support`, `identity_http`, `identity_leptos`, `infrastructure`, `observability`, `persistence`, `platform_core`, `presentation`, `runtime`, `test_support`, `web` |
 | `platform_core` | None |
 | `configuration` | None |
 | `persistence` | None |
@@ -114,6 +118,7 @@ matching policy update.
 | `identity_application` | `domain_shared`, `identity_application_contracts`, `identity_domain`, `identity_domain_shared` |
 | `identity_sqlx` | `identity_application`, `identity_application_contracts`, `identity_domain`, `identity_domain_shared`, `persistence` |
 | `identity_http` | `application`, `application_contracts`, `domain_shared`, `http_support`, `leptos_support`, `presentation` |
+| `identity_leptos` | `application`, `application_contracts`, `domain_shared`, `leptos_support`, `presentation`, `web` |
 
 The boundary check reads declared local dependencies from locked Cargo metadata,
 classifies every workspace package by its repository location, and then applies
@@ -151,7 +156,7 @@ not define a Rust package of its own.
 │       └── tests/           full-stack integration tests
 ├── crates/                  reusable layered workspace packages
 ├── modules/
-│   └── identity/            official Identity domain and application packages
+│   └── identity/            official layered Identity module and adapters
 ├── config/                  environment configuration profiles
 ├── docs/                    current architecture and operations guides
 ├── ops/                     local observability configuration
@@ -164,15 +169,16 @@ The `apps/` directory contains deployable packages. Packages outside `apps/`
 must remain reusable and cannot depend on an application package.
 
 The `modules/identity/` directory owns the canonical Identity Domain Shared,
-Domain, Application Contracts, Application, SQLx, and Axum HTTP adapter
-sources. The existing `domain_shared`, `domain`, `application_contracts`,
-`application`, and `infrastructure` packages compile the applicable canonical
-layer files as compatibility views for current consumers without adding a
-forbidden framework dependency on a module package. The host explicitly
-selects the Identity HTTP adapter. `presentation` compiles the module-owned
-session-cookie source as a compatibility view for the current Leptos server
-functions, again without a framework-to-module Cargo dependency. General
-background-job, settings, and storage application ports remain framework-owned.
+Domain, Application Contracts, Application, SQLx, Axum HTTP, and Leptos
+adapter sources. The existing `domain_shared`, `domain`,
+`application_contracts`, `application`, `infrastructure`, `presentation`, and
+`web` packages compile the applicable canonical files as compatibility views
+for current consumers without adding a forbidden framework dependency on a
+module package. The host explicitly selects the Identity HTTP adapter. The
+current `web` package compiles the module-owned Leptos source and consumes its
+explicit route and navigation contributions while it continues to own the
+application shell and shared UI primitives. General background-job, settings,
+and storage application ports remain framework-owned.
 
 ## Workspace Packages
 
@@ -193,7 +199,7 @@ background-job, settings, and storage application ports remain framework-owned.
 | `application` | `crates/application` | Current compatibility view of Identity use cases and provider-facing ports, plus framework-owned background-job, settings, and storage application ports |
 | `infrastructure` | `crates/infrastructure` | Host infrastructure composition and adapters for jobs, security, cache, mail, search, storage, and the current Identity SQLx compatibility view |
 | `presentation` | `crates/presentation` | Current service construction, host state, Leptos server-service context, and operational probe composition |
-| `web` | `crates/web` | Leptos routes, pages, components, and server functions |
+| `web` | `crates/web` | Leptos application shell, dashboard, shared UI primitives, and the current compatibility view of the Identity Leptos adapter |
 | `runtime` | `crates/runtime` | Runtime roles, Tokio process lifecycle, and shutdown signaling |
 | `db_migrator` | `crates/db_migrator` | Migration, reset, seed, and search reindex commands |
 | `identity_domain_shared` | `modules/identity/domain_shared` | Identity errors, protected principal names, and shared security values |
@@ -202,6 +208,7 @@ background-job, settings, and storage application ports remain framework-owned.
 | `identity_application` | `modules/identity/application` | Transport-independent Identity use cases, authorization, validation, transaction intent, and provider-facing ports |
 | `identity_sqlx` | `modules/identity/sqlx` | PostgreSQL and SQLite Identity repositories, migrations, seeds, cleanup, reset, and search projection reads |
 | `identity_http` | `modules/identity/http` | Identity Axum controllers, Bearer extraction, secure session-cookie handling, OpenAPI document, route contribution, and explicit cookie/Bearer transport-policy contribution |
+| `identity_leptos` | `modules/identity/leptos` | Identity authentication, account, user, and role pages; server functions; and explicit Leptos route and navigation contributions |
 
 Code is grouped by bounded context and capability rather than by database
 table. Identity is the first official layered module and its domain and
@@ -210,6 +217,10 @@ exposing Axum, Leptos, SQLx, or provider types. `identity_sqlx` is the explicit
 outward adapter that implements those ports for PostgreSQL and SQLite.
 `identity_http` is the separately selected Axum adapter; its controller state
 contains application services rather than host configuration or persistence.
+`identity_leptos` is the separately buildable Leptos adapter. It uses Identity
+contracts and host-provided application services without declaring SQLx or
+persistence dependencies; UI permission gates remain presentation behavior,
+while application services continue to authorize protected operations.
 The authenticated web surface starts from a neutral dashboard instead of
 composing a sample business capability.
 
@@ -348,20 +359,24 @@ inside the same SQLx transaction as the Identity state change.
 ## Feature Registration
 
 Permission descriptors are compile-time Rust values. The host explicitly
-selects the `identity_http` route and OpenAPI contributions; there is no runtime
-plugin discovery or automatic endpoint publication. Concrete service
-composition, Leptos routes, and navigation remain explicit because Rust and the
-relevant proc macros require concrete types.
+selects the `identity_http` route and OpenAPI contributions, while the current
+Leptos composition explicitly consumes `identity_leptos` route and navigation
+contributions. There is no runtime plugin discovery or automatic endpoint
+publication. Concrete service composition and adapter contributions remain
+explicit because Rust and the relevant proc macros require concrete types.
 
 ## Frontend
 
-The `web` crate contains the app shell, branding, shared visual components, and
-bounded-context features. Feature-local server functions form the data
-boundary. Product-neutral form state, mutation state, server context access,
-and safe server-function error construction live in `leptos_support`; they do
-not grant authorization. Standard CRUD pages reuse `CrudListState`,
-`CrudDialog`, and `MutationStatus`; custom workflows may use ordinary Leptos
-signals and typed services.
+The `web` crate contains the app shell, dashboard, branding, and shared visual
+components. `identity_leptos` owns the Identity authentication, account, user,
+and role pages and their feature-local server functions. During the current
+compatibility phase, `web` compiles those canonical sources through an explicit
+source view, so framework packages still do not depend on module packages.
+Product-neutral form state, mutation state, server context access, and safe
+server-function error construction live in `leptos_support`; they do not grant
+authorization. Standard CRUD pages reuse `CrudListState`, `CrudDialog`, and
+`MutationStatus`; custom workflows may use ordinary Leptos signals and typed
+services.
 
 The `test_support` package owns reusable recording and in-memory implementations
 of application capability ports plus generic Axum request and JSON response

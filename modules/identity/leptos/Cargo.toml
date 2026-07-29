@@ -1,0 +1,41 @@
+[package]
+name = "identity_leptos"
+version = "0.2.0"
+edition = "2024"
+license = "Apache-2.0"
+publish = false
+
+[dependencies]
+application = { path = "../../../crates/application", optional = true }
+application_contracts = { path = "../../../crates/application_contracts" }
+domain_shared = { path = "../../../crates/domain_shared" }
+leptos_support = { path = "../../../crates/leptos_support", default-features = false }
+presentation = { path = "../../../crates/presentation", optional = true, default-features = false }
+web = { path = "../../../crates/web", default-features = false }
+
+icons = { version = "0.18.3", features = ["leptos"] }
+leptos = { version = "0.8.19" }
+leptos_router = { version = "0.8.13" }
+uuid = { version = "1.23.2", features = ["serde", "js"] }
+web-sys = { version = "0.3.91", features = ["Location", "Window"] }
+
+[features]
+default = ["db-postgres", "db-sqlite"]
+db-postgres = ["presentation/db-postgres", "web/db-postgres"]
+db-sqlite = ["presentation/db-sqlite", "web/db-sqlite"]
+hydrate = [
+    "leptos/hydrate",
+    "leptos_support/hydrate",
+    "web/hydrate",
+]
+ssr = [
+    "dep:application",
+    "dep:presentation",
+    "application/ssr",
+    "leptos/ssr",
+    "leptos_support/ssr",
+    "leptos_router/ssr",
+    "presentation/ssr",
+    "web/ssr",
+]
+wasm-split = ["web/wasm-split"]
