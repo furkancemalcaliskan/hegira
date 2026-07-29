@@ -418,16 +418,7 @@ async fn serve_http(
 
     let operational_routes =
         presentation::http::routes::operational_routes(app_state.clone()).with_state(());
-    #[cfg(feature = "openapi")]
-    let operational_routes = if app_config.openapi.enabled && !app_config.is_production() {
-        operational_routes.merge(identity_http::openapi::routes())
-    } else {
-        operational_routes
-    };
-    let bearer_api_routes = identity_http::bearer_api_routes(
-        identity_http::state::IdentityHttpState::new(web_services.clone()),
-    )
-    .with_state(());
+    let bearer_api_routes = identity_api_routes(app_state);
     let cookie_bff_routes = Router::<LeptosOptions>::new()
         .leptos_routes_with_context(
             &leptos_options,
@@ -499,6 +490,30 @@ async fn serve_http(
     .map_err(|err| format!("server error: {err}"))?;
 
     Ok(())
+}
+
+/// Builds the Identity Bearer API selected by this application host.
+///
+/// Kept public so integration tests exercise the same explicit composition
+/// used by the production server rather than reconstructing module routes.
+#[doc(hidden)]
+pub fn identity_api_routes<S>(state: presentation::http::state::AppState) -> axum::Router<S>
+where
+    S: Clone + Send + Sync + 'static,
+{
+    let router = identity_http::bearer_api_routes(identity_http::state::IdentityHttpState::new(
+        state.services.clone(),
+    ))
+    .with_state(());
+
+    #[cfg(feature = "openapi")]
+    let router = if state.config.openapi.enabled && !state.config.is_production() {
+        router.merge(identity_http::openapi::routes())
+    } else {
+        router
+    };
+
+    router
 }
 
 fn compose_transport_routes<S>(
