@@ -1,0 +1,98 @@
+schema = 1
+id = "layered-leptos-identity"
+source = "applications/layered"
+include = ["Cargo.toml", "Dockerfile", "apps"]
+requires = ["layered-base"]
+
+[[framework_dependencies]]
+manifest = "Cargo.toml"
+name = "application"
+path = "crates/application"
+default_features = false
+
+[[framework_dependencies]]
+manifest = "Cargo.toml"
+name = "application_contracts"
+path = "crates/application_contracts"
+
+[[framework_dependencies]]
+manifest = "Cargo.toml"
+name = "background_jobs"
+path = "crates/background_jobs"
+
+[[framework_dependencies]]
+manifest = "Cargo.toml"
+name = "configuration"
+path = "crates/configuration"
+
+[[framework_dependencies]]
+manifest = "Cargo.toml"
+name = "domain"
+path = "crates/domain"
+
+[[framework_dependencies]]
+manifest = "Cargo.toml"
+name = "domain_shared"
+path = "crates/domain_shared"
+
+[[framework_dependencies]]
+manifest = "Cargo.toml"
+name = "http_support"
+path = "crates/http_support"
+
+[[framework_dependencies]]
+manifest = "Cargo.toml"
+name = "identity_http"
+path = "modules/identity/http"
+default_features = false
+
+[[framework_dependencies]]
+manifest = "Cargo.toml"
+name = "identity_leptos"
+path = "modules/identity/leptos"
+default_features = false
+
+[[framework_dependencies]]
+manifest = "Cargo.toml"
+name = "infrastructure"
+path = "crates/infrastructure"
+default_features = false
+
+[[framework_dependencies]]
+manifest = "Cargo.toml"
+name = "leptos_support"
+path = "crates/leptos_support"
+default_features = false
+
+[[framework_dependencies]]
+manifest = "Cargo.toml"
+name = "observability"
+path = "crates/observability"
+
+[[framework_dependencies]]
+manifest = "Cargo.toml"
+name = "persistence"
+path = "crates/persistence"
+default_features = false
+
+[[framework_dependencies]]
+manifest = "Cargo.toml"
+name = "platform_core"
+path = "crates/platform_core"
+
+[[framework_dependencies]]
+manifest = "Cargo.toml"
+name = "presentation"
+path = "crates/presentation"
+default_features = false
+
+[[framework_dependencies]]
+manifest = "Cargo.toml"
+name = "runtime"
+path = "crates/runtime"
+
+[[framework_dependencies]]
+manifest = "Cargo.toml"
+name = "web"
+path = "crates/web"
+default_features = false

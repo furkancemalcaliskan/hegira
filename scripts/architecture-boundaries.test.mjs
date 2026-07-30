@@ -18,6 +18,7 @@ const PACKAGE_LOCATIONS = Object.freeze({
   identity_sqlx: "modules/identity/sqlx",
   identity_http: "modules/identity/http",
   identity_leptos: "modules/identity/leptos",
+  template_renderer: "tools/template_renderer",
 });
 
 function packageLocation(name) {

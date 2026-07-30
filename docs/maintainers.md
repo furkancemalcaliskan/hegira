@@ -134,10 +134,26 @@ sh scripts/layered-template-check.sh
 ```
 
 The check works on a disposable copy. It preserves pinned release-style
-dependencies in the committed template and does not write maintainer paths
-into template files. It installs the client package lock, validates native
-workspace targets and tests, compiles the hydration target, and produces the
-full-stack Cargo Leptos release output.
+dependencies in a normal render and does not write maintainer paths into
+template source files. For repository validation, the internal renderer patches
+declared framework dependencies only in the disposable output. The check runs
+the renderer snapshot and failure-path tests, installs the client package lock,
+validates native workspace targets and tests, compiles the hydration target,
+and produces the full-stack Cargo Leptos release output.
+
+The renderer is an internal maintainer tool rather than the public Hegira CLI.
+To inspect an independently copyable release-style render:
+
+```sh
+cargo run --locked -p template_renderer -- render \
+  --repository-root . \
+  --template layered \
+  --output /tmp/hegira-layered
+```
+
+The destination must not already exist. Component manifests declare their
+requirements, conflicts, source inputs, and repository-validation dependency
+patches. They cannot execute shell commands.
 
 To reproduce pull request metadata validation with a saved GitHub
 `pull_request` event:

@@ -26,6 +26,7 @@ members = [
     "modules/identity/sqlx",
     "modules/identity/http",
     "modules/identity/leptos",
+    "tools/template_renderer",
 ]
 default-members = ["apps/hegira"]
 

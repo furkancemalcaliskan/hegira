@@ -105,6 +105,7 @@ export const WORKSPACE_DEPENDENCY_POLICY = Object.freeze({
     "presentation",
     "web",
   ],
+  template_renderer: [],
 });
 
 export const REPOSITORY_OWNERSHIP_POLICY = Object.freeze({
