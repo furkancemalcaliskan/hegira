@@ -1,0 +1,43 @@
+[workspace]
+resolver = "3"
+members = [
+    "apps/server",
+    "crates/domain_shared",
+    "crates/domain",
+    "crates/application_contracts",
+    "crates/application",
+    "crates/infrastructure",
+    "crates/presentation",
+]
+default-members = ["apps/server"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+rust-version = "1.96"
+publish = false
+
+[workspace.dependencies]
+app_domain_shared = { path = "crates/domain_shared" }
+app_domain = { path = "crates/domain" }
+app_application_contracts = { path = "crates/application_contracts" }
+app_application = { path = "crates/application" }
+app_infrastructure = { path = "crates/infrastructure", default-features = false }
+app_presentation = { path = "crates/presentation", default-features = false }
+
+# Framework packages are consumed as release dependencies. Repository
+# validation patches this source in a disposable copy of the template.
+configuration = { git = "https://github.com/furkancemalcaliskan/hegira.git", tag = "v0.3.0" }
+http_support = { git = "https://github.com/furkancemalcaliskan/hegira.git", tag = "v0.3.0" }
+observability = { git = "https://github.com/furkancemalcaliskan/hegira.git", tag = "v0.3.0" }
+persistence = { git = "https://github.com/furkancemalcaliskan/hegira.git", tag = "v0.3.0", default-features = false }
+platform_core = { git = "https://github.com/furkancemalcaliskan/hegira.git", tag = "v0.3.0" }
+runtime = { git = "https://github.com/furkancemalcaliskan/hegira.git", tag = "v0.3.0" }
+
+axum = "0.8.9"
+serde = { version = "1.0.228", features = ["derive"] }
+tokio = { version = "1.52.3", features = ["rt-multi-thread", "macros", "signal"] }
+tracing = "0.1.44"
+url = "2.5.7"
+

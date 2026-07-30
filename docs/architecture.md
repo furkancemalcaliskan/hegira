@@ -157,6 +157,9 @@ not define a Rust package of its own.
 ├── crates/                  reusable layered workspace packages
 ├── modules/
 │   └── identity/            official layered Identity module and adapters
+├── templates/
+│   └── applications/
+│       └── layered/         workspace-external layered server base
 ├── config/                  environment configuration profiles
 ├── docs/                    current architecture and operations guides
 ├── ops/                     local observability configuration
@@ -179,6 +182,21 @@ current `web` package compiles the module-owned Leptos source and consumes its
 explicit route and navigation contributions while it continues to own the
 application shell and shared UI primitives. General background-job, settings,
 and storage application ports remain framework-owned.
+
+The canonical base at `templates/applications/layered` is a separate Cargo
+workspace and is deliberately absent from the framework workspace member
+list. It defines a brand-neutral `apps/server` composition root and explicit
+Domain Shared, Domain, Application Contracts, Application, Infrastructure, and
+Presentation packages. The base owns its application configuration profiles,
+Dockerfile, and local PostgreSQL contract. It does not yet contain the default
+Leptos client or compose Identity.
+
+Framework dependencies in the canonical manifest use the pinned `v0.3.0` Git
+source rather than paths into this repository. Before that release tag exists,
+`scripts/layered-template-check.sh` copies the template to a disposable
+directory and rewrites only that staging manifest to use the current framework
+checkout. The committed template therefore remains independently copyable and
+contains no maintainer filesystem paths.
 
 ## Workspace Packages
 
@@ -248,6 +266,18 @@ Cargo commands are run from the repository root and select the application with
 `apps/hegira/Cargo.toml`; frontend sources and public assets remain owned by
 `crates/web`, while generated server and site outputs are written to the
 workspace-level `target/release` and `target/site` directories.
+
+The canonical layered base is validated separately with:
+
+```sh
+sh scripts/layered-template-check.sh
+```
+
+That check compiles every template layer and feature against the current
+framework checkout without adding the template to the framework workspace.
+The existing `apps/hegira` package remains the full-stack compatibility host
+until the client and Identity composition are established in the canonical
+template.
 
 ## Request Boundaries
 
