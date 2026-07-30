@@ -1,5 +1,7 @@
-mod server;
-
+#[cfg(feature = "ssr")]
 fn main() -> std::process::ExitCode {
-    runtime::run(server::serve)
+    app_server::server::run()
 }
+
+#[cfg(not(feature = "ssr"))]
+fn main() {}

@@ -135,7 +135,9 @@ sh scripts/layered-template-check.sh
 
 The check works on a disposable copy. It preserves pinned release-style
 dependencies in the committed template and does not write maintainer paths
-into template files.
+into template files. It installs the client package lock, validates native
+workspace targets and tests, compiles the hydration target, and produces the
+full-stack Cargo Leptos release output.
 
 To reproduce pull request metadata validation with a saved GitHub
 `pull_request` event:

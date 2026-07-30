@@ -2,6 +2,7 @@
 resolver = "3"
 members = [
     "apps/server",
+    "apps/web",
     "crates/domain_shared",
     "crates/domain",
     "crates/application_contracts",
@@ -10,6 +11,15 @@ members = [
     "crates/presentation",
 ]
 default-members = ["apps/server"]
+
+[profile.wasm-release]
+inherits = "release"
+opt-level = "z"
+lto = true
+codegen-units = 1
+debug = 0
+panic = "abort"
+strip = "symbols"
 
 [workspace.package]
 version = "0.1.0"
@@ -25,19 +35,38 @@ app_application_contracts = { path = "crates/application_contracts" }
 app_application = { path = "crates/application" }
 app_infrastructure = { path = "crates/infrastructure", default-features = false }
 app_presentation = { path = "crates/presentation", default-features = false }
+app_web = { path = "apps/web", default-features = false }
 
 # Framework packages are consumed as release dependencies. Repository
 # validation patches this source in a disposable copy of the template.
+application = { git = "https://github.com/furkancemalcaliskan/hegira.git", tag = "v0.3.0", default-features = false }
+application_contracts = { git = "https://github.com/furkancemalcaliskan/hegira.git", tag = "v0.3.0" }
+background_jobs = { git = "https://github.com/furkancemalcaliskan/hegira.git", tag = "v0.3.0" }
 configuration = { git = "https://github.com/furkancemalcaliskan/hegira.git", tag = "v0.3.0" }
+domain = { git = "https://github.com/furkancemalcaliskan/hegira.git", tag = "v0.3.0" }
+domain_shared = { git = "https://github.com/furkancemalcaliskan/hegira.git", tag = "v0.3.0" }
 http_support = { git = "https://github.com/furkancemalcaliskan/hegira.git", tag = "v0.3.0" }
+identity_http = { git = "https://github.com/furkancemalcaliskan/hegira.git", tag = "v0.3.0", default-features = false }
+identity_leptos = { git = "https://github.com/furkancemalcaliskan/hegira.git", tag = "v0.3.0", default-features = false }
+infrastructure = { git = "https://github.com/furkancemalcaliskan/hegira.git", tag = "v0.3.0", default-features = false }
+leptos_support = { git = "https://github.com/furkancemalcaliskan/hegira.git", tag = "v0.3.0", default-features = false }
 observability = { git = "https://github.com/furkancemalcaliskan/hegira.git", tag = "v0.3.0" }
 persistence = { git = "https://github.com/furkancemalcaliskan/hegira.git", tag = "v0.3.0", default-features = false }
 platform_core = { git = "https://github.com/furkancemalcaliskan/hegira.git", tag = "v0.3.0" }
+presentation = { git = "https://github.com/furkancemalcaliskan/hegira.git", tag = "v0.3.0", default-features = false }
 runtime = { git = "https://github.com/furkancemalcaliskan/hegira.git", tag = "v0.3.0" }
+web = { git = "https://github.com/furkancemalcaliskan/hegira.git", tag = "v0.3.0", default-features = false }
 
 axum = "0.8.9"
+console_error_panic_hook = "0.1.7"
+leptos = "0.8.19"
+leptos_axum = "0.8.9"
+leptos_meta = "0.8.6"
+leptos_router = "0.8.13"
 serde = { version = "1.0.228", features = ["derive"] }
+sqlx = { version = "0.8.6", features = ["runtime-tokio-rustls", "migrate", "chrono", "uuid"] }
 tokio = { version = "1.52.3", features = ["rt-multi-thread", "macros", "signal"] }
+tower-http = { version = "0.7.0", features = ["compression-br", "compression-gzip", "cors", "limit", "timeout"] }
 tracing = "0.1.44"
 url = "2.5.7"
-
+wasm-bindgen = "0.2.114"

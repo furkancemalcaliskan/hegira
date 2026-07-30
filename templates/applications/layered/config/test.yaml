@@ -1,5 +1,5 @@
 application:
-  name: Application
+  name: Application Test
   public_url: http://127.0.0.1:3000
 
 server:
@@ -23,7 +23,7 @@ startup:
 
 database:
   backend: postgres
-  url: postgres://postgres@localhost:5432/application
+  url: postgres://postgres@localhost:5432/application_test
   max_connections: 5
   auto_migrate: true
 
@@ -33,18 +33,17 @@ security:
     enabled: true
     allowed_origins:
       - http://127.0.0.1:3000
-      - http://localhost:3000
     allow_credentials: false
   rate_limit:
     enabled: true
-    backend: memory # memory | redis
-    max_requests: 20
+    backend: memory
+    max_requests: 1000
     window_seconds: 60
     redis:
       url: redis://127.0.0.1:6379
 
 sessions:
-  backend: database # database | redis
+  backend: database
   sliding_ttl_seconds: 1800
   max_lifetime_seconds: 3600
   refresh_threshold_percent: 25
@@ -81,7 +80,7 @@ oauth:
 
 mailer:
   enabled: true
-  backend: log # null | log | smtp
+  backend: log
   from: no-reply@example.com
   smtp:
     host: localhost
@@ -92,18 +91,18 @@ mailer:
 
 cache:
   enabled: false
-  backend: "null" # null | memory | redis
+  backend: "null"
   authorization_ttl_seconds: 60
   redis:
     url: redis://127.0.0.1:6379
 
 storage:
   enabled: false
-  backend: "null" # null | local | s3
+  backend: "null"
   local:
-    root: storage/development
+    root: storage/test
   s3:
-    bucket: application
+    bucket: application-test
     region: us-east-1
     endpoint_url: http://127.0.0.1:9000
     force_path_style: true
@@ -111,7 +110,7 @@ storage:
 search:
   enabled: false
   backend: "null" # null | meilisearch
-  index_prefix: application
+  index_prefix: application_test
   task_timeout_milliseconds: 10000
   meilisearch:
     url: http://127.0.0.1:7700
@@ -125,9 +124,9 @@ scheduler:
 jobs:
   durable:
     enabled: false
-    poll_interval_milliseconds: 1000
+    poll_interval_milliseconds: 10
     batch_size: 20
-    lock_timeout_seconds: 300
+    lock_timeout_seconds: 30
 
 audit:
   enabled: true
@@ -137,7 +136,7 @@ settings:
   cache_ttl_seconds: 60
 
 openapi:
-  enabled: false
+  enabled: true
 
 metrics:
   enabled: false
@@ -158,4 +157,4 @@ seed:
   admin_username: admin@example.com
 
 logging:
-  filter: info,app_server=debug
+  filter: warn,app_server=debug
