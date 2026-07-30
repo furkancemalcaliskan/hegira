@@ -43,6 +43,10 @@ commands change. Never describe planned work as implemented.
   explicit route and navigation contributions. Current compatibility packages
   compile the applicable canonical sources without depending on a module
   package.
+- `templates/applications/layered/` contains the workspace-external,
+  brand-neutral layered server application base. It consumes framework
+  packages through a pinned release source; repository validation rewrites
+  those dependencies only in a disposable staging copy.
 - `config/` contains environment profiles.
 - `scripts/` contains local validation, smoke, operations, and release helpers.
 - `.github/workflows/` contains validation and release automation.
@@ -133,6 +137,12 @@ Focused workspace dependency-boundary validation:
 
 ```sh
 sh scripts/architecture-boundaries.sh
+```
+
+Focused canonical layered application validation:
+
+```sh
+sh scripts/layered-template-check.sh
 ```
 
 Focused release identity and source-first workflow validation:

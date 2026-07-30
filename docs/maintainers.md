@@ -126,6 +126,17 @@ sh scripts/architecture-boundaries.sh
 sh scripts/release-policy.sh
 ```
 
+Validate the workspace-external canonical layered application base against the
+current framework checkout:
+
+```sh
+sh scripts/layered-template-check.sh
+```
+
+The check works on a disposable copy. It preserves pinned release-style
+dependencies in the committed template and does not write maintainer paths
+into template files.
+
 To reproduce pull request metadata validation with a saved GitHub
 `pull_request` event:
 

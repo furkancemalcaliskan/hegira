@@ -1,0 +1,31 @@
+application:
+  name: Application
+  public_url: http://127.0.0.1:3000
+
+server:
+  addr: 127.0.0.1:3000
+  request_timeout_seconds: 30
+  body_limit_bytes: 2097152
+
+startup:
+  ensure_database: true
+
+database:
+  backend: postgres
+  # Supply credentials through APP__DATABASE__URL.
+  url: postgres://postgres@localhost:5432/application
+  max_connections: 5
+  auto_migrate: true
+
+health:
+  readiness_timeout_milliseconds: 2000
+
+telemetry:
+  enabled: false
+  protocol: grpc # grpc | http_protobuf
+  endpoint: http://127.0.0.1:4317
+  timeout_milliseconds: 5000
+  sample_ratio: 1.0
+
+logging:
+  filter: info,app_server=debug

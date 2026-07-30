@@ -1,0 +1,13 @@
+[package]
+name = "app_application_contracts"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+app_domain.workspace = true
+app_domain_shared.workspace = true
+serde.workspace = true
+
