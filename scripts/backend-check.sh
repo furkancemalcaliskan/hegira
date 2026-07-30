@@ -14,6 +14,7 @@ run_step "Format" cargo fmt --all -- --check
 run_step "DX baseline" sh scripts/dx-audit.sh
 run_step "Clippy" cargo clippy -p hegira --features ssr,test-support -- -D warnings
 run_step "Identity module Clippy" cargo clippy --all-features -p identity_domain_shared -p identity_domain -p identity_application_contracts -p identity_application -p identity_sqlx -p identity_http -p identity_leptos -- -D warnings
+run_step "Template renderer tests" cargo test --locked -p template_renderer
 run_step "SSR check" cargo check -p hegira --features ssr
 run_step "Hydrate check" cargo check -p hegira --no-default-features --features hydrate --target wasm32-unknown-unknown
 run_step "OpenAPI check" cargo check -p hegira --features openapi

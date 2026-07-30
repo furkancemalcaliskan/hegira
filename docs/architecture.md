@@ -75,6 +75,9 @@ identity_http
 identity_leptos
   -> application, application_contracts, domain_shared, leptos_support,
      presentation, web
+
+template_renderer
+  -> no local packages
 ```
 
 Domain and application code do not depend on Axum, Leptos, SQLx, Redis, or
@@ -119,6 +122,7 @@ matching policy update.
 | `identity_sqlx` | `identity_application`, `identity_application_contracts`, `identity_domain`, `identity_domain_shared`, `persistence` |
 | `identity_http` | `application`, `application_contracts`, `domain_shared`, `http_support`, `leptos_support`, `presentation` |
 | `identity_leptos` | `application`, `application_contracts`, `domain_shared`, `leptos_support`, `presentation`, `web` |
+| `template_renderer` | None |
 
 The boundary check reads declared local dependencies from locked Cargo metadata,
 classifies every workspace package by its repository location, and then applies
@@ -158,8 +162,11 @@ not define a Rust package of its own.
 ├── modules/
 │   └── identity/            official layered Identity module and adapters
 ├── templates/
-│   └── applications/
-│       └── layered/         workspace-external layered server base
+│   ├── applications/
+│   │   └── layered/         workspace-external layered full-stack source
+│   └── components/          typed application-component manifests
+├── tools/
+│   └── template_renderer/   internal deterministic template renderer
 ├── config/                  environment configuration profiles
 ├── docs/                    current architecture and operations guides
 ├── ops/                     local observability configuration
@@ -183,25 +190,33 @@ explicit route and navigation contributions while it continues to own the
 application shell and shared UI primitives. General background-job, settings,
 and storage application ports remain framework-owned.
 
-The canonical base at `templates/applications/layered` is a separate Cargo
-workspace and is deliberately absent from the framework workspace member
+The canonical source at `templates/applications/layered` renders a separate
+Cargo workspace and is deliberately absent from the framework workspace member
 list. It defines a brand-neutral `apps/server` composition root and explicit
 Domain Shared, Domain, Application Contracts, Application, Infrastructure, and
 Presentation packages. Its `apps/web` package owns the default Leptos shell,
 branding assets, neutral dashboard, routes, and hydration entry point. The
 server explicitly composes the Identity HTTP adapter, and the client explicitly
 composes the Identity Leptos adapter; neither surface discovers module
-contributions implicitly. The base owns its application configuration
+contributions implicitly. The rendered base owns its application configuration
 profiles, full-stack Dockerfile, and local PostgreSQL contract.
 
 Framework dependencies in the canonical manifest use the pinned `v0.3.0` Git
-source rather than paths into this repository. Before that release tag exists,
-`scripts/layered-template-check.sh` copies the template to a disposable
-directory and rewrites only that staging manifest to use the current framework
-checkout. The committed template therefore remains independently copyable and
-contains no maintainer filesystem paths. Validation covers native server and
-test targets, the browser hydration target, and the Cargo Leptos release
-output.
+source rather than paths into this repository. The typed template manifest
+selects the `layered-base` and `layered-leptos-identity` component graph.
+`template_renderer` resolves requirements and conflicts, substitutes declared
+variables, detects output collisions, and constructs the complete output plan
+before writing. It rejects symbolic links and path traversal, does not execute
+component scripts, and publishes a successful render by renaming a private
+staging directory into a previously absent destination.
+
+Before the release tag exists, `scripts/layered-template-check.sh` asks the
+renderer to patch declared framework dependencies only in its disposable
+validation output. A normal render retains the release-style Git source and is
+rejected if repository-local absolute paths leak into its files. Validation
+covers renderer snapshots and failure paths, native server and test targets,
+the browser hydration target, and the Cargo Leptos release output. This
+maintainer tool is not exposed as the public Hegira CLI.
 
 ## Workspace Packages
 
@@ -232,6 +247,7 @@ output.
 | `identity_sqlx` | `modules/identity/sqlx` | PostgreSQL and SQLite Identity repositories, migrations, seeds, cleanup, reset, and search projection reads |
 | `identity_http` | `modules/identity/http` | Identity Axum controllers, Bearer extraction, secure session-cookie handling, OpenAPI document, route contribution, and explicit cookie/Bearer transport-policy contribution |
 | `identity_leptos` | `modules/identity/leptos` | Identity authentication, account, user, and role pages; server functions; and explicit Leptos route and navigation contributions |
+| `template_renderer` | `tools/template_renderer` | Internal typed component resolution, deterministic rendering, local validation patching, collision detection, and atomic output publication |
 
 Code is grouped by bounded context and capability rather than by database
 table. Identity is the first official layered module and its domain and
@@ -279,10 +295,10 @@ sh scripts/layered-template-check.sh
 ```
 
 That check compiles every template layer and feature against the current
-framework checkout without adding the template to the framework workspace.
-The existing `apps/hegira` package remains the full-stack compatibility host
-until the client and Identity composition are established in the canonical
-template.
+framework checkout without adding the rendered application to the framework
+workspace. The existing `apps/hegira` package remains the full-stack
+compatibility host while the canonical template provides the default Leptos
+and Identity composition for newly rendered applications.
 
 ## Request Boundaries
 

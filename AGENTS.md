@@ -49,6 +49,11 @@ commands change. Never describe planned work as implemented.
   default Leptos shell and explicitly selects the Identity Leptos adapter. It
   consumes framework packages through a pinned release source; repository
   validation rewrites those dependencies only in a disposable staging copy.
+- `templates/components/` contains typed component manifests for the canonical
+  application template.
+- `tools/template_renderer/` contains the internal deterministic and atomic
+  template renderer used by repository validation. It is not the public Hegira
+  CLI.
 - `config/` contains environment profiles.
 - `scripts/` contains local validation, smoke, operations, and release helpers.
 - `.github/workflows/` contains validation and release automation.

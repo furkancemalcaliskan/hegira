@@ -39,23 +39,23 @@ app_web = { path = "apps/web", default-features = false }
 
 # Framework packages are consumed as release dependencies. Repository
 # validation patches this source in a disposable copy of the template.
-application = { git = "https://github.com/furkancemalcaliskan/hegira.git", tag = "v0.3.0", default-features = false }
-application_contracts = { git = "https://github.com/furkancemalcaliskan/hegira.git", tag = "v0.3.0" }
-background_jobs = { git = "https://github.com/furkancemalcaliskan/hegira.git", tag = "v0.3.0" }
-configuration = { git = "https://github.com/furkancemalcaliskan/hegira.git", tag = "v0.3.0" }
-domain = { git = "https://github.com/furkancemalcaliskan/hegira.git", tag = "v0.3.0" }
-domain_shared = { git = "https://github.com/furkancemalcaliskan/hegira.git", tag = "v0.3.0" }
-http_support = { git = "https://github.com/furkancemalcaliskan/hegira.git", tag = "v0.3.0" }
-identity_http = { git = "https://github.com/furkancemalcaliskan/hegira.git", tag = "v0.3.0", default-features = false }
-identity_leptos = { git = "https://github.com/furkancemalcaliskan/hegira.git", tag = "v0.3.0", default-features = false }
-infrastructure = { git = "https://github.com/furkancemalcaliskan/hegira.git", tag = "v0.3.0", default-features = false }
-leptos_support = { git = "https://github.com/furkancemalcaliskan/hegira.git", tag = "v0.3.0", default-features = false }
-observability = { git = "https://github.com/furkancemalcaliskan/hegira.git", tag = "v0.3.0" }
-persistence = { git = "https://github.com/furkancemalcaliskan/hegira.git", tag = "v0.3.0", default-features = false }
-platform_core = { git = "https://github.com/furkancemalcaliskan/hegira.git", tag = "v0.3.0" }
-presentation = { git = "https://github.com/furkancemalcaliskan/hegira.git", tag = "v0.3.0", default-features = false }
-runtime = { git = "https://github.com/furkancemalcaliskan/hegira.git", tag = "v0.3.0" }
-web = { git = "https://github.com/furkancemalcaliskan/hegira.git", tag = "v0.3.0", default-features = false }
+application = { git = "{{framework_repository}}", tag = "{{framework_version}}", default-features = false }
+application_contracts = { git = "{{framework_repository}}", tag = "{{framework_version}}" }
+background_jobs = { git = "{{framework_repository}}", tag = "{{framework_version}}" }
+configuration = { git = "{{framework_repository}}", tag = "{{framework_version}}" }
+domain = { git = "{{framework_repository}}", tag = "{{framework_version}}" }
+domain_shared = { git = "{{framework_repository}}", tag = "{{framework_version}}" }
+http_support = { git = "{{framework_repository}}", tag = "{{framework_version}}" }
+identity_http = { git = "{{framework_repository}}", tag = "{{framework_version}}", default-features = false }
+identity_leptos = { git = "{{framework_repository}}", tag = "{{framework_version}}", default-features = false }
+infrastructure = { git = "{{framework_repository}}", tag = "{{framework_version}}", default-features = false }
+leptos_support = { git = "{{framework_repository}}", tag = "{{framework_version}}", default-features = false }
+observability = { git = "{{framework_repository}}", tag = "{{framework_version}}" }
+persistence = { git = "{{framework_repository}}", tag = "{{framework_version}}", default-features = false }
+platform_core = { git = "{{framework_repository}}", tag = "{{framework_version}}" }
+presentation = { git = "{{framework_repository}}", tag = "{{framework_version}}", default-features = false }
+runtime = { git = "{{framework_repository}}", tag = "{{framework_version}}" }
+web = { git = "{{framework_repository}}", tag = "{{framework_version}}", default-features = false }
 
 axum = "0.8.9"
 console_error_panic_hook = "0.1.7"
