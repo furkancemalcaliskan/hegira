@@ -187,16 +187,21 @@ The canonical base at `templates/applications/layered` is a separate Cargo
 workspace and is deliberately absent from the framework workspace member
 list. It defines a brand-neutral `apps/server` composition root and explicit
 Domain Shared, Domain, Application Contracts, Application, Infrastructure, and
-Presentation packages. The base owns its application configuration profiles,
-Dockerfile, and local PostgreSQL contract. It does not yet contain the default
-Leptos client or compose Identity.
+Presentation packages. Its `apps/web` package owns the default Leptos shell,
+branding assets, neutral dashboard, routes, and hydration entry point. The
+server explicitly composes the Identity HTTP adapter, and the client explicitly
+composes the Identity Leptos adapter; neither surface discovers module
+contributions implicitly. The base owns its application configuration
+profiles, full-stack Dockerfile, and local PostgreSQL contract.
 
 Framework dependencies in the canonical manifest use the pinned `v0.3.0` Git
 source rather than paths into this repository. Before that release tag exists,
 `scripts/layered-template-check.sh` copies the template to a disposable
 directory and rewrites only that staging manifest to use the current framework
 checkout. The committed template therefore remains independently copyable and
-contains no maintainer filesystem paths.
+contains no maintainer filesystem paths. Validation covers native server and
+test targets, the browser hydration target, and the Cargo Leptos release
+output.
 
 ## Workspace Packages
 

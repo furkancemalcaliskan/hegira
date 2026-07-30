@@ -44,9 +44,11 @@ commands change. Never describe planned work as implemented.
   compile the applicable canonical sources without depending on a module
   package.
 - `templates/applications/layered/` contains the workspace-external,
-  brand-neutral layered server application base. It consumes framework
-  packages through a pinned release source; repository validation rewrites
-  those dependencies only in a disposable staging copy.
+  layered full-stack application base. Its brand-neutral server composition
+  explicitly selects the Identity HTTP adapter, while `apps/web` owns the
+  default Leptos shell and explicitly selects the Identity Leptos adapter. It
+  consumes framework packages through a pinned release source; repository
+  validation rewrites those dependencies only in a disposable staging copy.
 - `config/` contains environment profiles.
 - `scripts/` contains local validation, smoke, operations, and release helpers.
 - `.github/workflows/` contains validation and release automation.

@@ -33,12 +33,48 @@ cp -R "$template_root/." "$staging_root/"
 # only the disposable manifest so Cargo can validate against this checkout
 # without adding repository paths to the canonical template.
 awk -v root="$repo_root" '
+  /^application = \{ git = / {
+    print "application = { path = \"" root "/crates/application\", default-features = false }"
+    next
+  }
+  /^application_contracts = \{ git = / {
+    print "application_contracts = { path = \"" root "/crates/application_contracts\" }"
+    next
+  }
+  /^background_jobs = \{ git = / {
+    print "background_jobs = { path = \"" root "/crates/background_jobs\" }"
+    next
+  }
   /^configuration = \{ git = / {
     print "configuration = { path = \"" root "/crates/configuration\" }"
     next
   }
+  /^domain = \{ git = / {
+    print "domain = { path = \"" root "/crates/domain\" }"
+    next
+  }
+  /^domain_shared = \{ git = / {
+    print "domain_shared = { path = \"" root "/crates/domain_shared\" }"
+    next
+  }
   /^http_support = \{ git = / {
     print "http_support = { path = \"" root "/crates/http_support\" }"
+    next
+  }
+  /^identity_http = \{ git = / {
+    print "identity_http = { path = \"" root "/modules/identity/http\", default-features = false }"
+    next
+  }
+  /^identity_leptos = \{ git = / {
+    print "identity_leptos = { path = \"" root "/modules/identity/leptos\", default-features = false }"
+    next
+  }
+  /^infrastructure = \{ git = / {
+    print "infrastructure = { path = \"" root "/crates/infrastructure\", default-features = false }"
+    next
+  }
+  /^leptos_support = \{ git = / {
+    print "leptos_support = { path = \"" root "/crates/leptos_support\", default-features = false }"
     next
   }
   /^observability = \{ git = / {
@@ -53,19 +89,39 @@ awk -v root="$repo_root" '
     print "platform_core = { path = \"" root "/crates/platform_core\" }"
     next
   }
+  /^presentation = \{ git = / {
+    print "presentation = { path = \"" root "/crates/presentation\", default-features = false }"
+    next
+  }
   /^runtime = \{ git = / {
     print "runtime = { path = \"" root "/crates/runtime\" }"
+    next
+  }
+  /^web = \{ git = / {
+    print "web = { path = \"" root "/crates/web\", default-features = false }"
     next
   }
   { print }
 ' "$staging_root/Cargo.toml" >"$staging_root/Cargo.toml.local"
 mv "$staging_root/Cargo.toml.local" "$staging_root/Cargo.toml"
 
-CARGO_TARGET_DIR="$repo_root/target/layered-template-check" \
-  cargo check --manifest-path "$staging_root/Cargo.toml" --workspace --all-targets --all-features
-CARGO_TARGET_DIR="$repo_root/target/layered-template-check" \
-  cargo clippy --manifest-path "$staging_root/Cargo.toml" --workspace --all-targets --all-features -- -D warnings
-CARGO_TARGET_DIR="$repo_root/target/layered-template-check" \
-  cargo test --manifest-path "$staging_root/Cargo.toml" --workspace --all-features
+(
+  cd "$staging_root"
+  npm ci --prefix apps/web/src
+  PATH="$staging_root/apps/web/src/node_modules/.bin:$PATH"
+  export PATH
+  CARGO_TARGET_DIR="$repo_root/target/layered-template-check" \
+    cargo check --workspace --all-targets --all-features
+  CARGO_TARGET_DIR="$repo_root/target/layered-template-check" \
+    cargo check -p app_server --no-default-features --features hydrate \
+      --target wasm32-unknown-unknown
+  CARGO_TARGET_DIR="$repo_root/target/layered-template-check" \
+    cargo clippy --workspace --all-targets --all-features -- -D warnings
+  CARGO_TARGET_DIR="$repo_root/target/layered-template-check" \
+    cargo test --workspace --all-features
+  CARGO_TARGET_DIR="$repo_root/target/layered-template-check" \
+    cargo leptos build -p app_server --release \
+      --bin-features ssr,db-postgres --lib-features hydrate
+)
 
 echo "canonical layered application template: ok"
