@@ -1,7 +1,10 @@
 # Configuration
 
-Configuration is loaded from `config/{APP_ENV}.yaml` and then overridden by
-environment variables. Nested keys use double underscores:
+The current compatibility host loads configuration from the repository root at
+`config/{APP_ENV}.yaml` and then applies environment-variable overrides. A canonical rendered
+application owns the equivalent `config/` directory inside its independent application
+workspace; it does not read profiles from the framework repository. Nested keys use double
+underscores:
 
 ```sh
 APP_ENV=production

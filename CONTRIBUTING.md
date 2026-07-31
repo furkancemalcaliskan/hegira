@@ -101,15 +101,25 @@ is:
 sh scripts/repository-policy.sh
 ```
 
-The standard application backend gate is:
+The aggregate backend gate validates framework, official-module, and canonical template
+ownership:
 
 ```sh
 sh scripts/backend-check.sh
 ```
 
-Production-relevant changes must also pass:
+Changes to the layered template, renderer, migrations, or generated runtime contract must also
+pass the generated-application gate with disposable Docker state:
 
 ```sh
+sh scripts/generated-application-check.sh
+```
+
+Changes to the compatibility host's production image or release output must also pass the
+applicable focused checks:
+
+```sh
+sh scripts/full-stack-build-check.sh
 sh scripts/container-smoke.sh
 ```
 

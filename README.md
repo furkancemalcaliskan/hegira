@@ -10,11 +10,11 @@
   An opinionated full-stack application template for the journey from idea to production.
 </p>
 
-Hegira is a production-oriented, opinionated full-stack web application template built around
-Axum, Leptos, SQLx, an ABP-inspired layered architecture, and DDD-oriented layers. It provides
-more than an empty starter: authentication, authorization, persistence, observability,
-background work, deployment, and security are approached through sensible defaults and
-explicit conventions.
+Hegira is a production-oriented, opinionated application foundation built around Axum,
+Leptos, SQLx, an ABP-inspired layered architecture, and DDD-oriented layers. Its canonical
+full-stack template provides more than an empty starter: authentication, authorization,
+persistence, observability, background work, deployment, and security are approached through
+sensible defaults and explicit conventions.
 
 The product and its destination remain yours. Hegira provides a proven path through recurring
 architectural and infrastructure decisions so that development can focus on the application
@@ -58,10 +58,30 @@ The template supports a containers-free SQLite development profile and a Postgre
 profile. Redis, Meilisearch, S3, SMTP, Prometheus, and OpenTelemetry remain optional compile-time
 capabilities.
 
+## Repository Model
+
+Hegira separates reusable framework code from official modules and generated application
+ownership:
+
+| Surface | Responsibility |
+|---|---|
+| `crates/` | Application-independent framework primitives, layered compatibility packages, providers, and runtime support |
+| `modules/identity/` | Canonical source for the official layered Identity module and its SQLx, Axum, and Leptos adapters |
+| `templates/applications/layered/` | Workspace-external, brand-neutral layered application base with application-owned server, web, configuration, migration composition, and deployment files |
+| `templates/components/` | Typed component manifests that define the canonical application composition |
+| `tools/template_renderer/` | Internal deterministic renderer used by repository validation; it is not a public CLI |
+| `apps/hegira/` | Current deployable compatibility host used to validate framework integration |
+
+The canonical rendered application is an independent Cargo workspace and consumes framework
+packages from a pinned release source. Releases are source-first, and the repository does not
+currently implement a public application-generation command.
+
 ## Quick Start
 
-Run the following commands from the repository root. The root coordinates the
-Cargo workspace, while the deployable package lives at `apps/hegira`.
+Run the following commands from the repository root to start the current compatibility host.
+The root coordinates the Cargo workspace, while the deployable package lives at
+`apps/hegira`. See [Architecture](docs/architecture.md) for the separate canonical generated
+application contract.
 
 Install the Rust WASM target, `cargo-leptos`, and lockfile-pinned frontend
 tooling:
@@ -90,6 +110,7 @@ configured in `config/sqlite.yaml`.
 - [Deployment](docs/deployment.md)
 - [Operations](docs/operations.md)
 - [Maintainer workflow](docs/maintainers.md)
+- [Contribution policy](CONTRIBUTING.md)
 - [Security policy](SECURITY.md)
 - [Changelog](CHANGELOG.md)
 
@@ -101,14 +122,21 @@ Validate repository governance and workspace dependency boundaries:
 sh scripts/repository-policy.sh
 ```
 
-Run the same local backend gate used by CI:
+Run the aggregate backend gate for framework, official-module, and template ownership:
 
 ```sh
 sh scripts/backend-check.sh
 ```
 
-The CI quality job also sets `WITH_IGNORED_DB_TESTS=true` and supplies a
-disposable PostgreSQL `DATABASE_URL`. Verify the full-stack release outputs
+Validate the canonical rendered application, including its fresh and upgrade migration paths,
+production image, and HTTP contract, with disposable Docker state:
+
+```sh
+sh scripts/generated-application-check.sh
+```
+
+The CI framework and official-module jobs also set `WITH_IGNORED_DB_TESTS=true` and supply
+disposable PostgreSQL databases. Verify the compatibility host's full-stack release outputs
 without creating a platform archive:
 
 ```sh
@@ -142,8 +170,8 @@ cancelled.
 
 Release automation publishes source-first GitHub Releases only for stable
 `vMAJOR.MINOR.PATCH` tags. GitHub provides the source archives, and the
-source-scoped SPDX SBOM is the only custom release asset. CI validates the
-full-stack build and production container; it does not publish an executable,
+source-scoped SPDX SBOM is the only custom release asset. Release automation validates the
+compatibility host's full-stack build and production container; it does not publish an executable,
 container image, preview application, public URL, or GitHub Environment. See
 the [maintainer workflow](docs/maintainers.md) for the complete trigger and
 release contract.

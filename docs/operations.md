@@ -4,9 +4,12 @@ This guide covers routine production operation after an image has been built
 and deployed. Build and topology decisions are documented in
 [Deployment](deployment.md).
 
-Run repository commands in this guide from the repository root. The application
-package is located at `apps/hegira`, while operational database commands are
-provided by the `db_migrator` package under `crates/db_migrator`.
+Run repository commands in this guide from the repository root. They operate on the current
+compatibility host at `apps/hegira`; its database commands are provided by the `db_migrator`
+package under `crates/db_migrator`. A canonical rendered application owns equivalent
+configuration, migration, and deployment surfaces within its independent workspace. Adapt
+package and image names to that application rather than coupling operations to the framework
+checkout.
 
 ## Migrations And Seed
 

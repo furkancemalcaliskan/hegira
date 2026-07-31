@@ -1,11 +1,26 @@
 # Getting Started
 
-This guide starts the complete Leptos and Axum application locally. Use SQLite
-for a zero-service development environment or PostgreSQL when database-specific
-behavior must match production.
+This guide starts the repository's current Axum and Leptos compatibility host locally. It is
+the deployable integration surface used while framework packages, the official Identity
+module, and the canonical layered application template are validated independently. Use SQLite
+for a zero-service development environment or PostgreSQL when database-specific behavior must
+match production.
 
 Run the commands in this guide from the repository root. It is the Cargo
-workspace entry point; the deployable package is located at `apps/hegira`.
+workspace entry point; the compatibility host package is located at `apps/hegira`. The
+repository does not currently provide a public application-generation command.
+
+## Repository Surfaces
+
+| Location | Current role |
+|---|---|
+| `apps/hegira/` | Deployable compatibility host started by this guide |
+| `crates/` | Framework primitives, providers, runtime support, and compatibility packages |
+| `modules/identity/` | Canonical official Identity module source and adapters |
+| `templates/applications/layered/` | Independent layered application source rendered during validation |
+| `tools/template_renderer/` | Internal validation renderer, not a public CLI |
+
+See [Architecture](architecture.md) for package ownership and dependency direction.
 
 ## Prerequisites
 
@@ -81,10 +96,20 @@ cargo run -p hegira --no-default-features --features ssr,db-sqlite,openapi
 ## Verify The Workspace
 
 ```sh
-cargo fmt --all -- --check
-cargo clippy --workspace --all-targets --all-features -- -D warnings
-cargo test --workspace --all-features
+sh scripts/repository-policy.sh
+sh scripts/backend-check.sh
 ```
+
+Template or generated-application changes additionally require:
+
+```sh
+sh scripts/layered-template-check.sh
+sh scripts/generated-application-check.sh
+```
+
+The generated-application check requires Docker and creates only disposable rendered output,
+containers, and databases. PostgreSQL tests marked `ignored` reset their target database and
+must never point at persistent or production data.
 
 The default test matrix runs without external Redis, Meilisearch, S3, or SMTP.
 See [Configuration](configuration.md) before enabling optional capabilities and
