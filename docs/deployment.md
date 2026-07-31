@@ -97,11 +97,11 @@ GitHub Release. GitHub provides `.zip` and `.tar.gz` archives of the tagged
 source; the only custom release asset is an SPDX JSON SBOM generated from that
 source checkout.
 
-The release workflow currently verifies the compatibility host's minimal PostgreSQL full-stack
-build and production container. Those are validation contracts for users building and
-deploying their own application, not published binaries or images. Hegira does
+The release workflow validates framework packages, official modules, the canonical template,
+and the rendered application's database, build, HTTP, security, and production-container
+contracts. These are source-distribution gates, not published binaries or images. Hegira does
 not publish a platform-specific executable, Linux application bundle, official
-container image, preview application, or production deployment.
+container image, crate, CLI package, preview application, or production deployment.
 
 ## Database Release Step
 
