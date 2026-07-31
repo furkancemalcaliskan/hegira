@@ -4,6 +4,64 @@ All notable changes are documented here. Releases follow Semantic Versioning.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-01
+
+### Added
+
+- Added application-independent platform packages for configuration,
+  persistence, background work, HTTP policy, Leptos integration,
+  observability, runtime lifecycle, capability identity, and test support.
+- Added the official layered Identity module with canonical Domain Shared,
+  Domain, Application Contracts, Application, SQLx, Axum HTTP, and Leptos
+  adapter packages.
+- Added a workspace-external, brand-neutral layered application template with
+  application-owned server, web, configuration, migration composition, and
+  production container surfaces.
+- Added typed component manifests and an internal deterministic, atomic
+  template renderer for repository validation.
+- Added generated-application validation for fresh SQLite and PostgreSQL
+  databases, supported v0.2.0 upgrades, production images, hydration assets,
+  HTTP security, and unauthenticated Bearer behavior.
+
+### Changed
+
+- Replaced the sample Catalog capability and UI with a neutral authenticated
+  dashboard while preserving historical migration compatibility.
+- Established repository ownership boundaries for framework packages,
+  official modules, application templates, internal tooling, and deployable
+  applications.
+- Made module HTTP and Leptos integration explicit at application composition
+  roots instead of relying on automatic discovery or publication.
+- Split repository validation into framework, official-module, template, and
+  generated-application gates aggregated by the stable `quality` check.
+- Updated architecture, setup, deployment, operations, contribution, agent,
+  and maintainer documentation to describe the implemented repository model.
+- Aligned release automation with source-only framework distribution and
+  removed compatibility-host application builds from the release contract.
+
+### Security
+
+- Preserved cookie/BFF and Bearer API policy separation across the extracted
+  Identity HTTP adapter and explicit host composition.
+- Kept release workflows read-only by default, restricted publication to the
+  tag-triggered job, and prohibited crate, CLI, container-registry, and other
+  package publication.
+- Retained immutable releases, the source-scoped SPDX SBOM, and GitHub release
+  attestations without publishing application or deployment artifacts.
+
+### Upgrade And Maintainer Notes
+
+- Framework source now spans `crates/`, `modules/identity/`,
+  `templates/applications/layered/`, and `tools/template_renderer/`.
+  `apps/hegira/` remains the compatibility host for framework integration.
+- PostgreSQL and SQLite upgrades from v0.2.0 are validated. Historical Catalog
+  migration identities and checksums remain immutable while Catalog runtime
+  state is retired.
+- The canonical layered template consumes framework packages from the pinned
+  `v0.3.0` source tag. The internal renderer is not a public CLI.
+- This release does not publish Cargo crates, a `hegira` CLI, prebuilt
+  executables, container images, or preview deployments.
+
 ## [0.2.0] - 2026-07-23
 
 ### Added

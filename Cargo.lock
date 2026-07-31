@@ -67,7 +67,7 @@ checksum = "2a4385e2e34eb35d6b3efe798b9eb88096925d87726c0798709bf56d9ed84af3"
 
 [[package]]
 name = "application"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "application_contracts",
  "background_jobs",
@@ -85,7 +85,7 @@ dependencies = [
 
 [[package]]
 name = "application_contracts"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "chrono",
  "domain",
@@ -700,7 +700,7 @@ dependencies = [
 
 [[package]]
 name = "background_jobs"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "serde_json",
  "tokio",
@@ -983,7 +983,7 @@ dependencies = [
 
 [[package]]
 name = "configuration"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "config",
 ]
@@ -1266,7 +1266,7 @@ checksum = "a4ae5f15dda3c708c0ade84bfee31ccab44a3da4f88015ed22f63732abe300c8"
 
 [[package]]
 name = "db_migrator"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "infrastructure",
  "persistence",
@@ -1358,7 +1358,7 @@ dependencies = [
 
 [[package]]
 name = "domain"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "chrono",
  "domain_shared",
@@ -1367,7 +1367,7 @@ dependencies = [
 
 [[package]]
 name = "domain_shared"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "serde_json",
 ]
@@ -1833,7 +1833,7 @@ checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
 name = "hegira"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "application",
  "application_contracts",
@@ -1979,7 +1979,7 @@ checksum = "9171a2ea8a68358193d15dd5d70c1c10a2afc3e7e4c5bc92bc9f025cebd7359c"
 
 [[package]]
 name = "http_support"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "axum",
  "http-body-util",
@@ -2233,7 +2233,7 @@ checksum = "b9e0384b61958566e926dc50660321d12159025e767c18e043daf26b70104c39"
 
 [[package]]
 name = "identity_application"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "chrono",
  "domain_shared",
@@ -2251,7 +2251,7 @@ dependencies = [
 
 [[package]]
 name = "identity_application_contracts"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "chrono",
  "domain_shared",
@@ -2265,7 +2265,7 @@ dependencies = [
 
 [[package]]
 name = "identity_domain"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "chrono",
  "identity_domain_shared",
@@ -2274,11 +2274,11 @@ dependencies = [
 
 [[package]]
 name = "identity_domain_shared"
-version = "0.2.0"
+version = "0.3.0"
 
 [[package]]
 name = "identity_http"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "application",
  "application_contracts",
@@ -2300,7 +2300,7 @@ dependencies = [
 
 [[package]]
 name = "identity_leptos"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "application",
  "application_contracts",
@@ -2317,7 +2317,7 @@ dependencies = [
 
 [[package]]
 name = "identity_sqlx"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "chrono",
  "identity_application",
@@ -2366,7 +2366,7 @@ dependencies = [
 
 [[package]]
 name = "infrastructure"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "application",
  "application_contracts",
@@ -2714,7 +2714,7 @@ dependencies = [
 
 [[package]]
 name = "leptos_support"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "leptos",
  "serde",
@@ -3053,7 +3053,7 @@ dependencies = [
 
 [[package]]
 name = "observability"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "axum",
  "background_jobs",
@@ -3261,7 +3261,7 @@ checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 
 [[package]]
 name = "persistence"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "serde",
  "sqlx",
@@ -3377,7 +3377,7 @@ checksum = "b4596b6d070b27117e987119b4dac604f3c58cfb0b191112e24771b2faeac1a6"
 
 [[package]]
 name = "platform_core"
-version = "0.2.0"
+version = "0.3.0"
 
 [[package]]
 name = "portable-atomic"
@@ -3411,7 +3411,7 @@ dependencies = [
 
 [[package]]
 name = "presentation"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "application",
  "application_contracts",
@@ -4020,7 +4020,7 @@ dependencies = [
 
 [[package]]
 name = "runtime"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "serde",
  "tokio",
@@ -4860,7 +4860,7 @@ dependencies = [
 
 [[package]]
 name = "template_renderer"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "serde",
  "toml",
@@ -4868,7 +4868,7 @@ dependencies = [
 
 [[package]]
 name = "test_support"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "application",
  "axum",
@@ -5718,7 +5718,7 @@ dependencies = [
 
 [[package]]
 name = "web"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "application",
  "application_contracts",
