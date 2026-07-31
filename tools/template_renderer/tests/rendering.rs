@@ -73,6 +73,38 @@ fn repository_validation_can_patch_framework_dependencies_locally() {
 }
 
 #[test]
+fn repository_validation_can_use_a_safe_relative_framework_path() {
+    let repository = repository_root();
+    let output_parent = TestDirectory::new("relative-framework-patch");
+    let output = output_parent.path().join("application");
+    let mut request = canonical_request(&repository, output.clone());
+    request.framework_root = Some(repository);
+    request.framework_path = Some(PathBuf::from(".hegira-validation/framework"));
+
+    render(&request).expect("relative framework patch should succeed");
+
+    let manifest = fs::read_to_string(output.join("Cargo.toml")).expect("manifest should exist");
+    assert!(manifest.contains(
+        r#"application = { path = ".hegira-validation/framework/crates/application", default-features = false }"#
+    ));
+}
+
+#[test]
+fn unsafe_relative_framework_paths_are_rejected_before_output() {
+    let repository = repository_root();
+    let output_parent = TestDirectory::new("unsafe-framework-patch");
+    let output = output_parent.path().join("application");
+    let mut request = canonical_request(&repository, output.clone());
+    request.framework_root = Some(repository);
+    request.framework_path = Some(PathBuf::from("../framework"));
+
+    let error = render(&request).expect_err("unsafe framework path should fail");
+
+    assert!(error.to_string().contains("unsafe component"));
+    assert!(!output.exists());
+}
+
+#[test]
 fn missing_component_fails_before_creating_output() {
     let fixture = Fixture::new("missing-component");
     fixture.write_template("components = [\"feature\"]\n");
@@ -203,6 +235,7 @@ fn canonical_request(repository: &Path, output: PathBuf) -> RenderRequest {
         output,
         variables: BTreeMap::new(),
         framework_root: None,
+        framework_path: None,
     }
 }
 
@@ -273,6 +306,7 @@ impl Fixture {
             output,
             variables: BTreeMap::new(),
             framework_root: None,
+            framework_path: None,
         }
     }
 }

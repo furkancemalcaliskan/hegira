@@ -22,6 +22,7 @@ fn run() -> Result<(), String> {
     let mut template = None;
     let mut output = None;
     let mut framework_root = None;
+    let mut framework_path = None;
     let mut variables = BTreeMap::new();
 
     while let Some(flag) = arguments.next() {
@@ -31,6 +32,7 @@ fn run() -> Result<(), String> {
             "--template" => template = Some(value),
             "--output" => output = Some(PathBuf::from(value)),
             "--framework-root" => framework_root = Some(PathBuf::from(value)),
+            "--framework-path" => framework_path = Some(PathBuf::from(value)),
             "--set" => {
                 let (name, value) = value
                     .split_once('=')
@@ -52,6 +54,7 @@ fn run() -> Result<(), String> {
         output: output.ok_or_else(usage)?,
         variables,
         framework_root,
+        framework_path,
     };
     let result = render(&request).map_err(|error| error.to_string())?;
     println!(
@@ -65,5 +68,5 @@ fn run() -> Result<(), String> {
 }
 
 fn usage() -> String {
-    "usage: template_renderer render --repository-root <path> --template <id> --output <path> [--framework-root <path>] [--set NAME=VALUE]".to_string()
+    "usage: template_renderer render --repository-root <path> --template <id> --output <path> [--framework-root <path>] [--framework-path <path>] [--set NAME=VALUE]".to_string()
 }

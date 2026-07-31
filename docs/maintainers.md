@@ -155,6 +155,24 @@ The destination must not already exist. Component manifests declare their
 requirements, conflicts, source inputs, and repository-validation dependency
 patches. They cannot execute shell commands.
 
+Validate a rendered application against both database providers, the supported
+v0.2.0 database upgrade, and the production container contract:
+
+```sh
+sh scripts/generated-application-check.sh
+```
+
+The check renders into a disposable directory, runs SQLite fresh-install and
+upgrade tests in memory, and starts an ephemeral PostgreSQL container for the
+equivalent PostgreSQL contracts. It then builds the rendered application image,
+boots it against the disposable database, and verifies readiness, hydration
+assets, security headers, and unauthenticated Bearer API behavior. The check
+stages a credential-free framework source view under the disposable render so
+the same relative Cargo paths work on the host and inside the Docker build. It
+generates runtime-only database and JWT values and removes its containers,
+network, database state, and rendered output on exit. It never targets the
+maintainer's configured database.
+
 To reproduce pull request metadata validation with a saved GitHub
 `pull_request` event:
 

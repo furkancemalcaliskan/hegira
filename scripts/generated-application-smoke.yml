@@ -1,0 +1,34 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: generated_app
+      POSTGRES_PASSWORD: ${GENERATED_APP_DB_PASSWORD:?required}
+      POSTGRES_DB: generated_app
+    ports:
+      - "127.0.0.1:${GENERATED_APP_POSTGRES_PORT:?required}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U generated_app -d generated_app"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  web:
+    image: ${GENERATED_APP_IMAGE:?required}
+    environment:
+      APP_ENV: production
+      APP__DATABASE__URL: postgres://generated_app:${GENERATED_APP_DB_PASSWORD}@postgres:5432/generated_app
+      APP__SECURITY__JWT_SECRET: ${GENERATED_APP_JWT_SECRET:?required}
+      APP__STARTUP__SEED_IDENTITY: "false"
+      APP__STARTUP__SCHEDULER: "false"
+      APP__STARTUP__DURABLE_JOBS: "false"
+    ports:
+      - "127.0.0.1:${GENERATED_APP_HTTP_PORT}:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:3000/healthz"]
+      interval: 2s
+      timeout: 3s
+      retries: 30

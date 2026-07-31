@@ -9,6 +9,7 @@ a22af5c5aaf36269 apps/server/Cargo.toml
 9ea27e2845c55bb5 apps/server/src/main.rs
 9137cc302763d0ec apps/server/src/server.rs
 64d553e09dfc58a4 apps/server/src/worker_operations.rs
+f9defabfa1d3eaba apps/server/tests/database_contracts.rs
 55108516b520af34 apps/web/Cargo.toml
 bc6b4dcf62969ffd apps/web/src/dashboard.rs
 9f528f501fc2261b apps/web/src/lib.rs

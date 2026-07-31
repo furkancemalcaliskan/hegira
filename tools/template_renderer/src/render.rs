@@ -17,6 +17,7 @@ pub struct RenderRequest {
     pub output: PathBuf,
     pub variables: BTreeMap<String, String>,
     pub framework_root: Option<PathBuf>,
+    pub framework_path: Option<PathBuf>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -73,7 +74,10 @@ fn build_plan(request: &RenderRequest) -> Result<RenderPlan> {
 
     reject_repository_path_leaks(catalog.repository_root(), &files)?;
     if let Some(framework_root) = &request.framework_root {
-        apply_framework_patches(framework_root, &components, &mut files)?;
+        let framework_path = request.framework_path.as_deref().unwrap_or(framework_root);
+        apply_framework_patches(framework_root, framework_path, &components, &mut files)?;
+    } else if request.framework_path.is_some() {
+        return Err(RendererError::new("framework_path requires framework_root"));
     }
 
     Ok(RenderPlan {
@@ -301,6 +305,7 @@ fn reject_repository_path_leaks(
 
 fn apply_framework_patches(
     framework_root: &Path,
+    framework_path: &Path,
     components: &[&ComponentManifest],
     files: &mut BTreeMap<PathBuf, PlannedFile>,
 ) -> Result<()> {
@@ -316,6 +321,7 @@ fn apply_framework_patches(
             framework_root.display()
         )));
     }
+    validate_framework_path(framework_path)?;
 
     for component in components {
         for dependency in &component.framework_dependencies {
@@ -340,7 +346,25 @@ fn apply_framework_patches(
                     dependency.manifest.display()
                 ))
             })?;
-            patch_dependency(planned, dependency, &dependency_root)?;
+            patch_dependency(planned, dependency, &framework_path.join(&dependency.path))?;
+        }
+    }
+    Ok(())
+}
+
+fn validate_framework_path(path: &Path) -> Result<()> {
+    if path.as_os_str().is_empty() {
+        return Err(RendererError::new("framework_path may not be empty"));
+    }
+    if path.is_absolute() {
+        return Ok(());
+    }
+    for component in path.components() {
+        if !matches!(component, std::path::Component::Normal(_)) {
+            return Err(RendererError::new(format!(
+                "relative framework_path contains an unsafe component: {}",
+                path.display()
+            )));
         }
     }
     Ok(())
