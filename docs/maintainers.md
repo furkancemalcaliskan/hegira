@@ -122,9 +122,10 @@ until that workflow's source-distribution contract changes.
 
 ## Local Validation
 
-Run the commands in this section from the repository root. The root virtual
-workspace coordinates validation for the deployable `apps/hegira` package and
-the reusable packages under `crates/`.
+Run the commands in this section from the repository root. The root virtual workspace
+coordinates the compatibility host under `apps/hegira`, framework and compatibility packages
+under `crates/`, official module packages under `modules/`, the workspace-external application
+base under `templates/`, and internal repository tooling under `tools/`.
 
 Validate repository documentation, agent adapters, and policy fixtures:
 
@@ -201,14 +202,24 @@ Run the backend gate without ignored PostgreSQL tests:
 sh scripts/backend-check.sh
 ```
 
+This aggregate runs the framework/host, official-module, and canonical layered-template
+checks. Run an ownership gate directly while iterating when the change is confined to that
+surface:
+
+```sh
+sh scripts/framework-check.sh
+sh scripts/official-modules-check.sh
+sh scripts/layered-template-check.sh
+```
+
 Verify the full-stack release outputs without creating a release archive:
 
 ```sh
 sh scripts/full-stack-build-check.sh
 ```
 
-To match the CI quality job, provide a disposable PostgreSQL database and opt
-in to destructive ignored tests:
+To include the framework and official-module gates' ignored PostgreSQL tests locally, provide
+a disposable PostgreSQL database and opt in explicitly:
 
 ```sh
 APP_ENV=test \

@@ -4,6 +4,12 @@ Hegira uses an ABP-inspired layered design adapted to Rust, Axum, Leptos, and
 explicit compile-time composition. It avoids runtime reflection, assembly
 scanning, ambient request transactions, and a universal repository.
 
+This repository has three distinct application-facing roles. `crates/` and official modules
+are the reusable framework source, `templates/applications/layered/` is the canonical source
+for an independently owned generated application, and `apps/hegira/` is the current deployable
+compatibility host used to exercise framework integration. The compatibility host is not the
+generated application's ownership model, and the internal renderer is not a public CLI.
+
 ## Dependency Direction
 
 The deployable package selects and composes reusable workspace packages. Within
@@ -275,7 +281,7 @@ while application services continue to authorize protected operations.
 The authenticated web surface starts from a neutral dashboard instead of
 composing a sample business capability.
 
-## Application Composition And Build Ownership
+## Compatibility Host And Generated Application Ownership
 
 `apps/hegira/Cargo.toml` is the package-level composition root. It forwards
 database and optional capability features to the packages that implement them,
