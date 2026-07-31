@@ -1,4 +1,4 @@
-name: backend
+name: repository-validation
 
 on:
   push:
@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: backend-${{ github.event.pull_request.number || github.ref }}
+  group: repository-validation-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -54,15 +54,17 @@ jobs:
           --features "${{ matrix.features }}"
           ${{ matrix.target_args }}
 
-  quality:
+  framework:
+    name: framework
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     services:
       postgres:
         image: postgres:17-alpine
         env:
           POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
           POSTGRES_DB: hegira_test
+          POSTGRES_HOST_AUTH_METHOD: trust
         ports:
           - 5432:5432
         options: >-
@@ -71,7 +73,7 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      DATABASE_URL: postgres://postgres:postgres@localhost:5432/hegira_test
+      DATABASE_URL: postgres://postgres@localhost:5432/hegira_test
       APP_ENV: test
     steps:
       - uses: actions/checkout@v7
@@ -80,7 +82,94 @@ jobs:
           targets: wasm32-unknown-unknown
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
-      - run: WITH_IGNORED_DB_TESTS=true sh scripts/backend-check.sh
+      - name: Validate framework crates and host composition
+        run: WITH_IGNORED_DB_TESTS=true sh scripts/framework-check.sh
+
+  official-modules:
+    name: official-modules
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_DB: hegira_test
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d hegira_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres@localhost:5432/hegira_test
+      APP_ENV: test
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.96.1
+        with:
+          targets: wasm32-unknown-unknown
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Validate official modules and host integration
+        run: WITH_IGNORED_DB_TESTS=true sh scripts/official-modules-check.sh
+
+  templates:
+    name: templates
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.96.1
+        with:
+          targets: wasm32-unknown-unknown
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-leptos@0.3.7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: templates/applications/layered/apps/web/src/package-lock.json
+      - name: Validate template manifests and rendering
+        run: sh scripts/layered-template-check.sh
+
+  generated-application:
+    name: generated-application
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.96.1
+      - uses: Swatinem/rust-cache@v2
+      - name: Validate generated applications and production container
+        run: sh scripts/generated-application-check.sh
+
+  quality:
+    name: quality
+    if: always()
+    needs:
+      - framework
+      - official-modules
+      - templates
+      - generated-application
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every repository ownership gate
+        env:
+          FRAMEWORK_RESULT: ${{ needs.framework.result }}
+          MODULES_RESULT: ${{ needs.official-modules.result }}
+          TEMPLATES_RESULT: ${{ needs.templates.result }}
+          GENERATED_APPLICATION_RESULT: ${{ needs.generated-application.result }}
+        run: |
+          test "$FRAMEWORK_RESULT" = success
+          test "$MODULES_RESULT" = success
+          test "$TEMPLATES_RESULT" = success
+          test "$GENERATED_APPLICATION_RESULT" = success
 
   supply-chain:
     runs-on: ubuntu-latest

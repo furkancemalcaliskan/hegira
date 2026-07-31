@@ -140,6 +140,13 @@ sh scripts/repository-policy.sh
 sh scripts/backend-check.sh
 ```
 
+Focused framework and official-module validation:
+
+```sh
+sh scripts/framework-check.sh
+sh scripts/official-modules-check.sh
+```
+
 Focused workspace dependency-boundary validation:
 
 ```sh
