@@ -62,9 +62,7 @@ authorized change requirements are defined in
 | Workflow | Pull request | Branch push | Manual | Tag | Side effect |
 |---|---|---|---|---|---|
 | `repository-policy` | Targets `develop` or `main` | No | No | No | Validation only |
-| `backend` | Targets `develop` or `main` | `develop` or `main` | Yes | No | Validation only |
-| `full-stack-build` | Targets `develop` or `main`, with packaging path filters | `develop` or `main`, with packaging path filters | Yes | No | Validation only |
-| `production-container-smoke` | Targets `develop` or `main`, with production path filters | `develop` or `main`, with production path filters | Yes | No | Disposable local containers only |
+| `repository-validation` | Targets `develop` or `main` | `develop` or `main` | Yes | No | Validation with disposable databases and containers |
 | `release` | No | No | `main` only | Push matching `v*.*.*` | Manual: validation artifacts; tag: source-first GitHub Release |
 
 The `repository-policy` workflow validates every pull request to a protected
@@ -74,36 +72,53 @@ source-first release contract, together with the supported Dependabot and
 release promotion exceptions. It uses no secrets and has read-only repository
 permission.
 
-Add the exact `repository-policy` status check to the required checks for both
-`develop` and `main`. The check must pass before merge.
+Keep these exact status checks required for both `develop` and `main`:
+
+- `repository-policy`
+- `quality`
+- `supply-chain`
+- `feature-matrix (sqlite-server)`
+- `feature-matrix (postgres-server)`
+- `feature-matrix (wasm-hydrate)`
+- `feature-matrix (observability)`
+- `feature-matrix (distributed-providers)`
+
+The stable `quality` context is an aggregate gate. It reports failure unless
+the `framework`, `official-modules`, `templates`, and `generated-application`
+jobs all succeed. Generated-application database, release-build, production
+container, and HTTP/security validation is therefore release-blocking without
+requiring a new protected-branch context.
 
 A plain push to an issue branch does not trigger the push-based validation
 workflows. Updating an open pull request triggers its `pull_request` checks.
 Validation workflows cancel superseded runs for the same pull request or
 integration ref.
 
-The backend workflow contains three gates:
+The repository validation workflow separates these responsibilities:
 
 - `feature-matrix` compiles SQLite, PostgreSQL, WASM hydration, observability,
   and distributed-provider capability sets;
-- `quality` runs formatting, DX, Clippy, Identity module, explicit host
-  composition, SQLx and HTTP adapter tests, provider checks, library tests,
-  and ignored PostgreSQL migration compatibility and integration tests against
-  a disposable service;
+- `framework` validates framework crates, host composition, provider contracts,
+  and ignored PostgreSQL integration tests against a disposable service;
+- `official-modules` validates the canonical Identity layers and their host
+  integration against a separate disposable PostgreSQL service;
+- `templates` validates manifests, deterministic rendering, the workspace-
+  external layered application, hydration, and release output;
+- `generated-application` validates fresh SQLite and PostgreSQL applications,
+  the supported v0.2.0 upgrade, and the rendered production container;
+- `quality` aggregates the four repository ownership gates under the existing
+  required status context;
 - `supply-chain` runs dependency policy and vulnerability checks.
 
-The full-stack build workflow is path-filtered to the deployable package,
-workspace crates, frontend inputs, and packaging configuration. It installs
-frontend dependencies from the committed npm lockfile, resolves Tailwind from
-the repository-local installation, builds the PostgreSQL server and database
-migrator, builds the hydrated frontend, and verifies the server, migrator,
-WebAssembly, JavaScript, CSS, and branding outputs. It does not create a
-platform archive or perform a deployment.
+The two PostgreSQL service containers use trust authentication only inside
+their isolated GitHub-hosted runners. They contain disposable test data, expose
+no repository secret, and are destroyed with the runner after validation.
 
-The container workflow is deliberately path-filtered to production build,
-configuration, Rust source, and smoke-test inputs. It builds the default
-`ssr,db-postgres` image, migrates a disposable PostgreSQL database, verifies
-health, readiness, HTML, CSS, and JavaScript, then removes the stack.
+The former standalone full-stack and production-container pull-request
+workflows are removed because the template and generated-application jobs own
+those contracts. Their scripts remain available for focused validation of the
+repository's current deployable package and remain used by release automation
+until that workflow's source-distribution contract changes.
 
 ## Local Validation
 
