@@ -117,8 +117,7 @@ no repository secret, and are destroyed with the runner after validation.
 The former standalone full-stack and production-container pull-request
 workflows are removed because the template and generated-application jobs own
 those contracts. Their scripts remain available for focused validation of the
-repository's current deployable package and remain used by release automation
-until that workflow's source-distribution contract changes.
+repository's current compatibility host but are not framework release gates.
 
 ## Local Validation
 
@@ -241,19 +240,26 @@ Never point the ignored database tests at persistent or production data.
 Hegira is distributed as source. A release consists of an immutable signed
 stable SemVer tag, a GitHub Release, versioned release notes, GitHub-provided
 source archives, and a source-scoped SPDX JSON SBOM. It does not contain a
-platform executable, application bundle, official container image, or
-deployment.
+platform executable, application bundle, published crate or CLI package,
+official container image, or deployment.
 
 The `release` workflow supports manual release-candidate validation from
 `main` and publication from a pushed `vMAJOR.MINOR.PATCH` tag. Both paths:
 
 - verify that the release ref, every workspace package version, the dated
   changelog entry, and the versioned release-note identity agree;
+- verify that registry publication remains disabled for every workspace
+  package;
 - generate and verify an SPDX JSON SBOM from a clean checkout before build
   outputs exist;
-- verify the full-stack PostgreSQL server, migrator, hydrated frontend, and
-  branding outputs;
-- build and smoke-test the production container against disposable PostgreSQL.
+- validate framework packages and the compatibility host, including their
+  database-backed contracts against disposable PostgreSQL;
+- validate official Identity module packages and integration against a
+  separate disposable PostgreSQL database;
+- validate typed template rendering, the independent layered workspace,
+  hydration, and release output;
+- validate fresh SQLite and PostgreSQL generated applications, supported
+  v0.2.0 upgrades, and the rendered production container and HTTP contract.
 
 A manual run uploads the source SBOM as a short-lived workflow artifact but
 cannot execute the publication job. A push to `develop` or `main` never creates
@@ -287,10 +293,13 @@ automatically provides `.zip` and `.tar.gz` source archives for the tagged
 source.
 
 Enable GitHub's release immutability setting for the repository. Publication
-then locks the associated tag and uploaded SBOM asset. Published tags and
-releases must not be deleted, moved, recreated, or replaced. Correct a released
-defect with a new patch version. The workflow creates a new release and never
-updates an existing one.
+then locks the associated tag and uploaded SBOM asset and automatically creates
+a release attestation covering the release tag, commit, and assets. Verify an
+immutable published release with `gh release verify vX.Y.Z`, and verify a
+downloaded SBOM with `gh release verify-asset vX.Y.Z <path>`. Published tags
+and releases must not be deleted, moved, recreated, or replaced. Correct a
+released defect with a new patch version. The workflow creates a new release
+and never updates an existing one.
 
 Versioned release notes are historical records. The v0.1.x notes continue to
 describe the platform bundle artifacts actually published for those versions;

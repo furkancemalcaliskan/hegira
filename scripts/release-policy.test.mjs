@@ -15,11 +15,13 @@ function metadata(overrides = {}) {
     id: "hegira 0.2.0 (path+file:///workspace/apps/hegira)",
     name: "hegira",
     version: "0.2.0",
+    publish: [],
   };
   const domain = {
     id: "domain 0.2.0 (path+file:///workspace/crates/domain)",
     name: "domain",
     version: "0.2.0",
+    publish: [],
   };
   return {
     workspace_members: [hegira.id, domain.id],
@@ -53,18 +55,33 @@ jobs:
       - uses: anchore/sbom-action@v0
         with:
           upload-release-assets: false
-  full-stack:
+  framework:
     steps:
-      - run: sh scripts/full-stack-build-check.sh
-  container:
+      - run: sh scripts/framework-check.sh
+  official-modules:
     steps:
-      - run: sh scripts/container-smoke.sh
+      - run: sh scripts/official-modules-check.sh
+  templates:
+    steps:
+      - run: sh scripts/layered-template-check.sh
+  generated-application:
+    steps:
+      - run: sh scripts/generated-application-check.sh
   publish:
     if: github.event_name == 'push'
+    needs:
+      - validate
+      - framework
+      - official-modules
+      - templates
+      - generated-application
     permissions:
       contents: write
     steps:
-      - run: gh release create --verify-tag --title "$RELEASE_REF"
+      - run: >-
+          gh release create
+          "dist/hegira-$RELEASE_REF.spdx.json#Source SPDX SBOM"
+          --verify-tag --title "$RELEASE_REF"
 `;
 
 test("accepts consistent workspace versions", () => {
@@ -83,6 +100,17 @@ test("rejects a mismatched workspace package version", () => {
   assert.ok(
     errors.some(
       (error) => error.includes("domain") && error.includes("0.1.2"),
+    ),
+  );
+});
+
+test("rejects a publishable workspace package", () => {
+  const fixture = metadata();
+  fixture.packages[1].publish = null;
+  const errors = validateReleaseMetadata(fixture, "v0.2.0");
+  assert.ok(
+    errors.some((error) =>
+      error.includes("registry publication is not disabled"),
     ),
   );
 });
@@ -120,7 +148,7 @@ test("rejects missing versioned release notes", (context) => {
   assert.ok(errors.some((error) => error.includes("missing or empty")));
 });
 
-test("accepts the source-first release workflow contract", () => {
+test("accepts the source-only framework release workflow contract", () => {
   assert.deepEqual(validateReleaseWorkflow(validWorkflow), []);
 });
 
@@ -138,6 +166,16 @@ test("rejects a prefixed GitHub Release title", () => {
   );
 });
 
+test("rejects a missing source SBOM release asset", () => {
+  const errors = validateReleaseWorkflow(
+    validWorkflow.replace(
+      '"dist/hegira-$RELEASE_REF.spdx.json#Source SPDX SBOM"',
+      '"dist/unrelated.txt"',
+    ),
+  );
+  assert.ok(errors.some((error) => error.includes("source SBOM release asset")));
+});
+
 test("rejects obsolete Linux bundle publication", () => {
   const errors = validateReleaseWorkflow(
     `${validWorkflow}\narchive: hegira-v0.2.0-linux-x86_64.tar.gz\n`,
@@ -145,12 +183,50 @@ test("rejects obsolete Linux bundle publication", () => {
   assert.ok(errors.some((error) => error.includes("Linux application bundle")));
 });
 
-test("rejects a missing production container gate", () => {
+test("rejects a missing generated application gate", () => {
   const errors = validateReleaseWorkflow(
-    validWorkflow.replace("sh scripts/container-smoke.sh", "true"),
+    validWorkflow.replace("sh scripts/generated-application-check.sh", "true"),
   );
   assert.ok(
-    errors.some((error) => error.includes("production container validation")),
+    errors.some((error) => error.includes("generated application validation")),
+  );
+});
+
+test("rejects compatibility-host release validation", () => {
+  const errors = validateReleaseWorkflow(
+    `${validWorkflow}\nrun: sh scripts/full-stack-build-check.sh\n`,
+  );
+  assert.ok(
+    errors.some((error) =>
+      error.includes("compatibility-host full-stack validation"),
+    ),
+  );
+});
+
+test("rejects Cargo registry publication", () => {
+  const errors = validateReleaseWorkflow(
+    `${validWorkflow}\nrun: cargo publish --workspace\n`,
+  );
+  assert.ok(
+    errors.some((error) => error.includes("Cargo registry publication")),
+  );
+});
+
+test("rejects registry write permission", () => {
+  const errors = validateReleaseWorkflow(
+    `${validWorkflow}\npermissions:\n  packages: write\n`,
+  );
+  assert.ok(errors.some((error) => error.includes("registry write permission")));
+});
+
+test("rejects publication that bypasses a repository ownership gate", () => {
+  const errors = validateReleaseWorkflow(
+    validWorkflow.replace("      - generated-application\n", ""),
+  );
+  assert.ok(
+    errors.some((error) =>
+      error.includes("validation dependency: generated-application"),
+    ),
   );
 });
 

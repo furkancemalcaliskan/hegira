@@ -9,10 +9,16 @@ const STABLE_RELEASE_REF =
 
 const REQUIRED_WORKFLOW_CONTRACTS = [
   ["release identity validation", "scripts/release-policy.sh"],
-  ["full-stack build validation", "scripts/full-stack-build-check.sh"],
-  ["production container validation", "scripts/container-smoke.sh"],
+  ["framework validation", "scripts/framework-check.sh"],
+  ["official module validation", "scripts/official-modules-check.sh"],
+  ["template validation", "scripts/layered-template-check.sh"],
+  ["generated application validation", "scripts/generated-application-check.sh"],
   ["source SBOM generation", "anchore/sbom-action@v0"],
   ["disabled implicit SBOM publication", "upload-release-assets: false"],
+  [
+    "source SBOM release asset",
+    '"dist/hegira-$RELEASE_REF.spdx.json#Source SPDX SBOM"',
+  ],
   ["existing-tag verification", "--verify-tag"],
   ["GitHub Release publication", "gh release create"],
   ["canonical SemVer release title", '--title "$RELEASE_REF"'],
@@ -23,6 +29,13 @@ const OBSOLETE_WORKFLOW_CONTRACTS = [
   ["obsolete bundle script", "release-bundle.sh"],
   ["bundle checksum", "sha256sum"],
   ["updatable release action", "softprops/action-gh-release"],
+  ["compatibility-host full-stack validation", "scripts/full-stack-build-check.sh"],
+  ["compatibility-host container validation", "scripts/container-smoke.sh"],
+  ["Cargo registry publication", "cargo publish"],
+  ["Cargo registry credential", "CARGO_REGISTRY_TOKEN"],
+  ["crates.io publication", "crates.io"],
+  ["registry write permission", "packages: write"],
+  ["container registry publication", "docker push"],
 ];
 
 function workspacePackages(metadata) {
@@ -95,6 +108,14 @@ export function validateReleaseMetadata(metadata, releaseRef) {
     if (packageMetadata.version !== version) {
       errors.push(
         `workspace package version mismatch: ${packageMetadata.name} is ${packageMetadata.version}, expected ${version} for ${releaseRef}`,
+      );
+    }
+    if (
+      !Array.isArray(packageMetadata.publish) ||
+      packageMetadata.publish.length !== 0
+    ) {
+      errors.push(
+        `workspace package registry publication is not disabled: ${packageMetadata.name}`,
       );
     }
   }
@@ -182,6 +203,30 @@ export function validateReleaseWorkflow(workflow) {
 
   if (!/^permissions:\s*\n  contents: read\s*$/m.test(workflow)) {
     errors.push("release workflow must default to contents: read");
+  }
+
+  const publishStart = workflow.search(/^  publish:\s*$/m);
+  if (publishStart !== -1) {
+    const remainingWorkflow = workflow.slice(publishStart + 1);
+    const nextJob = remainingWorkflow.search(/^  [a-zA-Z0-9_-]+:\s*$/m);
+    const publishJob =
+      nextJob === -1
+        ? workflow.slice(publishStart)
+        : workflow.slice(publishStart, publishStart + 1 + nextJob);
+    const publishPreamble = publishJob.split(/^    steps:\s*$/m, 1)[0];
+    for (const dependency of [
+      "validate",
+      "framework",
+      "official-modules",
+      "templates",
+      "generated-application",
+    ]) {
+      if (!publishPreamble.includes(`- ${dependency}`)) {
+        errors.push(
+          `release publication is missing validation dependency: ${dependency}`,
+        );
+      }
+    }
   }
 
   const writePermissions = workflow.match(/contents: write/g) ?? [];

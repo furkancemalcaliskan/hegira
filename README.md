@@ -171,8 +171,9 @@ cancelled.
 Release automation publishes source-first GitHub Releases only for stable
 `vMAJOR.MINOR.PATCH` tags. GitHub provides the source archives, and the
 source-scoped SPDX SBOM is the only custom release asset. Release automation validates the
-compatibility host's full-stack build and production container; it does not publish an executable,
-container image, preview application, public URL, or GitHub Environment. See
+framework, official modules, canonical template, and generated application; it does not publish
+an executable, crate, CLI package, container image, preview application, public URL, or GitHub
+Environment. Immutable GitHub Releases receive GitHub's automatic release attestation. See
 the [maintainer workflow](docs/maintainers.md) for the complete trigger and
 release contract.
 
