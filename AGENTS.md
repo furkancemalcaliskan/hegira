@@ -152,6 +152,12 @@ Focused canonical layered application validation:
 sh scripts/layered-template-check.sh
 ```
 
+Rendered provider, upgrade, and production-container validation:
+
+```sh
+sh scripts/generated-application-check.sh
+```
+
 Focused release identity and source-first workflow validation:
 
 ```sh

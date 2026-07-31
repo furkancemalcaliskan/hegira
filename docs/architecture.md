@@ -218,6 +218,18 @@ covers renderer snapshots and failure paths, native server and test targets,
 the browser hydration target, and the Cargo Leptos release output. This
 maintainer tool is not exposed as the public Hegira CLI.
 
+`scripts/generated-application-check.sh` exercises the rendered application as
+the release unit. It applies fresh SQLite and PostgreSQL migration plans,
+verifies the supported v0.2.0 upgrade with historical Catalog state, builds the
+rendered production image, and boots it against disposable PostgreSQL. HTTP
+smoke checks cover readiness, hydration assets, production security headers,
+and unauthenticated Bearer API behavior. All databases and rendered outputs are
+ephemeral; destructive PostgreSQL tests require the script's explicit reset
+opt-in and dedicated generated-application database variable. Repository
+validation stages a credential-free framework source view inside the disposable
+render and uses validated relative dependency paths so the host and Docker
+build consume the same manifests without leaking maintainer filesystem paths.
+
 ## Workspace Packages
 
 | Package | Location | Responsibility |
