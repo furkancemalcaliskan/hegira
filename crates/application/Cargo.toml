@@ -1,15 +1,16 @@
 [package]
 name = "application"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 license = "Apache-2.0"
 publish = false
 
 [dependencies]
-application_contracts = { path = "../application_contracts" }
+background_jobs = { path = "../background_jobs" }
 chrono = { version = "0.4.44", features = ["serde"] }
-domain = { path = "../domain" }
 domain_shared = { path = "../domain_shared" }
+identity_application_contracts = { package = "application_contracts", path = "../application_contracts" }
+identity_domain = { package = "domain", path = "../domain" }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
 totp-rs = { version = "5.7.1", features = ["gen_secret", "otpauth"] }
@@ -19,7 +20,6 @@ uuid = { version = "1.23.2", features = ["v4", "serde", "js"] }
 
 [features]
 ssr = []
-test-support = []
 
 [dev-dependencies]
 tokio = { version = "1.52.3", features = ["macros", "rt"] }

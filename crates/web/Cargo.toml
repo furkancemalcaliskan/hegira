@@ -1,6 +1,6 @@
 [package]
 name = "web"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 license = "Apache-2.0"
 publish = false
@@ -12,6 +12,7 @@ path = "src/mod.rs"
 application = { path = "../application", optional = true }
 application_contracts = { path = "../application_contracts" }
 domain_shared = { path = "../domain_shared" }
+leptos_support = { path = "../leptos_support", default-features = false }
 presentation = { path = "../presentation", optional = true, default-features = false }
 
 icons = { version = "0.18.3", features = ["leptos"] }
@@ -31,11 +32,12 @@ web-sys = { version = "0.3.91", features = ["Document", "DomTokenList", "Element
 default = ["db-postgres", "db-sqlite"]
 db-postgres = ["presentation/db-postgres"]
 db-sqlite = ["presentation/db-sqlite"]
-hydrate = ["leptos/hydrate"]
+hydrate = ["leptos/hydrate", "leptos_support/hydrate"]
 ssr = [
     "dep:application",
     "dep:presentation",
     "application/ssr",
+    "leptos_support/ssr",
     "presentation/ssr",
     "leptos/ssr",
     "leptos_meta/ssr",

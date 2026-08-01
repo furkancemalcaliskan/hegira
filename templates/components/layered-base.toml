@@ -1,0 +1,11 @@
+schema = 1
+id = "layered-base"
+source = "applications/layered"
+include = [
+  ".dockerignore",
+  ".env.example",
+  ".gitignore",
+  "config",
+  "crates",
+  "docker-compose.yml",
+]

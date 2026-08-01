@@ -2,6 +2,14 @@
 resolver = "3"
 members = [
     "apps/hegira",
+    "crates/platform_core",
+    "crates/configuration",
+    "crates/persistence",
+    "crates/background_jobs",
+    "crates/http_support",
+    "crates/leptos_support",
+    "crates/observability",
+    "crates/test_support",
     "crates/domain_shared",
     "crates/domain",
     "crates/application_contracts",
@@ -11,6 +19,14 @@ members = [
     "crates/web",
     "crates/db_migrator",
     "crates/runtime",
+    "modules/identity/domain_shared",
+    "modules/identity/domain",
+    "modules/identity/application_contracts",
+    "modules/identity/application",
+    "modules/identity/sqlx",
+    "modules/identity/http",
+    "modules/identity/leptos",
+    "tools/template_renderer",
 ]
 default-members = ["apps/hegira"]
 

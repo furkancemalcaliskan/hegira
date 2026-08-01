@@ -1,0 +1,26 @@
+[package]
+name = "app_infrastructure"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+app_application.workspace = true
+app_application_contracts.workspace = true
+app_domain.workspace = true
+app_domain_shared.workspace = true
+configuration.workspace = true
+observability.workspace = true
+persistence.workspace = true
+platform_core.workspace = true
+runtime.workspace = true
+serde.workspace = true
+url.workspace = true
+
+[features]
+default = []
+db-postgres = ["persistence/db-postgres"]
+db-sqlite = ["persistence/db-sqlite"]
+otel-otlp = ["observability/otel-otlp"]

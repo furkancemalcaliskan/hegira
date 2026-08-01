@@ -1,10 +1,10 @@
 #!/usr/bin/env sh
 set -eu
 
-./scripts/dx-audit.sh scripts/fixtures/dx/catalog-products.manifest
+./scripts/dx-audit.sh scripts/fixtures/dx/platform-contracts.manifest
 
 for path in \
-  crates/application_contracts/src/features.rs \
+  modules/identity/application_contracts/src/features.rs \
   crates/presentation/src/http/feature.rs \
   crates/web/src/shared/crud/dialog.rs \
   crates/web/src/shared/crud/state.rs
@@ -16,4 +16,4 @@ cargo check -p hegira --no-default-features --features ssr,db-sqlite
 cargo check -p hegira --no-default-features --features ssr,db-postgres
 cargo check -p hegira --no-default-features --features hydrate,db-sqlite
 
-echo "manual feature workflow contracts passed"
+echo "manual platform composition contracts passed"

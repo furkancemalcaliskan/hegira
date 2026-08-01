@@ -1,0 +1,9 @@
+[package]
+name = "configuration"
+version = "0.3.0"
+edition = "2024"
+license = "Apache-2.0"
+publish = false
+
+[dependencies]
+config = { version = "0.15.19", features = ["yaml"] }

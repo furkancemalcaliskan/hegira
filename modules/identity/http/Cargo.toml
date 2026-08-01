@@ -1,0 +1,37 @@
+[package]
+name = "identity_http"
+version = "0.3.0"
+edition = "2024"
+license = "Apache-2.0"
+publish = false
+
+[dependencies]
+application = { path = "../../../crates/application", features = ["ssr"] }
+application_contracts = { path = "../../../crates/application_contracts" }
+axum = "0.8.9"
+cookie = "0.18.1"
+domain_shared = { path = "../../../crates/domain_shared" }
+http_support = { path = "../../../crates/http_support" }
+leptos_axum = "0.8.9"
+leptos_support = { path = "../../../crates/leptos_support", features = ["ssr"] }
+presentation = { path = "../../../crates/presentation", default-features = false, features = ["ssr"] }
+serde = { version = "1.0.228", features = ["derive"] }
+tracing = "0.1.44"
+utoipa = { version = "5.4.0", features = ["chrono", "uuid"], optional = true }
+utoipa-swagger-ui = { version = "9.0.2", features = ["axum"], optional = true }
+uuid = { version = "1.23.2", features = ["v4", "serde", "js"] }
+
+[features]
+default = ["db-postgres", "db-sqlite"]
+db-postgres = ["presentation/db-postgres"]
+db-sqlite = ["presentation/db-sqlite"]
+ssr = []
+openapi = [
+    "dep:utoipa",
+    "dep:utoipa-swagger-ui",
+    "application_contracts/openapi",
+]
+
+[dev-dependencies]
+http-body-util = "0.1.3"
+tower = { version = "0.5.3", features = ["util"] }

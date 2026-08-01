@@ -27,10 +27,33 @@ commands change. Never describe planned work as implemented.
 
 - The repository root is a virtual Cargo workspace and the documented command
   entry point.
-- `apps/hegira/` contains the deployable Axum/Leptos package, server binary,
-  hydration entry point, package metadata, and integration tests.
-- `crates/` contains the layered domain, application, infrastructure,
-  presentation, web, runtime, and database-migrator packages.
+- `apps/hegira/` contains the deployable Axum/Leptos package, server
+  composition, binary and hydration entry points, package metadata, and
+  integration tests.
+- `crates/` contains application-independent platform core, configuration,
+  persistence, background-work, and runtime packages alongside the current
+  layered domain, application, infrastructure, presentation, web, and
+  database-migrator packages.
+- `modules/identity/` contains the canonical Identity Domain Shared, Domain,
+  Application Contracts, Application, SQLx, Axum HTTP, and Leptos adapter
+  packages.
+  The HTTP adapter contributes Identity routes, OpenAPI, Bearer extraction,
+  secure session-cookie handling, and explicit cookie/Bearer security policies
+  to the host. The Leptos adapter owns Identity pages, server functions, and
+  explicit route and navigation contributions. Current compatibility packages
+  compile the applicable canonical sources without depending on a module
+  package.
+- `templates/applications/layered/` contains the workspace-external,
+  layered full-stack application base. Its brand-neutral server composition
+  explicitly selects the Identity HTTP adapter, while `apps/web` owns the
+  default Leptos shell and explicitly selects the Identity Leptos adapter. It
+  consumes framework packages through a pinned release source; repository
+  validation rewrites those dependencies only in a disposable staging copy.
+- `templates/components/` contains typed component manifests for the canonical
+  application template.
+- `tools/template_renderer/` contains the internal deterministic and atomic
+  template renderer used by repository validation. It is not the public Hegira
+  CLI.
 - `config/` contains environment profiles.
 - `scripts/` contains local validation, smoke, operations, and release helpers.
 - `.github/workflows/` contains validation and release automation.
@@ -117,10 +140,29 @@ sh scripts/repository-policy.sh
 sh scripts/backend-check.sh
 ```
 
+Focused framework and official-module validation:
+
+```sh
+sh scripts/framework-check.sh
+sh scripts/official-modules-check.sh
+```
+
 Focused workspace dependency-boundary validation:
 
 ```sh
 sh scripts/architecture-boundaries.sh
+```
+
+Focused canonical layered application validation:
+
+```sh
+sh scripts/layered-template-check.sh
+```
+
+Rendered provider, upgrade, and production-container validation:
+
+```sh
+sh scripts/generated-application-check.sh
 ```
 
 Focused release identity and source-first workflow validation:

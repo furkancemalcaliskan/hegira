@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
@@ -7,38 +8,156 @@ export const WORKSPACE_DEPENDENCY_POLICY = Object.freeze({
   hegira: [
     "application",
     "application_contracts",
+    "background_jobs",
+    "configuration",
     "domain",
     "domain_shared",
+    "http_support",
+    "identity_http",
+    "identity_leptos",
     "infrastructure",
+    "observability",
+    "persistence",
+    "platform_core",
     "presentation",
     "runtime",
+    "test_support",
     "web",
   ],
+  platform_core: [],
+  configuration: [],
+  persistence: [],
+  background_jobs: [],
+  http_support: [],
+  leptos_support: [],
+  observability: ["background_jobs"],
+  test_support: ["application"],
   domain_shared: [],
   domain: ["domain_shared"],
   application_contracts: ["domain", "domain_shared"],
-  application: ["application_contracts", "domain", "domain_shared"],
+  application: [
+    "application_contracts",
+    "background_jobs",
+    "domain",
+    "domain_shared",
+  ],
   infrastructure: [
     "application",
     "application_contracts",
+    "background_jobs",
+    "configuration",
     "domain",
     "domain_shared",
+    "persistence",
+    "platform_core",
+    "runtime",
   ],
   presentation: [
     "application",
     "application_contracts",
     "domain_shared",
     "infrastructure",
+    "leptos_support",
+    "observability",
   ],
   web: [
     "application",
     "application_contracts",
     "domain_shared",
+    "leptos_support",
     "presentation",
   ],
-  runtime: ["infrastructure", "presentation", "web"],
-  db_migrator: ["infrastructure"],
+  runtime: [],
+  db_migrator: ["infrastructure", "persistence"],
+  identity_domain_shared: [],
+  identity_domain: ["identity_domain_shared"],
+  identity_application_contracts: [
+    "domain_shared",
+    "identity_domain",
+    "identity_domain_shared",
+  ],
+  identity_application: [
+    "domain_shared",
+    "identity_application_contracts",
+    "identity_domain",
+    "identity_domain_shared",
+  ],
+  identity_sqlx: [
+    "identity_application",
+    "identity_application_contracts",
+    "identity_domain",
+    "identity_domain_shared",
+    "persistence",
+  ],
+  identity_http: [
+    "application",
+    "application_contracts",
+    "domain_shared",
+    "http_support",
+    "leptos_support",
+    "presentation",
+  ],
+  identity_leptos: [
+    "application",
+    "application_contracts",
+    "domain_shared",
+    "leptos_support",
+    "presentation",
+    "web",
+  ],
+  template_renderer: [],
 });
+
+export const REPOSITORY_OWNERSHIP_POLICY = Object.freeze({
+  app: Object.freeze(["app", "framework", "module"]),
+  framework: Object.freeze(["framework"]),
+  module: Object.freeze(["framework", "module"]),
+  template: Object.freeze(["framework", "module", "template"]),
+  tool: Object.freeze(["framework", "module", "template", "tool"]),
+});
+
+const IDENTITY_SQL_PATTERN =
+  /\b(?:select|from|join|insert\s+into|update|delete\s+from|create\s+table|alter\s+table|drop\s+table)\b[^\n]*\b(?:users|sessions|roles|permissions|user_roles|role_permissions|oauth_states|user_oauth_connections|oauth_pending_signups)\b/i;
+
+export function validateIdentitySqlOwnership(files) {
+  return files
+    .filter(
+      ({ location, content }) =>
+        location.startsWith("crates/") && IDENTITY_SQL_PATTERN.test(content),
+    )
+    .map(
+      ({ location }) =>
+        `Identity SQL must be module-owned under modules/identity/sqlx: ${location}`,
+    );
+}
+
+function repositorySourceFiles(root) {
+  const files = [];
+  const visit = (directory) => {
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      const location = path.join(directory, entry.name);
+      if (entry.isDirectory()) {
+        visit(location);
+      } else if (entry.isFile() && /\.(?:rs|sql)$/.test(entry.name)) {
+        files.push({
+          location: path.relative(root, location).split(path.sep).join("/"),
+          content: fs.readFileSync(location, "utf8"),
+        });
+      }
+    }
+  };
+
+  visit(path.join(root, "crates"));
+  return files;
+}
+
+const REPOSITORY_PACKAGE_ROOTS = Object.freeze([
+  Object.freeze({ directory: "apps", ownership: "app" }),
+  Object.freeze({ directory: "crates", ownership: "framework" }),
+  Object.freeze({ directory: "modules", ownership: "module" }),
+  Object.freeze({ directory: "templates", ownership: "template" }),
+  Object.freeze({ directory: "tools", ownership: "tool" }),
+]);
 
 function isInside(parent, candidate) {
   const relative = path.relative(parent, candidate);
@@ -52,6 +171,18 @@ function isInside(parent, candidate) {
 
 function packageDirectory(packageMetadata) {
   return path.dirname(path.resolve(packageMetadata.manifest_path));
+}
+
+function packageOwnership(workspaceRoot, packageMetadata) {
+  const directory = packageDirectory(packageMetadata);
+
+  for (const root of REPOSITORY_PACKAGE_ROOTS) {
+    if (isInside(path.join(workspaceRoot, root.directory), directory)) {
+      return root.ownership;
+    }
+  }
+
+  return undefined;
 }
 
 function workspaceGraph(metadata) {
@@ -93,7 +224,6 @@ export function validateWorkspaceMetadata(
 ) {
   const errors = [];
   const workspaceRoot = path.resolve(metadata.workspace_root);
-  const appsRoot = path.join(workspaceRoot, "apps");
   const { packages, edges } = workspaceGraph(metadata);
   const packageNames = new Set(
     packages.map((packageMetadata) => packageMetadata.name),
@@ -101,9 +231,27 @@ export function validateWorkspaceMetadata(
   const checkedEdges = new Set();
 
   for (const packageMetadata of packages) {
+    const ownership = packageOwnership(workspaceRoot, packageMetadata);
+    if (ownership === undefined) {
+      errors.push(
+        `workspace package is outside an owned repository location: ${packageMetadata.name} (${packageDirectory(packageMetadata)})`,
+      );
+    }
+
     if (!Object.hasOwn(policy, packageMetadata.name)) {
       errors.push(
         `workspace package has no architecture policy entry: ${packageMetadata.name}`,
+      );
+    }
+
+    if (
+      packageMetadata.name === "identity_leptos" &&
+      (packageMetadata.dependencies ?? []).some(
+        (dependency) => dependency.name === "sqlx",
+      )
+    ) {
+      errors.push(
+        "identity_leptos must depend on Identity contracts and application services, not SQLx",
       );
     }
   }
@@ -142,11 +290,16 @@ export function validateWorkspaceMetadata(
     }
     checkedEdges.add(edgeName);
 
-    const fromIsApp = isInside(appsRoot, packageDirectory(edge.from));
-    const toIsApp = isInside(appsRoot, packageDirectory(edge.target));
-    if (!fromIsApp && toIsApp) {
+    const fromOwnership = packageOwnership(workspaceRoot, edge.from);
+    const toOwnership = packageOwnership(workspaceRoot, edge.target);
+    const allowedOwnerships =
+      REPOSITORY_OWNERSHIP_POLICY[fromOwnership] ?? [];
+    if (
+      toOwnership !== undefined &&
+      !allowedOwnerships.includes(toOwnership)
+    ) {
       errors.push(
-        `invalid workspace dependency edge: ${edgeName} (packages outside apps/ must not depend on deployable packages under apps/)`,
+        `invalid repository ownership edge: ${edgeName} (${fromOwnership ?? "unknown"} packages may not depend on ${toOwnership} packages)`,
       );
       continue;
     }
@@ -210,7 +363,10 @@ function runCli() {
     return;
   }
 
-  const errors = validateWorkspaceMetadata(metadata);
+  const errors = [
+    ...validateWorkspaceMetadata(metadata),
+    ...validateIdentitySqlOwnership(repositorySourceFiles(root)),
+  ];
   if (errors.length > 0) {
     for (const error of errors) {
       console.error(`architecture boundary violation: ${error}`);

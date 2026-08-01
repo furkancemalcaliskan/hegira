@@ -1,6 +1,6 @@
 [package]
 name = "db_migrator"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 license = "Apache-2.0"
 publish = false
@@ -11,11 +11,12 @@ path = "src/main.rs"
 
 [dependencies]
 infrastructure = { path = "../infrastructure", optional = true, default-features = false }
+persistence = { path = "../persistence", optional = true, default-features = false }
 tokio = { version = "1.52.3", features = ["rt-multi-thread", "macros"], optional = true }
 
 [features]
 default = ["db-postgres", "db-sqlite"]
-db-postgres = ["infrastructure/db-postgres"]
-db-sqlite = ["infrastructure/db-sqlite"]
-ssr = ["dep:infrastructure", "dep:tokio", "infrastructure/ssr"]
+db-postgres = ["infrastructure/db-postgres", "persistence/db-postgres"]
+db-sqlite = ["infrastructure/db-sqlite", "persistence/db-sqlite"]
+ssr = ["dep:infrastructure", "dep:persistence", "dep:tokio", "infrastructure/ssr"]
 search-meilisearch = ["ssr", "infrastructure/search-meilisearch"]

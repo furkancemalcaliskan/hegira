@@ -141,7 +141,7 @@ mod tests {
 
     #[tokio::test]
     async fn sqlite_projection_rejects_stale_revisions_and_advances_monotonically() {
-        let pool = db::connect_sqlite(&DatabaseConfig {
+        let pool = db::connect_sqlite_with_application_migrations(&DatabaseConfig {
             backend: DatabaseBackend::Sqlite,
             url: "sqlite::memory:".to_string(),
             max_connections: 4,

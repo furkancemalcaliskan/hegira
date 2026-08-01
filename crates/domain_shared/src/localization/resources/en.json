@@ -160,10 +160,5 @@
   "Permission.Identity.Users.Create": "Create identity users",
   "Permission.Identity.Users.Update": "Update identity users",
   "Permission.Identity.Users.Delete": "Delete identity users",
-  "Permission.Identity.Authorization": "Manage identity roles and permissions",
-  "Permission.Catalog.Products": "View catalog products",
-  "Permission.Catalog.Products.Create": "Create catalog products",
-  "Permission.Catalog.Products.Update": "Update catalog products",
-  "Permission.Catalog.Products.Delete": "Delete catalog products",
-  "Products": "Products"
+  "Permission.Identity.Authorization": "Manage identity roles and permissions"
 }

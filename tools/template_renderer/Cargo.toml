@@ -1,0 +1,11 @@
+[package]
+name = "template_renderer"
+version = "0.3.0"
+edition = "2024"
+license = "Apache-2.0"
+publish = false
+rust-version = "1.96"
+
+[dependencies]
+serde = { version = "1.0.228", features = ["derive"] }
+toml = "1.1.2"

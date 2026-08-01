@@ -9,10 +9,10 @@ use hegira::application::shared::{
     mail::{MailAddress, MailMessage, Mailer},
     settings::{SettingKey, get_setting, set_setting},
     storage::{Storage, StoragePath},
-    testing::{
-        InMemoryCache, InMemorySettings, InMemoryStorage, RecordingAuditLogger,
-        RecordingJobDispatcher, RecordingMailer,
-    },
+};
+use hegira::test_support::{
+    InMemoryCache, InMemorySettings, InMemoryStorage, RecordingAuditLogger, RecordingJobDispatcher,
+    RecordingMailer,
 };
 
 #[derive(Clone)]
@@ -47,34 +47,38 @@ async fn shared_test_doubles_cover_optional_capability_ports() {
     audit
         .record(AuditLogEntry::new(
             "admin@example.com",
-            "catalog.products.create",
-            "catalog.product",
-            Some("product-id".to_string()),
+            "test.records.create",
+            "test.record",
+            Some("record-id".to_string()),
             serde_json::json!({}),
         ))
         .await
         .unwrap();
-    assert_eq!(audit.entries()[0].action, "catalog.products.create");
+    assert_eq!(audit.entries()[0].action, "test.records.create");
 
     let cache = InMemoryCache::default();
     cache
-        .set_string("catalog:product:1", "value".to_string(), None)
+        .set_string("test:record:1", "value".to_string(), None)
         .await
         .unwrap();
     assert_eq!(
-        cache.get_string("catalog:product:1").await.unwrap(),
+        cache.get_string("test:record:1").await.unwrap(),
         Some("value".to_string())
     );
     cache
-        .set_string("catalog:expired", "value".to_string(), Some(Duration::ZERO))
+        .set_string("test:expired", "value".to_string(), Some(Duration::ZERO))
         .await
         .unwrap();
-    assert_eq!(cache.get_string("catalog:expired").await.unwrap(), None);
+    assert_eq!(cache.get_string("test:expired").await.unwrap(), None);
 
     let storage = InMemoryStorage::default();
-    let path = StoragePath::from_segments(["catalog", "products", "image.webp"]).unwrap();
+    let path = StoragePath::from_segments(["test", "records", "attachment.bin"]).unwrap();
     storage
-        .put(&path, vec![1, 2, 3], Some("image/webp".to_string()))
+        .put(
+            &path,
+            vec![1, 2, 3],
+            Some("application/octet-stream".to_string()),
+        )
         .await
         .unwrap();
     assert_eq!(storage.paths(), vec![path.to_string()]);
@@ -84,7 +88,7 @@ async fn shared_test_doubles_cover_optional_capability_ports() {
     );
 
     let settings = InMemorySettings::default();
-    let key = SettingKey::new("catalog.products.page_size").unwrap();
+    let key = SettingKey::new("test.records.page_size").unwrap();
     set_setting(&settings, &key, &25_u32).await.unwrap();
     assert_eq!(get_setting::<u32>(&settings, &key).await.unwrap(), Some(25));
 

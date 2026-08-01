@@ -1,6 +1,6 @@
 [package]
 name = "hegira"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 default-run = "hegira"
 authors = ["Furkan Cemal Caliskan <github.chant290@passinbox.com>"]
@@ -16,13 +16,28 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 application = { path = "../../crates/application", optional = true }
 application_contracts = { path = "../../crates/application_contracts" }
+background_jobs = { path = "../../crates/background_jobs", optional = true }
+configuration = { path = "../../crates/configuration", optional = true }
 domain = { path = "../../crates/domain" }
 domain_shared = { path = "../../crates/domain_shared" }
 infrastructure = { path = "../../crates/infrastructure", optional = true, default-features = false }
+http_support = { path = "../../crates/http_support", optional = true, default-features = false }
+identity_http = { path = "../../modules/identity/http", optional = true, default-features = false }
+observability = { path = "../../crates/observability", optional = true, default-features = false }
+platform_core = { path = "../../crates/platform_core", optional = true }
+persistence = { path = "../../crates/persistence", optional = true, default-features = false }
 presentation = { path = "../../crates/presentation", optional = true, default-features = false }
 runtime = { path = "../../crates/runtime", optional = true, default-features = false }
+test_support = { path = "../../crates/test_support", optional = true }
 web = { path = "../../crates/web", default-features = false }
 leptos = { version = "0.8.19" }
+axum = { version = "0.8.9", optional = true }
+leptos_axum = { version = "0.8.9", optional = true }
+serde = { version = "1.0.228", features = ["derive"], optional = true }
+sqlx = { version = "0.8.6", features = ["runtime-tokio-rustls", "migrate", "chrono", "uuid"], optional = true }
+tokio = { version = "1.52.3", features = ["rt-multi-thread", "macros", "fs", "signal"], optional = true }
+tower-http = { version = "0.7.0", features = ["compression-br", "compression-gzip", "cors", "limit", "timeout"], optional = true }
+tracing = { version = "0.1.44", optional = true }
 
 # Client dependencies
 console_error_panic_hook = { version = "0.1.7", optional = true }
@@ -30,8 +45,8 @@ wasm-bindgen = { version = "0.2.114", optional = true }
 
 [features]
 default = ["db-postgres", "db-sqlite"]
-db-postgres = ["infrastructure/db-postgres", "presentation/db-postgres", "runtime/db-postgres", "web/db-postgres"]
-db-sqlite = ["infrastructure/db-sqlite", "presentation/db-sqlite", "runtime/db-sqlite", "web/db-sqlite"]
+db-postgres = ["identity_http/db-postgres", "infrastructure/db-postgres", "persistence/db-postgres", "presentation/db-postgres", "web/db-postgres", "sqlx/postgres"]
+db-sqlite = ["identity_http/db-sqlite", "infrastructure/db-sqlite", "persistence/db-sqlite", "presentation/db-sqlite", "web/db-sqlite", "sqlx/sqlite"]
 hydrate = [
     "web/hydrate",
     "leptos/hydrate",
@@ -40,25 +55,38 @@ hydrate = [
 ]
 ssr = [
     "dep:application",
+    "dep:axum",
+    "dep:background_jobs",
+    "dep:configuration",
     "dep:infrastructure",
+    "dep:http_support",
+    "dep:identity_http",
+    "dep:leptos_axum",
+    "dep:observability",
+    "dep:persistence",
+    "dep:platform_core",
     "dep:presentation",
     "dep:runtime",
+    "dep:serde",
+    "dep:sqlx",
+    "dep:tokio",
+    "dep:tower-http",
+    "dep:tracing",
     "application/ssr",
     "infrastructure/ssr",
     "presentation/ssr",
-    "runtime/ssr",
     "web/ssr",
     "leptos/ssr",
 ]
-openapi = ["ssr", "application_contracts/openapi", "presentation/openapi", "runtime/openapi"]
+openapi = ["ssr", "application_contracts/openapi", "identity_http/openapi"]
 wasm-split = ["web/wasm-split"]
-cache-redis = ["ssr", "infrastructure/cache-redis", "presentation/cache-redis", "runtime/cache-redis"]
-metrics-prometheus = ["ssr", "presentation/metrics-prometheus", "runtime/metrics-prometheus"]
-otel-otlp = ["ssr", "presentation/otel-otlp", "runtime/otel-otlp"]
-search-meilisearch = ["ssr", "infrastructure/search-meilisearch", "runtime/search-meilisearch"]
-storage-s3 = ["ssr", "infrastructure/storage-s3", "runtime/storage-s3"]
-mailer-smtp = ["ssr", "infrastructure/mailer-smtp", "runtime/mailer-smtp"]
-test-support = ["ssr", "application/test-support", "infrastructure/test-support"]
+cache-redis = ["ssr", "infrastructure/cache-redis", "http_support/cache-redis"]
+metrics-prometheus = ["ssr", "observability/metrics-prometheus", "presentation/metrics-prometheus"]
+otel-otlp = ["ssr", "http_support/otel-otlp", "observability/otel-otlp"]
+search-meilisearch = ["ssr", "infrastructure/search-meilisearch"]
+storage-s3 = ["ssr", "infrastructure/storage-s3"]
+mailer-smtp = ["ssr", "infrastructure/mailer-smtp"]
+test-support = ["ssr", "dep:test_support"]
 
 [dev-dependencies]
 axum = "0.8.9"
@@ -69,6 +97,7 @@ sqlx = { version = "0.8.6", features = ["runtime-tokio-rustls", "postgres", "mig
 tokio = { version = "1.52.3", features = ["rt-multi-thread", "macros", "sync"] }
 tower = { version = "0.5.3", features = ["util"] }
 http-body-util = "0.1.3"
+test_support = { path = "../../crates/test_support" }
 uuid = { version = "1.23.2", features = ["v4", "serde", "js"] }
 
 [package.metadata.leptos]

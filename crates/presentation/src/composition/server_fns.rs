@@ -1,17 +1,17 @@
 use crate::composition::services::{
-    AppServices, CatalogProductService, IdentityAuthService, IdentityOAuthService,
-    IdentityPermissionService, IdentityUserService,
+    AppServices, IdentityAuthService, IdentityOAuthService, IdentityPermissionService,
+    IdentityUserService,
 };
 use application::shared::errors::ApplicationError;
 
 // hegira:server-fn-service-imports
 // hegira:server-fn-service-imports:end
 
-use leptos::prelude::{ServerFnError, expect_context};
+use leptos_support::server::{Error as ServerFnError, context};
 use std::sync::Arc;
 
 fn services() -> Arc<AppServices> {
-    expect_context::<Arc<AppServices>>()
+    context::<Arc<AppServices>>()
 }
 
 pub fn auth_service() -> IdentityAuthService {
@@ -30,19 +30,14 @@ pub fn permission_service() -> IdentityPermissionService {
     services().permissions.clone()
 }
 
-pub fn product_service() -> CatalogProductService {
-    services().products.clone()
-}
-
 // hegira:server-fn-services
 // hegira:server-fn-services:end
 
 pub fn server_fn_error(error: ApplicationError) -> ServerFnError {
     match error {
         ApplicationError::Infrastructure(message) | ApplicationError::Unexpected(message) => {
-            tracing::error!(error = %message, "server function failed");
-            ServerFnError::new("internal server error")
+            leptos_support::server::internal_error(message)
         }
-        other => ServerFnError::new(other.message().to_string()),
+        other => leptos_support::server::public_error(other.message()),
     }
 }

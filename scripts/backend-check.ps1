@@ -19,11 +19,52 @@ function Run-Step {
 
 Run-Step "Format" @("cargo", "fmt", "--all", "--", "--check")
 Run-Step "Clippy" @("cargo", "clippy", "-p", "hegira", "--features", "ssr,test-support", "--", "-D", "warnings")
+Run-Step "Identity module Clippy" @(
+    "cargo",
+    "clippy",
+    "--all-features",
+    "-p",
+    "identity_domain_shared",
+    "-p",
+    "identity_domain",
+    "-p",
+    "identity_application_contracts",
+    "-p",
+    "identity_application",
+    "-p",
+    "identity_sqlx",
+    "-p",
+    "identity_http",
+    "-p",
+    "identity_leptos",
+    "--",
+    "-D",
+    "warnings"
+)
 Run-Step "SSR check" @("cargo", "check", "-p", "hegira", "--features", "ssr")
 Run-Step "Hydrate check" @("cargo", "check", "-p", "hegira", "--features", "hydrate", "--target", "wasm32-unknown-unknown")
 Run-Step "OpenAPI check" @("cargo", "check", "-p", "hegira", "--features", "openapi")
 Run-Step "DbMigrator check" @("cargo", "check", "-p", "db_migrator", "--features", "ssr")
 Run-Step "Library tests" @("cargo", "test", "-p", "hegira", "--features", "ssr", "--lib")
+Run-Step "Identity module contract tests" @(
+    "cargo",
+    "test",
+    "--all-features",
+    "-p",
+    "identity_domain_shared",
+    "-p",
+    "identity_domain",
+    "-p",
+    "identity_application_contracts",
+    "-p",
+    "identity_application",
+    "-p",
+    "identity_sqlx",
+    "-p",
+    "identity_http",
+    "-p",
+    "identity_leptos"
+)
 Run-Step "Capability test support" @(
     "cargo",
     "test",
@@ -34,6 +75,16 @@ Run-Step "Capability test support" @(
     "--test",
     "capability_test_support"
 )
+Run-Step "Identity composition parity" @(
+    "cargo",
+    "test",
+    "-p",
+    "hegira",
+    "--features",
+    "ssr",
+    "--test",
+    "identity_composition"
+)
 Run-Step "API identity tests" @("cargo", "test", "-p", "hegira", "--features", "ssr", "--test", "api_identity")
 
 if ($WithIgnoredDbTests) {
@@ -41,6 +92,16 @@ if ($WithIgnoredDbTests) {
         throw "DATABASE_URL must be set when -WithIgnoredDbTests is used"
     }
 
+    Run-Step "DB-backed migration compatibility tests" @(
+        "cargo",
+        "test",
+        "-p",
+        "identity_sqlx",
+        "--all-features",
+        "postgres_v020_upgrade_retires_catalog_state_and_preserves_history",
+        "--",
+        "--ignored"
+    )
     Run-Step "DB-backed API identity tests" @(
         "cargo",
         "test",

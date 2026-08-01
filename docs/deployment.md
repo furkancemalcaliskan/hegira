@@ -1,7 +1,9 @@
 # Deployment
 
-Hegira can run as one process or as separately scaled web and worker processes.
-Choose the smallest topology that meets the workload.
+An application built on Hegira can run as one process or as separately scaled web and worker
+processes. Choose the smallest topology that meets the workload. Commands in this guide target
+the repository's current `apps/hegira` compatibility host unless a section explicitly refers
+to the canonical rendered application.
 
 ## Topologies
 
@@ -72,19 +74,34 @@ site under `target/site`. Frontend source, styles, and public assets remain
 under `crates/web`; they are inputs to the application-owned Cargo-Leptos
 package rather than independent deployment units.
 
+## Canonical Rendered Application
+
+`templates/applications/layered/` defines the canonical application deployment contract. A
+normal render produces an independent Cargo workspace with an `app_server` composition root,
+an application-owned Leptos web package, layered application packages, configuration profiles,
+explicit migration composition, a Dockerfile, and a local PostgreSQL Compose file. Its framework
+dependencies use the release tag pinned in the template manifest rather than paths into a
+Hegira checkout.
+
+The internal renderer and `scripts/generated-application-check.sh` validate this contract in
+disposable output. The check exercises fresh SQLite and PostgreSQL databases, the supported
+v0.2.0 upgrade, the production image, readiness, hydration assets, security headers, and
+unauthenticated Bearer API behavior. The renderer is repository tooling, not a public Hegira
+CLI, so no end-user generation command is documented yet.
+
 ## Source Distribution
 
-Hegira is released as a source template rather than as a compiled application.
+Hegira is released as framework and template source rather than as a compiled application.
 Each stable release is identified by a signed `vMAJOR.MINOR.PATCH` tag and a
 GitHub Release. GitHub provides `.zip` and `.tar.gz` archives of the tagged
 source; the only custom release asset is an SPDX JSON SBOM generated from that
 source checkout.
 
-The release workflow still verifies the minimal PostgreSQL full-stack build and
-production container. Those are validation contracts for users building and
-deploying their own application, not published binaries or images. Hegira does
+The release workflow validates framework packages, official modules, the canonical template,
+and the rendered application's database, build, HTTP, security, and production-container
+contracts. These are source-distribution gates, not published binaries or images. Hegira does
 not publish a platform-specific executable, Linux application bundle, official
-container image, preview application, or production deployment.
+container image, crate, CLI package, preview application, or production deployment.
 
 ## Database Release Step
 

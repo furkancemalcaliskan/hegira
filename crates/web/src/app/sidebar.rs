@@ -1,10 +1,10 @@
-use icons::{CircleUser, House, Package, PanelLeftClose, PanelLeftOpen, Search, Users};
+use icons::{CircleUser, House, PanelLeftClose, PanelLeftOpen, Search, Users};
 use leptos::prelude::*;
 use leptos_router::components::A;
 use leptos_router::hooks::use_location;
 
 use crate::{
-    app::navigation::{NavIcon, WORKSPACE_NAV},
+    app::navigation::{NavIcon, WORKSPACE_NAV, workspace_nav_items},
     shared::{
         authorization,
         i18n::{T, use_i18n},
@@ -64,7 +64,7 @@ pub fn Sidebar(sidebar_open: RwSignal<bool>, sidebar_collapsed: RwSignal<bool>) 
             }
         >
             <div class=shell_class>
-                <A href="/content" attr:class="brand-mark" attr:aria-label="hegira home">
+                <A href="/dashboard" attr:class="brand-mark" attr:aria-label="hegira home">
                     <img
                         class="brand-logo"
                         src="/assets/branding/hegira-logo.png"
@@ -120,9 +120,7 @@ pub fn Sidebar(sidebar_open: RwSignal<bool>, sidebar_collapsed: RwSignal<bool>) 
                             <section class="sidebar-section">
                                 <h2>{move || i18n.t(section.label)}</h2>
                                 <div class="sidebar-items">
-                                    {section
-                                        .items
-                                        .iter()
+                                    {workspace_nav_items(section)
                                         .filter(|item| authorization::can_access_untracked(item.permission))
                                         .map(|item| {
                                             let is_active = move || location.pathname.get() == item.href;
@@ -171,6 +169,5 @@ fn NavItemIcon(icon: NavIcon) -> impl IntoView {
         NavIcon::Roles => view! { <Users class="size-4" /> }.into_any(),
         NavIcon::Users => view! { <Users class="size-4" /> }.into_any(),
         NavIcon::Profile => view! { <CircleUser class="size-4" /> }.into_any(),
-        NavIcon::Products => view! { <Package class="size-4" /> }.into_any(),
     }
 }

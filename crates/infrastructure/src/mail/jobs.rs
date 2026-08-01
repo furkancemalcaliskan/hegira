@@ -1,21 +1,14 @@
 use super::MailerAdapter;
 #[cfg(feature = "db-postgres")]
-use application::shared::jobs::DurableJobOptions;
+use crate::jobs::durable::SqlxDurableJobQueue;
 use application::shared::{
     jobs::{DurableJobFuture, DurableJobHandler},
     mail::{Mailer, TransactionalMail},
 };
-use serde::{Deserialize, Serialize};
-
 #[cfg(feature = "db-postgres")]
-use crate::jobs::durable::SqlxDurableJobQueue;
+use background_jobs::DurableJobOptions;
 
-pub const SEND_MAIL_JOB: &str = "mail.send.v1";
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SendMailJob {
-    pub mail: TransactionalMail,
-}
+pub use application::shared::mail::{SEND_MAIL_JOB, SendMailJob};
 
 #[cfg(feature = "db-postgres")]
 pub async fn enqueue_in(

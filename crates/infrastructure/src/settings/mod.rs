@@ -320,7 +320,7 @@ mod tests {
 
     #[tokio::test]
     async fn sqlite_provider_satisfies_settings_contract() {
-        let pool = db::connect_sqlite(&DatabaseConfig {
+        let pool = db::connect_sqlite_with_application_migrations(&DatabaseConfig {
             backend: DatabaseBackend::Sqlite,
             url: "sqlite::memory:".to_string(),
             max_connections: 4,
@@ -330,7 +330,7 @@ mod tests {
         .unwrap();
         let cache = Arc::new(CacheAdapter::Memory(MemoryCache::default()));
         let provider = SqliteSettingsProvider::new(pool, cache, Duration::from_secs(60));
-        let key = SettingKey::new("catalog.page_size").unwrap();
+        let key = SettingKey::new("test.records.page_size").unwrap();
 
         assert_eq!(provider.get_json(&key).await.unwrap(), None);
 

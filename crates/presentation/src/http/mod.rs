@@ -1,11 +1,3 @@
-pub mod controllers;
-pub mod error_response;
-pub mod extractors;
-pub mod feature;
-#[cfg(feature = "metrics-prometheus")]
-pub mod metrics;
 pub mod middleware;
-#[cfg(feature = "openapi")]
-pub mod openapi;
 pub mod routes;
 pub mod state;

@@ -1,5 +1,6 @@
 #[cfg(feature = "cache-redis")]
 pub mod redis_session;
+#[path = "../../../../../modules/identity/sqlx/src/identity/sessions/repository.rs"]
 pub mod repository;
 
 #[cfg(feature = "db-postgres")]

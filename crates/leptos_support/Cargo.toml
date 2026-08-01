@@ -1,0 +1,18 @@
+[package]
+name = "leptos_support"
+version = "0.3.0"
+edition = "2024"
+license = "Apache-2.0"
+publish = false
+
+[dependencies]
+leptos = { version = "0.8.19" }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
+tracing = "0.1.44"
+validator = "0.20.0"
+
+[features]
+default = []
+hydrate = ["leptos/hydrate"]
+ssr = ["leptos/ssr"]

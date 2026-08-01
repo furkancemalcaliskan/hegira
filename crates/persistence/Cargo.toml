@@ -1,0 +1,18 @@
+[package]
+name = "persistence"
+version = "0.3.0"
+edition = "2024"
+license = "Apache-2.0"
+publish = false
+
+[dependencies]
+serde = { version = "1.0.228", features = ["derive"] }
+sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio-rustls", "migrate"] }
+
+[features]
+default = []
+db-postgres = ["sqlx/postgres"]
+db-sqlite = ["sqlx/sqlite"]
+
+[dev-dependencies]
+tokio = { version = "1.52.3", features = ["macros", "rt"] }

@@ -62,9 +62,7 @@ authorized change requirements are defined in
 | Workflow | Pull request | Branch push | Manual | Tag | Side effect |
 |---|---|---|---|---|---|
 | `repository-policy` | Targets `develop` or `main` | No | No | No | Validation only |
-| `backend` | Targets `develop` or `main` | `develop` or `main` | Yes | No | Validation only |
-| `full-stack-build` | Targets `develop` or `main`, with packaging path filters | `develop` or `main`, with packaging path filters | Yes | No | Validation only |
-| `production-container-smoke` | Targets `develop` or `main`, with production path filters | `develop` or `main`, with production path filters | Yes | No | Disposable local containers only |
+| `repository-validation` | Targets `develop` or `main` | `develop` or `main` | Yes | No | Validation with disposable databases and containers |
 | `release` | No | No | `main` only | Push matching `v*.*.*` | Manual: validation artifacts; tag: source-first GitHub Release |
 
 The `repository-policy` workflow validates every pull request to a protected
@@ -74,40 +72,59 @@ source-first release contract, together with the supported Dependabot and
 release promotion exceptions. It uses no secrets and has read-only repository
 permission.
 
-Add the exact `repository-policy` status check to the required checks for both
-`develop` and `main`. The check must pass before merge.
+Keep these exact status checks required for both `develop` and `main`:
+
+- `repository-policy`
+- `quality`
+- `supply-chain`
+- `feature-matrix (sqlite-server)`
+- `feature-matrix (postgres-server)`
+- `feature-matrix (wasm-hydrate)`
+- `feature-matrix (observability)`
+- `feature-matrix (distributed-providers)`
+
+The stable `quality` context is an aggregate gate. It reports failure unless
+the `framework`, `official-modules`, `templates`, and `generated-application`
+jobs all succeed. Generated-application database, release-build, production
+container, and HTTP/security validation is therefore release-blocking without
+requiring a new protected-branch context.
 
 A plain push to an issue branch does not trigger the push-based validation
 workflows. Updating an open pull request triggers its `pull_request` checks.
 Validation workflows cancel superseded runs for the same pull request or
 integration ref.
 
-The backend workflow contains three gates:
+The repository validation workflow separates these responsibilities:
 
 - `feature-matrix` compiles SQLite, PostgreSQL, WASM hydration, observability,
   and distributed-provider capability sets;
-- `quality` runs formatting, DX, Clippy, provider checks, library tests, and
-  ignored PostgreSQL integration tests against a disposable service;
+- `framework` validates framework crates, host composition, provider contracts,
+  and ignored PostgreSQL integration tests against a disposable service;
+- `official-modules` validates the canonical Identity layers and their host
+  integration against a separate disposable PostgreSQL service;
+- `templates` validates manifests, deterministic rendering, the workspace-
+  external layered application, hydration, and release output;
+- `generated-application` validates fresh SQLite and PostgreSQL applications,
+  the supported v0.2.0 upgrade, and the rendered production container;
+- `quality` aggregates the four repository ownership gates under the existing
+  required status context;
 - `supply-chain` runs dependency policy and vulnerability checks.
 
-The full-stack build workflow is path-filtered to the deployable package,
-workspace crates, frontend inputs, and packaging configuration. It installs
-frontend dependencies from the committed npm lockfile, resolves Tailwind from
-the repository-local installation, builds the PostgreSQL server and database
-migrator, builds the hydrated frontend, and verifies the server, migrator,
-WebAssembly, JavaScript, CSS, and branding outputs. It does not create a
-platform archive or perform a deployment.
+The two PostgreSQL service containers use trust authentication only inside
+their isolated GitHub-hosted runners. They contain disposable test data, expose
+no repository secret, and are destroyed with the runner after validation.
 
-The container workflow is deliberately path-filtered to production build,
-configuration, Rust source, and smoke-test inputs. It builds the default
-`ssr,db-postgres` image, migrates a disposable PostgreSQL database, verifies
-health, readiness, HTML, CSS, and JavaScript, then removes the stack.
+The former standalone full-stack and production-container pull-request
+workflows are removed because the template and generated-application jobs own
+those contracts. Their scripts remain available for focused validation of the
+repository's current compatibility host but are not framework release gates.
 
 ## Local Validation
 
-Run the commands in this section from the repository root. The root virtual
-workspace coordinates validation for the deployable `apps/hegira` package and
-the reusable packages under `crates/`.
+Run the commands in this section from the repository root. The root virtual workspace
+coordinates the compatibility host under `apps/hegira`, framework and compatibility packages
+under `crates/`, official module packages under `modules/`, the workspace-external application
+base under `templates/`, and internal repository tooling under `tools/`.
 
 Validate repository documentation, agent adapters, and policy fixtures:
 
@@ -115,13 +132,61 @@ Validate repository documentation, agent adapters, and policy fixtures:
 sh scripts/repository-policy.sh
 ```
 
-This standard repository check includes the workspace dependency boundary
-and source-first release policies. Run those focused contracts directly with:
+This standard repository check includes the locked-metadata package allowlist,
+repository-location ownership boundary, and source-first release policies. Run
+those focused contracts directly with:
 
 ```sh
 sh scripts/architecture-boundaries.sh
 sh scripts/release-policy.sh
 ```
+
+Validate the workspace-external canonical layered application base against the
+current framework checkout:
+
+```sh
+sh scripts/layered-template-check.sh
+```
+
+The check works on a disposable copy. It preserves pinned release-style
+dependencies in a normal render and does not write maintainer paths into
+template source files. For repository validation, the internal renderer patches
+declared framework dependencies only in the disposable output. The check runs
+the renderer snapshot and failure-path tests, installs the client package lock,
+validates native workspace targets and tests, compiles the hydration target,
+and produces the full-stack Cargo Leptos release output.
+
+The renderer is an internal maintainer tool rather than the public Hegira CLI.
+To inspect an independently copyable release-style render:
+
+```sh
+cargo run --locked -p template_renderer -- render \
+  --repository-root . \
+  --template layered \
+  --output /tmp/hegira-layered
+```
+
+The destination must not already exist. Component manifests declare their
+requirements, conflicts, source inputs, and repository-validation dependency
+patches. They cannot execute shell commands.
+
+Validate a rendered application against both database providers, the supported
+v0.2.0 database upgrade, and the production container contract:
+
+```sh
+sh scripts/generated-application-check.sh
+```
+
+The check renders into a disposable directory, runs SQLite fresh-install and
+upgrade tests in memory, and starts an ephemeral PostgreSQL container for the
+equivalent PostgreSQL contracts. It then builds the rendered application image,
+boots it against the disposable database, and verifies readiness, hydration
+assets, security headers, and unauthenticated Bearer API behavior. The check
+stages a credential-free framework source view under the disposable render so
+the same relative Cargo paths work on the host and inside the Docker build. It
+generates runtime-only database and JWT values and removes its containers,
+network, database state, and rendered output on exit. It never targets the
+maintainer's configured database.
 
 To reproduce pull request metadata validation with a saved GitHub
 `pull_request` event:
@@ -136,14 +201,24 @@ Run the backend gate without ignored PostgreSQL tests:
 sh scripts/backend-check.sh
 ```
 
+This aggregate runs the framework/host, official-module, and canonical layered-template
+checks. Run an ownership gate directly while iterating when the change is confined to that
+surface:
+
+```sh
+sh scripts/framework-check.sh
+sh scripts/official-modules-check.sh
+sh scripts/layered-template-check.sh
+```
+
 Verify the full-stack release outputs without creating a release archive:
 
 ```sh
 sh scripts/full-stack-build-check.sh
 ```
 
-To match the CI quality job, provide a disposable PostgreSQL database and opt
-in to destructive ignored tests:
+To include the framework and official-module gates' ignored PostgreSQL tests locally, provide
+a disposable PostgreSQL database and opt in explicitly:
 
 ```sh
 APP_ENV=test \
@@ -165,19 +240,26 @@ Never point the ignored database tests at persistent or production data.
 Hegira is distributed as source. A release consists of an immutable signed
 stable SemVer tag, a GitHub Release, versioned release notes, GitHub-provided
 source archives, and a source-scoped SPDX JSON SBOM. It does not contain a
-platform executable, application bundle, official container image, or
-deployment.
+platform executable, application bundle, published crate or CLI package,
+official container image, or deployment.
 
 The `release` workflow supports manual release-candidate validation from
 `main` and publication from a pushed `vMAJOR.MINOR.PATCH` tag. Both paths:
 
 - verify that the release ref, every workspace package version, the dated
   changelog entry, and the versioned release-note identity agree;
+- verify that registry publication remains disabled for every workspace
+  package;
 - generate and verify an SPDX JSON SBOM from a clean checkout before build
   outputs exist;
-- verify the full-stack PostgreSQL server, migrator, hydrated frontend, and
-  branding outputs;
-- build and smoke-test the production container against disposable PostgreSQL.
+- validate framework packages and the compatibility host, including their
+  database-backed contracts against disposable PostgreSQL;
+- validate official Identity module packages and integration against a
+  separate disposable PostgreSQL database;
+- validate typed template rendering, the independent layered workspace,
+  hydration, and release output;
+- validate fresh SQLite and PostgreSQL generated applications, supported
+  v0.2.0 upgrades, and the rendered production container and HTTP contract.
 
 A manual run uploads the source SBOM as a short-lived workflow artifact but
 cannot execute the publication job. A push to `develop` or `main` never creates
@@ -211,10 +293,13 @@ automatically provides `.zip` and `.tar.gz` source archives for the tagged
 source.
 
 Enable GitHub's release immutability setting for the repository. Publication
-then locks the associated tag and uploaded SBOM asset. Published tags and
-releases must not be deleted, moved, recreated, or replaced. Correct a released
-defect with a new patch version. The workflow creates a new release and never
-updates an existing one.
+then locks the associated tag and uploaded SBOM asset and automatically creates
+a release attestation covering the release tag, commit, and assets. Verify an
+immutable published release with `gh release verify vX.Y.Z`, and verify a
+downloaded SBOM with `gh release verify-asset vX.Y.Z <path>`. Published tags
+and releases must not be deleted, moved, recreated, or replaced. Correct a
+released defect with a new patch version. The workflow creates a new release
+and never updates an existing one.
 
 Versioned release notes are historical records. The v0.1.x notes continue to
 describe the platform bundle artifacts actually published for those versions;

@@ -1,6 +1,6 @@
 use std::{sync::Arc, time::Duration};
 
-use application::shared::jobs::{DurableJobOptions, DurableJobQueue};
+use background_jobs::{DurableJobOptions, DurableJobQueue};
 use chrono::Utc;
 use sqlx::{Row, SqlitePool};
 use uuid::Uuid;
@@ -20,7 +20,7 @@ pub struct SqliteDurableJobQueue {
 mod tests {
     use super::*;
     use crate::config::{DatabaseBackend, DatabaseConfig};
-    use application::shared::jobs::{DurableJobFuture, DurableJobHandler};
+    use background_jobs::{DurableJobFuture, DurableJobHandler};
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     struct CountingHandler {
@@ -46,7 +46,7 @@ mod tests {
     }
 
     async fn pool() -> SqlitePool {
-        crate::db::connect_sqlite(&DatabaseConfig {
+        crate::db::connect_sqlite_with_application_migrations(&DatabaseConfig {
             backend: DatabaseBackend::Sqlite,
             url: "sqlite::memory:".to_string(),
             max_connections: 4,

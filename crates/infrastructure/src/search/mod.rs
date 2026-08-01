@@ -126,66 +126,25 @@ pub async fn reindex_identity_users(
     const INDEX: &str = "identity_users";
     const TEMPORARY_INDEX: &str = "identity_users_reindex";
     const BATCH_SIZE: i64 = 500;
-    let mut transaction = pool.begin().await.map_err(|err| err.to_string())?;
-    sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
-        .execute(&mut *transaction)
-        .await
-        .map_err(|err| err.to_string())?;
-    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
-        .bind(SEARCH_REBUILD_LOCK)
-        .execute(&mut *transaction)
-        .await
-        .map_err(|err| err.to_string())?;
+    let mut snapshot =
+        crate::identity::search::IdentitySearchSnapshot::begin(pool, SEARCH_REBUILD_LOCK)
+            .await
+            .map_err(|error| error.to_string())?;
     search
         .prepare_rebuild(INDEX, TEMPORARY_INDEX)
         .await
         .map_err(|err| err.to_string())?;
 
-    let mut last_id = 0_i32;
     let mut indexed = 0_u64;
     loop {
-        let rows = sqlx::query_as::<
-            _,
-            (
-                i32,
-                uuid::Uuid,
-                String,
-                chrono::DateTime<chrono::Utc>,
-                bool,
-                Vec<String>,
-            ),
-        >(
-            "SELECT id, pid, username, created_at, email_verified_at IS NOT NULL,
-                    ARRAY(SELECT role_name FROM user_roles WHERE user_id = users.id ORDER BY role_name)
-             FROM users
-             WHERE deleted_at IS NULL AND id > $1
-             ORDER BY id
-             LIMIT $2",
-        )
-        .bind(last_id)
-        .bind(BATCH_SIZE)
-        .fetch_all(&mut *transaction)
-        .await
-        .map_err(|err| err.to_string())?;
-        if rows.is_empty() {
+        let documents = snapshot
+            .next_page(BATCH_SIZE)
+            .await
+            .map_err(|error| error.to_string())?;
+        if documents.is_empty() {
             break;
         }
 
-        last_id = rows.last().map(|row| row.0).unwrap_or(last_id);
-        let documents = rows
-            .into_iter()
-            .map(|(_, pid, username, created_at, is_verified, roles)| {
-                let mut fields = serde_json::Map::new();
-                fields.insert("username".to_string(), serde_json::json!(username));
-                fields.insert("created_at".to_string(), serde_json::json!(created_at));
-                fields.insert("is_verified".to_string(), serde_json::json!(is_verified));
-                fields.insert("roles".to_string(), serde_json::json!(roles));
-                application::shared::search::SearchDocument {
-                    id: pid.to_string(),
-                    fields,
-                }
-            })
-            .collect::<Vec<_>>();
         indexed += documents.len() as u64;
         search
             .upsert(TEMPORARY_INDEX, documents)
@@ -196,7 +155,7 @@ pub async fn reindex_identity_users(
         .promote_rebuild(INDEX, TEMPORARY_INDEX)
         .await
         .map_err(|err| err.to_string())?;
-    transaction.commit().await.map_err(|err| err.to_string())?;
+    snapshot.commit().await.map_err(|error| error.to_string())?;
     if !confirmed {
         tracing::warn!(
             index = INDEX,

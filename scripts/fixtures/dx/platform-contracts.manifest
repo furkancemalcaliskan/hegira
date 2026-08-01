@@ -1,0 +1,15 @@
+# Platform composition touchpoints that remain relevant without a sample domain.
+max_feature_files=0
+max_feature_loc=0
+max_provider_loc=0
+max_central_touchpoints=9
+
+central:modules/identity/application_contracts/src/features.rs
+central:crates/presentation/src/composition/services.rs
+central:crates/presentation/src/composition/server_fns.rs
+central:modules/identity/http/src/controllers/mod.rs
+central:crates/web/src/mod.rs
+central:crates/web/src/routes.rs
+central:crates/web/src/app/navigation.rs
+central:crates/web/src/app/sidebar.rs
+central:crates/runtime/src/lib.rs

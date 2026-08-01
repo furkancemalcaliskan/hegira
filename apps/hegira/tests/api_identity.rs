@@ -1,13 +1,8 @@
 #![cfg(feature = "ssr")]
 
-use axum::{
-    Router,
-    body::Body,
-    http::{Request, StatusCode, header},
-    middleware,
-};
+use axum::{Router, http::StatusCode, middleware};
 use hegira::{
-    application_contracts::catalog::products::{ProductDto, ProductPageDto},
+    application_contracts::identity::permissions,
     application_contracts::identity::users::{PagedUserResultDto, UserDto},
     infrastructure::{
         cache::CacheAdapter,
@@ -31,11 +26,11 @@ use hegira::{
     },
     presentation::http::state::AppState,
 };
-use http_body_util::BodyExt;
-use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 use std::env;
-use tower::ServiceExt;
+use test_support::http::{
+    request_empty, request_empty_with_authorization, request_json, response_json,
+};
 
 static DB_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
@@ -214,9 +209,13 @@ async fn setup() -> Router {
         .await
         .expect("failed to reset api test database");
     let repository = SqlxIdentityRepository::new(pool.clone());
-    seed_identity(&repository, &config.seed)
-        .await
-        .expect("failed to seed api test identity data");
+    seed_identity(
+        &repository,
+        &infrastructure::security::password_hasher::Argon2PasswordHasher,
+        &config.seed,
+    )
+    .await
+    .expect("failed to seed api test identity data");
     let state = AppState::new(
         config,
         infrastructure::db::DatabasePool::Postgres(pool),
@@ -226,9 +225,7 @@ async fn setup() -> Router {
         SettingsAdapter::Null(Default::default()),
     );
 
-    hegira::presentation::http::routes::routes(state).layer(middleware::from_fn(
-        hegira::presentation::http::middleware::request_id::set,
-    ))
+    test_routes(state).layer(middleware::from_fn(hegira::http_support::request_id::set))
 }
 
 #[cfg(feature = "db-sqlite")]
@@ -237,12 +234,17 @@ async fn setup_sqlite() -> Router {
     config.database.backend = infrastructure::config::DatabaseBackend::Sqlite;
     config.database.url = "sqlite::memory:".to_string();
     config.database.max_connections = 1;
-    let pool = hegira::infrastructure::db::connect_sqlite(&config.database)
-        .await
-        .unwrap();
-    seed_sqlite_identity(pool.clone(), &config.seed)
-        .await
-        .unwrap();
+    let pool =
+        hegira::infrastructure::db::connect_sqlite_with_application_migrations(&config.database)
+            .await
+            .unwrap();
+    seed_sqlite_identity(
+        pool.clone(),
+        &infrastructure::security::password_hasher::Argon2PasswordHasher,
+        &config.seed,
+    )
+    .await
+    .unwrap();
     let state = AppState::new(
         config,
         infrastructure::db::DatabasePool::Sqlite(pool),
@@ -251,9 +253,7 @@ async fn setup_sqlite() -> Router {
         SearchAdapter::Null(Default::default()),
         SettingsAdapter::Null(Default::default()),
     );
-    hegira::presentation::http::routes::routes(state).layer(middleware::from_fn(
-        hegira::presentation::http::middleware::request_id::set,
-    ))
+    test_routes(state).layer(middleware::from_fn(hegira::http_support::request_id::set))
 }
 
 async fn setup_without_database() -> Router {
@@ -274,97 +274,28 @@ async fn setup_without_database_with_config(config: AppConfig) -> Router {
         SettingsAdapter::Null(Default::default()),
     );
 
-    hegira::presentation::http::routes::routes(state).layer(middleware::from_fn(
-        hegira::presentation::http::middleware::request_id::set,
-    ))
+    test_routes(state).layer(middleware::from_fn(hegira::http_support::request_id::set))
 }
 
-async fn request_json(
-    app: Router,
-    method: &str,
-    uri: &str,
-    body: Value,
-    token: Option<&str>,
-) -> axum::response::Response {
-    let mut builder = Request::builder()
-        .method(method)
-        .uri(uri)
-        .header(header::CONTENT_TYPE, "application/json");
+fn test_routes(state: AppState) -> Router {
+    let router = hegira::presentation::http::routes::operational_routes(state.clone())
+        .merge(hegira::server::identity_api_routes(state));
 
-    if let Some(token) = token {
-        builder = builder.header(header::AUTHORIZATION, format!("Bearer {token}"));
-    }
-
-    app.oneshot(
-        builder
-            .body(Body::from(body.to_string()))
-            .expect("failed to build request"),
-    )
-    .await
-    .expect("request failed")
-}
-
-async fn request_empty(
-    app: Router,
-    method: &str,
-    uri: &str,
-    token: Option<&str>,
-) -> axum::response::Response {
-    let mut builder = Request::builder().method(method).uri(uri);
-
-    if let Some(token) = token {
-        builder = builder.header(header::AUTHORIZATION, format!("Bearer {token}"));
-    }
-
-    app.oneshot(
-        builder
-            .body(Body::empty())
-            .expect("failed to build request"),
-    )
-    .await
-    .expect("request failed")
-}
-
-async fn request_empty_with_authorization(
-    app: Router,
-    method: &str,
-    uri: &str,
-    authorization: &str,
-) -> axum::response::Response {
-    app.oneshot(
-        Request::builder()
-            .method(method)
-            .uri(uri)
-            .header(header::AUTHORIZATION, authorization)
-            .body(Body::empty())
-            .expect("failed to build request"),
-    )
-    .await
-    .expect("request failed")
-}
-
-async fn response_json<T>(response: axum::response::Response) -> T
-where
-    T: DeserializeOwned,
-{
-    let bytes = response
-        .into_body()
-        .collect()
-        .await
-        .expect("failed to read response body")
-        .to_bytes();
-
-    serde_json::from_slice(&bytes).expect("failed to parse json response")
+    router
 }
 
 async fn login_admin(app: Router) -> String {
+    login_as(app, "admin@example.com", "admin12345").await
+}
+
+async fn login_as(app: Router, username: &str, password: &str) -> String {
     let response = request_json(
         app,
         "POST",
         "/api/identity/auth/login",
         json!({
-            "username": "admin@example.com",
-            "password": "admin12345"
+            "username": username,
+            "password": password
         }),
         None,
     )
@@ -378,73 +309,247 @@ async fn login_admin(app: Router) -> String {
         .to_string()
 }
 
+async fn assert_identity_composition_and_security_parity(app: Router) {
+    let admin_token = login_admin(app.clone()).await;
+
+    let response = request_empty(
+        app.clone(),
+        "GET",
+        "/api/identity/auth/me",
+        Some(&admin_token),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let current_user: Value = response_json(response).await;
+    assert_eq!(current_user["username"], "admin@example.com");
+    let current_permissions = current_user["permissions"]
+        .as_array()
+        .expect("current user permissions must be an array")
+        .iter()
+        .filter_map(Value::as_str)
+        .collect::<std::collections::BTreeSet<_>>();
+    assert!(current_permissions.contains(permissions::USERS.0));
+    assert!(current_permissions.contains(permissions::AUTHORIZATION.0));
+
+    let response = request_empty(
+        app.clone(),
+        "GET",
+        "/api/identity/auth/sessions",
+        Some(&admin_token),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let sessions: Value = response_json(response).await;
+    assert!(
+        !sessions
+            .as_array()
+            .expect("sessions must be an array")
+            .is_empty()
+    );
+
+    let response = request_empty(
+        app.clone(),
+        "GET",
+        "/api/identity/auth/totp/status",
+        Some(&admin_token),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let totp_status: Value = response_json(response).await;
+    assert_eq!(totp_status["enabled"], false);
+
+    let response = request_empty(
+        app.clone(),
+        "POST",
+        "/api/identity/auth/totp/setup",
+        Some(&admin_token),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let totp_setup: Value = response_json(response).await;
+    assert!(
+        totp_setup["secret"]
+            .as_str()
+            .is_some_and(|secret| !secret.is_empty())
+    );
+    assert!(
+        totp_setup["otpauth_url"]
+            .as_str()
+            .is_some_and(|uri| uri.starts_with("otpauth://"))
+    );
+
+    let response = request_empty(
+        app.clone(),
+        "GET",
+        "/api/identity/auth/oauth/connections",
+        Some(&admin_token),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let connections: Value = response_json(response).await;
+    assert_eq!(connections, json!([]));
+
+    let response = request_empty(
+        app.clone(),
+        "GET",
+        "/api/identity/authorization/permissions",
+        Some(&admin_token),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let permission_registry: Value = response_json(response).await;
+    let permission_names = permission_registry
+        .as_array()
+        .expect("permission registry must be an array")
+        .iter()
+        .filter_map(|permission| permission["name"].as_str())
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(
+        permission_names,
+        permissions::ALL
+            .iter()
+            .map(|permission| permission.name.0)
+            .collect()
+    );
+
+    let response = request_json(
+        app.clone(),
+        "POST",
+        "/api/identity/authorization/roles",
+        json!({ "name": "parity-auditor" }),
+        Some(&admin_token),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+
+    let response = request_json(
+        app.clone(),
+        "PUT",
+        "/api/identity/authorization/roles/parity-auditor/permissions",
+        json!({
+            "role_name": "ignored-by-route",
+            "permissions": [permissions::USERS.0]
+        }),
+        Some(&admin_token),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+
+    let response = request_empty(
+        app.clone(),
+        "GET",
+        "/api/identity/authorization/roles?page=1&page_size=20&search=parity-auditor",
+        Some(&admin_token),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let roles: Value = response_json(response).await;
+    assert_eq!(roles["total_count"], 1);
+    assert_eq!(roles["items"][0]["name"], "parity-auditor");
+    assert_eq!(
+        roles["items"][0]["permissions"],
+        json!([permissions::USERS.0])
+    );
+
+    let response = request_json(
+        app.clone(),
+        "POST",
+        "/api/identity/users",
+        json!({
+            "username": "parity-member@example.com",
+            "password": "member12345",
+            "is_verified": true,
+            "roles": []
+        }),
+        Some(&admin_token),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::CREATED);
+
+    let member_token = login_as(app.clone(), "parity-member@example.com", "member12345").await;
+    let response = request_empty(
+        app,
+        "GET",
+        "/api/identity/authorization/permissions",
+        Some(&member_token),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    let forbidden: Value = response_json(response).await;
+    assert_eq!(forbidden["code"], "general:forbidden");
+}
+
 #[cfg(feature = "db-sqlite")]
 #[tokio::test]
-async fn admin_can_manage_catalog_products_on_sqlite() {
+async fn identity_composition_and_security_parity_holds_on_sqlite() {
+    assert_identity_composition_and_security_parity(setup_sqlite().await).await;
+}
+
+#[tokio::test]
+#[ignore = "requires a reachable PostgreSQL DATABASE_URL and resets the test database"]
+async fn identity_composition_and_security_parity_holds_on_postgres() {
+    let _guard = DB_TEST_LOCK.lock().await;
+    assert_identity_composition_and_security_parity(setup().await).await;
+}
+
+#[cfg(feature = "db-sqlite")]
+#[tokio::test]
+async fn admin_can_manage_identity_users_on_sqlite() {
     let app = setup_sqlite().await;
     let token = login_admin(app.clone()).await;
 
     let response = request_json(
         app.clone(),
         "POST",
-        "/api/catalog/products",
+        "/api/identity/users",
         json!({
-            "name": "Keyboard", "sku": "KB-01", "price_minor": 12500, "is_active": true
+            "username": "operator@example.com",
+            "password": "operator12345",
+            "is_verified": false,
+            "roles": []
         }),
         Some(&token),
     )
     .await;
     assert_eq!(response.status(), StatusCode::CREATED);
-    let created: ProductDto = response_json(response).await;
-    assert_eq!(created.revision, 1);
+    let created: UserDto = response_json(response).await;
+    assert_eq!(created.username, "operator@example.com");
+    assert!(created.roles.is_empty());
+    assert!(!created.is_verified);
 
     let response = request_empty(
         app.clone(),
         "GET",
-        "/api/catalog/products?page=1&page_size=10&search=key&sorting=price_asc",
+        "/api/identity/users?page=1&page_size=10&search=operator",
         Some(&token),
     )
     .await;
     assert_eq!(response.status(), StatusCode::OK);
-    let page: ProductPageDto = response_json(response).await;
+    let page: PagedUserResultDto = response_json(response).await;
     assert_eq!(page.total_count, 1);
     assert_eq!(page.items[0].pid, created.pid);
 
     let response = request_json(
         app.clone(),
         "PUT",
-        &format!("/api/catalog/products/{}", created.pid),
+        "/api/identity/users/operator@example.com",
         json!({
-            "name": "Mechanical Keyboard", "sku": "KB-01", "price_minor": 15000,
-            "is_active": true, "expected_revision": created.revision
+            "password": null,
+            "is_verified": true,
+            "roles": []
         }),
         Some(&token),
     )
     .await;
     assert_eq!(response.status(), StatusCode::OK);
-    let updated: ProductDto = response_json(response).await;
-    assert_eq!(updated.revision, 2);
-
-    let response = request_json(
-        app.clone(),
-        "PUT",
-        &format!("/api/catalog/products/{}", created.pid),
-        json!({
-            "name": "Stale", "sku": "KB-01", "price_minor": 1,
-            "is_active": true, "expected_revision": created.revision
-        }),
-        Some(&token),
-    )
-    .await;
-    assert_eq!(response.status(), StatusCode::CONFLICT);
+    let updated: UserDto = response_json(response).await;
+    assert!(updated.is_verified);
+    assert!(updated.roles.is_empty());
 
     let response = request_empty(
         app.clone(),
         "DELETE",
-        &format!(
-            "/api/catalog/products/{}?expected_revision={}",
-            created.pid, updated.revision
-        ),
+        "/api/identity/users/operator@example.com",
         Some(&token),
     )
     .await;
@@ -452,7 +557,7 @@ async fn admin_can_manage_catalog_products_on_sqlite() {
     let response = request_empty(
         app,
         "GET",
-        &format!("/api/catalog/products/{}", created.pid),
+        "/api/identity/users/operator@example.com",
         Some(&token),
     )
     .await;
@@ -502,7 +607,8 @@ async fn protected_users_api_rejects_invalid_authorization_scheme() {
     let app = setup_without_database().await;
 
     let response =
-        request_empty_with_authorization(app, "GET", "/api/identity/users", "Token abc").await;
+        request_empty_with_authorization(app, "GET", "/api/identity/users", Some("Token abc"))
+            .await;
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 
     let body: Value = response_json(response).await;
