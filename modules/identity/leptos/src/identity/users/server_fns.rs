@@ -2,11 +2,11 @@ use leptos::prelude::*;
 
 #[server]
 pub async fn list_users(
-    input: application_contracts::identity::users::ListUsersInput,
-) -> Result<application_contracts::identity::users::PagedUserResultDto, ServerFnError> {
-    use presentation::composition::server_fns::{server_fn_error, user_service};
+    input: identity_application_contracts::identity::users::ListUsersInput,
+) -> Result<identity_application_contracts::identity::users::PagedUserResultDto, ServerFnError> {
+    use crate::identity::server::{server_fn_error, user_service};
 
-    let token = presentation::composition::web_session::require_token().await?;
+    let token = crate::identity::server::session::require_token().await?;
     user_service()
         .list(token, input)
         .await
@@ -16,10 +16,10 @@ pub async fn list_users(
 #[server]
 pub async fn get_user(
     username: String,
-) -> Result<application_contracts::identity::users::UserDto, ServerFnError> {
-    use presentation::composition::server_fns::{server_fn_error, user_service};
+) -> Result<identity_application_contracts::identity::users::UserDto, ServerFnError> {
+    use crate::identity::server::{server_fn_error, user_service};
 
-    let token = presentation::composition::web_session::require_token().await?;
+    let token = crate::identity::server::session::require_token().await?;
     user_service()
         .get(token, username)
         .await
@@ -28,11 +28,11 @@ pub async fn get_user(
 
 #[server]
 pub async fn create_user_admin(
-    input: application_contracts::identity::users::CreateUserInput,
-) -> Result<application_contracts::identity::users::UserDto, ServerFnError> {
-    use presentation::composition::server_fns::{server_fn_error, user_service};
+    input: identity_application_contracts::identity::users::CreateUserInput,
+) -> Result<identity_application_contracts::identity::users::UserDto, ServerFnError> {
+    use crate::identity::server::{server_fn_error, user_service};
 
-    let token = presentation::composition::web_session::require_token().await?;
+    let token = crate::identity::server::session::require_token().await?;
     user_service()
         .create(token, input)
         .await
@@ -41,11 +41,11 @@ pub async fn create_user_admin(
 
 #[server]
 pub async fn update_user_admin(
-    input: application_contracts::identity::users::UpdateUserInput,
-) -> Result<application_contracts::identity::users::UserDto, ServerFnError> {
-    use presentation::composition::server_fns::{server_fn_error, user_service};
+    input: identity_application_contracts::identity::users::UpdateUserInput,
+) -> Result<identity_application_contracts::identity::users::UserDto, ServerFnError> {
+    use crate::identity::server::{server_fn_error, user_service};
 
-    let token = presentation::composition::web_session::require_token().await?;
+    let token = crate::identity::server::session::require_token().await?;
     user_service()
         .update(token, input)
         .await
@@ -54,9 +54,9 @@ pub async fn update_user_admin(
 
 #[server]
 pub async fn delete_user_admin(username: String) -> Result<(), ServerFnError> {
-    use presentation::composition::server_fns::{server_fn_error, user_service};
+    use crate::identity::server::{server_fn_error, user_service};
 
-    let token = presentation::composition::web_session::require_token().await?;
+    let token = crate::identity::server::session::require_token().await?;
     user_service()
         .delete(token, username)
         .await

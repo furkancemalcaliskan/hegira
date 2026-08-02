@@ -2,26 +2,23 @@ use leptos::prelude::*;
 use leptos::task::spawn_local;
 
 use crate::{
-    application_contracts::identity::auth::CurrentUserDto,
-    web::{
-        app::{
-            layout::WorkspaceRouteLayout,
-            page::{PageHeaderKey, PageSection},
-        },
-        identity::auth::server_fns::{
-            current_user, oauth_authorize, oauth_connections, oauth_providers,
-            unlink_oauth_connection,
-        },
-        shared::{
-            i18n::{T, use_i18n},
-            rust_ui::ui::{
-                alert::{Alert, AlertDescription},
-                avatar::{Avatar, AvatarFallback},
-                badge::{Badge, BadgeVariant},
-                button::{Button, ButtonVariant},
-                dialog::{DialogBody, DialogDescription, DialogFooter, DialogHeader, DialogTitle},
-                skeleton::Skeleton,
-            },
+    app::{
+        layout::WorkspaceRouteLayout,
+        page::{PageHeaderKey, PageSection},
+    },
+    identity::auth::server_fns::{
+        current_user, oauth_authorize, oauth_connections, oauth_providers, unlink_oauth_connection,
+    },
+    identity_application_contracts::identity::auth::CurrentUserDto,
+    shared::{
+        i18n::{T, use_i18n},
+        rust_ui::ui::{
+            alert::{Alert, AlertDescription},
+            avatar::{Avatar, AvatarFallback},
+            badge::{Badge, BadgeVariant},
+            button::{Button, ButtonVariant},
+            dialog::{DialogBody, DialogDescription, DialogFooter, DialogHeader, DialogTitle},
+            skeleton::Skeleton,
         },
     },
 };
@@ -33,7 +30,7 @@ pub fn ProfileRoute() -> impl IntoView {
     let error = RwSignal::new(Option::<String>::None);
     let profile = RwSignal::new(Option::<CurrentUserDto>::None);
     let connections = RwSignal::new(Vec::<
-        application_contracts::identity::auth::OAuthConnectionDto,
+        identity_application_contracts::identity::auth::OAuthConnectionDto,
     >::new());
     let providers = RwSignal::new(Vec::<String>::new());
     let confirm_disconnect = RwSignal::new(None::<String>);

@@ -1,11 +1,11 @@
 use leptos::prelude::*;
 
 use crate::{
-    application_contracts::identity::{
+    identity_application_contracts::identity::{
         authorization::RoleDto,
         users::{CreateUserInput, ListUsersInput, UpdateUserInput, UserDto},
     },
-    web::shared::i18n::{I18n, T},
+    shared::i18n::{I18n, T},
 };
 use leptos_support::mutation::MutationStatus;
 

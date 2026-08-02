@@ -13,7 +13,7 @@ use identity_application_contracts::identity::{
     },
     authorization::{
         AssignUserRoleInput, CreateRoleInput, ListRolesInput, PagedRoleResultDto, PermissionDto,
-        SetRolePermissionsInput, UpdateRoleInput,
+        RoleDto, SetRolePermissionsInput, UpdateRoleInput,
     },
     users::{CreateUserInput, ListUsersInput, PagedUserResultDto, UpdateUserInput, UserDto},
 };
@@ -77,6 +77,7 @@ pub trait AuthServiceContract: Send + Sync {
 /// Transport-independent Identity OAuth operations exposed to adapters.
 #[async_trait]
 pub trait OAuthServiceContract: Send + Sync {
+    fn enabled_providers(&self) -> Vec<String>;
     async fn authorize_url(&self, provider: String) -> ApplicationResult<OAuthAuthorizeDto>;
     async fn link_authorize_url(
         &self,
@@ -131,11 +132,13 @@ pub trait UserServiceContract: Send + Sync {
 #[async_trait]
 pub trait PermissionServiceContract: Send + Sync {
     async fn list_permissions(&self, actor_token: String) -> ApplicationResult<Vec<PermissionDto>>;
+    async fn list_roles(&self, actor_token: String) -> ApplicationResult<Vec<RoleDto>>;
     async fn list_roles_page(
         &self,
         actor_token: String,
         input: ListRolesInput,
     ) -> ApplicationResult<PagedRoleResultDto>;
+    async fn get_role(&self, actor_token: String, role_name: String) -> ApplicationResult<RoleDto>;
     async fn create_role(
         &self,
         actor_token: String,

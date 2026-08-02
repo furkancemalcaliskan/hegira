@@ -85,8 +85,8 @@ identity_http
      leptos_support
 
 identity_leptos
-  -> application, application_contracts, domain_shared, leptos_support,
-     presentation, web
+  -> identity_application, identity_application_contracts,
+     identity_domain_shared, leptos_support
 
 template_renderer
   -> no local packages
@@ -132,7 +132,7 @@ matching policy update.
 | `application` | `background_jobs`, `identity_application`, `settings`, `storage` |
 | `infrastructure` | `application`, `application_contracts`, `background_jobs`, `configuration`, `domain`, `domain_shared`, `identity_sqlx`, `persistence`, `platform_core`, `runtime` |
 | `presentation` | `application`, `application_contracts`, `domain_shared`, `infrastructure`, `leptos_support`, `observability` |
-| `web` | `application`, `application_contracts`, `domain_shared`, `leptos_support`, `presentation` |
+| `web` | `application`, `application_contracts`, `domain_shared`, `identity_leptos`, `leptos_support`, `presentation` |
 | `runtime` | None |
 | `db_migrator` | `infrastructure`, `persistence` |
 | `identity_domain_shared` | None |
@@ -141,7 +141,7 @@ matching policy update.
 | `identity_application` | `audit`, `cache`, `identity_application_contracts`, `identity_domain`, `identity_domain_shared`, `mail`, `search`, `security` |
 | `identity_sqlx` | `identity_application`, `identity_application_contracts`, `identity_domain`, `identity_domain_shared`, `persistence` |
 | `identity_http` | `http_support`, `identity_application`, `identity_application_contracts`, `leptos_support` |
-| `identity_leptos` | `application`, `application_contracts`, `domain_shared`, `leptos_support`, `presentation`, `web` |
+| `identity_leptos` | `identity_application`, `identity_application_contracts`, `identity_domain_shared`, `leptos_support` |
 | `template_renderer` | None |
 
 The boundary check reads declared local dependencies from locked Cargo metadata
@@ -197,7 +197,7 @@ the referenced follow-up issue has already been implemented.
 | `application` | Compatibility | Extract and retire | #146 |
 | `infrastructure` | Compatibility | Extract and retire | #137, #138, #146 |
 | `presentation` | Compatibility | Extract and retire | #139, #146 |
-| `web` | Compatibility | Extract and retire | #135, #141, #146 |
+| `web` | Compatibility | Extract and retire | #141, #146 |
 | `db_migrator` | Compatibility | Replace and retire | #142, #146 |
 | `identity_domain_shared` | Official module | Retain | None |
 | `identity_domain` | Official module | Retain | None |
@@ -205,7 +205,7 @@ the referenced follow-up issue has already been implemented.
 | `identity_application` | Official module | Retain | None |
 | `identity_sqlx` | Official module | Retain | None |
 | `identity_http` | Official module | Retain | None |
-| `identity_leptos` | Official module | Decouple and retain | #135 |
+| `identity_leptos` | Official module | Retain | None |
 | `template_renderer` | Repository tooling | Refactor and retain | #148 |
 
 `Retain` means the package already has its final owner. `Decouple and retain`
@@ -215,18 +215,10 @@ reusable and application-owned behavior to move before deletion. `Replace and
 retire` requires a verified successor before deletion. `Refactor and retain`
 keeps an internal tool while changing its boundary.
 
-The current graph needs these temporary outward edges while the accepted
-follow-up issues remove them:
-
-| Transitional edge | Removal issue |
-|---|---|
-| `identity_leptos -> application, application_contracts, domain_shared, presentation, web` | #135 |
-
-The checker permits only these exact edges, requires every exception to name an
-accepted issue, and fails when an exception becomes stale. New framework or
-module dependencies on compatibility code are rejected. Normal, optional,
-development, and build dependencies use the same checks, so dependency kind
-cannot bypass the boundary.
+The current graph has no module-to-compatibility transition exception. New
+framework or module dependencies on compatibility code are rejected. Normal,
+optional, development, and build dependencies use the same checks, so
+dependency kind cannot bypass the boundary.
 
 The canonical layered application has a separate ownership contract:
 
@@ -283,13 +275,13 @@ The `modules/identity/` directory owns the canonical Identity Domain Shared,
 Domain, Application Contracts, Application, SQLx, Axum HTTP, and Leptos
 adapter sources. The existing `domain_shared`, `domain`,
 `application_contracts`, `application`, `infrastructure`, `presentation`, and
-`web` packages compile the applicable canonical files as compatibility views
-for current consumers without adding a forbidden framework dependency on a
-module package. The host explicitly selects the Identity HTTP adapter. The
-current `web` package compiles the module-owned Leptos source and consumes its
-explicit route and navigation contributions while it continues to own the
-application shell and shared UI primitives. General background-job, settings,
-and storage application ports remain framework-owned.
+`web` packages expose compatibility views for current consumers. The host
+explicitly selects the Identity HTTP adapter. The current `web` package depends
+on the separately compiled Identity Leptos adapter and consumes its explicit
+route, navigation, state, and layout contributions while it continues to own
+the compatibility application shell. Reusable visual, form, CRUD, routing,
+toast, and cookie helpers are owned by `leptos_support`. General
+background-job, settings, and storage application ports remain framework-owned.
 
 The canonical source at `templates/applications/layered` renders a separate
 Cargo workspace and is deliberately absent from the framework workspace member
@@ -348,7 +340,7 @@ build consume the same manifests without leaking maintainer filesystem paths.
 | `persistence` | `crates/persistence` | Database provider selection, pools, health checks, transaction primitives, and host-owned migration planning and execution |
 | `background_jobs` | `crates/background_jobs` | Job contracts, handler registration, observation, and recurring execution |
 | `http_support` | `crates/http_support` | Application-independent Axum middleware, transport-policy markers, CSRF, trusted-proxy resolution, and rate limiting |
-| `leptos_support` | `crates/leptos_support` | Product-neutral Leptos form state, mutation state, context access, and safe server-function errors |
+| `leptos_support` | `crates/leptos_support` | Product-neutral Leptos UI, form, CRUD, routing, toast, cookie-session, mutation-state, context, and safe server-function primitives |
 | `observability` | `crates/observability` | Tracing initialization, health/readiness primitives, HTTP and background-job metrics, and Prometheus exposure |
 | `test_support` | `crates/test_support` | Shared framework capability-port test doubles and application-independent Axum request/response helpers |
 | `domain_shared` | `crates/domain_shared` | Current compatibility view of Identity shared contracts plus application localization resources |
@@ -356,8 +348,8 @@ build consume the same manifests without leaking maintainer filesystem paths.
 | `application_contracts` | `crates/application_contracts` | Current compatibility view of Identity DTOs, inputs, permissions, and feature metadata |
 | `application` | `crates/application` | Current compatibility view of Identity use cases and framework capability ports |
 | `infrastructure` | `crates/infrastructure` | Host infrastructure composition and adapters for jobs, security, cache, mail, search, storage, and compatibility re-exports of the canonical Identity SQLx adapter |
-| `presentation` | `crates/presentation` | Current service construction, host state, Leptos server-service context, and operational probe composition |
-| `web` | `crates/web` | Leptos application shell, dashboard, shared UI primitives, and the current compatibility view of the Identity Leptos adapter |
+| `presentation` | `crates/presentation` | Current compatibility service construction, host state, and operational probe composition |
+| `web` | `crates/web` | Leptos compatibility application shell and dashboard plus explicit consumption of the Identity Leptos adapter |
 | `runtime` | `crates/runtime` | Runtime roles, Tokio process lifecycle, and shutdown signaling |
 | `db_migrator` | `crates/db_migrator` | Migration, reset, seed, and search reindex commands |
 | `identity_domain_shared` | `modules/identity/domain_shared` | Identity errors, protected principal names, and shared security values |
@@ -378,10 +370,14 @@ outward adapter that implements those ports for PostgreSQL and SQLite.
 contains object-safe Identity use-case contracts rather than host configuration,
 persistence, or compatibility Presentation services. The application host
 injects each concrete service explicitly when it selects the adapter.
-`identity_leptos` is the separately buildable Leptos adapter. It uses Identity
-contracts and host-provided application services without declaring SQLx or
-persistence dependencies; UI permission gates remain presentation behavior,
-while application services continue to authorize protected operations.
+`identity_leptos` is the separately buildable Leptos adapter. Its server
+functions obtain object-safe Identity use-case contracts from an explicit host
+context, and its UI consumes only module contracts and reusable
+`leptos_support` primitives. It declares no compatibility Web, Presentation,
+SQLx, or persistence dependency. Route layout, route selection, navigation,
+and concrete service injection remain explicit host contributions. UI
+permission gates remain presentation behavior, while application services
+continue to authorize protected operations.
 The authenticated web surface starts from a neutral dashboard instead of
 composing a sample business capability.
 
@@ -547,12 +543,13 @@ explicit because Rust and the relevant proc macros require concrete types.
 
 ## Frontend
 
-The `web` crate contains the app shell, dashboard, branding, and shared visual
-components. `identity_leptos` owns the Identity authentication, account, user,
-and role pages and their feature-local server functions. During the current
-compatibility phase, `web` compiles those canonical sources through an explicit
-source view, so framework packages still do not depend on module packages.
-Product-neutral form state, mutation state, server context access, and safe
+The `web` crate contains the compatibility app shell, dashboard, and branding.
+It depends on `identity_leptos` and explicitly selects the module's route,
+navigation, state, localization, and host-layout contributions.
+`identity_leptos` owns the Identity authentication, account, user, and role
+pages and their feature-local server functions. Product-neutral visual
+components, form state, mutation state, CRUD helpers, routing helpers, toast
+state, cookie-session mechanics, server context access, and safe
 server-function error construction live in `leptos_support`; they do not grant
 authorization. Standard CRUD pages reuse `CrudListState`, `CrudDialog`, and
 `MutationStatus`; custom workflows may use ordinary Leptos signals and typed

@@ -178,7 +178,10 @@ test("accepts the documented ownership-class dependency directions", () => {
       WORKSPACE_DEPENDENCY_POLICY.infrastructure.includes("identity_sqlx") &&
       WORKSPACE_DEPENDENCY_POLICY.identity_sqlx.includes("persistence") &&
       WORKSPACE_DEPENDENCY_POLICY.identity_http.includes("http_support") &&
-      WORKSPACE_DEPENDENCY_POLICY.identity_leptos.includes("web") &&
+      WORKSPACE_DEPENDENCY_POLICY.identity_leptos.includes(
+        "identity_application_contracts",
+      ) &&
+      !WORKSPACE_DEPENDENCY_POLICY.identity_leptos.includes("web") &&
       !WORKSPACE_DEPENDENCY_POLICY.identity_leptos.includes("persistence") &&
       WORKSPACE_DEPENDENCY_POLICY.presentation.includes("infrastructure"),
   );
@@ -229,7 +232,7 @@ test("keeps transitional compatibility edges explicit and issue-bound", () => {
   );
   assert.equal(
     TRANSITIONAL_COMPATIBILITY_EDGES["identity_leptos -> web"],
-    135,
+    undefined,
   );
 });
 
@@ -258,6 +261,7 @@ test("completed Identity module boundaries expose no compatibility dependency", 
     "identity_application",
     "identity_sqlx",
     "identity_http",
+    "identity_leptos",
   ]) {
     const compatibilityDependencies = WORKSPACE_DEPENDENCY_POLICY[name].filter(
       (dependency) =>

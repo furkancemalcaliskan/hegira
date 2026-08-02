@@ -26,6 +26,7 @@ domain.workspace = true
 domain_shared.workspace = true
 http_support = { workspace = true, optional = true }
 identity_http = { workspace = true, optional = true }
+identity_leptos = { workspace = true, optional = true }
 infrastructure = { workspace = true, optional = true }
 observability = { workspace = true, optional = true }
 persistence = { workspace = true, optional = true }
@@ -75,6 +76,7 @@ ssr = [
     "app_web/ssr",
     "application/ssr",
     "infrastructure/ssr",
+    "identity_leptos/ssr",
     "presentation/ssr",
     "leptos/ssr",
     "dep:app_infrastructure",
@@ -85,6 +87,7 @@ ssr = [
     "dep:configuration",
     "dep:http_support",
     "dep:identity_http",
+    "dep:identity_leptos",
     "dep:infrastructure",
     "dep:leptos_axum",
     "dep:observability",

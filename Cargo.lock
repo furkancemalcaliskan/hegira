@@ -1848,6 +1848,7 @@ dependencies = [
  "http-body-util",
  "http_support",
  "identity_http",
+ "identity_leptos",
  "infrastructure",
  "leptos",
  "leptos_axum",
@@ -2286,12 +2287,10 @@ name = "identity_http"
 version = "0.3.0"
 dependencies = [
  "axum",
- "cookie",
  "http-body-util",
  "http_support",
  "identity_application",
  "identity_application_contracts",
- "leptos_axum",
  "leptos_support",
  "serde",
  "tower",
@@ -2305,16 +2304,15 @@ dependencies = [
 name = "identity_leptos"
 version = "0.3.0"
 dependencies = [
- "application",
- "application_contracts",
- "domain_shared",
  "icons",
+ "identity_application",
+ "identity_application_contracts",
+ "identity_domain_shared",
  "leptos",
  "leptos_router",
  "leptos_support",
- "presentation",
+ "serde_json",
  "uuid",
- "web",
  "web-sys",
 ]
 
@@ -2720,11 +2718,20 @@ dependencies = [
 name = "leptos_support"
 version = "0.3.0"
 dependencies = [
+ "axum",
+ "cookie",
+ "icons",
  "leptos",
+ "leptos_axum",
+ "leptos_router",
+ "leptos_ui",
  "serde",
  "serde_json",
+ "strum",
  "tracing",
+ "tw_merge",
  "validator",
+ "web-sys",
 ]
 
 [[package]]
@@ -5767,6 +5774,7 @@ dependencies = [
  "application_contracts",
  "domain_shared",
  "icons",
+ "identity_leptos",
  "leptos",
  "leptos_meta",
  "leptos_router",

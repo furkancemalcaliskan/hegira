@@ -4,10 +4,10 @@ components=layered-base,layered-leptos-identity
 5993ab4d526be466 .gitignore
 d4c9664cc095ef91 Cargo.toml
 2a1866fde05d96cd Dockerfile
-a22af5c5aaf36269 apps/server/Cargo.toml
+b5eaadb6f1f1fb07 apps/server/Cargo.toml
 3bde3764afe35806 apps/server/src/lib.rs
 9ea27e2845c55bb5 apps/server/src/main.rs
-f5d617bcae83ba2a apps/server/src/server.rs
+77be5a1788788085 apps/server/src/server.rs
 64d553e09dfc58a4 apps/server/src/worker_operations.rs
 f9defabfa1d3eaba apps/server/tests/database_contracts.rs
 55108516b520af34 apps/web/Cargo.toml

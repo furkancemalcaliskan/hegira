@@ -370,12 +370,20 @@ where
         PermissionAppService::list_permissions(self, actor_token).await
     }
 
+    async fn list_roles(&self, actor_token: String) -> ApplicationResult<Vec<RoleDto>> {
+        PermissionAppService::list_roles(self, actor_token).await
+    }
+
     async fn list_roles_page(
         &self,
         actor_token: String,
         input: ListRolesInput,
     ) -> ApplicationResult<PagedRoleResultDto> {
         PermissionAppService::list_roles_page(self, actor_token, input).await
+    }
+
+    async fn get_role(&self, actor_token: String, role_name: String) -> ApplicationResult<RoleDto> {
+        PermissionAppService::get_role(self, actor_token, role_name).await
     }
 
     async fn create_role(

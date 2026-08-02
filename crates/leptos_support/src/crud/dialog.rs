@@ -1,7 +1,7 @@
 use icons::X;
 use leptos::prelude::*;
 
-use crate::shared::rust_ui::ui::{
+use crate::rust_ui::ui::{
     button::{Button, ButtonVariant},
     dialog::{DialogDescription, DialogHeader, DialogTitle},
 };

@@ -3,11 +3,9 @@ use leptos::task::spawn_local;
 use leptos_router::hooks::use_navigate;
 
 use crate::{
-    application_contracts::identity::permissions::PermissionName,
-    web::{
-        app::auth_state::AuthState, identity::auth::server_fns::current_user,
-        shared::feedback::unauthorized::Unauthorized,
-    },
+    app::auth_state::AuthState, identity::auth::server_fns::current_user,
+    identity_application_contracts::identity::permissions::PermissionName,
+    shared::feedback::unauthorized::Unauthorized,
 };
 
 pub fn is_authenticated() -> bool {

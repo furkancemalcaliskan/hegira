@@ -1,6 +1,6 @@
 use leptos::prelude::*;
 
-use leptos_support::mutation::MutationStatus;
+use crate::mutation::MutationStatus;
 
 pub struct CrudListState<Item: Send + Sync + 'static, Sort: Copy + Send + Sync + 'static> {
     pub items: RwSignal<Vec<Item>>,

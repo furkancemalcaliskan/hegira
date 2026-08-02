@@ -563,6 +563,10 @@ where
     Audit: AuditLogger<Error = ApplicationError>,
     ProviderClient: OAuthProviderClient,
 {
+    fn enabled_providers(&self) -> Vec<String> {
+        OAuthAppService::enabled_providers(self)
+    }
+
     async fn authorize_url(&self, provider: String) -> ApplicationResult<OAuthAuthorizeDto> {
         OAuthAppService::authorize_url(self, provider).await
     }

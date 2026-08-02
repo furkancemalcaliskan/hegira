@@ -1,53 +1,45 @@
 use leptos::prelude::*;
 
-use domain_shared::localization::translate;
-pub use domain_shared::localization::{Locale, T};
+pub use domain_shared::localization::T;
+pub use leptos_support::i18n::Locale;
+use leptos_support::i18n::LocaleContext;
 
 #[derive(Clone, Copy, Debug)]
 pub struct I18n {
-    locale: RwSignal<Locale>,
+    locale: LocaleContext,
 }
 
 impl I18n {
-    pub fn new(locale: Locale) -> Self {
-        Self {
-            locale: RwSignal::new(locale),
-        }
+    pub fn new(locale: LocaleContext) -> Self {
+        Self { locale }
     }
 
     pub fn locale(&self) -> Locale {
-        self.locale.get()
+        self.locale.locale()
     }
 
     pub fn set_locale(&self, locale: Locale) {
-        self.locale.set(locale);
-
-        #[cfg(feature = "hydrate")]
-        {
-            if let Some(window) = web_sys::window()
-                && let Ok(Some(storage)) = window.local_storage()
-            {
-                let _ = storage.set_item(Locale::STORAGE_KEY, locale.code());
-            }
-        }
+        self.locale.set_locale(locale);
     }
 
     pub fn toggle_locale(&self) {
-        self.set_locale(self.locale.get_untracked().toggled());
+        self.locale.toggle();
     }
 
     pub fn t(&self, key: T) -> &'static str {
-        translate(self.locale.get(), key)
+        translate(self.locale.locale(), key)
     }
 
     pub fn t_untracked(&self, key: T) -> &'static str {
-        translate(self.locale.get_untracked(), key)
+        translate(self.locale.locale_untracked(), key)
     }
 }
 
 impl Default for I18n {
     fn default() -> Self {
-        Self::new(stored_locale())
+        Self::new(
+            use_context::<LocaleContext>().unwrap_or_else(|| LocaleContext::new("hegira-locale")),
+        )
     }
 }
 
@@ -55,17 +47,10 @@ pub fn use_i18n() -> I18n {
     use_context::<I18n>().unwrap_or_default()
 }
 
-pub fn stored_locale() -> Locale {
-    #[cfg(feature = "hydrate")]
-    {
-        if let Some(window) = web_sys::window()
-            && let Ok(Some(storage)) = window.local_storage()
-            && let Ok(Some(value)) = storage.get_item(Locale::STORAGE_KEY)
-            && let Some(locale) = Locale::from_code(&value)
-        {
-            return locale;
-        }
-    }
-
-    Locale::En
+fn translate(locale: Locale, key: T) -> &'static str {
+    let locale = match locale {
+        Locale::En => domain_shared::localization::Locale::En,
+        Locale::Tr => domain_shared::localization::Locale::Tr,
+    };
+    domain_shared::localization::translate(locale, key)
 }

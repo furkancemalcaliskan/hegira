@@ -2,33 +2,29 @@ use icons::{ChevronLeft, ChevronRight, Ellipsis, KeyRound, Pencil, Shield, Trash
 use leptos::prelude::*;
 
 use crate::{
-    application_contracts::identity::{authorization::RoleDto, permissions},
-    domain_shared::identity::is_protected_admin_role,
-    web::{
-        identity::roles::model::roles_page_state::{ROLES_PAGE_SIZE, RolesPageState},
-        shared::{
-            authorization,
-            i18n::{T, use_i18n},
-            rust_ui::ui::{
-                badge::{Badge, BadgeVariant},
-                button::{Button, ButtonVariant},
-                dialog::{DialogBody, DialogDescription, DialogFooter, DialogHeader, DialogTitle},
-                dropdown_menu::{
-                    DropdownMenu, DropdownMenuAlign, DropdownMenuContent, DropdownMenuItem,
-                    DropdownMenuTrigger,
-                },
-                empty::{
-                    Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyMediaVariant, EmptyTitle,
-                },
-                pagination::{
-                    Pagination, PaginationItem, PaginationLink, PaginationList, PaginationNavButton,
-                },
-                skeleton::Skeleton,
-                spinner::Spinner,
-                table::{
-                    Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableWrapper,
-                },
+    identity::roles::model::roles_page_state::{ROLES_PAGE_SIZE, RolesPageState},
+    identity_application_contracts::identity::{authorization::RoleDto, permissions},
+    identity_domain_shared::identity::is_protected_admin_role,
+    shared::{
+        authorization,
+        i18n::{T, use_i18n},
+        rust_ui::ui::{
+            badge::{Badge, BadgeVariant},
+            button::{Button, ButtonVariant},
+            dialog::{DialogBody, DialogDescription, DialogFooter, DialogHeader, DialogTitle},
+            dropdown_menu::{
+                DropdownMenu, DropdownMenuAlign, DropdownMenuContent, DropdownMenuItem,
+                DropdownMenuTrigger,
             },
+            empty::{
+                Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyMediaVariant, EmptyTitle,
+            },
+            pagination::{
+                Pagination, PaginationItem, PaginationLink, PaginationList, PaginationNavButton,
+            },
+            skeleton::Skeleton,
+            spinner::Spinner,
+            table::{Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableWrapper},
         },
     },
 };

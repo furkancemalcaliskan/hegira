@@ -23,6 +23,7 @@ domain_shared = { path = "../../crates/domain_shared" }
 infrastructure = { path = "../../crates/infrastructure", optional = true, default-features = false }
 http_support = { path = "../../crates/http_support", optional = true, default-features = false }
 identity_http = { path = "../../modules/identity/http", optional = true, default-features = false }
+identity_leptos = { path = "../../modules/identity/leptos", optional = true, default-features = false }
 observability = { path = "../../crates/observability", optional = true, default-features = false }
 platform_core = { path = "../../crates/platform_core", optional = true }
 persistence = { path = "../../crates/persistence", optional = true, default-features = false }
@@ -61,6 +62,7 @@ ssr = [
     "dep:infrastructure",
     "dep:http_support",
     "dep:identity_http",
+    "dep:identity_leptos",
     "dep:leptos_axum",
     "dep:observability",
     "dep:persistence",
@@ -74,6 +76,7 @@ ssr = [
     "dep:tracing",
     "application/ssr",
     "infrastructure/ssr",
+    "identity_leptos/ssr",
     "presentation/ssr",
     "web/ssr",
     "leptos/ssr",

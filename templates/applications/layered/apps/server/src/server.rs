@@ -398,6 +398,13 @@ async fn serve_http(
         settings,
     );
     let web_services = app_state.services.clone();
+    let identity_leptos_services = identity_leptos::identity::server::IdentityLeptosServices::new(
+        web_services.auth.clone(),
+        web_services.oauth.clone(),
+        web_services.users.clone(),
+        web_services.permissions.clone(),
+        identity_http::cookie::SESSION_COOKIE,
+    );
     let web_config = app_state.config.clone();
     let identity_cookie_settings = identity_http::cookie::IdentityCookieSettings {
         secure: app_config.is_production(),
@@ -426,9 +433,11 @@ async fn serve_http(
             routes,
             {
                 let services = web_services.clone();
+                let identity_services = identity_leptos_services.clone();
                 let config = web_config.clone();
                 move || {
                     provide_context(services.clone());
+                    provide_context(identity_services.clone());
                     provide_context(config.clone());
                     provide_context(identity_cookie_settings);
                 }
