@@ -7,7 +7,8 @@ use axum::{
 use serde::{Deserialize, Serialize};
 
 use crate::{error_response::ApiResult, extractors::auth::BearerToken, state::IdentityHttpState};
-use application_contracts::identity::auth::{
+use identity_application::identity::http_contracts::{AuthServiceContract, OAuthServiceContract};
+use identity_application_contracts::identity::auth::{
     dto::{
         CurrentUserDto, LoginResultDto, OAuthAuthorizeDto, OAuthCallbackDto, OAuthConnectionDto,
         SessionDto, TotpEnableDto, TotpSetupDto, TotpStatusDto,
@@ -18,7 +19,6 @@ use application_contracts::identity::auth::{
         ResetPasswordInput, TotpCodeInput, UnlinkOAuthConnectionInput, VerifyTotpLoginInput,
     },
 };
-use presentation::composition::services::{IdentityAuthService, IdentityOAuthService};
 
 #[cfg(feature = "openapi")]
 use crate::error_response::ErrorBody;
@@ -478,11 +478,7 @@ pub(crate) async fn oauth_callback(
     Path(provider): Path<String>,
     Query(input): Query<OAuthCallbackInput>,
 ) -> ApiResult<Json<OAuthCallbackDto>> {
-    Ok(Json(
-        oauth(&state)
-            .callback(provider, input.code, input.state)
-            .await?,
-    ))
+    Ok(Json(oauth(&state).callback(provider, input).await?))
 }
 
 #[cfg_attr(feature = "openapi", utoipa::path(
@@ -540,10 +536,10 @@ pub(crate) async fn unlink_oauth_connection(
     Ok(StatusCode::NO_CONTENT)
 }
 
-fn service(state: &IdentityHttpState) -> IdentityAuthService {
-    state.services.auth.clone()
+fn service(state: &IdentityHttpState) -> &dyn AuthServiceContract {
+    state.auth.as_ref()
 }
 
-fn oauth(state: &IdentityHttpState) -> IdentityOAuthService {
-    state.services.oauth.clone()
+fn oauth(state: &IdentityHttpState) -> &dyn OAuthServiceContract {
+    state.oauth.as_ref()
 }

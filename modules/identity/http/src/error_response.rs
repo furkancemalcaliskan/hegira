@@ -1,9 +1,9 @@
-use application::shared::errors::{ApplicationError, ApplicationErrorKind};
 use axum::{
     Json,
     http::StatusCode,
     response::{IntoResponse, Response},
 };
+use identity_application::shared::errors::{ApplicationError, ApplicationErrorKind};
 use serde::Serialize;
 
 #[derive(Debug, Serialize)]
@@ -104,7 +104,7 @@ mod tests {
     #[test]
     fn maps_localized_error_to_stable_specific_code() {
         let error = ApiError::from(ApplicationError::localized_not_found(
-            application_contracts::localization::IdentityMessage::UserNotFound,
+            identity_application_contracts::localization::IdentityMessage::UserNotFound,
         ));
 
         assert_eq!(error.status, StatusCode::NOT_FOUND);

@@ -2236,6 +2236,7 @@ checksum = "b9e0384b61958566e926dc50660321d12159025e767c18e043daf26b70104c39"
 name = "identity_application"
 version = "0.3.0"
 dependencies = [
+ "async-trait",
  "audit",
  "cache",
  "chrono",
@@ -2284,16 +2285,14 @@ version = "0.3.0"
 name = "identity_http"
 version = "0.3.0"
 dependencies = [
- "application",
- "application_contracts",
  "axum",
  "cookie",
- "domain_shared",
  "http-body-util",
  "http_support",
+ "identity_application",
+ "identity_application_contracts",
  "leptos_axum",
  "leptos_support",
- "presentation",
  "serde",
  "tower",
  "tracing",

@@ -502,7 +502,10 @@ where
     S: Clone + Send + Sync + 'static,
 {
     let router = identity_http::bearer_api_routes(identity_http::state::IdentityHttpState::new(
-        state.services.clone(),
+        state.services.auth.clone(),
+        state.services.oauth.clone(),
+        state.services.users.clone(),
+        state.services.permissions.clone(),
     ))
     .with_state(());
 

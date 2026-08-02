@@ -7,10 +7,10 @@ use axum::{
 use serde::Deserialize;
 
 use crate::{error_response::ApiResult, extractors::auth::BearerToken, state::IdentityHttpState};
-use application_contracts::identity::users::{
+use identity_application::identity::http_contracts::UserServiceContract;
+use identity_application_contracts::identity::users::{
     CreateUserInput, ListUsersInput, PagedUserResultDto, UpdateUserInput, UserDto,
 };
-use presentation::composition::services::IdentityUserService;
 
 #[cfg(feature = "openapi")]
 use crate::error_response::ErrorBody;
@@ -179,6 +179,6 @@ pub(crate) async fn delete_user(
     Ok(StatusCode::NO_CONTENT)
 }
 
-fn service(state: &IdentityHttpState) -> IdentityUserService {
-    state.services.users.clone()
+fn service(state: &IdentityHttpState) -> &dyn UserServiceContract {
+    state.users.as_ref()
 }
