@@ -1,11 +1,15 @@
 use crate::config::{DatabaseBackend, DatabaseConfig};
-use persistence::migrations::{MigrationPlan, ModuleMigrationSource};
+#[cfg(feature = "db-sqlite")]
+use persistence::migrations::MigrationPlan;
+use persistence::migrations::ModuleMigrationSource;
 #[cfg(feature = "db-postgres")]
 use sqlx::PgPool;
 #[cfg(feature = "db-sqlite")]
 use sqlx::SqlitePool;
 use sqlx::migrate::Migrator;
 
+#[cfg(test)]
+mod retirement_tests;
 #[cfg(feature = "db-postgres")]
 pub mod transaction;
 

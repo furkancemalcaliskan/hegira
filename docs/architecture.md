@@ -120,7 +120,7 @@ matching policy update.
 | `domain` | `identity_domain` |
 | `application_contracts` | `identity_application_contracts` |
 | `application` | `background_jobs`, `identity_application` |
-| `infrastructure` | `application`, `application_contracts`, `background_jobs`, `configuration`, `domain`, `domain_shared`, `persistence`, `platform_core`, `runtime` |
+| `infrastructure` | `application`, `application_contracts`, `background_jobs`, `configuration`, `domain`, `domain_shared`, `identity_sqlx`, `persistence`, `platform_core`, `runtime` |
 | `presentation` | `application`, `application_contracts`, `domain_shared`, `infrastructure`, `leptos_support`, `observability` |
 | `web` | `application`, `application_contracts`, `domain_shared`, `leptos_support`, `presentation` |
 | `runtime` | None |
@@ -178,7 +178,7 @@ the referenced follow-up issue has already been implemented.
 | `domain` | Compatibility | Extract and retire | #146 |
 | `application_contracts` | Compatibility | Extract and retire | #136, #146 |
 | `application` | Compatibility | Extract and retire | #136, #146 |
-| `infrastructure` | Compatibility | Extract and retire | #133, #137, #138, #146 |
+| `infrastructure` | Compatibility | Extract and retire | #137, #138, #146 |
 | `presentation` | Compatibility | Extract and retire | #134, #139, #146 |
 | `web` | Compatibility | Extract and retire | #135, #141, #146 |
 | `db_migrator` | Compatibility | Replace and retire | #142, #146 |
@@ -186,7 +186,7 @@ the referenced follow-up issue has already been implemented.
 | `identity_domain` | Official module | Retain | None |
 | `identity_application_contracts` | Official module | Retain | None |
 | `identity_application` | Official module | Retain | None |
-| `identity_sqlx` | Official module | Canonicalize and retain | #133 |
+| `identity_sqlx` | Official module | Retain | None |
 | `identity_http` | Official module | Decouple and retain | #134 |
 | `identity_leptos` | Official module | Decouple and retain | #135 |
 | `template_renderer` | Repository tooling | Refactor and retain | #148 |
@@ -333,7 +333,7 @@ build consume the same manifests without leaking maintainer filesystem paths.
 | `domain` | `crates/domain` | Current compatibility view of Identity entities and repository ports |
 | `application_contracts` | `crates/application_contracts` | Current compatibility view of Identity DTOs, inputs, permissions, and feature metadata |
 | `application` | `crates/application` | Current compatibility view of Identity use cases and provider-facing ports, plus framework-owned background-job, settings, and storage application ports |
-| `infrastructure` | `crates/infrastructure` | Host infrastructure composition and adapters for jobs, security, cache, mail, search, storage, and the current Identity SQLx compatibility view |
+| `infrastructure` | `crates/infrastructure` | Host infrastructure composition and adapters for jobs, security, cache, mail, search, storage, and compatibility re-exports of the canonical Identity SQLx adapter |
 | `presentation` | `crates/presentation` | Current service construction, host state, Leptos server-service context, and operational probe composition |
 | `web` | `crates/web` | Leptos application shell, dashboard, shared UI primitives, and the current compatibility view of the Identity Leptos adapter |
 | `runtime` | `crates/runtime` | Runtime roles, Tokio process lifecycle, and shutdown signaling |
@@ -468,16 +468,22 @@ and checksums. The host sorts selected migrations by their global numeric
 identity and rejects invalid or duplicate module identities, duplicate
 migration identities, and checksum conflicts before database execution.
 
-`identity_sqlx` owns the PostgreSQL and SQLite Identity repositories,
-provider-specific migration sources, seed behavior, cleanup queries, reset
-behavior, and search projection reads. The remaining host migrations own
-application settings, durable messaging, search projection state, audit
-storage, and the frozen Catalog creation history. The immutable PostgreSQL 22
-and SQLite 9 retirement migrations remain with the Identity source because
-they remove retired permissions; their cleanup of host outbox, projection, and
-Catalog state is a historical compatibility exception whose bytes and
-checksums cannot be split. The current `infrastructure` compatibility view
-compiles the module-owned adapter sources for existing consumers.
+`identity_sqlx` is the single implementation owner for the PostgreSQL and
+SQLite Identity repositories, provider-specific migration sources, seed
+behavior, cleanup queries, reset behavior, and search projection reads. Its
+typed adapter surface is consumed directly by hosts and re-exported by the
+current `infrastructure` compatibility package; compatibility code does not
+include or compile a second copy of the adapter sources.
+
+The remaining host migrations own application settings, durable messaging,
+search projection state, audit storage, and the frozen Catalog creation
+history. The immutable PostgreSQL 22 and SQLite 9 retirement migrations are
+application-owned historical migrations because they clean host outbox,
+projection, and retired Catalog state in addition to retired Identity
+permissions. They keep their original identities and exact bytes so existing
+SQLx histories remain valid. Repository policy permits only these exact
+checksummed exceptions outside `identity_sqlx`; new Identity schema SQL remains
+module-owned.
 
 The deployable application and the dedicated `db_migrator` are hosts: each
 explicitly selects both the host and Identity sources, builds one validated

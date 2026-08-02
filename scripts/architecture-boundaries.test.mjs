@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import path from "node:path";
+import process from "node:process";
 import test from "node:test";
 
 import {
@@ -9,6 +11,7 @@ import {
   WORKSPACE_PACKAGE_POLICY,
   validateIdentityBusinessSourceOwnership,
   validateIdentitySqlOwnership,
+  validateIdentitySqlxSourceOwnership,
   validateWorkspaceMetadata,
 } from "./architecture-boundaries.mjs";
 
@@ -164,6 +167,7 @@ test("accepts the documented ownership-class dependency directions", () => {
       WORKSPACE_DEPENDENCY_POLICY.identity_application.includes(
         "identity_application_contracts",
       ) &&
+      WORKSPACE_DEPENDENCY_POLICY.infrastructure.includes("identity_sqlx") &&
       WORKSPACE_DEPENDENCY_POLICY.identity_sqlx.includes("persistence") &&
       WORKSPACE_DEPENDENCY_POLICY.identity_http.includes("http_support") &&
       WORKSPACE_DEPENDENCY_POLICY.identity_leptos.includes("web") &&
@@ -238,12 +242,13 @@ test("framework policy exposes no dependency on an Identity module package", () 
   assert.deepEqual(violations, []);
 });
 
-test("Identity business packages expose no compatibility dependency", () => {
+test("Identity business and persistence packages expose no compatibility dependency", () => {
   for (const name of [
     "identity_domain_shared",
     "identity_domain",
     "identity_application_contracts",
     "identity_application",
+    "identity_sqlx",
   ]) {
     const compatibilityDependencies = WORKSPACE_DEPENDENCY_POLICY[name].filter(
       (dependency) =>
@@ -568,9 +573,39 @@ test("requires Identity SQL to remain module-owned", () => {
         location: "crates/storage/src/path.rs",
         content: 'StoragePath::from_segments(["identity", "users"])',
       },
+      {
+        location:
+          "crates/infrastructure/src/db/migrations/022_retire_catalog_persistence.sql",
+        content: fs.readFileSync(
+          path.join(
+            process.cwd(),
+            "crates/infrastructure/src/db/migrations/022_retire_catalog_persistence.sql",
+          ),
+          "utf8",
+        ),
+      },
+      {
+        location: "crates/infrastructure/src/db/retirement_tests.rs",
+        content: "SELECT name FROM permissions WHERE name LIKE 'Catalog.%'",
+      },
     ]),
     [
       "Identity SQL must be module-owned under modules/identity/sqlx: crates/infrastructure/src/users.rs",
+    ],
+  );
+});
+
+test("rejects changes to historical application-owned Identity SQL", () => {
+  assert.deepEqual(
+    validateIdentitySqlOwnership([
+      {
+        location:
+          "crates/infrastructure/src/db/migrations/022_retire_catalog_persistence.sql",
+        content: "DELETE FROM permissions WHERE name LIKE 'Catalog.%';",
+      },
+    ]),
+    [
+      "historical application migration checksum changed: crates/infrastructure/src/db/migrations/022_retire_catalog_persistence.sql",
     ],
   );
 });
@@ -600,6 +635,25 @@ test("requires Identity business source to compile from module packages", () => 
     [
       "Identity business source must be compiled by its module package, not included by compatibility code: crates/application/src/lib.rs",
       "Identity business source must be compiled by its module package, not included by compatibility code: crates/domain/src/lib.rs",
+    ],
+  );
+});
+
+test("requires Identity SQLx source to compile from the module adapter", () => {
+  assert.deepEqual(
+    validateIdentitySqlxSourceOwnership([
+      {
+        location: "crates/infrastructure/src/identity/mod.rs",
+        content:
+          '#[path = "../../../../modules/identity/sqlx/src/identity/provider.rs"]',
+      },
+      {
+        location: "modules/identity/sqlx/src/identity/mod.rs",
+        content: "pub mod provider;",
+      },
+    ]),
+    [
+      "Identity SQLx source must be compiled by identity_sqlx, not included by compatibility infrastructure: crates/infrastructure/src/identity/mod.rs",
     ],
   );
 });

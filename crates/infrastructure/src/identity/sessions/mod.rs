@@ -1,7 +1,8 @@
 #[cfg(feature = "cache-redis")]
 pub mod redis_session;
-#[path = "../../../../../modules/identity/sqlx/src/identity/sessions/repository.rs"]
-pub mod repository;
+
+#[cfg(any(feature = "db-postgres", feature = "db-sqlite"))]
+pub use identity_sqlx::identity::sessions::repository;
 
 #[cfg(feature = "db-postgres")]
 use crate::identity::SqlxIdentityRepository;

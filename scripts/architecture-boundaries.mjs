@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
@@ -43,6 +44,7 @@ export const WORKSPACE_DEPENDENCY_POLICY = Object.freeze({
     "configuration",
     "domain",
     "domain_shared",
+    "identity_sqlx",
     "persistence",
     "platform_core",
     "runtime",
@@ -133,7 +135,7 @@ export const WORKSPACE_PACKAGE_POLICY = Object.freeze({
   infrastructure: packageContract(
     "compatibility",
     "extract-and-retire",
-    [133, 137, 138, 146],
+    [137, 138, 146],
   ),
   presentation: packageContract(
     "compatibility",
@@ -155,7 +157,7 @@ export const WORKSPACE_PACKAGE_POLICY = Object.freeze({
   identity_domain: packageContract("module", "retain"),
   identity_application_contracts: packageContract("module", "retain"),
   identity_application: packageContract("module", "retain"),
-  identity_sqlx: packageContract("module", "canonicalize-and-retain", [133]),
+  identity_sqlx: packageContract("module", "retain"),
   identity_http: packageContract("module", "decouple-and-retain", [134]),
   identity_leptos: packageContract("module", "decouple-and-retain", [135]),
   template_renderer: packageContract("tool", "refactor-and-retain", [148]),
@@ -202,16 +204,44 @@ const PACKAGE_DISPOSITIONS = new Set([
 const IDENTITY_SQL_PATTERN =
   /\b(?:select|from|join|insert\s+into|update|delete\s+from|create\s+table|alter\s+table|drop\s+table)\b[^\n]*\b(?:users|sessions|roles|permissions|user_roles|role_permissions|oauth_states|user_oauth_connections|oauth_pending_signups)\b/i;
 
+const HISTORICAL_APPLICATION_IDENTITY_SQL = Object.freeze({
+  "crates/infrastructure/src/db/migrations/022_retire_catalog_persistence.sql":
+    "36cee0eac99d95ce134bce3bde5efc0cae646403ef1da3dcf020b991a4d0a01c4048e24a9f6916215c7ae7abd484f362",
+  "crates/infrastructure/src/db/migrations_sqlite/009_retire_catalog_persistence.sql":
+    "c3485487deb6ff20755cce6a76b80de70c2c1129c72075989ea4a2c76b0b3e4634f5985f01fb569d50a0ae3650ad38e7",
+});
+
+const HISTORICAL_APPLICATION_IDENTITY_SQL_TESTS = new Set([
+  "crates/infrastructure/src/db/retirement_tests.rs",
+]);
+
+function sha384(content) {
+  return crypto.createHash("sha384").update(content).digest("hex");
+}
+
 export function validateIdentitySqlOwnership(files) {
-  return files
-    .filter(
-      ({ location, content }) =>
-        location.startsWith("crates/") && IDENTITY_SQL_PATTERN.test(content),
-    )
-    .map(
-      ({ location }) =>
+  const errors = [];
+  for (const { location, content } of files) {
+    if (!location.startsWith("crates/") || !IDENTITY_SQL_PATTERN.test(content)) {
+      continue;
+    }
+
+    if (HISTORICAL_APPLICATION_IDENTITY_SQL_TESTS.has(location)) {
+      continue;
+    }
+
+    const historicalChecksum = HISTORICAL_APPLICATION_IDENTITY_SQL[location];
+    if (historicalChecksum === undefined) {
+      errors.push(
         `Identity SQL must be module-owned under modules/identity/sqlx: ${location}`,
-    );
+      );
+    } else if (sha384(content) !== historicalChecksum) {
+      errors.push(
+        `historical application migration checksum changed: ${location}`,
+      );
+    }
+  }
+  return errors;
 }
 
 const IDENTITY_BUSINESS_COMPATIBILITY_ROOTS = [
@@ -235,6 +265,22 @@ export function validateIdentityBusinessSourceOwnership(files) {
     .map(
       ({ location }) =>
         `Identity business source must be compiled by its module package, not included by compatibility code: ${location}`,
+    );
+}
+
+const IDENTITY_SQLX_SOURCE_REFERENCE =
+  /(?:#\s*\[\s*path\s*=\s*"|include!\s*\(\s*")[^"]*modules\/identity\/sqlx\//;
+
+export function validateIdentitySqlxSourceOwnership(files) {
+  return files
+    .filter(
+      ({ location, content }) =>
+        location.startsWith("crates/infrastructure/") &&
+        IDENTITY_SQLX_SOURCE_REFERENCE.test(content),
+    )
+    .map(
+      ({ location }) =>
+        `Identity SQLx source must be compiled by identity_sqlx, not included by compatibility infrastructure: ${location}`,
     );
 }
 
@@ -560,6 +606,7 @@ function runCli() {
   const errors = [
     ...validateWorkspaceMetadata(metadata),
     ...validateIdentityBusinessSourceOwnership(sourceFiles),
+    ...validateIdentitySqlxSourceOwnership(sourceFiles),
     ...validateIdentitySqlOwnership(sourceFiles),
   ];
   if (errors.length > 0) {

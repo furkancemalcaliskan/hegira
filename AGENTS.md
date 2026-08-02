@@ -47,8 +47,10 @@ commands change. Never describe planned work as implemented.
   secure session-cookie handling, and explicit cookie/Bearer security policies
   to the host. The Leptos adapter owns Identity pages, server functions, and
   explicit route and navigation contributions. Identity business compatibility
-  packages re-export the canonical module packages instead of compiling their
-  source files a second time.
+  packages and the SQLx compatibility surface re-export the canonical module
+  packages instead of compiling duplicate implementations. Historical
+  application-owned retirement migrations retain their original identities
+  and checksums outside the Identity SQLx migration source.
 - `templates/applications/layered/` contains the workspace-external,
   layered full-stack application base. Its brand-neutral server composition
   explicitly selects the Identity HTTP adapter, while `apps/web` owns the
