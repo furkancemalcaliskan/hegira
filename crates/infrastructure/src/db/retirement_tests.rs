@@ -3,6 +3,14 @@ use std::borrow::Cow;
 use persistence::migrations::MigrationPlan;
 use sqlx::migrate::Migrator;
 
+#[cfg(feature = "db-postgres")]
+type PostgresRetiredJob = (
+    Option<chrono::DateTime<chrono::Utc>>,
+    Option<chrono::DateTime<chrono::Utc>>,
+    Option<String>,
+    Option<String>,
+);
+
 fn migrations_through(migrator: &Migrator, version: i64) -> Migrator {
     Migrator {
         migrations: Cow::Owned(
@@ -36,7 +44,7 @@ async fn sqlite_v020_upgrade_retires_catalog_state_and_preserves_history() {
     )
     .unwrap();
     let migrator = plan.migrator();
-    migrations_through(&migrator, 8).run(&pool).await.unwrap();
+    migrations_through(migrator, 8).run(&pool).await.unwrap();
 
     sqlx::raw_sql(
         r#"
@@ -152,7 +160,7 @@ async fn postgres_v020_upgrade_retires_catalog_state_and_preserves_history() {
     )
     .unwrap();
     let migrator = plan.migrator();
-    migrations_through(&migrator, 21).run(&pool).await.unwrap();
+    migrations_through(migrator, 21).run(&pool).await.unwrap();
     sqlx::raw_sql(
         r#"
         INSERT INTO permissions (name) VALUES ('Catalog.Products');
@@ -197,12 +205,7 @@ async fn postgres_v020_upgrade_retires_catalog_state_and_preserves_history() {
             .unwrap();
     assert_eq!(catalog_permission_count, 0);
 
-    let retired_job: (
-        Option<chrono::DateTime<chrono::Utc>>,
-        Option<chrono::DateTime<chrono::Utc>>,
-        Option<String>,
-        Option<String>,
-    ) = sqlx::query_as(
+    let retired_job: PostgresRetiredJob = sqlx::query_as(
         "SELECT processed_at, locked_at, lock_owner, last_error
          FROM outbox_messages
          WHERE id = '11111111-1111-1111-1111-111111111111'",

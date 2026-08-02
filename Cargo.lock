@@ -2366,6 +2366,7 @@ dependencies = [
  "domain",
  "domain_shared",
  "hmac 0.13.0",
+ "identity_sqlx",
  "ipnet",
  "lettre",
  "persistence",
