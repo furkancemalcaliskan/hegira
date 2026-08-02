@@ -231,6 +231,8 @@ impl MeilisearchAdapter {
 }
 
 impl SearchIndex for MeilisearchAdapter {
+    type Error = ApplicationError;
+
     async fn upsert(&self, index: &str, documents: Vec<SearchDocument>) -> ApplicationResult<()> {
         if documents.is_empty() {
             return Ok(());

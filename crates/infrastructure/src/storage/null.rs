@@ -7,6 +7,8 @@ use application::shared::{
 pub struct NullStorage;
 
 impl Storage for NullStorage {
+    type Error = ApplicationError;
+
     async fn put(
         &self,
         _path: &StoragePath,

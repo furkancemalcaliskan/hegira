@@ -8,6 +8,8 @@ use std::time::Duration;
 pub struct NullCache;
 
 impl Cache for NullCache {
+    type Error = ApplicationError;
+
     async fn get_string(&self, _key: &str) -> ApplicationResult<Option<String>> {
         Ok(None)
     }

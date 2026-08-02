@@ -1,28 +1,5 @@
-use crate::shared::errors::ApplicationResult;
+pub use ::mail::{MailAddress, MailMessage, Mailer};
 use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct MailAddress {
-    pub email: String,
-    pub name: Option<String>,
-}
-
-impl MailAddress {
-    pub fn new(email: impl Into<String>) -> Self {
-        Self {
-            email: email.into(),
-            name: None,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct MailMessage {
-    pub to: MailAddress,
-    pub subject: String,
-    pub text_body: String,
-    pub html_body: Option<String>,
-}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "template", rename_all = "snake_case")]
@@ -132,13 +109,6 @@ fn escape_html(value: &str) -> String {
         .replace('>', "&gt;")
         .replace('"', "&quot;")
         .replace('\'', "&#39;")
-}
-
-pub trait Mailer: Send + Sync {
-    fn send(
-        &self,
-        message: MailMessage,
-    ) -> impl std::future::Future<Output = ApplicationResult<()>> + Send;
 }
 
 #[cfg(test)]

@@ -65,6 +65,8 @@ impl S3Storage {
 }
 
 impl Storage for S3Storage {
+    type Error = ApplicationError;
+
     async fn put(
         &self,
         path: &StoragePath,

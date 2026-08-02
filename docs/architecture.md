@@ -25,15 +25,16 @@ apps/hegira
      presentation, infrastructure, application, application_contracts,
      domain, domain_shared
 
-platform_core, configuration, persistence, background_jobs, http_support,
-leptos_support, runtime
+platform_core, audit, cache, mail, search, security, settings, storage,
+configuration, persistence, background_jobs, http_support, leptos_support,
+runtime
   -> no local application packages
 
 observability
   -> background_jobs
 
 test_support
-  -> application
+  -> audit, background_jobs, cache, mail, settings, storage
 
 domain_shared
   -> identity_domain_shared
@@ -45,7 +46,7 @@ application_contracts
   -> identity_application_contracts
 
 application
-  -> background_jobs, identity_application
+  -> background_jobs, identity_application, settings, storage
 
 web
   -> leptos_support, presentation, application, application_contracts,
@@ -72,7 +73,8 @@ identity_application_contracts
   -> identity_domain, identity_domain_shared
 
 identity_application
-  -> identity_application_contracts, identity_domain, identity_domain_shared
+  -> audit, cache, mail, search, security, identity_application_contracts,
+     identity_domain, identity_domain_shared
 
 identity_sqlx
   -> identity_application, identity_application_contracts, identity_domain,
@@ -94,9 +96,10 @@ Domain and application code do not depend on Axum, Leptos, SQLx, Redis, or
 vendor SDKs. Infrastructure implements business-facing ports. The deployable
 application owns adapter, route, telemetry-settings, and worker composition.
 Framework packages own reusable HTTP security policy, telemetry and operational
-support, reusable Leptos integration and test support, capability identity,
-configuration orchestration, provider-neutral persistence and background-work
-primitives, runtime roles, process execution, and shutdown signaling.
+support, reusable Leptos integration and test support, provider-neutral audit,
+cache, mail, search, security, settings, storage, persistence, and
+background-work ports, capability identity, configuration orchestration,
+runtime roles, process execution, and shutdown signaling.
 
 ### Enforced Workspace Dependencies
 
@@ -109,17 +112,24 @@ matching policy update.
 |---|---|
 | `hegira` | `application`, `application_contracts`, `background_jobs`, `configuration`, `domain`, `domain_shared`, `http_support`, `identity_http`, `identity_leptos`, `infrastructure`, `observability`, `persistence`, `platform_core`, `presentation`, `runtime`, `test_support`, `web` |
 | `platform_core` | None |
+| `audit` | None |
+| `cache` | None |
+| `mail` | None |
+| `search` | None |
+| `security` | None |
+| `settings` | None |
+| `storage` | None |
 | `configuration` | None |
 | `persistence` | None |
 | `background_jobs` | None |
 | `http_support` | None |
 | `leptos_support` | None |
 | `observability` | `background_jobs` |
-| `test_support` | `application` |
+| `test_support` | `audit`, `background_jobs`, `cache`, `mail`, `settings`, `storage` |
 | `domain_shared` | `identity_domain_shared` |
 | `domain` | `identity_domain` |
 | `application_contracts` | `identity_application_contracts` |
-| `application` | `background_jobs`, `identity_application` |
+| `application` | `background_jobs`, `identity_application`, `settings`, `storage` |
 | `infrastructure` | `application`, `application_contracts`, `background_jobs`, `configuration`, `domain`, `domain_shared`, `identity_sqlx`, `persistence`, `platform_core`, `runtime` |
 | `presentation` | `application`, `application_contracts`, `domain_shared`, `infrastructure`, `leptos_support`, `observability` |
 | `web` | `application`, `application_contracts`, `domain_shared`, `leptos_support`, `presentation` |
@@ -128,7 +138,7 @@ matching policy update.
 | `identity_domain_shared` | None |
 | `identity_domain` | `identity_domain_shared` |
 | `identity_application_contracts` | `identity_domain`, `identity_domain_shared` |
-| `identity_application` | `identity_application_contracts`, `identity_domain`, `identity_domain_shared` |
+| `identity_application` | `audit`, `cache`, `identity_application_contracts`, `identity_domain`, `identity_domain_shared`, `mail`, `search`, `security` |
 | `identity_sqlx` | `identity_application`, `identity_application_contracts`, `identity_domain`, `identity_domain_shared`, `persistence` |
 | `identity_http` | `application`, `application_contracts`, `domain_shared`, `http_support`, `leptos_support`, `presentation` |
 | `identity_leptos` | `application`, `application_contracts`, `domain_shared`, `leptos_support`, `presentation`, `web` |
@@ -166,18 +176,25 @@ the referenced follow-up issue has already been implemented.
 |---|---|---|---|
 | `hegira` | Compatibility host | Replace and retire | #145, #146 |
 | `platform_core` | Framework | Retain | None |
+| `audit` | Framework | Retain | None |
+| `cache` | Framework | Retain | None |
+| `mail` | Framework | Retain | None |
+| `search` | Framework | Retain | None |
+| `security` | Framework | Retain | None |
+| `settings` | Framework | Retain | None |
+| `storage` | Framework | Retain | None |
 | `configuration` | Framework | Retain | None |
 | `persistence` | Framework | Retain | None |
 | `background_jobs` | Framework | Retain | None |
 | `http_support` | Framework | Retain | None |
 | `leptos_support` | Framework | Retain | None |
 | `observability` | Framework | Retain | None |
-| `test_support` | Framework | Decouple and retain | #136 |
+| `test_support` | Framework | Retain | None |
 | `runtime` | Framework | Retain | None |
-| `domain_shared` | Compatibility | Extract and retire | #136, #146 |
+| `domain_shared` | Compatibility | Extract and retire | #146 |
 | `domain` | Compatibility | Extract and retire | #146 |
-| `application_contracts` | Compatibility | Extract and retire | #136, #146 |
-| `application` | Compatibility | Extract and retire | #136, #146 |
+| `application_contracts` | Compatibility | Extract and retire | #146 |
+| `application` | Compatibility | Extract and retire | #146 |
 | `infrastructure` | Compatibility | Extract and retire | #137, #138, #146 |
 | `presentation` | Compatibility | Extract and retire | #134, #139, #146 |
 | `web` | Compatibility | Extract and retire | #135, #141, #146 |
@@ -203,7 +220,6 @@ follow-up issues remove them:
 
 | Transitional edge | Removal issue |
 |---|---|
-| `test_support -> application` | #136 |
 | `identity_http -> application, application_contracts, domain_shared, presentation` | #134 |
 | `identity_leptos -> application, application_contracts, domain_shared, presentation, web` | #135 |
 
@@ -322,17 +338,24 @@ build consume the same manifests without leaking maintainer filesystem paths.
 |---|---|---|
 | `hegira` | `apps/hegira` | Deployable Axum/Leptos package and full-stack composition |
 | `platform_core` | `crates/platform_core` | Application-independent compiled capability primitives |
+| `audit` | `crates/audit` | Provider-neutral audit records and logging port |
+| `cache` | `crates/cache` | Provider-neutral string-cache port and expiration contract |
+| `mail` | `crates/mail` | Provider-neutral mail message values and delivery port |
+| `search` | `crates/search` | Provider-neutral search documents, queries, indexing commands, and search port |
+| `security` | `crates/security` | Provider-neutral password hashing and token ports |
+| `settings` | `crates/settings` | Validated setting keys, typed serialization helpers, and settings port |
+| `storage` | `crates/storage` | Validated storage paths, stored objects, and object-storage port |
 | `configuration` | `crates/configuration` | Configuration profile sources and ordered validation orchestration |
 | `persistence` | `crates/persistence` | Database provider selection, pools, health checks, transaction primitives, and host-owned migration planning and execution |
 | `background_jobs` | `crates/background_jobs` | Job contracts, handler registration, observation, and recurring execution |
 | `http_support` | `crates/http_support` | Application-independent Axum middleware, transport-policy markers, CSRF, trusted-proxy resolution, and rate limiting |
 | `leptos_support` | `crates/leptos_support` | Product-neutral Leptos form state, mutation state, context access, and safe server-function errors |
 | `observability` | `crates/observability` | Tracing initialization, health/readiness primitives, HTTP and background-job metrics, and Prometheus exposure |
-| `test_support` | `crates/test_support` | Shared application-port test doubles and application-independent Axum request/response helpers |
+| `test_support` | `crates/test_support` | Shared framework capability-port test doubles and application-independent Axum request/response helpers |
 | `domain_shared` | `crates/domain_shared` | Current compatibility view of Identity shared contracts plus application localization resources |
 | `domain` | `crates/domain` | Current compatibility view of Identity entities and repository ports |
 | `application_contracts` | `crates/application_contracts` | Current compatibility view of Identity DTOs, inputs, permissions, and feature metadata |
-| `application` | `crates/application` | Current compatibility view of Identity use cases and provider-facing ports, plus framework-owned background-job, settings, and storage application ports |
+| `application` | `crates/application` | Current compatibility view of Identity use cases and framework capability ports |
 | `infrastructure` | `crates/infrastructure` | Host infrastructure composition and adapters for jobs, security, cache, mail, search, storage, and compatibility re-exports of the canonical Identity SQLx adapter |
 | `presentation` | `crates/presentation` | Current service construction, host state, Leptos server-service context, and operational probe composition |
 | `web` | `crates/web` | Leptos application shell, dashboard, shared UI primitives, and the current compatibility view of the Identity Leptos adapter |
@@ -534,9 +557,10 @@ authorization. Standard CRUD pages reuse `CrudListState`, `CrudDialog`, and
 services.
 
 The `test_support` package owns reusable recording and in-memory implementations
-of application capability ports plus generic Axum request and JSON response
-helpers. It depends on the application interfaces it implements; production
-feature graphs do not enable it. Host database helpers remain in
+of framework capability ports plus generic Axum request and JSON response
+helpers. It depends directly on those provider-neutral contracts rather than
+the compatibility Application package; production feature graphs do not enable
+it. Host database helpers remain in
 `infrastructure`; canonical Identity migrations, focused provider tests, and
 seed behavior live with `identity_sqlx`.
 

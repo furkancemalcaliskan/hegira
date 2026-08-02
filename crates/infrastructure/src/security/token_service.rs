@@ -38,6 +38,8 @@ impl JwtTokenService {
 }
 
 impl TokenService for JwtTokenService {
+    type Error = ApplicationError;
+
     fn create_token(&self, subject: &str) -> ApplicationResult<String> {
         let now = Utc::now();
         let claims = Claims {

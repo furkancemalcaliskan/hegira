@@ -7,7 +7,7 @@ pub mod projection_sqlite;
 
 use crate::config::{AppConfig, SearchBackend};
 use application::shared::{
-    errors::ApplicationResult,
+    errors::{ApplicationError, ApplicationResult},
     search::{SearchDocument, SearchIndex, SearchQuery, SearchResults},
 };
 use null::NullSearch;
@@ -70,6 +70,8 @@ impl SearchAdapter {
 }
 
 impl SearchIndex for SearchAdapter {
+    type Error = ApplicationError;
+
     async fn upsert(&self, index: &str, documents: Vec<SearchDocument>) -> ApplicationResult<()> {
         match self {
             Self::Null(search) => search.upsert(index, documents).await,

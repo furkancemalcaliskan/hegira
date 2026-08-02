@@ -6,7 +6,7 @@ pub mod smtp_mailer;
 
 use crate::config::{AppConfig, MailerBackend};
 use application::shared::{
-    errors::ApplicationResult,
+    errors::{ApplicationError, ApplicationResult},
     mail::{MailMessage, Mailer},
 };
 use log_mailer::LogMailer;
@@ -35,6 +35,8 @@ impl MailerAdapter {
 }
 
 impl Mailer for MailerAdapter {
+    type Error = ApplicationError;
+
     async fn send(&self, message: MailMessage) -> ApplicationResult<()> {
         match self {
             Self::Null(mailer) => mailer.send(message).await,

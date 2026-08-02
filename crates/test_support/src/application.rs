@@ -4,15 +4,29 @@ use std::{
     time::{Duration, Instant},
 };
 
-use application::shared::{
-    audit::{AuditLogEntry, AuditLogger},
-    cache::Cache,
-    errors::ApplicationResult,
-    jobs::{Job, JobDispatcher},
-    mail::{MailMessage, Mailer},
-    settings::{SettingKey, SettingsProvider},
-    storage::{Storage, StoragePath, StoredObject},
-};
+use audit::{AuditLogEntry, AuditLogger};
+use background_jobs::{Job, JobDispatcher};
+use cache::Cache;
+use mail::{MailMessage, Mailer};
+use settings::{SettingKey, SettingsProvider};
+use storage::{Storage, StoragePath, StoredObject};
+
+#[derive(Debug)]
+pub struct TestSupportError(String);
+
+impl std::fmt::Display for TestSupportError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for TestSupportError {}
+
+impl From<serde_json::Error> for TestSupportError {
+    fn from(error: serde_json::Error) -> Self {
+        Self(error.to_string())
+    }
+}
 
 #[derive(Debug, Clone, Default)]
 pub struct RecordingMailer {
@@ -26,7 +40,9 @@ impl RecordingMailer {
 }
 
 impl Mailer for RecordingMailer {
-    async fn send(&self, message: MailMessage) -> ApplicationResult<()> {
+    type Error = TestSupportError;
+
+    async fn send(&self, message: MailMessage) -> Result<(), Self::Error> {
         self.messages
             .lock()
             .expect("mailer mutex poisoned")
@@ -47,7 +63,9 @@ impl RecordingAuditLogger {
 }
 
 impl AuditLogger for RecordingAuditLogger {
-    async fn record(&self, entry: AuditLogEntry) -> ApplicationResult<()> {
+    type Error = TestSupportError;
+
+    async fn record(&self, entry: AuditLogEntry) -> Result<(), Self::Error> {
         self.entries
             .lock()
             .expect("audit mutex poisoned")
@@ -68,7 +86,9 @@ pub struct InMemoryCache {
 }
 
 impl Cache for InMemoryCache {
-    async fn get_string(&self, key: &str) -> ApplicationResult<Option<String>> {
+    type Error = TestSupportError;
+
+    async fn get_string(&self, key: &str) -> Result<Option<String>, Self::Error> {
         let mut values = self.values.lock().expect("cache mutex poisoned");
         if values
             .get(key)
@@ -85,7 +105,7 @@ impl Cache for InMemoryCache {
         key: &str,
         value: String,
         ttl: Option<Duration>,
-    ) -> ApplicationResult<()> {
+    ) -> Result<(), Self::Error> {
         self.values.lock().expect("cache mutex poisoned").insert(
             key.to_string(),
             CacheValue {
@@ -96,7 +116,7 @@ impl Cache for InMemoryCache {
         Ok(())
     }
 
-    async fn remove(&self, key: &str) -> ApplicationResult<()> {
+    async fn remove(&self, key: &str) -> Result<(), Self::Error> {
         self.values
             .lock()
             .expect("cache mutex poisoned")
@@ -125,12 +145,14 @@ impl InMemoryStorage {
 }
 
 impl Storage for InMemoryStorage {
+    type Error = TestSupportError;
+
     async fn put(
         &self,
         path: &StoragePath,
         bytes: Vec<u8>,
         content_type: Option<String>,
-    ) -> ApplicationResult<()> {
+    ) -> Result<(), Self::Error> {
         self.objects.lock().expect("storage mutex poisoned").insert(
             path.as_str().to_string(),
             StoredObject {
@@ -141,7 +163,7 @@ impl Storage for InMemoryStorage {
         Ok(())
     }
 
-    async fn get(&self, path: &StoragePath) -> ApplicationResult<Option<StoredObject>> {
+    async fn get(&self, path: &StoragePath) -> Result<Option<StoredObject>, Self::Error> {
         Ok(self
             .objects
             .lock()
@@ -150,7 +172,7 @@ impl Storage for InMemoryStorage {
             .cloned())
     }
 
-    async fn delete(&self, path: &StoragePath) -> ApplicationResult<()> {
+    async fn delete(&self, path: &StoragePath) -> Result<(), Self::Error> {
         self.objects
             .lock()
             .expect("storage mutex poisoned")
@@ -165,7 +187,9 @@ pub struct InMemorySettings {
 }
 
 impl SettingsProvider for InMemorySettings {
-    async fn get_json(&self, key: &SettingKey) -> ApplicationResult<Option<serde_json::Value>> {
+    type Error = TestSupportError;
+
+    async fn get_json(&self, key: &SettingKey) -> Result<Option<serde_json::Value>, Self::Error> {
         Ok(self
             .values
             .lock()
@@ -174,7 +198,11 @@ impl SettingsProvider for InMemorySettings {
             .cloned())
     }
 
-    async fn set_json(&self, key: &SettingKey, value: serde_json::Value) -> ApplicationResult<()> {
+    async fn set_json(
+        &self,
+        key: &SettingKey,
+        value: serde_json::Value,
+    ) -> Result<(), Self::Error> {
         self.values
             .lock()
             .expect("settings mutex poisoned")
@@ -182,7 +210,7 @@ impl SettingsProvider for InMemorySettings {
         Ok(())
     }
 
-    async fn remove(&self, key: &SettingKey) -> ApplicationResult<()> {
+    async fn remove(&self, key: &SettingKey) -> Result<(), Self::Error> {
         self.values
             .lock()
             .expect("settings mutex poisoned")

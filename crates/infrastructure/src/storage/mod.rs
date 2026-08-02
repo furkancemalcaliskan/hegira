@@ -5,7 +5,7 @@ pub mod s3;
 
 use crate::config::{AppConfig, StorageBackend};
 use application::shared::{
-    errors::ApplicationResult,
+    errors::{ApplicationError, ApplicationResult},
     storage::{Storage, StoragePath, StoredObject},
 };
 use local::LocalStorage;
@@ -46,6 +46,8 @@ impl StorageAdapter {
 }
 
 impl Storage for StorageAdapter {
+    type Error = ApplicationError;
+
     async fn put(
         &self,
         path: &StoragePath,

@@ -153,8 +153,16 @@ test("accepts the documented ownership-class dependency directions", () => {
       WORKSPACE_DEPENDENCY_POLICY.background_jobs.length === 0 &&
       WORKSPACE_DEPENDENCY_POLICY.http_support.length === 0 &&
       WORKSPACE_DEPENDENCY_POLICY.leptos_support.length === 0 &&
+      WORKSPACE_DEPENDENCY_POLICY.audit.length === 0 &&
+      WORKSPACE_DEPENDENCY_POLICY.cache.length === 0 &&
+      WORKSPACE_DEPENDENCY_POLICY.mail.length === 0 &&
+      WORKSPACE_DEPENDENCY_POLICY.search.length === 0 &&
+      WORKSPACE_DEPENDENCY_POLICY.security.length === 0 &&
+      WORKSPACE_DEPENDENCY_POLICY.settings.length === 0 &&
+      WORKSPACE_DEPENDENCY_POLICY.storage.length === 0 &&
       WORKSPACE_DEPENDENCY_POLICY.observability.includes("background_jobs") &&
-      WORKSPACE_DEPENDENCY_POLICY.test_support.includes("application") &&
+      WORKSPACE_DEPENDENCY_POLICY.test_support.includes("audit") &&
+      !WORKSPACE_DEPENDENCY_POLICY.test_support.includes("application") &&
       WORKSPACE_DEPENDENCY_POLICY.hegira.includes("infrastructure") &&
       WORKSPACE_DEPENDENCY_POLICY.hegira.includes("persistence") &&
       WORKSPACE_DEPENDENCY_POLICY.db_migrator.includes("persistence") &&
@@ -213,7 +221,7 @@ test("classifies every current package and records each transition issue", () =>
 test("keeps transitional compatibility edges explicit and issue-bound", () => {
   assert.equal(
     TRANSITIONAL_COMPATIBILITY_EDGES["test_support -> application"],
-    136,
+    undefined,
   );
   assert.equal(
     TRANSITIONAL_COMPATIBILITY_EDGES["identity_http -> presentation"],

@@ -43,6 +43,8 @@ impl LocalStorage {
 }
 
 impl Storage for LocalStorage {
+    type Error = ApplicationError;
+
     async fn put(
         &self,
         path: &StoragePath,

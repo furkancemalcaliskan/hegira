@@ -48,8 +48,8 @@ where
     Repository: AuthorizationRepository + AuditedRoleWriter,
     CurrentUsers: CurrentUserProvider,
     Authorization: AuthorizationService,
-    CacheAdapter: Cache,
-    Audit: AuditLogger,
+    CacheAdapter: Cache<Error = ApplicationError>,
+    Audit: AuditLogger<Error = ApplicationError>,
 {
     pub fn new(
         repository: Repository,

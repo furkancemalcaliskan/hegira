@@ -27,6 +27,8 @@ impl CacheEntry {
 }
 
 impl Cache for MemoryCache {
+    type Error = ApplicationError;
+
     async fn get_string(&self, key: &str) -> ApplicationResult<Option<String>> {
         let mut entries = self
             .entries

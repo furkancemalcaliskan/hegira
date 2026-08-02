@@ -4,7 +4,10 @@ pub mod null;
 pub mod redis_cache;
 
 use crate::config::{AppConfig, CacheBackend};
-use application::shared::{cache::Cache, errors::ApplicationResult};
+use application::shared::{
+    cache::Cache,
+    errors::{ApplicationError, ApplicationResult},
+};
 use memory::MemoryCache;
 use null::NullCache;
 use std::time::Duration;
@@ -43,6 +46,8 @@ impl CacheAdapter {
 }
 
 impl Cache for CacheAdapter {
+    type Error = ApplicationError;
+
     async fn get_string(&self, key: &str) -> ApplicationResult<Option<String>> {
         match self {
             Self::Null(cache) => cache.get_string(key).await,

@@ -1,5 +1,5 @@
 use application::shared::{
-    errors::ApplicationResult,
+    errors::{ApplicationError, ApplicationResult},
     mail::{MailMessage, Mailer},
 };
 
@@ -7,6 +7,8 @@ use application::shared::{
 pub struct LogMailer;
 
 impl Mailer for LogMailer {
+    type Error = ApplicationError;
+
     async fn send(&self, message: MailMessage) -> ApplicationResult<()> {
         tracing::info!(
             to = %message.to.email,

@@ -13,6 +13,8 @@ use argon2::{
 pub struct Argon2PasswordHasher;
 
 impl PasswordHasher for Argon2PasswordHasher {
+    type Error = ApplicationError;
+
     fn hash(&self, password: &str) -> ApplicationResult<String> {
         let salt = SaltString::generate(&mut OsRng);
         Argon2::default()

@@ -1,5 +1,5 @@
 use application::shared::{
-    errors::ApplicationResult,
+    errors::{ApplicationError, ApplicationResult},
     search::{SearchDocument, SearchIndex, SearchQuery, SearchResults},
 };
 
@@ -7,6 +7,8 @@ use application::shared::{
 pub struct NullSearch;
 
 impl SearchIndex for NullSearch {
+    type Error = ApplicationError;
+
     async fn upsert(&self, _index: &str, _documents: Vec<SearchDocument>) -> ApplicationResult<()> {
         Ok(())
     }
