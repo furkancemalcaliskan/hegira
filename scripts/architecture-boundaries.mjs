@@ -108,13 +108,113 @@ export const WORKSPACE_DEPENDENCY_POLICY = Object.freeze({
   template_renderer: [],
 });
 
+const packageContract = (role, disposition, issues = []) =>
+  Object.freeze({ role, disposition, issues: Object.freeze(issues) });
+
+export const WORKSPACE_PACKAGE_POLICY = Object.freeze({
+  hegira: packageContract("compatibility", "replace-and-retire", [145, 146]),
+  platform_core: packageContract("framework", "retain"),
+  configuration: packageContract("framework", "retain"),
+  persistence: packageContract("framework", "retain"),
+  background_jobs: packageContract("framework", "retain"),
+  http_support: packageContract("framework", "retain"),
+  leptos_support: packageContract("framework", "retain"),
+  observability: packageContract("framework", "retain"),
+  test_support: packageContract("framework", "decouple-and-retain", [136]),
+  domain_shared: packageContract(
+    "compatibility",
+    "extract-and-retire",
+    [132, 136, 146],
+  ),
+  domain: packageContract("compatibility", "extract-and-retire", [132, 146]),
+  application_contracts: packageContract(
+    "compatibility",
+    "extract-and-retire",
+    [132, 136, 146],
+  ),
+  application: packageContract(
+    "compatibility",
+    "extract-and-retire",
+    [132, 136, 146],
+  ),
+  infrastructure: packageContract(
+    "compatibility",
+    "extract-and-retire",
+    [133, 137, 138, 146],
+  ),
+  presentation: packageContract(
+    "compatibility",
+    "extract-and-retire",
+    [134, 139, 146],
+  ),
+  web: packageContract(
+    "compatibility",
+    "extract-and-retire",
+    [135, 141, 146],
+  ),
+  runtime: packageContract("framework", "retain"),
+  db_migrator: packageContract(
+    "compatibility",
+    "replace-and-retire",
+    [142, 146],
+  ),
+  identity_domain_shared: packageContract("module", "retain"),
+  identity_domain: packageContract("module", "retain"),
+  identity_application_contracts: packageContract(
+    "module",
+    "decouple-and-retain",
+    [132],
+  ),
+  identity_application: packageContract(
+    "module",
+    "decouple-and-retain",
+    [132],
+  ),
+  identity_sqlx: packageContract("module", "canonicalize-and-retain", [133]),
+  identity_http: packageContract("module", "decouple-and-retain", [134]),
+  identity_leptos: packageContract("module", "decouple-and-retain", [135]),
+  template_renderer: packageContract("tool", "refactor-and-retain", [148]),
+});
+
 export const REPOSITORY_OWNERSHIP_POLICY = Object.freeze({
-  app: Object.freeze(["app", "framework", "module"]),
   framework: Object.freeze(["framework"]),
   module: Object.freeze(["framework", "module"]),
-  template: Object.freeze(["framework", "module", "template"]),
-  tool: Object.freeze(["framework", "module", "template", "tool"]),
+  application: Object.freeze(["framework", "module", "application"]),
+  compatibility: Object.freeze(["framework", "module", "compatibility"]),
+  tool: Object.freeze(["framework", "module", "tool"]),
 });
+
+export const TRANSITIONAL_COMPATIBILITY_EDGES = Object.freeze({
+  "test_support -> application": 136,
+  "identity_application_contracts -> domain_shared": 132,
+  "identity_application -> domain_shared": 132,
+  "identity_http -> application": 134,
+  "identity_http -> application_contracts": 134,
+  "identity_http -> domain_shared": 134,
+  "identity_http -> presentation": 134,
+  "identity_leptos -> application": 135,
+  "identity_leptos -> application_contracts": 135,
+  "identity_leptos -> domain_shared": 135,
+  "identity_leptos -> presentation": 135,
+  "identity_leptos -> web": 135,
+});
+
+const PACKAGE_ROLE_LOCATION_POLICY = Object.freeze({
+  framework: Object.freeze(["framework"]),
+  module: Object.freeze(["module"]),
+  application: Object.freeze(["app"]),
+  compatibility: Object.freeze(["app", "framework"]),
+  tool: Object.freeze(["tool"]),
+});
+
+const PACKAGE_DISPOSITIONS = new Set([
+  "retain",
+  "decouple-and-retain",
+  "canonicalize-and-retain",
+  "refactor-and-retain",
+  "extract-and-retire",
+  "replace-and-retire",
+]);
 
 const IDENTITY_SQL_PATTERN =
   /\b(?:select|from|join|insert\s+into|update|delete\s+from|create\s+table|alter\s+table|drop\s+table)\b[^\n]*\b(?:users|sessions|roles|permissions|user_roles|role_permissions|oauth_states|user_oauth_connections|oauth_pending_signups)\b/i;
@@ -173,7 +273,7 @@ function packageDirectory(packageMetadata) {
   return path.dirname(path.resolve(packageMetadata.manifest_path));
 }
 
-function packageOwnership(workspaceRoot, packageMetadata) {
+function packageLocationOwnership(workspaceRoot, packageMetadata) {
   const directory = packageDirectory(packageMetadata);
 
   for (const root of REPOSITORY_PACKAGE_ROOTS) {
@@ -221,6 +321,8 @@ function workspaceGraph(metadata) {
 export function validateWorkspaceMetadata(
   metadata,
   policy = WORKSPACE_DEPENDENCY_POLICY,
+  packagePolicy = WORKSPACE_PACKAGE_POLICY,
+  transitionalEdges = TRANSITIONAL_COMPATIBILITY_EDGES,
 ) {
   const errors = [];
   const workspaceRoot = path.resolve(metadata.workspace_root);
@@ -231,11 +333,63 @@ export function validateWorkspaceMetadata(
   const checkedEdges = new Set();
 
   for (const packageMetadata of packages) {
-    const ownership = packageOwnership(workspaceRoot, packageMetadata);
-    if (ownership === undefined) {
+    const locationOwnership = packageLocationOwnership(
+      workspaceRoot,
+      packageMetadata,
+    );
+    if (locationOwnership === undefined) {
       errors.push(
         `workspace package is outside an owned repository location: ${packageMetadata.name} (${packageDirectory(packageMetadata)})`,
       );
+    }
+
+    const contract = packagePolicy[packageMetadata.name];
+    if (contract === undefined) {
+      errors.push(
+        `workspace package has no ownership and disposition contract: ${packageMetadata.name}`,
+      );
+    } else {
+      const allowedLocations = PACKAGE_ROLE_LOCATION_POLICY[contract.role];
+      if (allowedLocations === undefined) {
+        errors.push(
+          `workspace package has an invalid ownership role: ${packageMetadata.name} (${contract.role})`,
+        );
+      } else if (
+        locationOwnership !== undefined &&
+        !allowedLocations.includes(locationOwnership)
+      ) {
+        errors.push(
+          `workspace package role does not match its repository location: ${packageMetadata.name} (${contract.role} packages may not live under ${locationOwnership})`,
+        );
+      }
+
+      if (!PACKAGE_DISPOSITIONS.has(contract.disposition)) {
+        errors.push(
+          `workspace package has an invalid disposition: ${packageMetadata.name} (${contract.disposition})`,
+        );
+      }
+      if (!Array.isArray(contract.issues)) {
+        errors.push(
+          `workspace package has an invalid follow-up issue list: ${packageMetadata.name}`,
+        );
+      } else if (
+        contract.disposition !== "retain" &&
+        (contract.issues.length === 0 ||
+          contract.issues.some(
+            (issue) => !Number.isInteger(issue) || issue <= 0,
+          ))
+      ) {
+        errors.push(
+          `workspace package transition has no accepted issue: ${packageMetadata.name}`,
+        );
+      } else if (
+        contract.disposition === "retain" &&
+        contract.issues.length !== 0
+      ) {
+        errors.push(
+          `retained workspace package must not have transition issues: ${packageMetadata.name}`,
+        );
+      }
     }
 
     if (!Object.hasOwn(policy, packageMetadata.name)) {
@@ -260,6 +414,14 @@ export function validateWorkspaceMetadata(
     if (!packageNames.has(packageName)) {
       errors.push(
         `architecture policy references missing workspace package: ${packageName}`,
+      );
+    }
+  }
+
+  for (const packageName of Object.keys(packagePolicy)) {
+    if (!packageNames.has(packageName)) {
+      errors.push(
+        `ownership and disposition contract references missing workspace package: ${packageName}`,
       );
     }
   }
@@ -290,13 +452,14 @@ export function validateWorkspaceMetadata(
     }
     checkedEdges.add(edgeName);
 
-    const fromOwnership = packageOwnership(workspaceRoot, edge.from);
-    const toOwnership = packageOwnership(workspaceRoot, edge.target);
+    const fromOwnership = packagePolicy[from]?.role;
+    const toOwnership = packagePolicy[to]?.role;
     const allowedOwnerships =
       REPOSITORY_OWNERSHIP_POLICY[fromOwnership] ?? [];
     if (
       toOwnership !== undefined &&
-      !allowedOwnerships.includes(toOwnership)
+      !allowedOwnerships.includes(toOwnership) &&
+      !Object.hasOwn(transitionalEdges, edgeName)
     ) {
       errors.push(
         `invalid repository ownership edge: ${edgeName} (${fromOwnership ?? "unknown"} packages may not depend on ${toOwnership} packages)`,
@@ -308,6 +471,29 @@ export function validateWorkspaceMetadata(
     if (!allowedTargets.includes(to)) {
       errors.push(
         `invalid workspace dependency edge: ${edgeName} (not permitted by the documented workspace boundary policy)`,
+      );
+    }
+  }
+  for (const [edgeName, issue] of Object.entries(transitionalEdges)) {
+    if (!Number.isInteger(issue) || issue <= 0) {
+      errors.push(
+        `transitional compatibility edge has no accepted issue: ${edgeName}`,
+      );
+    }
+    if (!checkedEdges.has(edgeName)) {
+      errors.push(
+        `transitional compatibility policy references missing workspace edge: ${edgeName}`,
+      );
+    }
+    const [from, to] = edgeName.split(" -> ");
+    const fromRole = packagePolicy[from]?.role;
+    const toRole = packagePolicy[to]?.role;
+    if (
+      !["framework", "module"].includes(fromRole) ||
+      toRole !== "compatibility"
+    ) {
+      errors.push(
+        `transitional compatibility policy may only allow framework or module packages to leave compatibility code: ${edgeName}`,
       );
     }
   }

@@ -34,6 +34,12 @@ commands change. Never describe planned work as implemented.
   persistence, background-work, and runtime packages alongside the current
   layered domain, application, infrastructure, presentation, web, and
   database-migrator packages.
+  The package-level ownership and disposition contract in
+  `docs/architecture.md` classifies the latter packages as compatibility code;
+  their physical location under `crates/` does not make them final framework
+  packages. Do not add new framework or module dependencies on compatibility
+  code. Only the exact issue-bound transition edges enforced by
+  `scripts/architecture-boundaries.mjs` are temporarily permitted.
 - `modules/identity/` contains the canonical Identity Domain Shared, Domain,
   Application Contracts, Application, SQLx, Axum HTTP, and Leptos adapter
   packages.
