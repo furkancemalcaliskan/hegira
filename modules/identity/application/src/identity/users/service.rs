@@ -1,7 +1,9 @@
+use async_trait::async_trait;
 use chrono::Utc;
 
 use crate::{
     identity::authorization::{AuthorizationService, CurrentUserProvider, require_permission},
+    identity::http_contracts::UserServiceContract,
     identity::permissions::cache as permission_cache,
     identity::users::mapper::user_dto,
     identity::users::writer::{CreateManagedUser, ManagedUserWriter, UpdateManagedUser},
@@ -359,6 +361,51 @@ where
             details,
         )
         .await;
+    }
+}
+
+#[async_trait]
+impl<Users, Hasher, CurrentUsers, Authorization, CacheAdapter, Audit, Search> UserServiceContract
+    for UserAppService<Users, Hasher, CurrentUsers, Authorization, CacheAdapter, Audit, Search>
+where
+    Users: UserRepository + ManagedUserWriter,
+    Hasher: PasswordHasher<Error = ApplicationError>,
+    CurrentUsers: CurrentUserProvider,
+    Authorization: AuthorizationService,
+    CacheAdapter: Cache<Error = ApplicationError>,
+    Audit: AuditLogger<Error = ApplicationError>,
+    Search: SearchIndex<Error = ApplicationError>,
+{
+    async fn list(
+        &self,
+        actor_token: String,
+        input: ListUsersInput,
+    ) -> ApplicationResult<PagedUserResultDto> {
+        UserAppService::list(self, actor_token, input).await
+    }
+
+    async fn get(&self, actor_token: String, username: String) -> ApplicationResult<UserDto> {
+        UserAppService::get(self, actor_token, username).await
+    }
+
+    async fn create(
+        &self,
+        actor_token: String,
+        input: CreateUserInput,
+    ) -> ApplicationResult<UserDto> {
+        UserAppService::create(self, actor_token, input).await
+    }
+
+    async fn update(
+        &self,
+        actor_token: String,
+        input: UpdateUserInput,
+    ) -> ApplicationResult<UserDto> {
+        UserAppService::update(self, actor_token, input).await
+    }
+
+    async fn delete(&self, actor_token: String, username: String) -> ApplicationResult<()> {
+        UserAppService::delete(self, actor_token, username).await
     }
 }
 

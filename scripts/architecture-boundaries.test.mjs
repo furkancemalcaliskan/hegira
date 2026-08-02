@@ -225,7 +225,7 @@ test("keeps transitional compatibility edges explicit and issue-bound", () => {
   );
   assert.equal(
     TRANSITIONAL_COMPATIBILITY_EDGES["identity_http -> presentation"],
-    134,
+    undefined,
   );
   assert.equal(
     TRANSITIONAL_COMPATIBILITY_EDGES["identity_leptos -> web"],
@@ -250,13 +250,14 @@ test("framework policy exposes no dependency on an Identity module package", () 
   assert.deepEqual(violations, []);
 });
 
-test("Identity business and persistence packages expose no compatibility dependency", () => {
+test("completed Identity module boundaries expose no compatibility dependency", () => {
   for (const name of [
     "identity_domain_shared",
     "identity_domain",
     "identity_application_contracts",
     "identity_application",
     "identity_sqlx",
+    "identity_http",
   ]) {
     const compatibilityDependencies = WORKSPACE_DEPENDENCY_POLICY[name].filter(
       (dependency) =>

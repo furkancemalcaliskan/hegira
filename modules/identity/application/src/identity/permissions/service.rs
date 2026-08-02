@@ -1,6 +1,7 @@
 use crate::{
     identity::{
         authorization::{AuthorizationService, CurrentUser, CurrentUserProvider},
+        http_contracts::PermissionServiceContract,
         permissions::cache as permission_cache,
         validation,
     },
@@ -12,6 +13,7 @@ use crate::{
         errors::{ApplicationError, ApplicationResult},
     },
 };
+use async_trait::async_trait;
 use identity_application_contracts::{
     identity::{
         authorization::{
@@ -351,6 +353,65 @@ where
         if let Err(error) = self.audit.record(entry).await {
             tracing::debug!(%error, action, "audit log write skipped");
         }
+    }
+}
+
+#[async_trait]
+impl<Repository, CurrentUsers, Authorization, CacheAdapter, Audit> PermissionServiceContract
+    for PermissionAppService<Repository, CurrentUsers, Authorization, CacheAdapter, Audit>
+where
+    Repository: AuthorizationRepository + AuditedRoleWriter,
+    CurrentUsers: CurrentUserProvider,
+    Authorization: AuthorizationService,
+    CacheAdapter: Cache<Error = ApplicationError>,
+    Audit: AuditLogger<Error = ApplicationError>,
+{
+    async fn list_permissions(&self, actor_token: String) -> ApplicationResult<Vec<PermissionDto>> {
+        PermissionAppService::list_permissions(self, actor_token).await
+    }
+
+    async fn list_roles_page(
+        &self,
+        actor_token: String,
+        input: ListRolesInput,
+    ) -> ApplicationResult<PagedRoleResultDto> {
+        PermissionAppService::list_roles_page(self, actor_token, input).await
+    }
+
+    async fn create_role(
+        &self,
+        actor_token: String,
+        input: CreateRoleInput,
+    ) -> ApplicationResult<()> {
+        PermissionAppService::create_role(self, actor_token, input).await
+    }
+
+    async fn update_role(
+        &self,
+        actor_token: String,
+        input: UpdateRoleInput,
+    ) -> ApplicationResult<()> {
+        PermissionAppService::update_role(self, actor_token, input).await
+    }
+
+    async fn delete_role(&self, actor_token: String, role_name: String) -> ApplicationResult<()> {
+        PermissionAppService::delete_role(self, actor_token, role_name).await
+    }
+
+    async fn set_role_permissions(
+        &self,
+        actor_token: String,
+        input: SetRolePermissionsInput,
+    ) -> ApplicationResult<()> {
+        PermissionAppService::set_role_permissions(self, actor_token, input).await
+    }
+
+    async fn assign_user_role(
+        &self,
+        actor_token: String,
+        input: AssignUserRoleInput,
+    ) -> ApplicationResult<()> {
+        PermissionAppService::assign_user_role(self, actor_token, input).await
     }
 }
 

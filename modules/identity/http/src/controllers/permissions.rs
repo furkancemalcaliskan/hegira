@@ -7,11 +7,11 @@ use axum::{
 use serde::Deserialize;
 
 use crate::{error_response::ApiResult, extractors::auth::BearerToken, state::IdentityHttpState};
-use application_contracts::identity::authorization::{
+use identity_application::identity::http_contracts::PermissionServiceContract;
+use identity_application_contracts::identity::authorization::{
     AssignUserRoleInput, CreateRoleInput, ListRolesInput, PagedRoleResultDto, PermissionDto,
     SetRolePermissionsInput, UpdateRoleInput,
 };
-use presentation::composition::services::IdentityPermissionService;
 
 #[cfg(feature = "openapi")]
 use crate::error_response::ErrorBody;
@@ -206,6 +206,6 @@ pub(crate) async fn assign_user_role(
     Ok(StatusCode::NO_CONTENT)
 }
 
-fn service(state: &IdentityHttpState) -> IdentityPermissionService {
-    state.services.permissions.clone()
+fn service(state: &IdentityHttpState) -> &dyn PermissionServiceContract {
+    state.permissions.as_ref()
 }

@@ -81,8 +81,8 @@ identity_sqlx
      identity_domain_shared, persistence
 
 identity_http
-  -> application, application_contracts, domain_shared, http_support,
-     leptos_support, presentation
+  -> identity_application, identity_application_contracts, http_support,
+     leptos_support
 
 identity_leptos
   -> application, application_contracts, domain_shared, leptos_support,
@@ -140,7 +140,7 @@ matching policy update.
 | `identity_application_contracts` | `identity_domain`, `identity_domain_shared` |
 | `identity_application` | `audit`, `cache`, `identity_application_contracts`, `identity_domain`, `identity_domain_shared`, `mail`, `search`, `security` |
 | `identity_sqlx` | `identity_application`, `identity_application_contracts`, `identity_domain`, `identity_domain_shared`, `persistence` |
-| `identity_http` | `application`, `application_contracts`, `domain_shared`, `http_support`, `leptos_support`, `presentation` |
+| `identity_http` | `http_support`, `identity_application`, `identity_application_contracts`, `leptos_support` |
 | `identity_leptos` | `application`, `application_contracts`, `domain_shared`, `leptos_support`, `presentation`, `web` |
 | `template_renderer` | None |
 
@@ -196,7 +196,7 @@ the referenced follow-up issue has already been implemented.
 | `application_contracts` | Compatibility | Extract and retire | #146 |
 | `application` | Compatibility | Extract and retire | #146 |
 | `infrastructure` | Compatibility | Extract and retire | #137, #138, #146 |
-| `presentation` | Compatibility | Extract and retire | #134, #139, #146 |
+| `presentation` | Compatibility | Extract and retire | #139, #146 |
 | `web` | Compatibility | Extract and retire | #135, #141, #146 |
 | `db_migrator` | Compatibility | Replace and retire | #142, #146 |
 | `identity_domain_shared` | Official module | Retain | None |
@@ -204,7 +204,7 @@ the referenced follow-up issue has already been implemented.
 | `identity_application_contracts` | Official module | Retain | None |
 | `identity_application` | Official module | Retain | None |
 | `identity_sqlx` | Official module | Retain | None |
-| `identity_http` | Official module | Decouple and retain | #134 |
+| `identity_http` | Official module | Retain | None |
 | `identity_leptos` | Official module | Decouple and retain | #135 |
 | `template_renderer` | Repository tooling | Refactor and retain | #148 |
 
@@ -220,7 +220,6 @@ follow-up issues remove them:
 
 | Transitional edge | Removal issue |
 |---|---|
-| `identity_http -> application, application_contracts, domain_shared, presentation` | #134 |
 | `identity_leptos -> application, application_contracts, domain_shared, presentation, web` | #135 |
 
 The checker permits only these exact edges, requires every exception to name an
@@ -376,7 +375,9 @@ application layers cover users, roles, sessions, OAuth, and TOTP without
 exposing Axum, Leptos, SQLx, or provider types. `identity_sqlx` is the explicit
 outward adapter that implements those ports for PostgreSQL and SQLite.
 `identity_http` is the separately selected Axum adapter; its controller state
-contains application services rather than host configuration or persistence.
+contains object-safe Identity use-case contracts rather than host configuration,
+persistence, or compatibility Presentation services. The application host
+injects each concrete service explicitly when it selects the adapter.
 `identity_leptos` is the separately buildable Leptos adapter. It uses Identity
 contracts and host-provided application services without declaring SQLx or
 persistence dependencies; UI permission gates remain presentation behavior,
@@ -436,9 +437,10 @@ Bearer-authenticated Axum API:
 Client -> Axum controller -> application service
 ```
 
-Both entry points use the same service instance from `AppServices`.
-`identity_http` receives an `IdentityHttpState` containing only those services;
-controllers cannot reach the host database or provider adapters directly.
+Both entry points use the same host-selected service composition.
+`identity_http` receives an `IdentityHttpState` containing only object-safe
+use-case contracts; controllers cannot reach the host database, concrete
+provider adapters, or compatibility Presentation state directly.
 Controllers and server functions deserialize and delegate; business
 validation, authorization, and concurrency policy stay in the application
 layer.

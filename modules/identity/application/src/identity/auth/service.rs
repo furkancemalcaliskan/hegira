@@ -1,5 +1,6 @@
 use crate::{
     identity::{
+        http_contracts::AuthServiceContract,
         users::writer::{ManagedUserWriter, RegisterManagedUser},
         validation,
     },
@@ -10,6 +11,7 @@ use crate::{
         security::{PasswordHasher, TokenService},
     },
 };
+use async_trait::async_trait;
 use chrono::{Duration, Utc};
 use identity_application_contracts::{
     identity::auth::{
@@ -754,6 +756,135 @@ where
             .refresh(&session.token, next_expires_at)
             .await?;
         Ok(())
+    }
+}
+
+#[async_trait]
+impl<Users, Sessions, Permissions, TwoFactor, Hasher, Tokens, MailerAdapter> AuthServiceContract
+    for AuthAppService<Users, Sessions, Permissions, TwoFactor, Hasher, Tokens, MailerAdapter>
+where
+    Users: UserRepository + ManagedUserWriter,
+    Sessions: SessionRepository,
+    Permissions: AuthorizationRepository,
+    TwoFactor: TwoFactorRepository,
+    Hasher: PasswordHasher<Error = ApplicationError>,
+    Tokens: TokenService<Error = ApplicationError>,
+    MailerAdapter: Mailer<Error = ApplicationError>,
+{
+    async fn register(&self, input: RegisterInput) -> ApplicationResult<()> {
+        AuthAppService::register(self, input).await
+    }
+
+    async fn login(&self, input: LoginInput) -> ApplicationResult<LoginResultDto> {
+        AuthAppService::login(self, input).await
+    }
+
+    async fn current_user(&self, token: String) -> ApplicationResult<CurrentUserDto> {
+        AuthAppService::current_user(self, token).await
+    }
+
+    async fn logout(&self, token: String) -> ApplicationResult<()> {
+        AuthAppService::logout(self, token).await
+    }
+
+    async fn renew_session(&self, token: String) -> ApplicationResult<String> {
+        AuthAppService::renew_session(self, token).await
+    }
+
+    async fn verify_email(&self, token: String) -> ApplicationResult<()> {
+        AuthAppService::verify_email(self, token).await
+    }
+
+    async fn resend_verification(&self, actor_token: String) -> ApplicationResult<()> {
+        AuthAppService::resend_verification(self, actor_token).await
+    }
+
+    async fn delete_account(
+        &self,
+        actor_token: String,
+        input: DeleteAccountInput,
+    ) -> ApplicationResult<()> {
+        AuthAppService::delete_account(self, actor_token, input).await
+    }
+
+    async fn forgot_password(&self, input: ForgotPasswordInput) -> ApplicationResult<()> {
+        AuthAppService::forgot_password(self, input).await
+    }
+
+    async fn reset_password(&self, input: ResetPasswordInput) -> ApplicationResult<()> {
+        AuthAppService::reset_password(self, input).await
+    }
+
+    async fn change_password(
+        &self,
+        actor_token: String,
+        input: ChangePasswordInput,
+    ) -> ApplicationResult<()> {
+        AuthAppService::change_password(self, actor_token, input).await
+    }
+
+    async fn request_email_change(
+        &self,
+        actor_token: String,
+        input: ChangeEmailInput,
+    ) -> ApplicationResult<()> {
+        AuthAppService::request_email_change(self, actor_token, input).await
+    }
+
+    async fn confirm_email_change(&self, token: String) -> ApplicationResult<()> {
+        AuthAppService::confirm_email_change(self, token).await
+    }
+
+    async fn list_sessions(&self, actor_token: String) -> ApplicationResult<Vec<SessionDto>> {
+        AuthAppService::list_sessions(self, actor_token).await
+    }
+
+    async fn revoke_session(&self, actor_token: String, session_id: Uuid) -> ApplicationResult<()> {
+        AuthAppService::revoke_session(self, actor_token, session_id).await
+    }
+
+    async fn request_magic_link(&self, input: MagicLinkInput) -> ApplicationResult<()> {
+        AuthAppService::request_magic_link(self, input).await
+    }
+
+    async fn verify_magic_link(&self, token: String) -> ApplicationResult<String> {
+        AuthAppService::verify_magic_link(self, token).await
+    }
+
+    async fn setup_totp(&self, actor_token: String) -> ApplicationResult<TotpSetupDto> {
+        AuthAppService::setup_totp(self, actor_token).await
+    }
+
+    async fn enable_totp(
+        &self,
+        actor_token: String,
+        input: TotpCodeInput,
+    ) -> ApplicationResult<TotpEnableDto> {
+        AuthAppService::enable_totp(self, actor_token, input).await
+    }
+
+    async fn disable_totp(
+        &self,
+        actor_token: String,
+        input: TotpCodeInput,
+    ) -> ApplicationResult<()> {
+        AuthAppService::disable_totp(self, actor_token, input).await
+    }
+
+    async fn regenerate_totp_backup_codes(
+        &self,
+        actor_token: String,
+        input: TotpCodeInput,
+    ) -> ApplicationResult<TotpEnableDto> {
+        AuthAppService::regenerate_totp_backup_codes(self, actor_token, input).await
+    }
+
+    async fn totp_status(&self, actor_token: String) -> ApplicationResult<TotpStatusDto> {
+        AuthAppService::totp_status(self, actor_token).await
+    }
+
+    async fn verify_totp_login(&self, input: VerifyTotpLoginInput) -> ApplicationResult<String> {
+        AuthAppService::verify_totp_login(self, input).await
     }
 }
 

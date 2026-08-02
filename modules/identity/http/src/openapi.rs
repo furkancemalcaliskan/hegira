@@ -12,7 +12,7 @@ use crate::{
     },
     error_response::ErrorBody,
 };
-use application_contracts::identity::{
+use identity_application_contracts::identity::{
     auth::{
         dto::{
             CurrentUserDto, OAuthAuthorizeDto, OAuthCallbackDto, OAuthConnectionDto, SessionDto,
