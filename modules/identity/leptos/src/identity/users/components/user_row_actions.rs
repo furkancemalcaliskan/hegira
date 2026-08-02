@@ -2,20 +2,18 @@ use icons::{Ellipsis, Pencil, Trash2};
 use leptos::prelude::*;
 
 use crate::{
-    application_contracts::identity::{permissions, users::UserDto},
-    domain_shared::identity::is_protected_admin_username,
-    web::{
-        identity::users::model::users_page_state::UsersPageState,
-        shared::{
-            authorization,
-            i18n::{T, use_i18n},
-            rust_ui::ui::{
-                button::{Button, ButtonVariant},
-                dialog::{DialogBody, DialogDescription, DialogFooter, DialogHeader, DialogTitle},
-                dropdown_menu::{
-                    DropdownMenu, DropdownMenuAlign, DropdownMenuContent, DropdownMenuItem,
-                    DropdownMenuTrigger,
-                },
+    identity::users::model::users_page_state::UsersPageState,
+    identity_application_contracts::identity::{permissions, users::UserDto},
+    identity_domain_shared::identity::is_protected_admin_username,
+    shared::{
+        authorization,
+        i18n::{T, use_i18n},
+        rust_ui::ui::{
+            button::{Button, ButtonVariant},
+            dialog::{DialogBody, DialogDescription, DialogFooter, DialogHeader, DialogTitle},
+            dropdown_menu::{
+                DropdownMenu, DropdownMenuAlign, DropdownMenuContent, DropdownMenuItem,
+                DropdownMenuTrigger,
             },
         },
     },

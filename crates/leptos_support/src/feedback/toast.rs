@@ -1,7 +1,7 @@
 use icons::{CircleCheck, CircleX, Info, TriangleAlert, X};
 use leptos::prelude::*;
 
-use crate::shared::rust_ui::ui::{
+use crate::rust_ui::ui::{
     button::{Button, ButtonSize, ButtonVariant},
     sonner::{SonnerContainer, SonnerDirection, SonnerList, SonnerPosition},
 };

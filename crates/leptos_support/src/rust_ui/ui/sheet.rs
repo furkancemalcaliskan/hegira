@@ -5,8 +5,8 @@ use leptos_ui::clx;
 use tw_merge::*;
 
 use super::button::ButtonSize;
-use crate::shared::rust_ui::hooks::use_random::use_random_id_for;
-use crate::shared::rust_ui::ui::button::{Button, ButtonVariant};
+use crate::rust_ui::hooks::use_random::use_random_id_for;
+use crate::rust_ui::ui::button::{Button, ButtonVariant};
 
 mod components {
     use super::*;

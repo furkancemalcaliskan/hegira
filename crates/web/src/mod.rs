@@ -1,8 +1,7 @@
 #![recursion_limit = "256"]
 
 pub mod app;
-#[path = "../../../modules/identity/leptos/src/identity/mod.rs"]
-pub mod identity;
+pub use identity_leptos::identity;
 pub mod root;
 pub mod routes;
 pub mod shared;

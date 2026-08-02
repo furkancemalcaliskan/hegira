@@ -80,6 +80,7 @@ export const WORKSPACE_DEPENDENCY_POLICY = Object.freeze({
     "application",
     "application_contracts",
     "domain_shared",
+    "identity_leptos",
     "leptos_support",
     "presentation",
   ],
@@ -115,12 +116,10 @@ export const WORKSPACE_DEPENDENCY_POLICY = Object.freeze({
     "leptos_support",
   ],
   identity_leptos: [
-    "application",
-    "application_contracts",
-    "domain_shared",
+    "identity_application",
+    "identity_application_contracts",
+    "identity_domain_shared",
     "leptos_support",
-    "presentation",
-    "web",
   ],
   template_renderer: [],
 });
@@ -174,7 +173,7 @@ export const WORKSPACE_PACKAGE_POLICY = Object.freeze({
   web: packageContract(
     "compatibility",
     "extract-and-retire",
-    [135, 141, 146],
+    [141, 146],
   ),
   runtime: packageContract("framework", "retain"),
   db_migrator: packageContract(
@@ -188,7 +187,7 @@ export const WORKSPACE_PACKAGE_POLICY = Object.freeze({
   identity_application: packageContract("module", "retain"),
   identity_sqlx: packageContract("module", "retain"),
   identity_http: packageContract("module", "retain"),
-  identity_leptos: packageContract("module", "decouple-and-retain", [135]),
+  identity_leptos: packageContract("module", "retain"),
   template_renderer: packageContract("tool", "refactor-and-retain", [148]),
 });
 
@@ -200,13 +199,7 @@ export const REPOSITORY_OWNERSHIP_POLICY = Object.freeze({
   tool: Object.freeze(["framework", "module", "tool"]),
 });
 
-export const TRANSITIONAL_COMPATIBILITY_EDGES = Object.freeze({
-  "identity_leptos -> application": 135,
-  "identity_leptos -> application_contracts": 135,
-  "identity_leptos -> domain_shared": 135,
-  "identity_leptos -> presentation": 135,
-  "identity_leptos -> web": 135,
-});
+export const TRANSITIONAL_COMPATIBILITY_EDGES = Object.freeze({});
 
 const PACKAGE_ROLE_LOCATION_POLICY = Object.freeze({
   framework: Object.freeze(["framework"]),

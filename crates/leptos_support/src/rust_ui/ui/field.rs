@@ -2,8 +2,8 @@ use leptos::prelude::*;
 use leptos_ui::{clx, variants};
 use tw_merge::tw_merge;
 
-use crate::shared::rust_ui::ui::label::Label;
-use crate::shared::rust_ui::ui::separator::Separator;
+use crate::rust_ui::ui::label::Label;
+use crate::rust_ui::ui::separator::Separator;
 
 mod components {
     use super::*;

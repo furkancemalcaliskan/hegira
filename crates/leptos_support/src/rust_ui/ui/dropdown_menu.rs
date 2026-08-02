@@ -4,8 +4,8 @@ use leptos::prelude::*;
 use leptos_ui::clx;
 use tw_merge::*;
 
-use crate::shared::rust_ui::hooks::use_random::use_random_id_for;
-pub use crate::shared::rust_ui::ui::separator::Separator as DropdownMenuSeparator;
+use crate::rust_ui::hooks::use_random::use_random_id_for;
+pub use crate::rust_ui::ui::separator::Separator as DropdownMenuSeparator;
 
 mod components {
     use super::*;

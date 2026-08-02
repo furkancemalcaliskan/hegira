@@ -5,8 +5,8 @@ use leptos_ui::clx;
 use strum::{AsRefStr, Display};
 use tw_merge::*;
 
-use crate::shared::rust_ui::hooks::use_can_scroll_vertical::use_can_scroll_vertical;
-use crate::shared::rust_ui::hooks::use_random::use_random_id_for;
+use crate::rust_ui::hooks::use_can_scroll_vertical::use_can_scroll_vertical;
+use crate::rust_ui::hooks::use_random::use_random_id_for;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Display, AsRefStr)]
 pub enum SelectPosition {

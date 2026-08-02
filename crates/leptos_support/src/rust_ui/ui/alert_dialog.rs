@@ -1,7 +1,7 @@
 use leptos::prelude::*;
 
-use crate::shared::rust_ui::ui::button::{ButtonSize, ButtonVariant};
-use crate::shared::rust_ui::ui::dialog::{
+use crate::rust_ui::ui::button::{ButtonSize, ButtonVariant};
+use crate::rust_ui::ui::dialog::{
     Dialog, DialogBody, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader,
     DialogTitle, DialogTrigger,
 };

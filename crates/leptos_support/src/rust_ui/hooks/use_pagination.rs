@@ -1,7 +1,7 @@
 use leptos::prelude::*;
 use leptos_router::hooks::use_location;
 
-use crate::shared::routing::query::{QUERY, QueryUtils};
+use crate::routing::query::{QUERY, QueryUtils};
 
 const FIRST_PAGE: u32 = 1;
 

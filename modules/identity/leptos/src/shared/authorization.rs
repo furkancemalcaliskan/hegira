@@ -1,5 +1,6 @@
 use crate::{
-    application_contracts::identity::permissions::PermissionName, web::app::auth_state::AuthState,
+    app::auth_state::AuthState,
+    identity_application_contracts::identity::permissions::PermissionName,
 };
 use leptos::prelude::*;
 

@@ -12,6 +12,7 @@ path = "src/mod.rs"
 application = { path = "../application", optional = true }
 application_contracts = { path = "../application_contracts" }
 domain_shared = { path = "../domain_shared" }
+identity_leptos = { path = "../../modules/identity/leptos", default-features = false }
 leptos_support = { path = "../leptos_support", default-features = false }
 presentation = { path = "../presentation", optional = true, default-features = false }
 
@@ -30,17 +31,18 @@ web-sys = { version = "0.3.91", features = ["Document", "DomTokenList", "Element
 
 [features]
 default = ["db-postgres", "db-sqlite"]
-db-postgres = ["presentation/db-postgres"]
-db-sqlite = ["presentation/db-sqlite"]
-hydrate = ["leptos/hydrate", "leptos_support/hydrate"]
+db-postgres = ["identity_leptos/db-postgres", "presentation/db-postgres"]
+db-sqlite = ["identity_leptos/db-sqlite", "presentation/db-sqlite"]
+hydrate = ["identity_leptos/hydrate", "leptos/hydrate", "leptos_support/hydrate"]
 ssr = [
     "dep:application",
     "dep:presentation",
     "application/ssr",
+    "identity_leptos/ssr",
     "leptos_support/ssr",
     "presentation/ssr",
     "leptos/ssr",
     "leptos_meta/ssr",
     "leptos_router/ssr",
 ]
-wasm-split = []
+wasm-split = ["identity_leptos/wasm-split"]

@@ -7,11 +7,9 @@ publish = false
 
 [dependencies]
 axum = "0.8.9"
-cookie = "0.18.1"
 http_support = { path = "../../../crates/http_support" }
 identity_application = { path = "../application", features = ["ssr"] }
 identity_application_contracts = { path = "../application_contracts" }
-leptos_axum = "0.8.9"
 leptos_support = { path = "../../../crates/leptos_support", features = ["ssr"] }
 serde = { version = "1.0.228", features = ["derive"] }
 tracing = "0.1.44"

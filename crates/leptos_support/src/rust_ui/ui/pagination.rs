@@ -1,7 +1,7 @@
 use leptos::prelude::*;
 use leptos_ui::clx;
 
-use crate::shared::rust_ui::ui::button::{Button, ButtonSize, ButtonVariant};
+use crate::rust_ui::ui::button::{Button, ButtonSize, ButtonVariant};
 
 clx! {Pagination, nav, "mx-auto flex w-full justify-center"}
 clx! {PaginationList, ul, "flex flex-row items-center gap-1"}

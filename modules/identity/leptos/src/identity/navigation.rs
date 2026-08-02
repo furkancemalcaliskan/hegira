@@ -1,31 +1,44 @@
 use crate::{
-    application_contracts::identity::permissions,
-    web::{
-        app::navigation::{NavIcon, NavItem},
-        shared::i18n::T,
-    },
+    identity_application_contracts::identity::permissions::{self, PermissionName},
+    shared::i18n::T,
 };
 
-pub const NAVIGATION_ITEMS: &[NavItem] = &[
-    NavItem {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum IdentityNavIcon {
+    Roles,
+    Users,
+    Profile,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct IdentityNavItem {
+    pub key: &'static str,
+    pub label: T,
+    pub href: &'static str,
+    pub icon: IdentityNavIcon,
+    pub permission: Option<PermissionName>,
+}
+
+pub const NAVIGATION_ITEMS: &[IdentityNavItem] = &[
+    IdentityNavItem {
         key: "roles",
         label: T::Roles,
         href: "/admin/roles",
-        icon: NavIcon::Roles,
+        icon: IdentityNavIcon::Roles,
         permission: Some(permissions::AUTHORIZATION),
     },
-    NavItem {
+    IdentityNavItem {
         key: "users",
         label: T::Users,
         href: "/admin/users",
-        icon: NavIcon::Users,
+        icon: IdentityNavIcon::Users,
         permission: Some(permissions::USERS),
     },
-    NavItem {
+    IdentityNavItem {
         key: "profile",
         label: T::Profile,
         href: "/profile",
-        icon: NavIcon::Profile,
+        icon: IdentityNavIcon::Profile,
         permission: None,
     },
 ];
