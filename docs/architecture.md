@@ -130,25 +130,103 @@ matching policy update.
 | `identity_leptos` | `application`, `application_contracts`, `domain_shared`, `leptos_support`, `presentation`, `web` |
 | `template_renderer` | None |
 
-The boundary check reads declared local dependencies from locked Cargo metadata,
-classifies every workspace package by its repository location, and then applies
-both the location ownership matrix and the package-specific table above.
+The boundary check reads declared local dependencies from locked Cargo metadata
+and applies both the package-specific allowlist above and the explicit package
+role contract below. A physical directory alone does not make a package part of
+the final framework: compatibility packages under `crates/` remain classified
+as compatibility code until their accepted extraction and retirement work is
+complete.
 
-| Package location | Ownership | May depend on ownership |
+| Package role | May depend on role |
+|---|---|
+| Framework | Framework |
+| Official module | Framework, official module |
+| Application | Framework, official module, application |
+| Compatibility | Framework, official module, compatibility |
+| Repository tooling | Framework, official module, repository tooling |
+
+Generated-application and application-template packages are deliberately not
+members of the framework workspace. They are validated as independent Cargo
+workspaces and may consume framework and selected official-module packages.
+Framework packages cannot depend on modules, compatibility code, tools, or
+applications. Official modules cannot depend on compatibility code, tools, or
+applications except for the exact issue-bound transition edges listed below.
+
+### v0.4 Package Ownership And Disposition Contract
+
+This table records the disposition accepted for every current framework
+workspace package. It describes active transition work; it does not claim that
+the referenced follow-up issue has already been implemented.
+
+| Package | Role | Disposition | Follow-up |
+|---|---|---|---|
+| `hegira` | Compatibility host | Replace and retire | #145, #146 |
+| `platform_core` | Framework | Retain | None |
+| `configuration` | Framework | Retain | None |
+| `persistence` | Framework | Retain | None |
+| `background_jobs` | Framework | Retain | None |
+| `http_support` | Framework | Retain | None |
+| `leptos_support` | Framework | Retain | None |
+| `observability` | Framework | Retain | None |
+| `test_support` | Framework | Decouple and retain | #136 |
+| `runtime` | Framework | Retain | None |
+| `domain_shared` | Compatibility | Extract and retire | #132, #136, #146 |
+| `domain` | Compatibility | Extract and retire | #132, #146 |
+| `application_contracts` | Compatibility | Extract and retire | #132, #136, #146 |
+| `application` | Compatibility | Extract and retire | #132, #136, #146 |
+| `infrastructure` | Compatibility | Extract and retire | #133, #137, #138, #146 |
+| `presentation` | Compatibility | Extract and retire | #134, #139, #146 |
+| `web` | Compatibility | Extract and retire | #135, #141, #146 |
+| `db_migrator` | Compatibility | Replace and retire | #142, #146 |
+| `identity_domain_shared` | Official module | Retain | None |
+| `identity_domain` | Official module | Retain | None |
+| `identity_application_contracts` | Official module | Decouple and retain | #132 |
+| `identity_application` | Official module | Decouple and retain | #132 |
+| `identity_sqlx` | Official module | Canonicalize and retain | #133 |
+| `identity_http` | Official module | Decouple and retain | #134 |
+| `identity_leptos` | Official module | Decouple and retain | #135 |
+| `template_renderer` | Repository tooling | Refactor and retain | #148 |
+
+`Retain` means the package already has its final owner. `Decouple and retain`
+and `canonicalize and retain` keep the package while removing compatibility
+dependencies or duplicate implementations. `Extract and retire` requires its
+reusable and application-owned behavior to move before deletion. `Replace and
+retire` requires a verified successor before deletion. `Refactor and retain`
+keeps an internal tool while changing its boundary.
+
+The current graph needs these temporary outward edges while the accepted
+follow-up issues remove them:
+
+| Transitional edge | Removal issue |
+|---|---|
+| `test_support -> application` | #136 |
+| `identity_application_contracts -> domain_shared` | #132 |
+| `identity_application -> domain_shared` | #132 |
+| `identity_http -> application, application_contracts, domain_shared, presentation` | #134 |
+| `identity_leptos -> application, application_contracts, domain_shared, presentation, web` | #135 |
+
+The checker permits only these exact edges, requires every exception to name an
+accepted issue, and fails when an exception becomes stale. New framework or
+module dependencies on compatibility code are rejected. Normal, optional,
+development, and build dependencies use the same checks, so dependency kind
+cannot bypass the boundary.
+
+The canonical layered application has a separate ownership contract:
+
+| Template package | Owner | Disposition |
 |---|---|---|
-| `apps/` | Application composition | Application, framework, module |
-| `crates/` | Framework | Framework |
-| `modules/` | Official module | Framework, module |
-| `templates/` | Application template | Framework, module, template |
-| `tools/` | Repository tooling | Framework, module, template, tooling |
+| `app_server` | Generated application | Retain as server composition root |
+| `app_web` | Generated application | Retain as client composition root |
+| `app_domain_shared` | Generated application | Retain as application DDD layer |
+| `app_domain` | Generated application | Retain as application DDD layer |
+| `app_application_contracts` | Generated application | Retain as application DDD layer |
+| `app_application` | Generated application | Retain as application DDD layer |
+| `app_infrastructure` | Generated application | Retain as application DDD layer |
+| `app_presentation` | Generated application | Retain as application DDD layer |
 
-The checker does not require an unimplemented repository directory to exist.
-An ownership rule becomes active when locked Cargo metadata contains a workspace
-package under that location. Consequently, framework packages cannot depend on
-modules, templates, tools, or deployable applications; module packages cannot
-depend on templates, tools, or deployable applications. The same rules cover
-normal, optional, development, and build dependencies, so dependency kind
-cannot bypass the boundary. General third-party dependency policy remains the
+These packages remain under `templates/applications/layered/` as source for an
+independently owned generated repository. They must not be added to the Hegira
+framework workspace. General third-party dependency policy remains the
 responsibility of the supply-chain checks.
 
 ## Repository Layout

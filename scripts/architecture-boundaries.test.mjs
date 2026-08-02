@@ -4,7 +4,9 @@ import test from "node:test";
 
 import {
   REPOSITORY_OWNERSHIP_POLICY,
+  TRANSITIONAL_COMPATIBILITY_EDGES,
   WORKSPACE_DEPENDENCY_POLICY,
+  WORKSPACE_PACKAGE_POLICY,
   validateIdentitySqlOwnership,
   validateWorkspaceMetadata,
 } from "./architecture-boundaries.mjs";
@@ -72,9 +74,23 @@ function ownershipFixture(packageLocations, dependencies) {
   const locationByName = new Map(
     packageLocations.map(({ name, location }) => [name, location]),
   );
+  const packagePolicy = Object.fromEntries(
+    packageLocations.map(({ name, location, role }) => {
+      let inferredRole = role;
+      if (inferredRole === undefined) {
+        if (location.startsWith("crates/")) inferredRole = "framework";
+        else if (location.startsWith("modules/")) inferredRole = "module";
+        else if (location.startsWith("tools/")) inferredRole = "tool";
+        else if (location.startsWith("apps/")) inferredRole = "compatibility";
+        else inferredRole = "invalid";
+      }
+      return [name, { role: inferredRole, disposition: "retain", issues: [] }];
+    }),
+  );
 
   return {
     policy,
+    packagePolicy,
     metadata: {
       workspace_root: root,
       workspace_members: packageLocations.map(
@@ -99,7 +115,12 @@ function ownershipFixture(packageLocations, dependencies) {
 
 function validateOwnershipFixture(packageLocations, dependencies) {
   const fixture = ownershipFixture(packageLocations, dependencies);
-  return validateWorkspaceMetadata(fixture.metadata, fixture.policy);
+  return validateWorkspaceMetadata(
+    fixture.metadata,
+    fixture.policy,
+    fixture.packagePolicy,
+    {},
+  );
 }
 
 test("accepts the documented current workspace graph", () => {
@@ -117,7 +138,7 @@ test("rejects SQLx from the Identity Leptos adapter", () => {
   ]);
 });
 
-test("accepts framework isolation and app-owned composition edges", () => {
+test("accepts the documented ownership-class dependency directions", () => {
   const metadata = workspaceMetadata();
   const errors = validateWorkspaceMetadata(metadata);
   assert.deepEqual(errors, []);
@@ -153,6 +174,50 @@ test("accepts framework isolation and app-owned composition edges", () => {
     "framework",
     "module",
   ]);
+  assert.deepEqual(REPOSITORY_OWNERSHIP_POLICY.compatibility, [
+    "framework",
+    "module",
+    "compatibility",
+  ]);
+  assert.deepEqual(REPOSITORY_OWNERSHIP_POLICY.application, [
+    "framework",
+    "module",
+    "application",
+  ]);
+});
+
+test("classifies every current package and records each transition issue", () => {
+  assert.deepEqual(
+    new Set(Object.keys(WORKSPACE_PACKAGE_POLICY)),
+    new Set(Object.keys(WORKSPACE_DEPENDENCY_POLICY)),
+  );
+
+  for (const [name, contract] of Object.entries(WORKSPACE_PACKAGE_POLICY)) {
+    assert.ok(contract.role, `${name} must have a role`);
+    assert.ok(contract.disposition, `${name} must have a disposition`);
+    if (contract.disposition !== "retain") {
+      assert.ok(contract.issues.length > 0, `${name} must have an issue`);
+      assert.ok(
+        contract.issues.every((issue) => Number.isInteger(issue)),
+        `${name} must have valid issues`,
+      );
+    }
+  }
+});
+
+test("keeps transitional compatibility edges explicit and issue-bound", () => {
+  assert.equal(
+    TRANSITIONAL_COMPATIBILITY_EDGES["test_support -> application"],
+    136,
+  );
+  assert.equal(
+    TRANSITIONAL_COMPATIBILITY_EDGES["identity_http -> presentation"],
+    134,
+  );
+  assert.equal(
+    TRANSITIONAL_COMPATIBILITY_EDGES["identity_leptos -> web"],
+    135,
+  );
 });
 
 test("framework policy exposes no dependency on an Identity module package", () => {
@@ -172,39 +237,38 @@ test("framework policy exposes no dependency on an Identity module package", () 
   assert.deepEqual(violations, []);
 });
 
-test("rejects a dependency from a reusable crate to the deployable app", () => {
+test("rejects a dependency from a framework package to the compatibility host", () => {
   const errors = validateWorkspaceMetadata(
-    workspaceMetadata([{ from: "web", to: "hegira" }]),
+    workspaceMetadata([{ from: "runtime", to: "hegira" }]),
   );
   assert.ok(
     errors.some(
       (error) =>
-        error.includes("web -> hegira") &&
-        error.includes("framework packages may not depend on app packages"),
+        error.includes("runtime -> hegira") &&
+        error.includes(
+          "framework packages may not depend on compatibility packages",
+        ),
     ),
   );
 });
 
-test("accepts valid framework module template tool and app directions", () => {
+test("accepts valid framework module tool and compatibility directions", () => {
   const packages = [
     { name: "framework_core", location: "crates/framework_core" },
     { name: "framework_http", location: "crates/framework_http" },
     { name: "identity_domain", location: "modules/identity/domain" },
     { name: "identity_http", location: "modules/identity/http" },
-    { name: "app_template", location: "templates/app/server" },
     { name: "template_renderer", location: "tools/template_renderer" },
-    { name: "example_app", location: "apps/example" },
+    { name: "compatibility_host", location: "apps/example" },
   ];
   const dependencies = [
     { from: "framework_http", to: "framework_core" },
     { from: "identity_domain", to: "framework_core" },
     { from: "identity_http", to: "identity_domain" },
     { from: "identity_http", to: "framework_http" },
-    { from: "app_template", to: "identity_http" },
-    { from: "app_template", to: "framework_core" },
-    { from: "template_renderer", to: "app_template" },
-    { from: "example_app", to: "identity_http" },
-    { from: "example_app", to: "framework_http" },
+    { from: "template_renderer", to: "identity_http" },
+    { from: "compatibility_host", to: "identity_http" },
+    { from: "compatibility_host", to: "framework_http" },
   ];
 
   assert.deepEqual(validateOwnershipFixture(packages, dependencies), []);
@@ -212,14 +276,18 @@ test("accepts valid framework module template tool and app directions", () => {
 
 for (const target of [
   { ownership: "module", location: "modules/identity" },
-  { ownership: "template", location: "templates/app" },
+  {
+    ownership: "application",
+    location: "apps/application",
+    role: "application",
+  },
   { ownership: "tool", location: "tools/cli" },
 ]) {
-  test(`rejects a framework dependency on a ${target.ownership} package`, () => {
+  test(`rejects a framework dependency on ${target.ownership} code`, () => {
     const errors = validateOwnershipFixture(
       [
         { name: "framework", location: "crates/framework" },
-        { name: "downstream", location: target.location },
+        { name: "downstream", location: target.location, role: target.role },
       ],
       [{ from: "framework", to: "downstream" }],
     );
@@ -231,14 +299,23 @@ for (const target of [
 }
 
 for (const target of [
-  { ownership: "template", location: "templates/app" },
+  {
+    ownership: "application",
+    location: "apps/application",
+    role: "application",
+  },
+  {
+    ownership: "compatibility",
+    location: "crates/compatibility",
+    role: "compatibility",
+  },
   { ownership: "tool", location: "tools/cli" },
 ]) {
-  test(`rejects a module dependency on a ${target.ownership} package`, () => {
+  test(`rejects a module dependency on ${target.ownership} code`, () => {
     const errors = validateOwnershipFixture(
       [
         { name: "identity", location: "modules/identity" },
-        { name: "downstream", location: target.location },
+        { name: "downstream", location: target.location, role: target.role },
       ],
       [{ from: "identity", to: "downstream" }],
     );
@@ -248,6 +325,108 @@ for (const target of [
     ]);
   });
 }
+
+test("rejects application-template packages in the framework workspace", () => {
+  const errors = validateOwnershipFixture(
+    [
+      {
+        name: "generated_server",
+        location: "templates/applications/layered/apps/server",
+        role: "application",
+      },
+    ],
+    [],
+  );
+
+  assert.ok(
+    errors.some((error) =>
+      error.includes("workspace package role does not match its repository location"),
+    ),
+  );
+});
+
+test("accepts an explicitly owned application composition package", () => {
+  const errors = validateOwnershipFixture(
+    [
+      { name: "framework", location: "crates/framework" },
+      { name: "module", location: "modules/module" },
+      { name: "application", location: "apps/application", role: "application" },
+    ],
+    [
+      { from: "application", to: "framework" },
+      { from: "application", to: "module" },
+    ],
+  );
+
+  assert.deepEqual(errors, []);
+});
+
+test("rejects an unapproved framework dependency on compatibility code", () => {
+  const errors = validateOwnershipFixture(
+    [
+      { name: "framework", location: "crates/framework" },
+      {
+        name: "legacy",
+        location: "crates/legacy",
+        role: "compatibility",
+      },
+    ],
+    [{ from: "framework", to: "legacy" }],
+  );
+
+  assert.deepEqual(errors, [
+    "invalid repository ownership edge: framework -> legacy (framework packages may not depend on compatibility packages)",
+  ]);
+});
+
+test("requires a transition disposition to reference an accepted issue", () => {
+  const fixture = ownershipFixture(
+    [{ name: "legacy", location: "crates/legacy", role: "compatibility" }],
+    [],
+  );
+  fixture.packagePolicy.legacy = {
+    role: "compatibility",
+    disposition: "extract-and-retire",
+    issues: [],
+  };
+
+  assert.deepEqual(
+    validateWorkspaceMetadata(
+      fixture.metadata,
+      fixture.policy,
+      fixture.packagePolicy,
+      {},
+    ),
+    ["workspace package transition has no accepted issue: legacy"],
+  );
+});
+
+test("rejects a stale transitional compatibility exception", () => {
+  const fixture = ownershipFixture(
+    [
+      { name: "framework", location: "crates/framework" },
+      {
+        name: "legacy",
+        location: "crates/legacy",
+        role: "compatibility",
+      },
+    ],
+    [],
+  );
+
+  const errors = validateWorkspaceMetadata(
+    fixture.metadata,
+    fixture.policy,
+    fixture.packagePolicy,
+    { "framework -> legacy": 999 },
+  );
+
+  assert.ok(
+    errors.includes(
+      "transitional compatibility policy references missing workspace edge: framework -> legacy",
+    ),
+  );
+});
 
 for (const dependency of [
   { label: "normal", kind: null, optional: false },
@@ -278,6 +457,7 @@ test("rejects a workspace package outside an owned repository location", () => {
 
   assert.deepEqual(errors, [
     "workspace package is outside an owned repository location: unknown (/workspace/vendor/unknown)",
+    "workspace package has an invalid ownership role: unknown (invalid)",
   ]);
 });
 
@@ -326,6 +506,11 @@ test("requires every workspace package to have a policy entry", () => {
   assert.ok(
     errors.some((error) =>
       error.includes("workspace package has no architecture policy entry"),
+    ),
+  );
+  assert.ok(
+    errors.some((error) =>
+      error.includes("workspace package has no ownership and disposition contract"),
     ),
   );
 });
