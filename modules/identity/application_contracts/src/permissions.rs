@@ -1,11 +1,11 @@
 use crate::features;
-use domain_shared::localization::T;
+use crate::localization::IdentityMessage;
 pub use identity_domain::identity::authorization::PermissionName;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PermissionDefinition {
     pub name: PermissionName,
-    pub display_name: T,
+    pub display_name: IdentityMessage,
 }
 
 /// Returns every permission contributed by the application's bounded contexts.

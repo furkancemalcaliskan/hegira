@@ -1,5 +1,5 @@
 use crate::identity_common::errors::DomainError;
-use domain_shared::localization::{Locale, T, translate};
+use identity_application_contracts::localization::IdentityMessage;
 use std::fmt::{Display, Formatter};
 
 #[derive(Debug)]
@@ -31,7 +31,7 @@ impl ApplicationError {
         }
     }
 
-    pub fn localized_validation(key: T) -> Self {
+    pub fn localized_validation(key: IdentityMessage) -> Self {
         Self::coded(
             ApplicationErrorKind::Validation,
             localized_error_code(key, "general:validation_error"),
@@ -39,7 +39,7 @@ impl ApplicationError {
         )
     }
 
-    pub fn localized_conflict(key: T) -> Self {
+    pub fn localized_conflict(key: IdentityMessage) -> Self {
         Self::coded(
             ApplicationErrorKind::Conflict,
             localized_error_code(key, "general:conflict"),
@@ -47,7 +47,7 @@ impl ApplicationError {
         )
     }
 
-    pub fn localized_not_found(key: T) -> Self {
+    pub fn localized_not_found(key: IdentityMessage) -> Self {
         Self::coded(
             ApplicationErrorKind::NotFound,
             localized_error_code(key, "general:not_found"),
@@ -55,7 +55,7 @@ impl ApplicationError {
         )
     }
 
-    pub fn localized_forbidden(key: T) -> Self {
+    pub fn localized_forbidden(key: IdentityMessage) -> Self {
         Self::coded(
             ApplicationErrorKind::Forbidden,
             localized_error_code(key, "general:forbidden"),
@@ -114,22 +114,28 @@ pub enum ApplicationErrorKind {
     Unexpected,
 }
 
-fn localized_message(key: T) -> String {
-    translate(Locale::En, key).to_string()
+fn localized_message(key: IdentityMessage) -> String {
+    key.default_text().to_string()
 }
 
-fn localized_error_code(key: T, fallback: &'static str) -> &'static str {
+fn localized_error_code(key: IdentityMessage, fallback: &'static str) -> &'static str {
     match key {
-        T::UsernameRequired => "identity:username_required",
-        T::PasswordRequired | T::PasswordRequiredForNewUsers => "identity:password_required",
-        T::UserNotFound => "identity:user_not_found",
-        T::UserAlreadyExists => "identity:user_already_exists",
-        T::RoleNameRequired => "identity:role_name_required",
-        T::RoleNotFound => "identity:role_not_found",
-        T::ProtectedAdminCannotBeDeleted => "identity:protected_admin_cannot_be_deleted",
-        T::ProtectedAdminRoleCannotBeDeleted => "identity:protected_admin_role_cannot_be_deleted",
-        T::SessionExpired => "auth:session_expired",
-        T::InvalidCredentials => "auth:invalid_credentials",
+        IdentityMessage::UsernameRequired => "identity:username_required",
+        IdentityMessage::PasswordRequired | IdentityMessage::PasswordRequiredForNewUsers => {
+            "identity:password_required"
+        }
+        IdentityMessage::UserNotFound => "identity:user_not_found",
+        IdentityMessage::UserAlreadyExists => "identity:user_already_exists",
+        IdentityMessage::RoleNameRequired => "identity:role_name_required",
+        IdentityMessage::RoleNotFound => "identity:role_not_found",
+        IdentityMessage::ProtectedAdminCannotBeDeleted => {
+            "identity:protected_admin_cannot_be_deleted"
+        }
+        IdentityMessage::ProtectedAdminRoleCannotBeDeleted => {
+            "identity:protected_admin_role_cannot_be_deleted"
+        }
+        IdentityMessage::SessionExpired => "auth:session_expired",
+        IdentityMessage::InvalidCredentials => "auth:invalid_credentials",
         _ => fallback,
     }
 }
@@ -161,3 +167,24 @@ impl From<std::io::Error> for ApplicationError {
 }
 
 pub type ApplicationResult<T> = Result<T, ApplicationError>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn identity_messages_preserve_error_codes_and_default_text() {
+        let validation = ApplicationError::localized_validation(IdentityMessage::UsernameRequired);
+        assert_eq!(validation.code(), "identity:username_required");
+        assert_eq!(validation.message(), "Username is required");
+
+        let forbidden = ApplicationError::localized_forbidden(
+            IdentityMessage::ProtectedAdminRoleCannotBeDeleted,
+        );
+        assert_eq!(
+            forbidden.code(),
+            "identity:protected_admin_role_cannot_be_deleted"
+        );
+        assert_eq!(forbidden.message(), "Admin role cannot be deleted.");
+    }
+}

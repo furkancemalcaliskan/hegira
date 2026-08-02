@@ -11,13 +11,18 @@ use crate::{
     },
 };
 use chrono::{Duration, Utc};
-use domain_shared::localization::T;
-use identity_application_contracts::identity::auth::{
-    dto::{CurrentUserDto, LoginResultDto, SessionDto, TotpEnableDto, TotpSetupDto, TotpStatusDto},
-    inputs::{
-        ChangeEmailInput, ChangePasswordInput, DeleteAccountInput, ForgotPasswordInput, LoginInput,
-        MagicLinkInput, RegisterInput, ResetPasswordInput, TotpCodeInput, VerifyTotpLoginInput,
+use identity_application_contracts::{
+    identity::auth::{
+        dto::{
+            CurrentUserDto, LoginResultDto, SessionDto, TotpEnableDto, TotpSetupDto, TotpStatusDto,
+        },
+        inputs::{
+            ChangeEmailInput, ChangePasswordInput, DeleteAccountInput, ForgotPasswordInput,
+            LoginInput, MagicLinkInput, RegisterInput, ResetPasswordInput, TotpCodeInput,
+            VerifyTotpLoginInput,
+        },
     },
+    localization::IdentityMessage,
 };
 use identity_domain::identity::{
     authorization::AuthorizationRepository, sessions::SessionRepository,
@@ -117,7 +122,7 @@ where
             .await
             .map_err(|error| match error {
                 ApplicationError::Conflict(_) => {
-                    ApplicationError::localized_conflict(T::UserAlreadyExists)
+                    ApplicationError::localized_conflict(IdentityMessage::UserAlreadyExists)
                 }
                 error => error,
             })?;
@@ -177,7 +182,7 @@ where
         let current = self.current_user(actor_token).await?;
         if identity::is_protected_admin_username(&current.username) {
             return Err(ApplicationError::localized_forbidden(
-                T::ProtectedAdminCannotBeDeleted,
+                IdentityMessage::ProtectedAdminCannotBeDeleted,
             ));
         }
         let user = self
@@ -197,7 +202,9 @@ where
             .delete_managed_user(&current.username, self.publish_search)
             .await?
         {
-            return Err(ApplicationError::localized_not_found(T::UserNotFound));
+            return Err(ApplicationError::localized_not_found(
+                IdentityMessage::UserNotFound,
+            ));
         }
         for session in sessions {
             self.sessions
@@ -429,7 +436,9 @@ where
             .set_setup_secret(&current_user.username, &secret)
             .await?
         {
-            return Err(ApplicationError::localized_not_found(T::UserNotFound));
+            return Err(ApplicationError::localized_not_found(
+                IdentityMessage::UserNotFound,
+            ));
         }
 
         let totp = totp(&secret, &current_user.username, &self.app_name)?;
@@ -477,7 +486,9 @@ where
             .enable(&current_user.username, Utc::now(), backup_hashes)
             .await?
         {
-            return Err(ApplicationError::localized_not_found(T::UserNotFound));
+            return Err(ApplicationError::localized_not_found(
+                IdentityMessage::UserNotFound,
+            ));
         }
 
         Ok(TotpEnableDto { backup_codes })
@@ -503,7 +514,9 @@ where
         }
 
         if !self.two_factor.disable(&current_user.username).await? {
-            return Err(ApplicationError::localized_not_found(T::UserNotFound));
+            return Err(ApplicationError::localized_not_found(
+                IdentityMessage::UserNotFound,
+            ));
         }
 
         Ok(())

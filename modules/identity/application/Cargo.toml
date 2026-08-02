@@ -7,7 +7,6 @@ publish = false
 
 [dependencies]
 chrono = { version = "0.4.44", features = ["serde"] }
-domain_shared = { path = "../../../crates/domain_shared" }
 identity_application_contracts = { path = "../application_contracts" }
 identity_domain = { path = "../domain" }
 identity_domain_shared = { path = "../domain_shared" }

@@ -7,6 +7,7 @@ import {
   TRANSITIONAL_COMPATIBILITY_EDGES,
   WORKSPACE_DEPENDENCY_POLICY,
   WORKSPACE_PACKAGE_POLICY,
+  validateIdentityBusinessSourceOwnership,
   validateIdentitySqlOwnership,
   validateWorkspaceMetadata,
 } from "./architecture-boundaries.mjs";
@@ -227,7 +228,7 @@ test("framework policy exposes no dependency on an Identity module package", () 
       .map(([name]) => name),
   );
   const violations = Object.entries(WORKSPACE_DEPENDENCY_POLICY)
-    .filter(([name]) => packageLocation(name).startsWith("crates/"))
+    .filter(([name]) => WORKSPACE_PACKAGE_POLICY[name].role === "framework")
     .flatMap(([name, dependencies]) =>
       dependencies
         .filter((dependency) => identityPackages.has(dependency))
@@ -235,6 +236,25 @@ test("framework policy exposes no dependency on an Identity module package", () 
     );
 
   assert.deepEqual(violations, []);
+});
+
+test("Identity business packages expose no compatibility dependency", () => {
+  for (const name of [
+    "identity_domain_shared",
+    "identity_domain",
+    "identity_application_contracts",
+    "identity_application",
+  ]) {
+    const compatibilityDependencies = WORKSPACE_DEPENDENCY_POLICY[name].filter(
+      (dependency) =>
+        WORKSPACE_PACKAGE_POLICY[dependency].role === "compatibility",
+    );
+    assert.deepEqual(
+      compatibilityDependencies,
+      [],
+      `${name} must not depend on compatibility code`,
+    );
+  }
 });
 
 test("rejects a dependency from a framework package to the compatibility host", () => {
@@ -551,6 +571,35 @@ test("requires Identity SQL to remain module-owned", () => {
     ]),
     [
       "Identity SQL must be module-owned under modules/identity/sqlx: crates/infrastructure/src/users.rs",
+    ],
+  );
+});
+
+test("requires Identity business source to compile from module packages", () => {
+  assert.deepEqual(
+    validateIdentityBusinessSourceOwnership([
+      {
+        location: "crates/application/src/lib.rs",
+        content:
+          '#[path = "../../../modules/identity/application/src/identity/mod.rs"]',
+      },
+      {
+        location: "modules/identity/application/src/lib.rs",
+        content: "pub mod identity;",
+      },
+      {
+        location: "crates/domain/src/lib.rs",
+        content:
+          'include!("../../../modules/identity/domain/src/identity/mod.rs");',
+      },
+      {
+        location: "crates/presentation/src/lib.rs",
+        content: '#[path = "../../../modules/identity/http/src/lib.rs"]',
+      },
+    ]),
+    [
+      "Identity business source must be compiled by its module package, not included by compatibility code: crates/application/src/lib.rs",
+      "Identity business source must be compiled by its module package, not included by compatibility code: crates/domain/src/lib.rs",
     ],
   );
 });

@@ -32,15 +32,10 @@ export const WORKSPACE_DEPENDENCY_POLICY = Object.freeze({
   leptos_support: [],
   observability: ["background_jobs"],
   test_support: ["application"],
-  domain_shared: [],
-  domain: ["domain_shared"],
-  application_contracts: ["domain", "domain_shared"],
-  application: [
-    "application_contracts",
-    "background_jobs",
-    "domain",
-    "domain_shared",
-  ],
+  domain_shared: ["identity_domain_shared"],
+  domain: ["identity_domain"],
+  application_contracts: ["identity_application_contracts"],
+  application: ["background_jobs", "identity_application"],
   infrastructure: [
     "application",
     "application_contracts",
@@ -72,12 +67,10 @@ export const WORKSPACE_DEPENDENCY_POLICY = Object.freeze({
   identity_domain_shared: [],
   identity_domain: ["identity_domain_shared"],
   identity_application_contracts: [
-    "domain_shared",
     "identity_domain",
     "identity_domain_shared",
   ],
   identity_application: [
-    "domain_shared",
     "identity_application_contracts",
     "identity_domain",
     "identity_domain_shared",
@@ -124,18 +117,18 @@ export const WORKSPACE_PACKAGE_POLICY = Object.freeze({
   domain_shared: packageContract(
     "compatibility",
     "extract-and-retire",
-    [132, 136, 146],
+    [136, 146],
   ),
-  domain: packageContract("compatibility", "extract-and-retire", [132, 146]),
+  domain: packageContract("compatibility", "extract-and-retire", [146]),
   application_contracts: packageContract(
     "compatibility",
     "extract-and-retire",
-    [132, 136, 146],
+    [136, 146],
   ),
   application: packageContract(
     "compatibility",
     "extract-and-retire",
-    [132, 136, 146],
+    [136, 146],
   ),
   infrastructure: packageContract(
     "compatibility",
@@ -160,16 +153,8 @@ export const WORKSPACE_PACKAGE_POLICY = Object.freeze({
   ),
   identity_domain_shared: packageContract("module", "retain"),
   identity_domain: packageContract("module", "retain"),
-  identity_application_contracts: packageContract(
-    "module",
-    "decouple-and-retain",
-    [132],
-  ),
-  identity_application: packageContract(
-    "module",
-    "decouple-and-retain",
-    [132],
-  ),
+  identity_application_contracts: packageContract("module", "retain"),
+  identity_application: packageContract("module", "retain"),
   identity_sqlx: packageContract("module", "canonicalize-and-retain", [133]),
   identity_http: packageContract("module", "decouple-and-retain", [134]),
   identity_leptos: packageContract("module", "decouple-and-retain", [135]),
@@ -186,8 +171,6 @@ export const REPOSITORY_OWNERSHIP_POLICY = Object.freeze({
 
 export const TRANSITIONAL_COMPATIBILITY_EDGES = Object.freeze({
   "test_support -> application": 136,
-  "identity_application_contracts -> domain_shared": 132,
-  "identity_application -> domain_shared": 132,
   "identity_http -> application": 134,
   "identity_http -> application_contracts": 134,
   "identity_http -> domain_shared": 134,
@@ -228,6 +211,30 @@ export function validateIdentitySqlOwnership(files) {
     .map(
       ({ location }) =>
         `Identity SQL must be module-owned under modules/identity/sqlx: ${location}`,
+    );
+}
+
+const IDENTITY_BUSINESS_COMPATIBILITY_ROOTS = [
+  "crates/domain_shared/",
+  "crates/domain/",
+  "crates/application_contracts/",
+  "crates/application/",
+];
+
+const IDENTITY_BUSINESS_SOURCE_REFERENCE =
+  /(?:#\s*\[\s*path\s*=\s*"|include!\s*\(\s*")[^"]*modules\/identity\/(?:domain_shared|domain|application_contracts|application)\//;
+
+export function validateIdentityBusinessSourceOwnership(files) {
+  return files
+    .filter(
+      ({ location, content }) =>
+        IDENTITY_BUSINESS_COMPATIBILITY_ROOTS.some((root) =>
+          location.startsWith(root),
+        ) && IDENTITY_BUSINESS_SOURCE_REFERENCE.test(content),
+    )
+    .map(
+      ({ location }) =>
+        `Identity business source must be compiled by its module package, not included by compatibility code: ${location}`,
     );
 }
 
@@ -549,9 +556,11 @@ function runCli() {
     return;
   }
 
+  const sourceFiles = repositorySourceFiles(root);
   const errors = [
     ...validateWorkspaceMetadata(metadata),
-    ...validateIdentitySqlOwnership(repositorySourceFiles(root)),
+    ...validateIdentityBusinessSourceOwnership(sourceFiles),
+    ...validateIdentitySqlOwnership(sourceFiles),
   ];
   if (errors.length > 0) {
     for (const error of errors) {

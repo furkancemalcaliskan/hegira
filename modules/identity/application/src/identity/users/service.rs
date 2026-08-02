@@ -15,12 +15,12 @@ use crate::{
         security::PasswordHasher,
     },
 };
-use domain_shared::localization::T;
 use identity_application_contracts::{
     identity::permissions,
     identity::users::{
         CreateUserInput, ListUsersInput, PagedUserResultDto, UpdateUserInput, UserDto,
     },
+    localization::IdentityMessage,
 };
 use identity_domain::identity::users::UserRepository;
 
@@ -134,7 +134,7 @@ where
             .users
             .find_by_username(&username)
             .await?
-            .ok_or_else(|| ApplicationError::localized_not_found(T::UserNotFound))?;
+            .ok_or_else(|| ApplicationError::localized_not_found(IdentityMessage::UserNotFound))?;
 
         let roles = self.users.user_roles(&user.username).await?;
         Ok(user_dto(user, roles))
@@ -156,7 +156,9 @@ where
         validation::required_username_password(&input.username, &input.password)?;
 
         if self.users.exists(&input.username).await? {
-            return Err(ApplicationError::localized_conflict(T::UserAlreadyExists));
+            return Err(ApplicationError::localized_conflict(
+                IdentityMessage::UserAlreadyExists,
+            ));
         }
 
         let roles = normalized_roles(&input.username, input.roles);
@@ -201,7 +203,9 @@ where
         validation::required_username(&input.username)?;
 
         if !self.users.exists(&input.username).await? {
-            return Err(ApplicationError::localized_not_found(T::UserNotFound));
+            return Err(ApplicationError::localized_not_found(
+                IdentityMessage::UserNotFound,
+            ));
         }
 
         let password_changed = input
@@ -227,7 +231,9 @@ where
             .await?
             .is_none()
         {
-            return Err(ApplicationError::localized_not_found(T::UserNotFound));
+            return Err(ApplicationError::localized_not_found(
+                IdentityMessage::UserNotFound,
+            ));
         }
         self.invalidate_authorization_cache().await;
         self.record_audit(
@@ -256,7 +262,7 @@ where
 
         if identity::is_protected_admin_username(&username) {
             return Err(ApplicationError::localized_forbidden(
-                T::ProtectedAdminCannotBeDeleted,
+                IdentityMessage::ProtectedAdminCannotBeDeleted,
             ));
         }
 
@@ -265,7 +271,9 @@ where
             .delete_managed_user(&username, self.search.publish_mutations)
             .await?
         {
-            return Err(ApplicationError::localized_not_found(T::UserNotFound));
+            return Err(ApplicationError::localized_not_found(
+                IdentityMessage::UserNotFound,
+            ));
         }
 
         self.invalidate_authorization_cache().await;
@@ -379,7 +387,7 @@ fn normalized_roles(username: &str, roles: Vec<String>) -> Vec<String> {
 
 fn localize_user_conflict(error: ApplicationError) -> ApplicationError {
     if matches!(error, ApplicationError::Conflict(_)) {
-        ApplicationError::localized_conflict(T::UserAlreadyExists)
+        ApplicationError::localized_conflict(IdentityMessage::UserAlreadyExists)
     } else {
         error
     }

@@ -104,7 +104,7 @@ mod tests {
     #[test]
     fn maps_localized_error_to_stable_specific_code() {
         let error = ApiError::from(ApplicationError::localized_not_found(
-            domain_shared::localization::T::UserNotFound,
+            application_contracts::localization::IdentityMessage::UserNotFound,
         ));
 
         assert_eq!(error.status, StatusCode::NOT_FOUND);

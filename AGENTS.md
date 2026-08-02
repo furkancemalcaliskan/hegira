@@ -46,9 +46,9 @@ commands change. Never describe planned work as implemented.
   The HTTP adapter contributes Identity routes, OpenAPI, Bearer extraction,
   secure session-cookie handling, and explicit cookie/Bearer security policies
   to the host. The Leptos adapter owns Identity pages, server functions, and
-  explicit route and navigation contributions. Current compatibility packages
-  compile the applicable canonical sources without depending on a module
-  package.
+  explicit route and navigation contributions. Identity business compatibility
+  packages re-export the canonical module packages instead of compiling their
+  source files a second time.
 - `templates/applications/layered/` contains the workspace-external,
   layered full-stack application base. Its brand-neutral server composition
   explicitly selects the Identity HTTP adapter, while `apps/web` owns the
