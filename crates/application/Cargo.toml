@@ -8,8 +8,10 @@ publish = false
 [dependencies]
 background_jobs = { path = "../background_jobs" }
 identity_application = { path = "../../modules/identity/application" }
+settings = { path = "../settings" }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
+storage = { path = "../storage" }
 
 [features]
 ssr = ["identity_application/ssr"]

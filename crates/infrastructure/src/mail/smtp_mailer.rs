@@ -47,6 +47,8 @@ impl SmtpMailer {
 }
 
 impl Mailer for SmtpMailer {
+    type Error = ApplicationError;
+
     async fn send(&self, message: MailMessage) -> ApplicationResult<()> {
         let to = message
             .to

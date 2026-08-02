@@ -42,6 +42,8 @@ impl AuditLoggerAdapter {
 }
 
 impl AuditLogger for AuditLoggerAdapter {
+    type Error = ApplicationError;
+
     async fn record(&self, entry: AuditLogEntry) -> ApplicationResult<()> {
         match self {
             Self::Null(logger) => logger.record(entry).await,
@@ -68,6 +70,8 @@ impl SqliteAuditLogger {
 
 #[cfg(feature = "db-sqlite")]
 impl AuditLogger for SqliteAuditLogger {
+    type Error = ApplicationError;
+
     async fn record(&self, entry: AuditLogEntry) -> ApplicationResult<()> {
         sqlx::query("INSERT INTO audit_logs (actor, action, entity_type, entity_id, details, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)")
             .bind(entry.actor).bind(entry.action).bind(entry.entity_type).bind(entry.entity_id)
@@ -123,6 +127,8 @@ mod sqlite_tests {
 pub struct NullAuditLogger;
 
 impl AuditLogger for NullAuditLogger {
+    type Error = ApplicationError;
+
     async fn record(&self, _entry: AuditLogEntry) -> ApplicationResult<()> {
         Ok(())
     }
@@ -143,6 +149,8 @@ impl SqlxAuditLogger {
 
 #[cfg(feature = "db-postgres")]
 impl AuditLogger for SqlxAuditLogger {
+    type Error = ApplicationError;
+
     async fn record(&self, entry: AuditLogEntry) -> ApplicationResult<()> {
         sqlx::query(
             "INSERT INTO audit_logs (actor, action, entity_type, entity_id, details)

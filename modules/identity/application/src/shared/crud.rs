@@ -74,7 +74,7 @@ where
 }
 
 pub async fn record_standard_audit(
-    audit: &impl AuditLogger,
+    audit: &impl AuditLogger<Error = crate::shared::errors::ApplicationError>,
     actor: String,
     action: &str,
     entity_type: &str,
@@ -108,6 +108,8 @@ mod tests {
     }
 
     impl AuditLogger for RecordingAuditLogger {
+        type Error = crate::shared::errors::ApplicationError;
+
         async fn record(&self, entry: AuditLogEntry) -> ApplicationResult<()> {
             self.entries.lock().unwrap().push(entry);
             Ok(())

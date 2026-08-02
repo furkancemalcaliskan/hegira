@@ -30,10 +30,11 @@ commands change. Never describe planned work as implemented.
 - `apps/hegira/` contains the deployable Axum/Leptos package, server
   composition, binary and hydration entry points, package metadata, and
   integration tests.
-- `crates/` contains application-independent platform core, configuration,
-  persistence, background-work, and runtime packages alongside the current
-  layered domain, application, infrastructure, presentation, web, and
-  database-migrator packages.
+- `crates/` contains application-independent platform core, audit, cache, mail,
+  search, security, settings, storage, configuration, persistence,
+  background-work, and runtime packages alongside the current layered domain,
+  application, infrastructure, presentation, web, and database-migrator
+  packages.
   The package-level ownership and disposition contract in
   `docs/architecture.md` classifies the latter packages as compatibility code;
   their physical location under `crates/` does not make them final framework

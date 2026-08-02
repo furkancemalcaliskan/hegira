@@ -51,7 +51,7 @@ impl<Sessions, Users, Tokens> TokenCurrentUserProvider<Sessions, Users, Tokens>
 where
     Sessions: SessionRepository,
     Users: UserRepository,
-    Tokens: TokenService,
+    Tokens: TokenService<Error = ApplicationError>,
 {
     pub fn new(sessions: Sessions, users: Users, token_service: Tokens) -> Self {
         Self {
@@ -67,7 +67,7 @@ impl<Sessions, Users, Tokens> CurrentUserProvider
 where
     Sessions: SessionRepository,
     Users: UserRepository,
-    Tokens: TokenService,
+    Tokens: TokenService<Error = ApplicationError>,
 {
     async fn current_user(&self, token: &str) -> ApplicationResult<CurrentUser> {
         let username = self.token_service.verify_token(token)?;

@@ -64,9 +64,9 @@ where
     Sessions: SessionRepository,
     Permissions: AuthorizationRepository,
     TwoFactor: TwoFactorRepository,
-    Hasher: PasswordHasher,
-    Tokens: TokenService,
-    MailerAdapter: Mailer,
+    Hasher: PasswordHasher<Error = ApplicationError>,
+    Tokens: TokenService<Error = ApplicationError>,
+    MailerAdapter: Mailer<Error = ApplicationError>,
 {
     #[allow(clippy::too_many_arguments)]
     pub fn new(

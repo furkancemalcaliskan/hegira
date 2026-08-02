@@ -46,12 +46,12 @@ impl<Users, Hasher, CurrentUsers, Authorization, CacheAdapter, Audit, Search>
     UserAppService<Users, Hasher, CurrentUsers, Authorization, CacheAdapter, Audit, Search>
 where
     Users: UserRepository + ManagedUserWriter,
-    Hasher: PasswordHasher,
+    Hasher: PasswordHasher<Error = ApplicationError>,
     CurrentUsers: CurrentUserProvider,
     Authorization: AuthorizationService,
-    CacheAdapter: Cache,
-    Audit: AuditLogger,
-    Search: SearchIndex,
+    CacheAdapter: Cache<Error = ApplicationError>,
+    Audit: AuditLogger<Error = ApplicationError>,
+    Search: SearchIndex<Error = ApplicationError>,
 {
     pub fn new(
         users: Users,

@@ -26,6 +26,8 @@ impl RedisCache {
 }
 
 impl Cache for RedisCache {
+    type Error = ApplicationError;
+
     async fn get_string(&self, key: &str) -> ApplicationResult<Option<String>> {
         let mut connection = self
             .client

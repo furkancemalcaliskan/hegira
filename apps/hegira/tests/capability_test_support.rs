@@ -90,7 +90,10 @@ async fn shared_test_doubles_cover_optional_capability_ports() {
     let settings = InMemorySettings::default();
     let key = SettingKey::new("test.records.page_size").unwrap();
     set_setting(&settings, &key, &25_u32).await.unwrap();
-    assert_eq!(get_setting::<u32>(&settings, &key).await.unwrap(), Some(25));
+    assert_eq!(
+        get_setting::<u32, _>(&settings, &key).await.unwrap(),
+        Some(25)
+    );
 
     let jobs = RecordingJobDispatcher::default();
     jobs.dispatch(ExampleJob, 42);

@@ -101,9 +101,9 @@ where
     CurrentUsers: CurrentUserProvider,
     Sessions: SessionRepository,
     TwoFactor: TwoFactorRepository,
-    Tokens: TokenService,
-    Hasher: PasswordHasher,
-    Audit: AuditLogger,
+    Tokens: TokenService<Error = ApplicationError>,
+    Hasher: PasswordHasher<Error = ApplicationError>,
+    Audit: AuditLogger<Error = ApplicationError>,
     ProviderClient: OAuthProviderClient,
 {
     pub fn enabled_providers(&self) -> Vec<String> {

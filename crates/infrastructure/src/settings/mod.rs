@@ -52,6 +52,8 @@ impl SettingsAdapter {
 }
 
 impl SettingsProvider for SettingsAdapter {
+    type Error = ApplicationError;
+
     async fn get_json(&self, key: &SettingKey) -> ApplicationResult<Option<serde_json::Value>> {
         match self {
             Self::Null(provider) => provider.get_json(key).await,
@@ -87,6 +89,8 @@ impl SettingsProvider for SettingsAdapter {
 pub struct NullSettingsProvider;
 
 impl SettingsProvider for NullSettingsProvider {
+    type Error = ApplicationError;
+
     async fn get_json(&self, _key: &SettingKey) -> ApplicationResult<Option<serde_json::Value>> {
         Ok(None)
     }
@@ -131,6 +135,8 @@ impl SqlxSettingsProvider {
 
 #[cfg(feature = "db-postgres")]
 impl SettingsProvider for SqlxSettingsProvider {
+    type Error = ApplicationError;
+
     async fn get_json(&self, key: &SettingKey) -> ApplicationResult<Option<serde_json::Value>> {
         let cache_key = Self::cache_key(key);
         if let Ok(Some(cached)) = self.cache.get_string(&cache_key).await {
@@ -233,6 +239,8 @@ impl SqliteSettingsProvider {
 
 #[cfg(feature = "db-sqlite")]
 impl SettingsProvider for SqliteSettingsProvider {
+    type Error = ApplicationError;
+
     async fn get_json(&self, key: &SettingKey) -> ApplicationResult<Option<serde_json::Value>> {
         let cache_key = Self::cache_key(key);
         if let Ok(Some(cached)) = self.cache.get_string(&cache_key).await {
