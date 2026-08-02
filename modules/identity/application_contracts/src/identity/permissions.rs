@@ -1,5 +1,5 @@
+use crate::localization::IdentityMessage;
 pub use crate::permissions::{PermissionDefinition, PermissionName};
-use domain_shared::localization::T;
 
 pub const USERS: PermissionName = PermissionName("Identity.Users");
 pub const USERS_CREATE: PermissionName = PermissionName("Identity.Users.Create");
@@ -10,22 +10,22 @@ pub const AUTHORIZATION: PermissionName = PermissionName("Identity.Authorization
 pub const ALL: &[PermissionDefinition] = &[
     PermissionDefinition {
         name: USERS,
-        display_name: T::PermissionIdentityUsers,
+        display_name: IdentityMessage::PermissionUsers,
     },
     PermissionDefinition {
         name: USERS_CREATE,
-        display_name: T::PermissionIdentityUsersCreate,
+        display_name: IdentityMessage::PermissionUsersCreate,
     },
     PermissionDefinition {
         name: USERS_UPDATE,
-        display_name: T::PermissionIdentityUsersUpdate,
+        display_name: IdentityMessage::PermissionUsersUpdate,
     },
     PermissionDefinition {
         name: USERS_DELETE,
-        display_name: T::PermissionIdentityUsersDelete,
+        display_name: IdentityMessage::PermissionUsersDelete,
     },
     PermissionDefinition {
         name: AUTHORIZATION,
-        display_name: T::PermissionIdentityAuthorization,
+        display_name: IdentityMessage::PermissionAuthorization,
     },
 ];

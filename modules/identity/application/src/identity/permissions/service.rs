@@ -12,7 +12,6 @@ use crate::{
         errors::{ApplicationError, ApplicationResult},
     },
 };
-use domain_shared::localization::{Locale, T, translate};
 use identity_application_contracts::{
     identity::{
         authorization::{
@@ -21,6 +20,7 @@ use identity_application_contracts::{
         },
         permissions as identity_permissions,
     },
+    localization::IdentityMessage,
     permissions::{self, PermissionName},
 };
 use identity_domain::identity::authorization::AuthorizationRepository;
@@ -76,7 +76,7 @@ where
         Ok(permissions::all()
             .map(|definition| PermissionDto {
                 name: definition.name.0.to_string(),
-                display_name: translate(Locale::En, definition.display_name).to_string(),
+                display_name: definition.display_name.default_text().to_string(),
             })
             .collect())
     }
@@ -125,7 +125,7 @@ where
             .repository
             .find_role(&role_name)
             .await?
-            .ok_or_else(|| ApplicationError::localized_not_found(T::RoleNotFound))?;
+            .ok_or_else(|| ApplicationError::localized_not_found(IdentityMessage::RoleNotFound))?;
 
         self.role_dto(role).await
     }
@@ -164,7 +164,7 @@ where
 
         if is_protected_admin_role(&input.name) {
             return Err(ApplicationError::localized_forbidden(
-                T::ProtectedAdminRoleCannotBeDeleted,
+                IdentityMessage::ProtectedAdminRoleCannotBeDeleted,
             ));
         }
 
@@ -173,7 +173,9 @@ where
             .update_role(&input.name, &input.new_name)
             .await?
         {
-            return Err(ApplicationError::localized_not_found(T::RoleNotFound));
+            return Err(ApplicationError::localized_not_found(
+                IdentityMessage::RoleNotFound,
+            ));
         }
 
         self.invalidate_authorization_cache().await;
@@ -198,12 +200,14 @@ where
 
         if is_protected_admin_role(&role_name) {
             return Err(ApplicationError::localized_forbidden(
-                T::ProtectedAdminRoleCannotBeDeleted,
+                IdentityMessage::ProtectedAdminRoleCannotBeDeleted,
             ));
         }
 
         if !self.repository.delete_role(&role_name).await? {
-            return Err(ApplicationError::localized_not_found(T::RoleNotFound));
+            return Err(ApplicationError::localized_not_found(
+                IdentityMessage::RoleNotFound,
+            ));
         }
 
         self.invalidate_authorization_cache().await;
@@ -354,7 +358,9 @@ fn validate_role_name(role_name: &str) -> ApplicationResult<()> {
     let role_name = role_name.trim();
 
     if role_name.is_empty() {
-        return Err(ApplicationError::localized_validation(T::RoleNameRequired));
+        return Err(ApplicationError::localized_validation(
+            IdentityMessage::RoleNameRequired,
+        ));
     }
 
     Ok(())

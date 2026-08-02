@@ -1,17 +1,5 @@
-#[path = "../../../../modules/identity/application/src/shared/audit.rs"]
-pub mod audit;
-#[path = "../../../../modules/identity/application/src/shared/cache.rs"]
-pub mod cache;
-#[path = "../../../../modules/identity/application/src/shared/crud.rs"]
-pub mod crud;
-#[path = "../../../../modules/identity/application/src/shared/errors.rs"]
-pub mod errors;
+pub use identity_application::shared::{audit, cache, crud, errors, mail, search, security};
+
 pub mod jobs;
-#[path = "../../../../modules/identity/application/src/shared/mail.rs"]
-pub mod mail;
-#[path = "../../../../modules/identity/application/src/shared/search.rs"]
-pub mod search;
-#[path = "../../../../modules/identity/application/src/shared/security.rs"]
-pub mod security;
 pub mod settings;
 pub mod storage;

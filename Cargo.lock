@@ -69,30 +69,18 @@ checksum = "2a4385e2e34eb35d6b3efe798b9eb88096925d87726c0798709bf56d9ed84af3"
 name = "application"
 version = "0.3.0"
 dependencies = [
- "application_contracts",
  "background_jobs",
- "chrono",
- "domain",
- "domain_shared",
+ "identity_application",
  "serde",
  "serde_json",
  "tokio",
- "totp-rs",
- "tracing",
- "urlencoding",
- "uuid",
 ]
 
 [[package]]
 name = "application_contracts"
 version = "0.3.0"
 dependencies = [
- "chrono",
- "domain",
- "domain_shared",
- "serde",
- "utoipa",
- "uuid",
+ "identity_application_contracts",
 ]
 
 [[package]]
@@ -1360,15 +1348,14 @@ dependencies = [
 name = "domain"
 version = "0.3.0"
 dependencies = [
- "chrono",
- "domain_shared",
- "uuid",
+ "identity_domain",
 ]
 
 [[package]]
 name = "domain_shared"
 version = "0.3.0"
 dependencies = [
+ "identity_domain_shared",
  "serde_json",
 ]
 
@@ -2236,7 +2223,6 @@ name = "identity_application"
 version = "0.3.0"
 dependencies = [
  "chrono",
- "domain_shared",
  "identity_application_contracts",
  "identity_domain",
  "identity_domain_shared",
@@ -2254,7 +2240,6 @@ name = "identity_application_contracts"
 version = "0.3.0"
 dependencies = [
  "chrono",
- "domain_shared",
  "identity_domain",
  "identity_domain_shared",
  "serde",

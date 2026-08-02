@@ -4,11 +4,13 @@ Hegira uses an ABP-inspired layered design adapted to Rust, Axum, Leptos, and
 explicit compile-time composition. It avoids runtime reflection, assembly
 scanning, ambient request transactions, and a universal repository.
 
-This repository has three distinct application-facing roles. `crates/` and official modules
-are the reusable framework source, `templates/applications/layered/` is the canonical source
-for an independently owned generated application, and `apps/hegira/` is the current deployable
-compatibility host used to exercise framework integration. The compatibility host is not the
-generated application's ownership model, and the internal renderer is not a public CLI.
+This repository has three distinct application-facing roles. Retained framework
+packages and official modules provide reusable source,
+`templates/applications/layered/` is the canonical source for an independently
+owned generated application, and `apps/hegira/` plus the legacy layered crates
+form the current compatibility application used to exercise framework
+integration. The compatibility host is not the generated application's
+ownership model, and the internal renderer is not a public CLI.
 
 ## Dependency Direction
 
@@ -33,6 +35,18 @@ observability
 test_support
   -> application
 
+domain_shared
+  -> identity_domain_shared
+
+domain
+  -> identity_domain
+
+application_contracts
+  -> identity_application_contracts
+
+application
+  -> background_jobs, identity_application
+
 web
   -> leptos_support, presentation, application, application_contracts,
      domain_shared
@@ -45,15 +59,6 @@ infrastructure
   -> platform_core, configuration, persistence, background_jobs, runtime,
      application, application_contracts, domain, domain_shared
 
-application
-  -> background_jobs, application_contracts, domain, domain_shared
-
-application_contracts
-  -> domain, domain_shared
-
-domain
-  -> domain_shared
-
 db_migrator
   -> infrastructure, persistence
 
@@ -64,11 +69,10 @@ identity_domain
   -> identity_domain_shared
 
 identity_application_contracts
-  -> identity_domain, identity_domain_shared, domain_shared
+  -> identity_domain, identity_domain_shared
 
 identity_application
-  -> identity_application_contracts, identity_domain, identity_domain_shared,
-     domain_shared
+  -> identity_application_contracts, identity_domain, identity_domain_shared
 
 identity_sqlx
   -> identity_application, identity_application_contracts, identity_domain,
@@ -112,10 +116,10 @@ matching policy update.
 | `leptos_support` | None |
 | `observability` | `background_jobs` |
 | `test_support` | `application` |
-| `domain_shared` | None |
-| `domain` | `domain_shared` |
-| `application_contracts` | `domain`, `domain_shared` |
-| `application` | `application_contracts`, `background_jobs`, `domain`, `domain_shared` |
+| `domain_shared` | `identity_domain_shared` |
+| `domain` | `identity_domain` |
+| `application_contracts` | `identity_application_contracts` |
+| `application` | `background_jobs`, `identity_application` |
 | `infrastructure` | `application`, `application_contracts`, `background_jobs`, `configuration`, `domain`, `domain_shared`, `persistence`, `platform_core`, `runtime` |
 | `presentation` | `application`, `application_contracts`, `domain_shared`, `infrastructure`, `leptos_support`, `observability` |
 | `web` | `application`, `application_contracts`, `domain_shared`, `leptos_support`, `presentation` |
@@ -123,8 +127,8 @@ matching policy update.
 | `db_migrator` | `infrastructure`, `persistence` |
 | `identity_domain_shared` | None |
 | `identity_domain` | `identity_domain_shared` |
-| `identity_application_contracts` | `domain_shared`, `identity_domain`, `identity_domain_shared` |
-| `identity_application` | `domain_shared`, `identity_application_contracts`, `identity_domain`, `identity_domain_shared` |
+| `identity_application_contracts` | `identity_domain`, `identity_domain_shared` |
+| `identity_application` | `identity_application_contracts`, `identity_domain`, `identity_domain_shared` |
 | `identity_sqlx` | `identity_application`, `identity_application_contracts`, `identity_domain`, `identity_domain_shared`, `persistence` |
 | `identity_http` | `application`, `application_contracts`, `domain_shared`, `http_support`, `leptos_support`, `presentation` |
 | `identity_leptos` | `application`, `application_contracts`, `domain_shared`, `leptos_support`, `presentation`, `web` |
@@ -170,18 +174,18 @@ the referenced follow-up issue has already been implemented.
 | `observability` | Framework | Retain | None |
 | `test_support` | Framework | Decouple and retain | #136 |
 | `runtime` | Framework | Retain | None |
-| `domain_shared` | Compatibility | Extract and retire | #132, #136, #146 |
-| `domain` | Compatibility | Extract and retire | #132, #146 |
-| `application_contracts` | Compatibility | Extract and retire | #132, #136, #146 |
-| `application` | Compatibility | Extract and retire | #132, #136, #146 |
+| `domain_shared` | Compatibility | Extract and retire | #136, #146 |
+| `domain` | Compatibility | Extract and retire | #146 |
+| `application_contracts` | Compatibility | Extract and retire | #136, #146 |
+| `application` | Compatibility | Extract and retire | #136, #146 |
 | `infrastructure` | Compatibility | Extract and retire | #133, #137, #138, #146 |
 | `presentation` | Compatibility | Extract and retire | #134, #139, #146 |
 | `web` | Compatibility | Extract and retire | #135, #141, #146 |
 | `db_migrator` | Compatibility | Replace and retire | #142, #146 |
 | `identity_domain_shared` | Official module | Retain | None |
 | `identity_domain` | Official module | Retain | None |
-| `identity_application_contracts` | Official module | Decouple and retain | #132 |
-| `identity_application` | Official module | Decouple and retain | #132 |
+| `identity_application_contracts` | Official module | Retain | None |
+| `identity_application` | Official module | Retain | None |
 | `identity_sqlx` | Official module | Canonicalize and retain | #133 |
 | `identity_http` | Official module | Decouple and retain | #134 |
 | `identity_leptos` | Official module | Decouple and retain | #135 |
@@ -200,8 +204,6 @@ follow-up issues remove them:
 | Transitional edge | Removal issue |
 |---|---|
 | `test_support -> application` | #136 |
-| `identity_application_contracts -> domain_shared` | #132 |
-| `identity_application -> domain_shared` | #132 |
 | `identity_http -> application, application_contracts, domain_shared, presentation` | #134 |
 | `identity_leptos -> application, application_contracts, domain_shared, presentation, web` | #135 |
 

@@ -1,5 +1,5 @@
 use crate::shared::errors::{ApplicationError, ApplicationResult};
-use domain_shared::localization::T;
+use identity_application_contracts::localization::IdentityMessage;
 
 pub const MAX_USERNAME_LEN: usize = 64;
 pub const MAX_PASSWORD_LEN: usize = 128;
@@ -8,7 +8,9 @@ pub fn required_username(username: &str) -> ApplicationResult<()> {
     let username = username.trim();
 
     if username.is_empty() {
-        return Err(ApplicationError::localized_validation(T::UsernameRequired));
+        return Err(ApplicationError::localized_validation(
+            IdentityMessage::UsernameRequired,
+        ));
     }
 
     if username.len() > MAX_USERNAME_LEN {
@@ -31,7 +33,9 @@ pub fn optional_username(username: &str) -> ApplicationResult<bool> {
 
 pub fn required_password(password: &str) -> ApplicationResult<()> {
     if password.is_empty() {
-        return Err(ApplicationError::localized_validation(T::PasswordRequired));
+        return Err(ApplicationError::localized_validation(
+            IdentityMessage::PasswordRequired,
+        ));
     }
 
     if password.len() > MAX_PASSWORD_LEN {
