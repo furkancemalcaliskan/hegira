@@ -282,7 +282,7 @@ async fn setup_without_database_with_config(config: AppConfig) -> Router {
 }
 
 fn test_routes(state: AppState) -> Router {
-    let router = hegira::presentation::http::routes::operational_routes(state.clone())
+    let router = hegira::server::operational_routes(state.clone())
         .merge(hegira::server::identity_api_routes(state));
 
     router

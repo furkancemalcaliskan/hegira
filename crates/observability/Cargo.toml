@@ -7,7 +7,7 @@ publish = false
 
 [dependencies]
 axum = "0.8.9"
-background_jobs = { path = "../background_jobs", optional = true }
+background_jobs = { path = "../background_jobs" }
 opentelemetry = { version = "0.32.0", optional = true }
 opentelemetry-otlp = { version = "0.32.0", default-features = false, features = ["trace", "grpc-tonic", "http-proto", "reqwest-blocking-client", "tls-ring", "tls-roots"], optional = true }
 opentelemetry_sdk = { version = "0.32.0", features = ["trace", "rt-tokio"], optional = true }
@@ -20,7 +20,7 @@ tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 
 [features]
 default = []
-metrics-prometheus = ["dep:background_jobs", "dep:prometheus"]
+metrics-prometheus = ["dep:prometheus"]
 otel-otlp = [
     "dep:opentelemetry",
     "dep:opentelemetry-otlp",

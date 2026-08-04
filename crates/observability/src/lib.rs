@@ -4,3 +4,4 @@ pub mod job_metrics;
 #[cfg(feature = "metrics-prometheus")]
 pub mod metrics;
 pub mod telemetry;
+pub mod worker_health;
