@@ -1,15 +1,12 @@
-use application::shared::{
-    errors::{ApplicationError, ApplicationResult},
-    mail::{MailMessage, Mailer},
-};
+use crate::{MailError, MailMessage, Mailer};
 
 #[derive(Debug, Clone, Copy)]
 pub struct LogMailer;
 
 impl Mailer for LogMailer {
-    type Error = ApplicationError;
+    type Error = MailError;
 
-    async fn send(&self, message: MailMessage) -> ApplicationResult<()> {
+    async fn send(&self, message: MailMessage) -> Result<(), MailError> {
         tracing::info!(
             to = %message.to.email,
             subject = %message.subject,

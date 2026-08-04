@@ -51,9 +51,9 @@ where
     Hasher: PasswordHasher<Error = ApplicationError>,
     CurrentUsers: CurrentUserProvider,
     Authorization: AuthorizationService,
-    CacheAdapter: Cache<Error = ApplicationError>,
+    CacheAdapter: Cache,
     Audit: AuditLogger<Error = ApplicationError>,
-    Search: SearchIndex<Error = ApplicationError>,
+    Search: SearchIndex,
 {
     pub fn new(
         users: Users,
@@ -320,7 +320,8 @@ where
                     limit: page_size as usize,
                 },
             )
-            .await?;
+            .await
+            .map_err(provider_error)?;
         let pids = result
             .hits
             .iter()
@@ -372,9 +373,9 @@ where
     Hasher: PasswordHasher<Error = ApplicationError>,
     CurrentUsers: CurrentUserProvider,
     Authorization: AuthorizationService,
-    CacheAdapter: Cache<Error = ApplicationError>,
+    CacheAdapter: Cache,
     Audit: AuditLogger<Error = ApplicationError>,
-    Search: SearchIndex<Error = ApplicationError>,
+    Search: SearchIndex,
 {
     async fn list(
         &self,
@@ -438,4 +439,8 @@ fn localize_user_conflict(error: ApplicationError) -> ApplicationError {
     } else {
         error
     }
+}
+
+fn provider_error(error: impl std::fmt::Display) -> ApplicationError {
+    ApplicationError::Infrastructure(error.to_string())
 }

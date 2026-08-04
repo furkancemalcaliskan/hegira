@@ -1,9 +1,10 @@
 use crate::composition::services::AppServices;
-use infrastructure::{
-    cache::CacheAdapter, config::AppConfig, search::SearchAdapter, settings::SettingsAdapter,
-    storage::StorageAdapter,
-};
+use cache::CacheAdapter;
+use infrastructure::{config::AppConfig, settings::SettingsAdapter};
+use mail::MailerAdapter;
+use search::SearchAdapter;
 use std::sync::Arc;
+use storage::StorageAdapter;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -23,6 +24,7 @@ impl AppState {
         cache: CacheAdapter,
         storage: StorageAdapter,
         search: SearchAdapter,
+        mailer: MailerAdapter,
         settings: SettingsAdapter,
     ) -> Self {
         let services = Arc::new(AppServices::new(
@@ -30,6 +32,7 @@ impl AppState {
             &config,
             cache.clone(),
             search.clone(),
+            mailer,
         ));
         Self {
             config: Arc::new(config),

@@ -76,6 +76,73 @@ fn compiled_capabilities() -> platform_core::CompiledCapabilities {
     }
 }
 
+fn cache_settings(config: &infrastructure::config::AppConfig) -> cache::CacheSettings {
+    cache::CacheSettings {
+        enabled: config.cache.enabled,
+        backend: match config.cache.backend {
+            infrastructure::config::CacheBackend::Null => cache::CacheBackend::Null,
+            infrastructure::config::CacheBackend::Memory => cache::CacheBackend::Memory,
+            infrastructure::config::CacheBackend::Redis => cache::CacheBackend::Redis,
+        },
+        redis_url: config.cache.redis.url.clone(),
+    }
+}
+
+fn mailer_settings(config: &infrastructure::config::AppConfig) -> mail::MailerSettings {
+    mail::MailerSettings {
+        enabled: config.mailer.enabled,
+        backend: match config.mailer.backend {
+            infrastructure::config::MailerBackend::Null => mail::MailerBackend::Null,
+            infrastructure::config::MailerBackend::Log => mail::MailerBackend::Log,
+            infrastructure::config::MailerBackend::Smtp => mail::MailerBackend::Smtp,
+        },
+        from: config.mailer.from.clone(),
+        smtp: mail::SmtpSettings {
+            host: config.mailer.smtp.host.clone(),
+            port: config.mailer.smtp.port,
+            username: config.mailer.smtp.username.clone(),
+            password: config.mailer.smtp.password.clone(),
+            starttls: config.mailer.smtp.starttls,
+        },
+    }
+}
+
+fn search_settings(config: &infrastructure::config::AppConfig) -> search::SearchSettings {
+    search::SearchSettings {
+        enabled: config.search.enabled,
+        backend: match config.search.backend {
+            infrastructure::config::SearchBackend::Null => search::SearchBackend::Null,
+            infrastructure::config::SearchBackend::Meilisearch => {
+                search::SearchBackend::Meilisearch
+            }
+        },
+        index_prefix: config.search.index_prefix.clone(),
+        task_timeout_milliseconds: config.search.task_timeout_milliseconds,
+        meilisearch: search::MeilisearchSettings {
+            url: config.search.meilisearch.url.clone(),
+            api_key: config.search.meilisearch.api_key.clone(),
+        },
+    }
+}
+
+fn storage_settings(config: &infrastructure::config::AppConfig) -> storage::StorageSettings {
+    storage::StorageSettings {
+        enabled: config.storage.enabled,
+        backend: match config.storage.backend {
+            infrastructure::config::StorageBackend::Null => storage::StorageBackend::Null,
+            infrastructure::config::StorageBackend::Local => storage::StorageBackend::Local,
+            infrastructure::config::StorageBackend::S3 => storage::StorageBackend::S3,
+        },
+        local_root: config.storage.local.root.clone(),
+        s3: storage::S3Settings {
+            bucket: config.storage.s3.bucket.clone(),
+            region: config.storage.s3.region.clone(),
+            endpoint_url: config.storage.s3.endpoint_url.clone(),
+            force_path_style: config.storage.s3.force_path_style,
+        },
+    }
+}
+
 async fn serve_configured(app_config: infrastructure::config::AppConfig) -> Result<(), String> {
     tracing::info!(
         environment = %app_config.environment,
@@ -132,7 +199,7 @@ async fn serve_configured(app_config: infrastructure::config::AppConfig) -> Resu
         db.clone(),
     )
     .map_err(|err| format!("invalid session store configuration: {err}"))?;
-    let search = infrastructure::search::SearchAdapter::from_config(&app_config)
+    let search = search::SearchAdapter::from_settings(&search_settings(&app_config))
         .map_err(|err| format!("invalid search configuration: {err}"))?;
     if app_config.search.enabled {
         search
@@ -140,7 +207,10 @@ async fn serve_configured(app_config: infrastructure::config::AppConfig) -> Resu
             .await
             .map_err(|err| format!("search startup probe failed: {err}"))?;
         search
-            .initialize_indexes()
+            .initialize_index(
+                "identity_users",
+                &identity_sqlx::identity::search::identity_user_index_settings(),
+            )
             .await
             .map_err(|err| format!("search index initialization failed: {err}"))?;
     }
@@ -207,7 +277,7 @@ fn start_workers(
     app_config: &infrastructure::config::AppConfig,
     observer: std::sync::Arc<dyn background_jobs::JobObserver>,
     health: std::sync::Arc<worker_operations::WorkerHealth>,
-    search: std::sync::Arc<infrastructure::search::SearchAdapter>,
+    search: std::sync::Arc<search::SearchAdapter>,
 ) -> Result<ActiveWorkers, String> {
     let mut active = ActiveWorkers::default();
     let heartbeat_grace =
@@ -264,8 +334,12 @@ fn start_workers(
         );
         let mut registry = background_jobs::DurableJobRegistry::default();
         if app_config.mailer.enabled {
-            registry.register(infrastructure::mail::jobs::SendMailJobHandler::new(
-                infrastructure::mail::MailerAdapter::from_config(app_config)?,
+            registry.register(mail::SendMailJobHandler::<
+                _,
+                application::shared::mail::SendMailJob,
+            >::new(
+                mail::MailerAdapter::from_settings(&mailer_settings(app_config))
+                    .map_err(|error| error.to_string())?,
             ))?;
         }
         match &db {
@@ -273,11 +347,8 @@ fn start_workers(
             persistence::DatabasePool::Postgres(pool) => {
                 if app_config.search.enabled {
                     registry.register(
-                        infrastructure::search::jobs::SearchIndexJobHandler::new(
-                            search,
-                            pool.clone(),
-                        )
-                        .with_observer(observer.clone()),
+                        search::jobs::SearchIndexJobHandler::new(search, pool.clone())
+                            .with_observer(observer.clone()),
                     )?;
                 }
                 background_jobs::sqlx::postgres::DurableJobWorker::new(
@@ -292,7 +363,7 @@ fn start_workers(
             persistence::DatabasePool::Sqlite(pool) => {
                 if app_config.search.enabled {
                     registry.register(
-                        infrastructure::search::projection_sqlite::SqliteSearchIndexJobHandler::new(
+                        search::projection_sqlite::SqliteSearchIndexJobHandler::new(
                             search,
                             pool.clone(),
                         ),
@@ -351,7 +422,7 @@ async fn serve_worker_operations(
 async fn serve_http(
     app_config: infrastructure::config::AppConfig,
     db: persistence::DatabasePool,
-    search: infrastructure::search::SearchAdapter,
+    search: search::SearchAdapter,
 ) -> Result<(), String> {
     use axum::{Router, middleware};
     use http_support as app_middleware;
@@ -361,14 +432,15 @@ async fn serve_http(
     use tower_http::{limit::RequestBodyLimitLayer, timeout::TimeoutLayer};
     use web::root::{App, shell};
 
-    infrastructure::mail::MailerAdapter::from_config(&app_config)
+    let mailer = mail::MailerAdapter::from_settings(&mailer_settings(&app_config))
         .map_err(|err| format!("invalid mailer configuration: {err}"))?;
-    infrastructure::cache::validate_config(&app_config)
+    let cache = cache::CacheAdapter::from_settings(&cache_settings(&app_config))
+        .map_err(|err| format!("invalid cache configuration: {err}"))?;
+    cache
+        .health_check()
         .await
         .map_err(|err| format!("invalid cache configuration: {err}"))?;
-    let cache = infrastructure::cache::CacheAdapter::from_config(&app_config)
-        .map_err(|err| format!("invalid cache configuration: {err}"))?;
-    let storage = infrastructure::storage::StorageAdapter::from_config(&app_config)
+    let storage = storage::StorageAdapter::from_settings(&storage_settings(&app_config))
         .await
         .map_err(|err| format!("invalid storage configuration: {err}"))?;
     let rate_limit_backend = match app_config.security.rate_limit.backend {
@@ -403,6 +475,7 @@ async fn serve_http(
         cache,
         storage,
         search,
+        mailer,
         settings,
     );
     let web_services = app_state.services.clone();

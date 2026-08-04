@@ -50,7 +50,7 @@ where
     Repository: AuthorizationRepository + AuditedRoleWriter,
     CurrentUsers: CurrentUserProvider,
     Authorization: AuthorizationService,
-    CacheAdapter: Cache<Error = ApplicationError>,
+    CacheAdapter: Cache,
     Audit: AuditLogger<Error = ApplicationError>,
 {
     pub fn new(
@@ -363,7 +363,7 @@ where
     Repository: AuthorizationRepository + AuditedRoleWriter,
     CurrentUsers: CurrentUserProvider,
     Authorization: AuthorizationService,
-    CacheAdapter: Cache<Error = ApplicationError>,
+    CacheAdapter: Cache,
     Audit: AuditLogger<Error = ApplicationError>,
 {
     async fn list_permissions(&self, actor_token: String) -> ApplicationResult<Vec<PermissionDto>> {

@@ -42,6 +42,7 @@ app_web = { path = "apps/web", default-features = false }
 application = { git = "{{framework_repository}}", tag = "{{framework_version}}", default-features = false }
 application_contracts = { git = "{{framework_repository}}", tag = "{{framework_version}}" }
 background_jobs = { git = "{{framework_repository}}", tag = "{{framework_version}}" }
+cache = { git = "{{framework_repository}}", tag = "{{framework_version}}" }
 configuration = { git = "{{framework_repository}}", tag = "{{framework_version}}" }
 domain = { git = "{{framework_repository}}", tag = "{{framework_version}}" }
 domain_shared = { git = "{{framework_repository}}", tag = "{{framework_version}}" }
@@ -51,11 +52,14 @@ identity_leptos = { git = "{{framework_repository}}", tag = "{{framework_version
 identity_sqlx = { git = "{{framework_repository}}", tag = "{{framework_version}}", default-features = false }
 infrastructure = { git = "{{framework_repository}}", tag = "{{framework_version}}", default-features = false }
 leptos_support = { git = "{{framework_repository}}", tag = "{{framework_version}}", default-features = false }
+mail = { git = "{{framework_repository}}", tag = "{{framework_version}}" }
 observability = { git = "{{framework_repository}}", tag = "{{framework_version}}" }
 persistence = { git = "{{framework_repository}}", tag = "{{framework_version}}", default-features = false }
 platform_core = { git = "{{framework_repository}}", tag = "{{framework_version}}" }
 presentation = { git = "{{framework_repository}}", tag = "{{framework_version}}", default-features = false }
 runtime = { git = "{{framework_repository}}", tag = "{{framework_version}}" }
+search = { git = "{{framework_repository}}", tag = "{{framework_version}}", default-features = false }
+storage = { git = "{{framework_repository}}", tag = "{{framework_version}}", default-features = false }
 web = { git = "{{framework_repository}}", tag = "{{framework_version}}", default-features = false }
 
 axum = "0.8.9"

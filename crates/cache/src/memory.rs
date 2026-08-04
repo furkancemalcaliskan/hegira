@@ -1,7 +1,4 @@
-use application::shared::{
-    cache::Cache,
-    errors::{ApplicationError, ApplicationResult},
-};
+use crate::{Cache, CacheError};
 use std::{
     collections::HashMap,
     sync::{Arc, RwLock},
@@ -27,13 +24,13 @@ impl CacheEntry {
 }
 
 impl Cache for MemoryCache {
-    type Error = ApplicationError;
+    type Error = CacheError;
 
-    async fn get_string(&self, key: &str) -> ApplicationResult<Option<String>> {
+    async fn get_string(&self, key: &str) -> Result<Option<String>, CacheError> {
         let mut entries = self
             .entries
             .write()
-            .map_err(|_| ApplicationError::Infrastructure("cache lock poisoned".to_string()))?;
+            .map_err(|_| CacheError::new("cache lock poisoned"))?;
 
         let Some(entry) = entries.get(key) else {
             return Ok(None);
@@ -52,22 +49,22 @@ impl Cache for MemoryCache {
         key: &str,
         value: String,
         ttl: Option<Duration>,
-    ) -> ApplicationResult<()> {
+    ) -> Result<(), CacheError> {
         let expires_at = ttl.map(|ttl| Instant::now() + ttl);
         let mut entries = self
             .entries
             .write()
-            .map_err(|_| ApplicationError::Infrastructure("cache lock poisoned".to_string()))?;
+            .map_err(|_| CacheError::new("cache lock poisoned"))?;
 
         entries.insert(key.to_string(), CacheEntry { value, expires_at });
         Ok(())
     }
 
-    async fn remove(&self, key: &str) -> ApplicationResult<()> {
+    async fn remove(&self, key: &str) -> Result<(), CacheError> {
         let mut entries = self
             .entries
             .write()
-            .map_err(|_| ApplicationError::Infrastructure("cache lock poisoned".to_string()))?;
+            .map_err(|_| CacheError::new("cache lock poisoned"))?;
 
         entries.remove(key);
         Ok(())

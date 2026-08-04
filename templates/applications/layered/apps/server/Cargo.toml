@@ -21,6 +21,7 @@ app_web = { workspace = true }
 application = { workspace = true, optional = true }
 application_contracts.workspace = true
 background_jobs = { workspace = true, optional = true }
+cache = { workspace = true, optional = true }
 configuration = { workspace = true, optional = true }
 domain.workspace = true
 domain_shared.workspace = true
@@ -34,10 +35,13 @@ persistence = { workspace = true, optional = true }
 platform_core = { workspace = true, optional = true }
 presentation = { workspace = true, optional = true }
 runtime = { workspace = true, optional = true }
+search = { workspace = true, optional = true }
+storage = { workspace = true, optional = true }
 axum = { workspace = true, optional = true }
 console_error_panic_hook = { workspace = true, optional = true }
 leptos.workspace = true
 leptos_axum = { workspace = true, optional = true }
+mail = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
 sqlx = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true }
@@ -57,6 +61,7 @@ db-postgres = [
     "infrastructure/db-postgres",
     "persistence/db-postgres",
     "presentation/db-postgres",
+    "search/db-postgres",
     "sqlx/postgres",
 ]
 db-sqlite = [
@@ -69,6 +74,7 @@ db-sqlite = [
     "infrastructure/db-sqlite",
     "persistence/db-sqlite",
     "presentation/db-sqlite",
+    "search/db-sqlite",
     "sqlx/sqlite",
 ]
 hydrate = [
@@ -89,6 +95,7 @@ ssr = [
     "dep:application",
     "dep:axum",
     "dep:background_jobs",
+    "dep:cache",
     "dep:configuration",
     "dep:http_support",
     "dep:identity_http",
@@ -96,25 +103,28 @@ ssr = [
     "dep:identity_sqlx",
     "dep:infrastructure",
     "dep:leptos_axum",
+    "dep:mail",
     "dep:observability",
     "dep:persistence",
     "dep:platform_core",
     "dep:presentation",
     "dep:runtime",
+    "dep:search",
     "dep:serde",
     "dep:sqlx",
     "dep:tokio",
     "dep:tower-http",
     "dep:tracing",
+    "dep:storage",
 ]
 openapi = ["ssr", "application_contracts/openapi", "identity_http/openapi"]
 wasm-split = ["app_web/wasm-split"]
-cache-redis = ["ssr", "infrastructure/cache-redis", "http_support/cache-redis"]
+cache-redis = ["ssr", "cache/redis", "infrastructure/cache-redis", "http_support/cache-redis"]
 metrics-prometheus = ["ssr", "observability/metrics-prometheus", "presentation/metrics-prometheus"]
 otel-otlp = ["ssr", "app_infrastructure/otel-otlp", "http_support/otel-otlp", "observability/otel-otlp"]
-search-meilisearch = ["ssr", "infrastructure/search-meilisearch"]
-storage-s3 = ["ssr", "infrastructure/storage-s3"]
-mailer-smtp = ["ssr", "infrastructure/mailer-smtp"]
+search-meilisearch = ["ssr", "search/meilisearch"]
+storage-s3 = ["ssr", "storage/s3"]
+mailer-smtp = ["ssr", "mail/smtp"]
 
 [dev-dependencies]
 http-body-util = "0.1.3"

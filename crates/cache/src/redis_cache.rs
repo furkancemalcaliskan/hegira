@@ -1,7 +1,4 @@
-use application::shared::{
-    cache::Cache,
-    errors::{ApplicationError, ApplicationResult},
-};
+use crate::{Cache, CacheError};
 use redis::AsyncCommands;
 use std::time::Duration;
 
@@ -11,24 +8,29 @@ pub struct RedisCache {
 }
 
 impl RedisCache {
-    pub fn new(url: &str) -> redis::RedisResult<Self> {
-        let client = redis::Client::open(url)?;
+    pub fn new(url: &str) -> Result<Self, CacheError> {
+        let client = redis::Client::open(url).map_err(redis_error)?;
         Ok(Self { client })
     }
 
-    pub async fn ping(&self) -> redis::RedisResult<()> {
-        let mut connection = self.client.get_multiplexed_async_connection().await?;
+    pub async fn ping(&self) -> Result<(), CacheError> {
+        let mut connection = self
+            .client
+            .get_multiplexed_async_connection()
+            .await
+            .map_err(redis_error)?;
         redis::cmd("PING")
             .query_async::<String>(&mut connection)
-            .await?;
+            .await
+            .map_err(redis_error)?;
         Ok(())
     }
 }
 
 impl Cache for RedisCache {
-    type Error = ApplicationError;
+    type Error = CacheError;
 
-    async fn get_string(&self, key: &str) -> ApplicationResult<Option<String>> {
+    async fn get_string(&self, key: &str) -> Result<Option<String>, CacheError> {
         let mut connection = self
             .client
             .get_multiplexed_async_connection()
@@ -43,7 +45,7 @@ impl Cache for RedisCache {
         key: &str,
         value: String,
         ttl: Option<Duration>,
-    ) -> ApplicationResult<()> {
+    ) -> Result<(), CacheError> {
         let mut connection = self
             .client
             .get_multiplexed_async_connection()
@@ -63,7 +65,7 @@ impl Cache for RedisCache {
         Ok(())
     }
 
-    async fn remove(&self, key: &str) -> ApplicationResult<()> {
+    async fn remove(&self, key: &str) -> Result<(), CacheError> {
         let mut connection = self
             .client
             .get_multiplexed_async_connection()
@@ -74,6 +76,6 @@ impl Cache for RedisCache {
     }
 }
 
-fn redis_error(error: redis::RedisError) -> ApplicationError {
-    ApplicationError::Infrastructure(error.to_string())
+fn redis_error(error: redis::RedisError) -> CacheError {
+    CacheError::new(error.to_string())
 }

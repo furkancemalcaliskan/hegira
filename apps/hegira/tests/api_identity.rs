@@ -4,8 +4,8 @@ use axum::{Router, http::StatusCode, middleware};
 use hegira::{
     application_contracts::identity::permissions,
     application_contracts::identity::users::{PagedUserResultDto, UserDto},
+    cache::CacheAdapter,
     infrastructure::{
-        cache::CacheAdapter,
         config::{
             AppConfig, ApplicationConfig, AuditConfig, CacheBackend, CacheConfig, CorsConfig,
             DatabaseConfig, DurableJobsConfig, HealthConfig, JobsConfig, LoggingConfig,
@@ -20,11 +20,12 @@ use hegira::{
             SqlxIdentityRepository,
             seed::{seed_identity, seed_sqlite_identity},
         },
-        search::SearchAdapter,
         settings::SettingsAdapter,
-        storage::StorageAdapter,
     },
+    mail::MailerAdapter,
     presentation::http::state::AppState,
+    search::SearchAdapter,
+    storage::StorageAdapter,
 };
 use serde_json::{Value, json};
 use std::env;
@@ -222,6 +223,7 @@ async fn setup() -> Router {
         CacheAdapter::Null(Default::default()),
         StorageAdapter::Null(Default::default()),
         SearchAdapter::Null(Default::default()),
+        MailerAdapter::Null(hegira::mail::NullMailer),
         SettingsAdapter::Null(Default::default()),
     );
 
@@ -251,6 +253,7 @@ async fn setup_sqlite() -> Router {
         CacheAdapter::Null(Default::default()),
         StorageAdapter::Null(Default::default()),
         SearchAdapter::Null(Default::default()),
+        MailerAdapter::Null(hegira::mail::NullMailer),
         SettingsAdapter::Null(Default::default()),
     );
     test_routes(state).layer(middleware::from_fn(hegira::http_support::request_id::set))
@@ -271,6 +274,7 @@ async fn setup_without_database_with_config(config: AppConfig) -> Router {
         CacheAdapter::Null(Default::default()),
         StorageAdapter::Null(Default::default()),
         SearchAdapter::Null(Default::default()),
+        MailerAdapter::Null(hegira::mail::NullMailer),
         SettingsAdapter::Null(Default::default()),
     );
 

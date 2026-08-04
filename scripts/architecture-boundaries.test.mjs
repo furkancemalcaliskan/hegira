@@ -155,8 +155,8 @@ test("accepts the documented ownership-class dependency directions", () => {
       WORKSPACE_DEPENDENCY_POLICY.leptos_support.length === 0 &&
       WORKSPACE_DEPENDENCY_POLICY.audit.length === 0 &&
       WORKSPACE_DEPENDENCY_POLICY.cache.length === 0 &&
-      WORKSPACE_DEPENDENCY_POLICY.mail.length === 0 &&
-      WORKSPACE_DEPENDENCY_POLICY.search.length === 0 &&
+      WORKSPACE_DEPENDENCY_POLICY.mail.includes("background_jobs") &&
+      WORKSPACE_DEPENDENCY_POLICY.search.includes("background_jobs") &&
       WORKSPACE_DEPENDENCY_POLICY.security.length === 0 &&
       WORKSPACE_DEPENDENCY_POLICY.settings.length === 0 &&
       WORKSPACE_DEPENDENCY_POLICY.storage.length === 0 &&
@@ -166,7 +166,13 @@ test("accepts the documented ownership-class dependency directions", () => {
       WORKSPACE_DEPENDENCY_POLICY.hegira.includes("infrastructure") &&
       WORKSPACE_DEPENDENCY_POLICY.hegira.includes("persistence") &&
       WORKSPACE_DEPENDENCY_POLICY.hegira.includes("identity_sqlx") &&
+      WORKSPACE_DEPENDENCY_POLICY.hegira.includes("cache") &&
+      WORKSPACE_DEPENDENCY_POLICY.hegira.includes("mail") &&
+      WORKSPACE_DEPENDENCY_POLICY.hegira.includes("search") &&
+      WORKSPACE_DEPENDENCY_POLICY.hegira.includes("storage") &&
       WORKSPACE_DEPENDENCY_POLICY.db_migrator.includes("persistence") &&
+      WORKSPACE_DEPENDENCY_POLICY.db_migrator.includes("identity_sqlx") &&
+      WORKSPACE_DEPENDENCY_POLICY.db_migrator.includes("search") &&
       WORKSPACE_DEPENDENCY_POLICY.identity_domain.includes(
         "identity_domain_shared",
       ) &&
@@ -179,6 +185,7 @@ test("accepts the documented ownership-class dependency directions", () => {
       WORKSPACE_DEPENDENCY_POLICY.infrastructure.includes("identity_sqlx") &&
       WORKSPACE_DEPENDENCY_POLICY.identity_sqlx.includes("persistence") &&
       WORKSPACE_DEPENDENCY_POLICY.identity_sqlx.includes("background_jobs") &&
+      WORKSPACE_DEPENDENCY_POLICY.identity_sqlx.includes("search") &&
       WORKSPACE_DEPENDENCY_POLICY.identity_http.includes("http_support") &&
       WORKSPACE_DEPENDENCY_POLICY.identity_leptos.includes(
         "identity_application_contracts",
@@ -186,7 +193,11 @@ test("accepts the documented ownership-class dependency directions", () => {
       !WORKSPACE_DEPENDENCY_POLICY.identity_leptos.includes("web") &&
       !WORKSPACE_DEPENDENCY_POLICY.identity_leptos.includes("persistence") &&
       WORKSPACE_DEPENDENCY_POLICY.presentation.includes("infrastructure") &&
-      WORKSPACE_DEPENDENCY_POLICY.presentation.includes("persistence"),
+      WORKSPACE_DEPENDENCY_POLICY.presentation.includes("persistence") &&
+      WORKSPACE_DEPENDENCY_POLICY.presentation.includes("cache") &&
+      WORKSPACE_DEPENDENCY_POLICY.presentation.includes("mail") &&
+      WORKSPACE_DEPENDENCY_POLICY.presentation.includes("search") &&
+      WORKSPACE_DEPENDENCY_POLICY.presentation.includes("storage"),
   );
   assert.deepEqual(REPOSITORY_OWNERSHIP_POLICY.framework, ["framework"]);
   assert.deepEqual(REPOSITORY_OWNERSHIP_POLICY.module, [

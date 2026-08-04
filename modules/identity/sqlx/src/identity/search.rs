@@ -80,3 +80,62 @@ impl<'pool> IdentitySearchSnapshot<'pool> {
 fn db_error(error: sqlx::Error) -> ApplicationError {
     ApplicationError::Infrastructure(error.to_string())
 }
+
+#[cfg(feature = "db-postgres")]
+pub async fn reindex_identity_users(
+    pool: &sqlx::PgPool,
+    search: &search::SearchAdapter,
+) -> Result<u64, String> {
+    use search::SearchIndex as _;
+
+    const INDEX: &str = "identity_users";
+    const TEMPORARY_INDEX: &str = "identity_users_reindex";
+    const BATCH_SIZE: i64 = 500;
+
+    let mut snapshot = IdentitySearchSnapshot::begin(pool, search::SEARCH_REBUILD_LOCK)
+        .await
+        .map_err(|error| error.to_string())?;
+    search
+        .prepare_rebuild(INDEX, TEMPORARY_INDEX, &identity_user_index_settings())
+        .await
+        .map_err(|error| error.to_string())?;
+
+    let mut indexed = 0_u64;
+    loop {
+        let documents = snapshot
+            .next_page(BATCH_SIZE)
+            .await
+            .map_err(|error| error.to_string())?;
+        if documents.is_empty() {
+            break;
+        }
+
+        indexed += documents.len() as u64;
+        search
+            .upsert(TEMPORARY_INDEX, documents)
+            .await
+            .map_err(|error| error.to_string())?;
+    }
+
+    let confirmed = search
+        .promote_rebuild(INDEX, TEMPORARY_INDEX)
+        .await
+        .map_err(|error| error.to_string())?;
+    snapshot.commit().await.map_err(|error| error.to_string())?;
+    if !confirmed {
+        tracing::warn!(
+            index = INDEX,
+            temporary_index = TEMPORARY_INDEX,
+            "search index swap was enqueued but could not be confirmed before timeout"
+        );
+    }
+    Ok(indexed)
+}
+
+pub fn identity_user_index_settings() -> search::SearchIndexSettings {
+    search::SearchIndexSettings {
+        searchable_attributes: vec!["username".to_string()],
+        filterable_attributes: vec!["is_verified".to_string(), "roles".to_string()],
+        sortable_attributes: vec!["username".to_string(), "created_at".to_string()],
+    }
+}

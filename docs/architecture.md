@@ -20,16 +20,20 @@ dependency allowlist below is the normative workspace contract.
 
 ```text
 apps/hegira
-  -> platform_core, configuration, persistence, background_jobs, http_support,
+  -> platform_core, configuration, persistence, background_jobs, cache, mail,
+     search, storage, http_support,
      identity_http, identity_leptos, identity_sqlx, observability, runtime,
      test_support, web,
      presentation, infrastructure, application, application_contracts,
      domain, domain_shared
 
-platform_core, audit, cache, mail, search, security, settings, storage,
+platform_core, audit, cache, security, settings, storage,
 configuration, persistence, background_jobs, http_support, leptos_support,
 runtime
   -> no local application packages
+
+mail, search
+  -> background_jobs
 
 observability
   -> background_jobs
@@ -54,15 +58,15 @@ web
      domain_shared
 
 presentation
-  -> leptos_support, observability, persistence, infrastructure, application,
-     application_contracts, domain_shared
+  -> cache, mail, search, storage, leptos_support, observability, persistence,
+     infrastructure, application, application_contracts, domain_shared
 
 infrastructure
-  -> platform_core, configuration, persistence, background_jobs, runtime,
+  -> platform_core, configuration, persistence, background_jobs, cache, runtime,
      application, application_contracts, domain, domain_shared
 
 db_migrator
-  -> infrastructure, persistence
+  -> identity_sqlx, infrastructure, persistence, search
 
 identity_domain_shared
   -> no local packages
@@ -79,7 +83,7 @@ identity_application
 
 identity_sqlx
   -> background_jobs, identity_application, identity_application_contracts,
-     identity_domain, identity_domain_shared, persistence
+     identity_domain, identity_domain_shared, persistence, search
 
 identity_http
   -> identity_application, identity_application_contracts, http_support,
@@ -111,12 +115,12 @@ matching policy update.
 
 | Package | Permitted direct local dependencies |
 |---|---|
-| `hegira` | `application`, `application_contracts`, `background_jobs`, `configuration`, `domain`, `domain_shared`, `http_support`, `identity_http`, `identity_leptos`, `identity_sqlx`, `infrastructure`, `observability`, `persistence`, `platform_core`, `presentation`, `runtime`, `test_support`, `web` |
+| `hegira` | `application`, `application_contracts`, `background_jobs`, `cache`, `configuration`, `domain`, `domain_shared`, `http_support`, `identity_http`, `identity_leptos`, `identity_sqlx`, `infrastructure`, `mail`, `observability`, `persistence`, `platform_core`, `presentation`, `runtime`, `search`, `storage`, `test_support`, `web` |
 | `platform_core` | None |
 | `audit` | None |
 | `cache` | None |
-| `mail` | None |
-| `search` | None |
+| `mail` | `background_jobs` |
+| `search` | `background_jobs` |
 | `security` | None |
 | `settings` | None |
 | `storage` | None |
@@ -131,16 +135,16 @@ matching policy update.
 | `domain` | `identity_domain` |
 | `application_contracts` | `identity_application_contracts` |
 | `application` | `background_jobs`, `identity_application`, `settings`, `storage` |
-| `infrastructure` | `application`, `application_contracts`, `background_jobs`, `configuration`, `domain`, `domain_shared`, `identity_sqlx`, `persistence`, `platform_core`, `runtime` |
-| `presentation` | `application`, `application_contracts`, `domain_shared`, `infrastructure`, `leptos_support`, `observability`, `persistence` |
+| `infrastructure` | `application`, `application_contracts`, `background_jobs`, `cache`, `configuration`, `domain`, `domain_shared`, `identity_sqlx`, `persistence`, `platform_core`, `runtime` |
+| `presentation` | `application`, `application_contracts`, `cache`, `domain_shared`, `infrastructure`, `leptos_support`, `mail`, `observability`, `persistence`, `search`, `storage` |
 | `web` | `application`, `application_contracts`, `domain_shared`, `identity_leptos`, `leptos_support`, `presentation` |
 | `runtime` | None |
-| `db_migrator` | `infrastructure`, `persistence` |
+| `db_migrator` | `identity_sqlx`, `infrastructure`, `persistence`, `search` |
 | `identity_domain_shared` | None |
 | `identity_domain` | `identity_domain_shared` |
 | `identity_application_contracts` | `identity_domain`, `identity_domain_shared` |
 | `identity_application` | `audit`, `cache`, `identity_application_contracts`, `identity_domain`, `identity_domain_shared`, `mail`, `search`, `security` |
-| `identity_sqlx` | `background_jobs`, `identity_application`, `identity_application_contracts`, `identity_domain`, `identity_domain_shared`, `persistence` |
+| `identity_sqlx` | `background_jobs`, `identity_application`, `identity_application_contracts`, `identity_domain`, `identity_domain_shared`, `persistence`, `search` |
 | `identity_http` | `http_support`, `identity_application`, `identity_application_contracts`, `leptos_support` |
 | `identity_leptos` | `identity_application`, `identity_application_contracts`, `identity_domain_shared`, `leptos_support` |
 | `template_renderer` | None |
@@ -196,7 +200,7 @@ the referenced follow-up issue has already been implemented.
 | `domain` | Compatibility | Extract and retire | #146 |
 | `application_contracts` | Compatibility | Extract and retire | #146 |
 | `application` | Compatibility | Extract and retire | #146 |
-| `infrastructure` | Compatibility | Extract and retire | #138, #146 |
+| `infrastructure` | Compatibility | Extract and retire | #146 |
 | `presentation` | Compatibility | Extract and retire | #139, #146 |
 | `web` | Compatibility | Extract and retire | #141, #146 |
 | `db_migrator` | Compatibility | Replace and retire | #142, #146 |
@@ -331,12 +335,12 @@ build consume the same manifests without leaking maintainer filesystem paths.
 | `hegira` | `apps/hegira` | Deployable Axum/Leptos package and full-stack composition |
 | `platform_core` | `crates/platform_core` | Application-independent compiled capability primitives |
 | `audit` | `crates/audit` | Provider-neutral audit records and logging port |
-| `cache` | `crates/cache` | Provider-neutral string-cache port and expiration contract |
-| `mail` | `crates/mail` | Provider-neutral mail message values and delivery port |
-| `search` | `crates/search` | Provider-neutral search documents, queries, indexing commands, and search port |
+| `cache` | `crates/cache` | Provider-neutral string-cache port plus null, memory, and optional Redis adapters |
+| `mail` | `crates/mail` | Provider-neutral mail values and delivery port plus null, log, optional SMTP, and durable-handler adapters |
+| `search` | `crates/search` | Provider-neutral search contracts plus null, optional Meilisearch, and PostgreSQL/SQLite projection-job adapters |
 | `security` | `crates/security` | Provider-neutral password hashing and token ports |
 | `settings` | `crates/settings` | Validated setting keys, typed serialization helpers, and settings port |
-| `storage` | `crates/storage` | Validated storage paths, stored objects, and object-storage port |
+| `storage` | `crates/storage` | Validated storage paths and object-storage port plus null, local, and optional S3 adapters |
 | `configuration` | `crates/configuration` | Configuration profile sources and ordered validation orchestration |
 | `persistence` | `crates/persistence` | Database provider selection, connections, pools, health checks, transaction primitives, and host-owned migration planning and execution |
 | `background_jobs` | `crates/background_jobs` | Job contracts, handler registration, observation, recurring execution, and PostgreSQL/SQLite durable queue workers |
@@ -348,7 +352,7 @@ build consume the same manifests without leaking maintainer filesystem paths.
 | `domain` | `crates/domain` | Current compatibility view of Identity entities and repository ports |
 | `application_contracts` | `crates/application_contracts` | Current compatibility view of Identity DTOs, inputs, permissions, and feature metadata |
 | `application` | `crates/application` | Current compatibility view of Identity use cases and framework capability ports |
-| `infrastructure` | `crates/infrastructure` | Compatibility host configuration, application migration/reset composition, remaining security/cache/mail/search/storage adapters, and compatibility re-exports of the canonical Identity SQLx adapter |
+| `infrastructure` | `crates/infrastructure` | Compatibility host configuration, application migration/reset composition, remaining application-specific security, session, audit, and settings adapters, and compatibility re-exports of the canonical Identity SQLx adapter |
 | `presentation` | `crates/presentation` | Current compatibility service construction, host state, and operational probe composition |
 | `web` | `crates/web` | Leptos compatibility application shell and dashboard plus explicit consumption of the Identity Leptos adapter |
 | `runtime` | `crates/runtime` | Runtime roles, Tokio process lifecycle, and shutdown signaling |
@@ -534,7 +538,10 @@ plan. Identity cleanup job definitions live with `identity_sqlx`, while the host
 explicitly selects their schedule and starts them only for worker-capable
 runtime roles. Identity mutations publish stable mail and search payload
 contracts into the outbox inside the same SQLx transaction as the Identity
-state change.
+state change. The `mail` package owns the reusable typed durable mail handler,
+and `search` owns the PostgreSQL and SQLite revision-aware projection handlers.
+Identity SQLx owns the Identity-specific index settings and search snapshot
+used by startup initialization and explicit reindex operations.
 
 ## Feature Registration
 
@@ -590,9 +597,11 @@ application/worker process; distributed roles are intended for PostgreSQL.
 
 ## Optional Capabilities
 
-External integrations are ports in the application layer and adapters in
-infrastructure. Cargo features remove unused vendor dependencies from the
-build; runtime configuration selects an enabled adapter. See
+External integrations expose provider-neutral ports and explicit adapters from
+their retained `cache`, `mail`, `search`, and `storage` framework packages. The
+application host maps validated configuration into provider-owned settings and
+selects each adapter explicitly. Cargo features remove unused vendor
+dependencies from the build; runtime configuration selects an enabled adapter. See
 [Configuration](configuration.md) for the complete matrix.
 
 ## Security Model

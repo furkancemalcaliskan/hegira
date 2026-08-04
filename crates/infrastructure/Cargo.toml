@@ -9,18 +9,16 @@ publish = false
 application = { path = "../application" }
 application_contracts = { path = "../application_contracts" }
 background_jobs = { path = "../background_jobs" }
+cache = { path = "../cache", default-features = false }
 configuration = { path = "../configuration" }
 argon2 = "0.5.3"
 base64 = "0.23.0"
-aws-config = { version = "1.8.18", default-features = false, features = ["behavior-version-latest", "default-https-client", "rt-tokio"], optional = true }
-aws-sdk-s3 = { version = "1.137.0", default-features = false, features = ["default-https-client", "rt-tokio"], optional = true }
 chrono = { version = "0.4.44", features = ["serde"] }
 domain = { path = "../domain" }
 domain_shared = { path = "../domain_shared" }
 hmac = "0.13.0"
 identity_sqlx = { path = "../../modules/identity/sqlx", default-features = false, optional = true }
 ipnet = "2.12.0"
-lettre = { version = "0.11.22", default-features = false, features = ["builder", "smtp-transport", "tokio1-rustls-tls"], optional = true }
 platform_core = { path = "../platform_core" }
 persistence = { path = "../persistence", default-features = false }
 redis = { version = "1.2.3", features = ["tokio-comp"], optional = true }
@@ -43,7 +41,4 @@ default = ["db-postgres", "db-sqlite"]
 db-postgres = ["background_jobs/db-postgres", "dep:identity_sqlx", "identity_sqlx/db-postgres", "persistence/db-postgres", "sqlx/postgres"]
 db-sqlite = ["background_jobs/db-sqlite", "dep:identity_sqlx", "identity_sqlx/db-sqlite", "persistence/db-sqlite", "sqlx/sqlite"]
 ssr = []
-cache-redis = ["dep:redis"]
-storage-s3 = ["dep:aws-config", "dep:aws-sdk-s3"]
-mailer-smtp = ["dep:lettre"]
-search-meilisearch = []
+cache-redis = ["cache/redis", "dep:redis"]

@@ -11,12 +11,14 @@ path = "src/main.rs"
 
 [dependencies]
 infrastructure = { path = "../infrastructure", optional = true, default-features = false }
+identity_sqlx = { path = "../../modules/identity/sqlx", optional = true, default-features = false }
 persistence = { path = "../persistence", optional = true, default-features = false }
+search = { path = "../search", optional = true, default-features = false }
 tokio = { version = "1.52.3", features = ["rt-multi-thread", "macros"], optional = true }
 
 [features]
 default = ["db-postgres", "db-sqlite"]
-db-postgres = ["infrastructure/db-postgres", "persistence/db-postgres"]
-db-sqlite = ["infrastructure/db-sqlite", "persistence/db-sqlite"]
-ssr = ["dep:infrastructure", "dep:persistence", "dep:tokio", "infrastructure/ssr"]
-search-meilisearch = ["ssr", "infrastructure/search-meilisearch"]
+db-postgres = ["identity_sqlx/db-postgres", "infrastructure/db-postgres", "persistence/db-postgres", "search/db-postgres"]
+db-sqlite = ["identity_sqlx/db-sqlite", "infrastructure/db-sqlite", "persistence/db-sqlite", "search/db-sqlite"]
+ssr = ["dep:identity_sqlx", "dep:infrastructure", "dep:persistence", "dep:search", "dep:tokio", "infrastructure/ssr"]
+search-meilisearch = ["ssr", "search/meilisearch"]

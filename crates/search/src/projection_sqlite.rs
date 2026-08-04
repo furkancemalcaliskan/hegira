@@ -1,9 +1,7 @@
 use std::sync::Arc;
 
-use application::shared::{
-    jobs::{DurableJobFuture, DurableJobHandler},
-    search::SearchIndex,
-};
+use crate::SearchIndex;
+use background_jobs::{DurableJobFuture, DurableJobHandler};
 use sqlx::SqlitePool;
 
 use super::{
@@ -133,20 +131,25 @@ impl DurableJobHandler for SqliteSearchIndexJobHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        config::{DatabaseBackend, DatabaseConfig},
-        db,
-        search::null::NullSearch,
-    };
+    use crate::NullSearch;
 
     #[tokio::test]
     async fn sqlite_projection_rejects_stale_revisions_and_advances_monotonically() {
-        let pool = db::connect_sqlite_with_application_migrations(&DatabaseConfig {
-            backend: DatabaseBackend::Sqlite,
-            url: "sqlite::memory:".to_string(),
-            max_connections: 4,
-            auto_migrate: true,
-        })
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::query(
+            "CREATE TABLE search_projection_versions (
+                index_name TEXT NOT NULL,
+                document_id TEXT NOT NULL,
+                revision INTEGER NOT NULL,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY (index_name, document_id)
+            )",
+        )
+        .execute(&pool)
         .await
         .unwrap();
         let handler = SqliteSearchIndexJobHandler::new(

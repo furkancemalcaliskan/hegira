@@ -4,3 +4,15 @@ version = "0.3.0"
 edition = "2024"
 license = "Apache-2.0"
 publish = false
+
+[dependencies]
+aws-config = { version = "1.8.18", default-features = false, features = ["behavior-version-latest", "default-https-client", "rt-tokio"], optional = true }
+aws-sdk-s3 = { version = "1.137.0", default-features = false, features = ["default-https-client", "rt-tokio"], optional = true }
+tokio = { version = "1.52.3", features = ["fs"] }
+
+[features]
+default = []
+s3 = ["dep:aws-config", "dep:aws-sdk-s3"]
+
+[dev-dependencies]
+tokio = { version = "1.52.3", features = ["macros", "rt"] }

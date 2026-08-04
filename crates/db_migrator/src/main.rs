@@ -94,9 +94,14 @@ async fn run() -> Result<(), String> {
                 let pool = persistence::connect_postgres(&config.database)
                     .await
                     .map_err(|err| format!("failed to initialize database: {err}"))?;
-                let search = infrastructure::search::SearchAdapter::from_config(&config)?;
-                search.health_check().await?;
-                let count = infrastructure::search::reindex_identity_users(&pool, &search).await?;
+                let search = search::SearchAdapter::from_settings(&search_settings(&config))
+                    .map_err(|error| error.to_string())?;
+                search
+                    .health_check()
+                    .await
+                    .map_err(|error| error.to_string())?;
+                let count =
+                    identity_sqlx::identity::search::reindex_identity_users(&pool, &search).await?;
                 println!("search reindex completed: {count} identity users indexed");
             }
         }
@@ -110,6 +115,25 @@ async fn run() -> Result<(), String> {
     }
 
     Ok(())
+}
+
+#[cfg(feature = "ssr")]
+fn search_settings(config: &infrastructure::config::AppConfig) -> search::SearchSettings {
+    search::SearchSettings {
+        enabled: config.search.enabled,
+        backend: match config.search.backend {
+            infrastructure::config::SearchBackend::Null => search::SearchBackend::Null,
+            infrastructure::config::SearchBackend::Meilisearch => {
+                search::SearchBackend::Meilisearch
+            }
+        },
+        index_prefix: config.search.index_prefix.clone(),
+        task_timeout_milliseconds: config.search.task_timeout_milliseconds,
+        meilisearch: search::MeilisearchSettings {
+            url: config.search.meilisearch.url.clone(),
+            api_key: config.search.meilisearch.api_key.clone(),
+        },
+    }
 }
 
 #[cfg(feature = "ssr")]
