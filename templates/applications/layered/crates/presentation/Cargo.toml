@@ -11,14 +11,11 @@ app_application.workspace = true
 app_application_contracts.workspace = true
 app_domain_shared.workspace = true
 http_support.workspace = true
-observability.workspace = true
-persistence.workspace = true
 axum.workspace = true
 serde.workspace = true
 tower-http = { version = "0.7.0", features = ["timeout"] }
 
 [features]
 default = []
-db-postgres = ["persistence/db-postgres"]
-db-sqlite = ["persistence/db-sqlite"]
-
+db-postgres = []
+db-sqlite = []

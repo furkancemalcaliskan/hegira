@@ -56,7 +56,7 @@ fn telemetry_settings(
         service_name: config.application.name.clone(),
         service_version: env!("CARGO_PKG_VERSION"),
         environment: config.environment.clone(),
-        role: format!("{:?}", config.runtime.role).to_lowercase(),
+        role: config.runtime.role.as_str().to_string(),
         logging_filter: config.logging.filter.clone(),
         exporter,
     }
@@ -228,8 +228,8 @@ async fn serve_configured(app_config: infrastructure::config::AppConfig) -> Resu
         .map_err(|err| format!("failed to seed identity data: {err}"))?;
     }
 
-    let worker_health = std::sync::Arc::new(worker_operations::WorkerHealth::default());
-    let job_observer = std::sync::Arc::new(worker_operations::RuntimeJobObserver::new(
+    let worker_health = std::sync::Arc::new(observability::worker_health::WorkerHealth::default());
+    let job_observer = std::sync::Arc::new(observability::worker_health::RuntimeJobObserver::new(
         worker_health.clone(),
         metrics_job_observer(&app_config),
     ));
@@ -276,7 +276,7 @@ fn start_workers(
     db: persistence::DatabasePool,
     app_config: &infrastructure::config::AppConfig,
     observer: std::sync::Arc<dyn background_jobs::JobObserver>,
-    health: std::sync::Arc<worker_operations::WorkerHealth>,
+    health: std::sync::Arc<observability::worker_health::WorkerHealth>,
     search: std::sync::Arc<search::SearchAdapter>,
 ) -> Result<ActiveWorkers, String> {
     let mut active = ActiveWorkers::default();
@@ -403,7 +403,7 @@ fn metrics_job_observer(
 async fn serve_worker_operations(
     app_config: infrastructure::config::AppConfig,
     db: persistence::DatabasePool,
-    health: std::sync::Arc<worker_operations::WorkerHealth>,
+    health: std::sync::Arc<observability::worker_health::WorkerHealth>,
 ) -> Result<(), String> {
     let addr = app_config.worker_operations.addr;
     let state = worker_operations::OperationsState::new(app_config, db, health);
@@ -505,8 +505,7 @@ async fn serve_http(
     let leptos_options = conf.leptos_options;
     let routes = generate_route_list(App);
 
-    let operational_routes =
-        presentation::http::routes::operational_routes(app_state.clone()).with_state(());
+    let operational_routes = operational_routes(app_state.clone()).with_state(());
     let bearer_api_routes = identity_api_routes(app_state);
     let cookie_bff_routes = Router::<LeptosOptions>::new()
         .leptos_routes_with_context(
@@ -581,6 +580,94 @@ async fn serve_http(
     .map_err(|err| format!("server error: {err}"))?;
 
     Ok(())
+}
+
+/// Builds the operational endpoints selected by this application host.
+///
+/// Kept public so integration tests exercise the same concrete dependency
+/// probes used by the production server.
+#[doc(hidden)]
+pub fn operational_routes(state: presentation::http::state::AppState) -> axum::Router {
+    use axum::routing::get;
+
+    let router = axum::Router::new()
+        .route("/healthz", get(healthz))
+        .route("/readyz", get(readyz));
+
+    #[cfg(feature = "metrics-prometheus")]
+    let router = if state.config.metrics.enabled {
+        router.merge(observability::metrics::routes(&state.config.metrics.path))
+    } else {
+        router
+    };
+
+    router.layer(axum::Extension(state))
+}
+
+async fn healthz(
+    axum::Extension(state): axum::Extension<presentation::http::state::AppState>,
+) -> axum::Json<observability::health::LivenessResponse> {
+    axum::Json(observability::health::LivenessResponse::new(
+        state.config.application.name.clone(),
+        env!("CARGO_PKG_VERSION"),
+    ))
+}
+
+async fn readyz(
+    axum::Extension(state): axum::Extension<presentation::http::state::AppState>,
+) -> (
+    axum::http::StatusCode,
+    axum::Json<observability::health::ReadinessResponse>,
+) {
+    let probe_timeout =
+        std::time::Duration::from_millis(state.config.health.readiness_timeout_milliseconds);
+    let database =
+        observability::health::check("database", true, probe_timeout, state.db.health_check());
+    let cache =
+        observability::health::check("cache", state.config.cache.enabled, probe_timeout, async {
+            state
+                .cache
+                .health_check()
+                .await
+                .map_err(|error| error.to_string())
+        });
+    let storage = observability::health::check(
+        "storage",
+        state.config.storage.enabled,
+        probe_timeout,
+        async {
+            state
+                .storage
+                .health_check()
+                .await
+                .map_err(|error| error.to_string())
+        },
+    );
+    let search = observability::health::check(
+        "search",
+        state.config.search.enabled,
+        probe_timeout,
+        async {
+            state
+                .search
+                .health_check()
+                .await
+                .map_err(|error| error.to_string())
+        },
+    );
+    let (database, cache, storage, search) = tokio::join!(database, cache, storage, search);
+    let response = observability::health::ReadinessResponse::new(
+        state.config.application.name.clone(),
+        env!("CARGO_PKG_VERSION"),
+        vec![database, cache, storage, search],
+    );
+    let status = if response.is_ready() {
+        axum::http::StatusCode::OK
+    } else {
+        axum::http::StatusCode::SERVICE_UNAVAILABLE
+    };
+
+    (status, axum::Json(response))
 }
 
 /// Builds the Identity Bearer API selected by this application host.

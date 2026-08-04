@@ -17,12 +17,10 @@ infrastructure = { path = "../infrastructure", default-features = false, feature
 leptos_axum = "0.8.9"
 leptos_support = { path = "../leptos_support", features = ["ssr"] }
 mail = { path = "../mail" }
-observability = { path = "../observability", default-features = false }
 persistence = { path = "../persistence", default-features = false }
 search = { path = "../search", default-features = false }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
-tokio = { version = "1.52.3", features = ["rt-multi-thread", "macros", "fs", "signal", "time"] }
 tower = "0.5.3"
 tracing = "0.1.44"
 uuid = { version = "1.23.2", features = ["v4", "serde", "js"] }
@@ -33,7 +31,6 @@ default = ["db-postgres", "db-sqlite"]
 db-postgres = ["infrastructure/db-postgres", "persistence/db-postgres", "search/db-postgres"]
 db-sqlite = ["infrastructure/db-sqlite", "persistence/db-sqlite", "search/db-sqlite"]
 ssr = []
-metrics-prometheus = ["observability/metrics-prometheus"]
 
 [dev-dependencies]
 http-body-util = "0.1.3"

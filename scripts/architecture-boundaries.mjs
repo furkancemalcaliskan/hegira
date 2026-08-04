@@ -82,7 +82,6 @@ export const WORKSPACE_DEPENDENCY_POLICY = Object.freeze({
     "infrastructure",
     "leptos_support",
     "mail",
-    "observability",
     "persistence",
     "search",
     "storage",
@@ -181,7 +180,7 @@ export const WORKSPACE_PACKAGE_POLICY = Object.freeze({
   presentation: packageContract(
     "compatibility",
     "extract-and-retire",
-    [139, 146],
+    [146],
   ),
   web: packageContract(
     "compatibility",

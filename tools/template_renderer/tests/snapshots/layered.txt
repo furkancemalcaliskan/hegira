@@ -4,11 +4,11 @@ components=layered-base,layered-leptos-identity
 5993ab4d526be466 .gitignore
 a352e2808e0b8a4b Cargo.toml
 2a1866fde05d96cd Dockerfile
-38ad197658e4fff2 apps/server/Cargo.toml
+55e4f9b1960d06b3 apps/server/Cargo.toml
 3bde3764afe35806 apps/server/src/lib.rs
 9ea27e2845c55bb5 apps/server/src/main.rs
-b5392a253b382e5f apps/server/src/server.rs
-a01464f4d43d508e apps/server/src/worker_operations.rs
+65358235910b9019 apps/server/src/server.rs
+67df4fda035b7a94 apps/server/src/worker_operations.rs
 9a50bfb495cec370 apps/server/tests/database_contracts.rs
 55108516b520af34 apps/web/Cargo.toml
 bc6b4dcf62969ffd apps/web/src/dashboard.rs
@@ -36,7 +36,7 @@ f03c774f46a4b709 crates/infrastructure/Cargo.toml
 11d78c19af90b478 crates/infrastructure/src/config.rs
 1317267941f11742 crates/infrastructure/src/database.rs
 f1872511358f35b5 crates/infrastructure/src/lib.rs
-bfc970ca3d1240b8 crates/presentation/Cargo.toml
-2b2750c4f4c358a1 crates/presentation/src/http.rs
+629e627fff227ae7 crates/presentation/Cargo.toml
+28acfa4312676a72 crates/presentation/src/http.rs
 66a33630de351b9c crates/presentation/src/lib.rs
 1309f45751c079e0 docker-compose.yml

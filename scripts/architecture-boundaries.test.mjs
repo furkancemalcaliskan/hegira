@@ -197,7 +197,8 @@ test("accepts the documented ownership-class dependency directions", () => {
       WORKSPACE_DEPENDENCY_POLICY.presentation.includes("cache") &&
       WORKSPACE_DEPENDENCY_POLICY.presentation.includes("mail") &&
       WORKSPACE_DEPENDENCY_POLICY.presentation.includes("search") &&
-      WORKSPACE_DEPENDENCY_POLICY.presentation.includes("storage"),
+      WORKSPACE_DEPENDENCY_POLICY.presentation.includes("storage") &&
+      !WORKSPACE_DEPENDENCY_POLICY.presentation.includes("observability"),
   );
   assert.deepEqual(REPOSITORY_OWNERSHIP_POLICY.framework, ["framework"]);
   assert.deepEqual(REPOSITORY_OWNERSHIP_POLICY.module, [

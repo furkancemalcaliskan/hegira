@@ -58,7 +58,7 @@ web
      domain_shared
 
 presentation
-  -> cache, mail, search, storage, leptos_support, observability, persistence,
+  -> cache, mail, search, storage, leptos_support, persistence,
      infrastructure, application, application_contracts, domain_shared
 
 infrastructure
@@ -136,7 +136,7 @@ matching policy update.
 | `application_contracts` | `identity_application_contracts` |
 | `application` | `background_jobs`, `identity_application`, `settings`, `storage` |
 | `infrastructure` | `application`, `application_contracts`, `background_jobs`, `cache`, `configuration`, `domain`, `domain_shared`, `identity_sqlx`, `persistence`, `platform_core`, `runtime` |
-| `presentation` | `application`, `application_contracts`, `cache`, `domain_shared`, `infrastructure`, `leptos_support`, `mail`, `observability`, `persistence`, `search`, `storage` |
+| `presentation` | `application`, `application_contracts`, `cache`, `domain_shared`, `infrastructure`, `leptos_support`, `mail`, `persistence`, `search`, `storage` |
 | `web` | `application`, `application_contracts`, `domain_shared`, `identity_leptos`, `leptos_support`, `presentation` |
 | `runtime` | None |
 | `db_migrator` | `identity_sqlx`, `infrastructure`, `persistence`, `search` |
@@ -201,7 +201,7 @@ the referenced follow-up issue has already been implemented.
 | `application_contracts` | Compatibility | Extract and retire | #146 |
 | `application` | Compatibility | Extract and retire | #146 |
 | `infrastructure` | Compatibility | Extract and retire | #146 |
-| `presentation` | Compatibility | Extract and retire | #139, #146 |
+| `presentation` | Compatibility | Extract and retire | #146 |
 | `web` | Compatibility | Extract and retire | #141, #146 |
 | `db_migrator` | Compatibility | Replace and retire | #142, #146 |
 | `identity_domain_shared` | Official module | Retain | None |
@@ -346,14 +346,14 @@ build consume the same manifests without leaking maintainer filesystem paths.
 | `background_jobs` | `crates/background_jobs` | Job contracts, handler registration, observation, recurring execution, and PostgreSQL/SQLite durable queue workers |
 | `http_support` | `crates/http_support` | Application-independent Axum middleware, transport-policy markers, CSRF, trusted-proxy resolution, and rate limiting |
 | `leptos_support` | `crates/leptos_support` | Product-neutral Leptos UI, form, CRUD, routing, toast, cookie-session, mutation-state, context, and safe server-function primitives |
-| `observability` | `crates/observability` | Tracing initialization, health/readiness primitives, HTTP and background-job metrics, and Prometheus exposure |
+| `observability` | `crates/observability` | Tracing initialization, health/readiness primitives, reusable worker heartbeat state and observation, HTTP and background-job metrics, and Prometheus exposure |
 | `test_support` | `crates/test_support` | Shared framework capability-port test doubles and application-independent Axum request/response helpers |
 | `domain_shared` | `crates/domain_shared` | Current compatibility view of Identity shared contracts plus application localization resources |
 | `domain` | `crates/domain` | Current compatibility view of Identity entities and repository ports |
 | `application_contracts` | `crates/application_contracts` | Current compatibility view of Identity DTOs, inputs, permissions, and feature metadata |
 | `application` | `crates/application` | Current compatibility view of Identity use cases and framework capability ports |
 | `infrastructure` | `crates/infrastructure` | Compatibility host configuration, application migration/reset composition, remaining application-specific security, session, audit, and settings adapters, and compatibility re-exports of the canonical Identity SQLx adapter |
-| `presentation` | `crates/presentation` | Current compatibility service construction, host state, and operational probe composition |
+| `presentation` | `crates/presentation` | Current compatibility service construction and host state |
 | `web` | `crates/web` | Leptos compatibility application shell and dashboard plus explicit consumption of the Identity Leptos adapter |
 | `runtime` | `crates/runtime` | Runtime roles, Tokio process lifecycle, and shutdown signaling |
 | `db_migrator` | `crates/db_migrator` | Migration, reset, seed, and search reindex commands |
@@ -398,12 +398,15 @@ The server entry point at `apps/hegira/src/main.rs` delegates application
 startup to `apps/hegira/src/server`. That composition root loads the concrete
 application configuration, runs the framework-owned structural, capability,
 and production validation pipeline, and only then constructs infrastructure
-adapters, presentation services, HTTP routes, telemetry, and worker loops. The
-framework `runtime` package supplies the Tokio process runner, runtime-role
-primitive, and operating-system shutdown signal without depending on
-application packages. The hydrated entry point at `apps/hegira/src/lib.rs`
-mounts the `web` application. Full-stack integration tests remain beside the
-deployable package under `apps/hegira/tests`.
+adapters, presentation services, operational and application routes,
+telemetry, and worker loops. Concrete liveness and readiness routes remain in
+the server because the application decides which configured dependencies are
+required. The framework `observability` package supplies reusable probe,
+worker-heartbeat, telemetry, and metrics behavior, while `runtime` supplies the
+Tokio process runner, runtime-role primitive, and operating-system shutdown
+signal without depending on application packages. The hydrated entry point at
+`apps/hegira/src/lib.rs` mounts the `web` application. Full-stack integration
+tests remain beside the deployable package under `apps/hegira/tests`.
 
 Cargo commands are run from the repository root and select the application with
 `-p hegira`. Cargo-Leptos reads the package metadata from
@@ -474,10 +477,11 @@ authorization remains mandatory for both.
 `http_support` owns request IDs, security headers, CSRF, trusted-proxy-aware
 client address resolution, rate limiting, and request tracing without depending
 on application packages. `observability` owns provider-neutral liveness and
-readiness response construction, tracing subscriber initialization, and the
-existing optional OTLP and Prometheus adapters. Application operational routes
-remain outside these framework packages because they select and probe concrete
-application dependencies.
+readiness response construction, reusable worker heartbeat tracking and job
+observation, tracing subscriber initialization, and the existing optional OTLP
+and Prometheus adapters. Application operational routes remain in the server
+composition root because they select and probe concrete application
+dependencies.
 
 ## Persistence And Transactions
 

@@ -11,6 +11,14 @@ pub enum RuntimeRole {
 }
 
 impl RuntimeRole {
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            Self::All => "all",
+            Self::Web => "web",
+            Self::Worker => "worker",
+        }
+    }
+
     pub fn runs_web(&self) -> bool {
         matches!(self, Self::All | Self::Web)
     }
@@ -76,6 +84,9 @@ mod tests {
 
     #[test]
     fn runtime_roles_advertise_expected_processes() {
+        assert_eq!(RuntimeRole::All.as_str(), "all");
+        assert_eq!(RuntimeRole::Web.as_str(), "web");
+        assert_eq!(RuntimeRole::Worker.as_str(), "worker");
         assert!(RuntimeRole::All.runs_web());
         assert!(RuntimeRole::All.runs_workers());
         assert!(RuntimeRole::Web.runs_web());
