@@ -1,8 +1,4 @@
-use crate::config::S3StorageConfig;
-use application::shared::{
-    errors::{ApplicationError, ApplicationResult},
-    storage::{Storage, StoragePath, StoredObject},
-};
+use crate::{S3Settings, Storage, StorageError, StoragePath, StoredObject};
 use aws_config::BehaviorVersion;
 use aws_sdk_s3::{Client, config::Region, primitives::ByteStream};
 
@@ -13,11 +9,9 @@ pub struct S3Storage {
 }
 
 impl S3Storage {
-    pub async fn new(config: &S3StorageConfig) -> ApplicationResult<Self> {
+    pub async fn new(config: &S3Settings) -> Result<Self, StorageError> {
         if config.bucket.is_empty() {
-            return Err(ApplicationError::Validation(
-                "storage.s3.bucket is required".to_string(),
-            ));
+            return Err(StorageError::new("storage.s3.bucket is required"));
         }
 
         let mut loader = aws_config::defaults(BehaviorVersion::latest())
@@ -38,41 +32,41 @@ impl S3Storage {
         })
     }
 
-    fn validate_key(path: &StoragePath) -> ApplicationResult<()> {
+    fn validate_key(path: &StoragePath) -> Result<(), StorageError> {
         let path = path.as_str();
         if path.is_empty()
             || path.starts_with('/')
             || path.contains('\\')
             || path.split('/').any(|segment| segment == "..")
         {
-            return Err(ApplicationError::Validation(
-                "storage path must be a relative safe path".to_string(),
+            return Err(StorageError::new(
+                "storage path must be a relative safe path",
             ));
         }
 
         Ok(())
     }
 
-    pub async fn health_check(&self) -> ApplicationResult<()> {
+    pub async fn health_check(&self) -> Result<(), StorageError> {
         self.client
             .head_bucket()
             .bucket(&self.bucket)
             .send()
             .await
-            .map_err(|err| ApplicationError::Infrastructure(err.to_string()))?;
+            .map_err(|err| StorageError::new(err.to_string()))?;
         Ok(())
     }
 }
 
 impl Storage for S3Storage {
-    type Error = ApplicationError;
+    type Error = StorageError;
 
     async fn put(
         &self,
         path: &StoragePath,
         bytes: Vec<u8>,
         content_type: Option<String>,
-    ) -> ApplicationResult<()> {
+    ) -> Result<(), StorageError> {
         Self::validate_key(path)?;
 
         let mut request = self
@@ -89,11 +83,11 @@ impl Storage for S3Storage {
         request
             .send()
             .await
-            .map_err(|err| ApplicationError::Infrastructure(err.to_string()))?;
+            .map_err(|err| StorageError::new(err.to_string()))?;
         Ok(())
     }
 
-    async fn get(&self, path: &StoragePath) -> ApplicationResult<Option<StoredObject>> {
+    async fn get(&self, path: &StoragePath) -> Result<Option<StoredObject>, StorageError> {
         Self::validate_key(path)?;
 
         let response = match self
@@ -111,7 +105,7 @@ impl Storage for S3Storage {
                     return Ok(None);
                 }
 
-                return Err(ApplicationError::Infrastructure(message));
+                return Err(StorageError::new(message));
             }
         };
 
@@ -120,7 +114,7 @@ impl Storage for S3Storage {
             .body
             .collect()
             .await
-            .map_err(|err| ApplicationError::Infrastructure(err.to_string()))?
+            .map_err(|err| StorageError::new(err.to_string()))?
             .into_bytes()
             .to_vec();
 
@@ -130,7 +124,7 @@ impl Storage for S3Storage {
         }))
     }
 
-    async fn delete(&self, path: &StoragePath) -> ApplicationResult<()> {
+    async fn delete(&self, path: &StoragePath) -> Result<(), StorageError> {
         Self::validate_key(path)?;
         self.client
             .delete_object()
@@ -138,7 +132,7 @@ impl Storage for S3Storage {
             .key(path.as_str())
             .send()
             .await
-            .map_err(|err| ApplicationError::Infrastructure(err.to_string()))?;
+            .map_err(|err| StorageError::new(err.to_string()))?;
         Ok(())
     }
 }

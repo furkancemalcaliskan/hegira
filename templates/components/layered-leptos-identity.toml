@@ -22,6 +22,11 @@ path = "crates/background_jobs"
 
 [[framework_dependencies]]
 manifest = "Cargo.toml"
+name = "cache"
+path = "crates/cache"
+
+[[framework_dependencies]]
+manifest = "Cargo.toml"
 name = "configuration"
 path = "crates/configuration"
 
@@ -72,6 +77,11 @@ default_features = false
 
 [[framework_dependencies]]
 manifest = "Cargo.toml"
+name = "mail"
+path = "crates/mail"
+
+[[framework_dependencies]]
+manifest = "Cargo.toml"
 name = "observability"
 path = "crates/observability"
 
@@ -96,6 +106,18 @@ default_features = false
 manifest = "Cargo.toml"
 name = "runtime"
 path = "crates/runtime"
+
+[[framework_dependencies]]
+manifest = "Cargo.toml"
+name = "search"
+path = "crates/search"
+default_features = false
+
+[[framework_dependencies]]
+manifest = "Cargo.toml"
+name = "storage"
+path = "crates/storage"
+default_features = false
 
 [[framework_dependencies]]
 manifest = "Cargo.toml"

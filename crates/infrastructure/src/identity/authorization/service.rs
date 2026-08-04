@@ -62,7 +62,7 @@ pub struct CachedAuthorization<Repository, CacheAdapter> {
 impl<Repository, CacheAdapter> CachedAuthorization<Repository, CacheAdapter>
 where
     Repository: AuthorizationRepository,
-    CacheAdapter: Cache<Error = ApplicationError>,
+    CacheAdapter: Cache,
 {
     pub fn new(repository: Repository, cache: CacheAdapter, ttl: Duration) -> Self {
         Self {
@@ -111,7 +111,7 @@ impl<Repository, CacheAdapter> AuthorizationService
     for CachedAuthorization<Repository, CacheAdapter>
 where
     Repository: AuthorizationRepository,
-    CacheAdapter: Cache<Error = ApplicationError>,
+    CacheAdapter: Cache,
 {
     async fn require(
         &self,

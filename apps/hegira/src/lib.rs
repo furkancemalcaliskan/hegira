@@ -6,6 +6,8 @@ pub use ::application_contracts;
 #[cfg(feature = "ssr")]
 pub use ::background_jobs;
 #[cfg(feature = "ssr")]
+pub use ::cache;
+#[cfg(feature = "ssr")]
 pub use ::domain;
 pub use ::domain_shared;
 #[cfg(feature = "ssr")]
@@ -15,11 +17,17 @@ pub use ::identity_http;
 #[cfg(feature = "ssr")]
 pub use ::infrastructure;
 #[cfg(feature = "ssr")]
+pub use ::mail;
+#[cfg(feature = "ssr")]
 pub use ::observability;
 #[cfg(feature = "ssr")]
 pub use ::presentation;
 #[cfg(feature = "ssr")]
 pub use ::runtime;
+#[cfg(feature = "ssr")]
+pub use ::search;
+#[cfg(feature = "ssr")]
+pub use ::storage;
 #[cfg(feature = "test-support")]
 pub use ::test_support;
 pub use ::web;

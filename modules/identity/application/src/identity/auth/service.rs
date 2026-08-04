@@ -68,7 +68,7 @@ where
     TwoFactor: TwoFactorRepository,
     Hasher: PasswordHasher<Error = ApplicationError>,
     Tokens: TokenService<Error = ApplicationError>,
-    MailerAdapter: Mailer<Error = ApplicationError>,
+    MailerAdapter: Mailer,
 {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
@@ -132,7 +132,10 @@ where
         if self.durable_mail {
             Ok(())
         } else {
-            self.mailer.send(mail.render()).await
+            self.mailer
+                .send(mail.render())
+                .await
+                .map_err(provider_error)
         }
     }
 
@@ -171,7 +174,10 @@ where
             self.users
                 .set_email_verification(&current.username, &token, sent_at)
                 .await?;
-            self.mailer.send(mail.render()).await?;
+            self.mailer
+                .send(mail.render())
+                .await
+                .map_err(provider_error)?;
         }
         Ok(())
     }
@@ -237,7 +243,10 @@ where
             self.users
                 .set_reset_token(&user.username, &token, sent_at)
                 .await?;
-            self.mailer.send(mail.render()).await
+            self.mailer
+                .send(mail.render())
+                .await
+                .map_err(provider_error)
         }
     }
 
@@ -323,7 +332,10 @@ where
             ));
         }
         if !self.durable_mail {
-            self.mailer.send(mail.render()).await?;
+            self.mailer
+                .send(mail.render())
+                .await
+                .map_err(provider_error)?;
         }
         Ok(())
     }
@@ -363,7 +375,10 @@ where
             self.users
                 .set_magic_link(&user.username, &token, expires_at)
                 .await?;
-            self.mailer.send(mail.render()).await
+            self.mailer
+                .send(mail.render())
+                .await
+                .map_err(provider_error)
         }
     }
 
@@ -769,7 +784,7 @@ where
     TwoFactor: TwoFactorRepository,
     Hasher: PasswordHasher<Error = ApplicationError>,
     Tokens: TokenService<Error = ApplicationError>,
-    MailerAdapter: Mailer<Error = ApplicationError>,
+    MailerAdapter: Mailer,
 {
     async fn register(&self, input: RegisterInput) -> ApplicationResult<()> {
         AuthAppService::register(self, input).await
@@ -988,6 +1003,10 @@ fn invalid_totp_token() -> ApplicationError {
         "totp:temp_token_invalid",
         "Invalid TOTP token",
     )
+}
+
+fn provider_error(error: impl std::fmt::Display) -> ApplicationError {
+    ApplicationError::Infrastructure(error.to_string())
 }
 
 #[cfg(test)]

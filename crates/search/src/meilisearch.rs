@@ -1,6 +1,6 @@
-use application::shared::{
-    errors::{ApplicationError, ApplicationResult},
-    search::{SearchDocument, SearchIndex, SearchQuery, SearchResults},
+use crate::{
+    SearchDocument, SearchError, SearchIndex, SearchIndexSettings, SearchQuery, SearchResults,
+    SearchSettings,
 };
 use reqwest::{Client, Method, Url};
 use serde::Deserialize;
@@ -27,9 +27,9 @@ impl std::fmt::Debug for MeilisearchAdapter {
 }
 
 impl MeilisearchAdapter {
-    pub fn new(config: &crate::config::SearchConfig) -> Result<Self, String> {
+    pub fn new(config: &SearchSettings) -> Result<Self, SearchError> {
         let base_url = Url::parse(&config.meilisearch.url)
-            .map_err(|err| format!("invalid Meilisearch URL: {err}"))?;
+            .map_err(|err| SearchError::new(format!("invalid Meilisearch URL: {err}")))?;
         Ok(Self {
             client: Client::new(),
             base_url,
@@ -39,31 +39,40 @@ impl MeilisearchAdapter {
         })
     }
 
-    pub async fn health_check(&self) -> Result<(), String> {
+    pub async fn health_check(&self) -> Result<(), SearchError> {
         self.request(Method::GET, &["health"])
             .send()
             .await
             .and_then(reqwest::Response::error_for_status)
             .map(|_| ())
-            .map_err(|err| format!("Meilisearch health probe failed: {err}"))
+            .map_err(|err| SearchError::new(format!("Meilisearch health probe failed: {err}")))
     }
 
-    pub async fn prepare_rebuild(&self, live: &str, temporary: &str) -> ApplicationResult<()> {
+    pub async fn prepare_rebuild(
+        &self,
+        live: &str,
+        temporary: &str,
+        settings: &SearchIndexSettings,
+    ) -> Result<(), SearchError> {
         let live = self.physical_index(live)?;
         let temporary = self.physical_index(temporary)?;
-        self.ensure_index(&live).await?;
+        self.ensure_physical_index(&live).await?;
         self.delete_index_if_exists(&temporary).await?;
         self.create_index(&temporary).await?;
-        self.apply_identity_user_settings(&temporary).await
+        self.apply_settings(&temporary, settings).await
     }
 
-    pub async fn ensure_identity_user_index(&self, index: &str) -> ApplicationResult<()> {
+    pub async fn ensure_index(
+        &self,
+        index: &str,
+        settings: &SearchIndexSettings,
+    ) -> Result<(), SearchError> {
         let index = self.physical_index(index)?;
-        self.ensure_index(&index).await?;
-        self.apply_identity_user_settings(&index).await
+        self.ensure_physical_index(&index).await?;
+        self.apply_settings(&index, settings).await
     }
 
-    pub async fn promote_rebuild(&self, live: &str, temporary: &str) -> ApplicationResult<bool> {
+    pub async fn promote_rebuild(&self, live: &str, temporary: &str) -> Result<bool, SearchError> {
         let live = self.physical_index(live)?;
         let temporary = self.physical_index(temporary)?;
         let response = self
@@ -82,14 +91,14 @@ impl MeilisearchAdapter {
         }
     }
 
-    async fn ensure_index(&self, index: &str) -> ApplicationResult<()> {
+    async fn ensure_physical_index(&self, index: &str) -> Result<(), SearchError> {
         if self.index_exists(index).await? {
             return Ok(());
         }
         self.create_index(index).await
     }
 
-    async fn index_exists(&self, index: &str) -> ApplicationResult<bool> {
+    async fn index_exists(&self, index: &str) -> Result<bool, SearchError> {
         let response = self
             .request(Method::GET, &["indexes", index])
             .send()
@@ -104,7 +113,7 @@ impl MeilisearchAdapter {
         Err(search_error(response.error_for_status().unwrap_err()))
     }
 
-    async fn create_index(&self, index: &str) -> ApplicationResult<()> {
+    async fn create_index(&self, index: &str) -> Result<(), SearchError> {
         let response = self
             .request(Method::POST, &["indexes"])
             .json(&serde_json::json!({ "uid": index, "primaryKey": "id" }))
@@ -119,7 +128,7 @@ impl MeilisearchAdapter {
         }
     }
 
-    async fn delete_index_if_exists(&self, index: &str) -> ApplicationResult<()> {
+    async fn delete_index_if_exists(&self, index: &str) -> Result<(), SearchError> {
         let response = self
             .request(Method::DELETE, &["indexes", index])
             .send()
@@ -132,13 +141,17 @@ impl MeilisearchAdapter {
         self.wait(task_uid).await
     }
 
-    async fn apply_identity_user_settings(&self, index: &str) -> ApplicationResult<()> {
+    async fn apply_settings(
+        &self,
+        index: &str,
+        settings: &SearchIndexSettings,
+    ) -> Result<(), SearchError> {
         let response = self
             .request(Method::PATCH, &["indexes", index, "settings"])
             .json(&serde_json::json!({
-                "searchableAttributes": ["username"],
-                "filterableAttributes": ["is_verified", "roles"],
-                "sortableAttributes": ["username", "created_at"]
+                "searchableAttributes": settings.searchable_attributes,
+                "filterableAttributes": settings.filterable_attributes,
+                "sortableAttributes": settings.sortable_attributes
             }))
             .send()
             .await
@@ -147,7 +160,7 @@ impl MeilisearchAdapter {
         self.wait(task_uid).await
     }
 
-    async fn wait_for_swap(&self, task_uid: u64) -> ApplicationResult<bool> {
+    async fn wait_for_swap(&self, task_uid: u64) -> Result<bool, SearchError> {
         let started_at = Instant::now();
         loop {
             let task = self.task_status(task_uid).await?;
@@ -160,14 +173,14 @@ impl MeilisearchAdapter {
         }
     }
 
-    fn physical_index(&self, logical_name: &str) -> ApplicationResult<String> {
+    fn physical_index(&self, logical_name: &str) -> Result<String, SearchError> {
         if logical_name.is_empty()
             || !logical_name.chars().all(|character| {
                 character.is_ascii_alphanumeric() || matches!(character, '-' | '_')
             })
         {
-            return Err(ApplicationError::Validation(
-                "search index name contains unsupported characters".to_string(),
+            return Err(SearchError::new(
+                "search index name contains unsupported characters",
             ));
         }
         Ok(format!("{}_{}", self.index_prefix, logical_name))
@@ -190,7 +203,7 @@ impl MeilisearchAdapter {
         }
     }
 
-    async fn task_uid(&self, response: reqwest::Response) -> ApplicationResult<u64> {
+    async fn task_uid(&self, response: reqwest::Response) -> Result<u64, SearchError> {
         response
             .error_for_status()
             .map_err(search_error)?
@@ -200,7 +213,7 @@ impl MeilisearchAdapter {
             .map_err(search_error)
     }
 
-    async fn wait(&self, task_uid: u64) -> ApplicationResult<()> {
+    async fn wait(&self, task_uid: u64) -> Result<(), SearchError> {
         let started_at = Instant::now();
         loop {
             let task = self.task_status(task_uid).await?;
@@ -208,7 +221,7 @@ impl MeilisearchAdapter {
                 "succeeded" => return Ok(()),
                 "failed" | "canceled" => return Err(task_failure(task_uid, task)),
                 _ if started_at.elapsed() >= self.task_timeout => {
-                    return Err(ApplicationError::Infrastructure(format!(
+                    return Err(SearchError::new(format!(
                         "Meilisearch task {task_uid} timed out"
                     )));
                 }
@@ -217,7 +230,7 @@ impl MeilisearchAdapter {
         }
     }
 
-    async fn task_status(&self, task_uid: u64) -> ApplicationResult<TaskStatus> {
+    async fn task_status(&self, task_uid: u64) -> Result<TaskStatus, SearchError> {
         self.request(Method::GET, &["tasks", &task_uid.to_string()])
             .send()
             .await
@@ -231,9 +244,9 @@ impl MeilisearchAdapter {
 }
 
 impl SearchIndex for MeilisearchAdapter {
-    type Error = ApplicationError;
+    type Error = SearchError;
 
-    async fn upsert(&self, index: &str, documents: Vec<SearchDocument>) -> ApplicationResult<()> {
+    async fn upsert(&self, index: &str, documents: Vec<SearchDocument>) -> Result<(), SearchError> {
         if documents.is_empty() {
             return Ok(());
         }
@@ -249,7 +262,7 @@ impl SearchIndex for MeilisearchAdapter {
         self.wait(task_uid).await
     }
 
-    async fn delete(&self, index: &str, document_id: &str) -> ApplicationResult<()> {
+    async fn delete(&self, index: &str, document_id: &str) -> Result<(), SearchError> {
         let physical_index = self.physical_index(index)?;
         let response = self
             .request(
@@ -263,7 +276,7 @@ impl SearchIndex for MeilisearchAdapter {
         self.wait(task_uid).await
     }
 
-    async fn clear(&self, index: &str) -> ApplicationResult<()> {
+    async fn clear(&self, index: &str) -> Result<(), SearchError> {
         let physical_index = self.physical_index(index)?;
         let response = self
             .request(Method::DELETE, &["indexes", &physical_index, "documents"])
@@ -274,7 +287,7 @@ impl SearchIndex for MeilisearchAdapter {
         self.wait(task_uid).await
     }
 
-    async fn search(&self, index: &str, query: SearchQuery) -> ApplicationResult<SearchResults> {
+    async fn search(&self, index: &str, query: SearchQuery) -> Result<SearchResults, SearchError> {
         let physical_index = self.physical_index(index)?;
         let response = self
             .request(Method::POST, &["indexes", &physical_index, "search"])
@@ -322,12 +335,12 @@ struct SearchResponse {
     estimated_total_hits: Option<usize>,
 }
 
-fn search_error(error: reqwest::Error) -> ApplicationError {
-    ApplicationError::Infrastructure(error.to_string())
+fn search_error(error: reqwest::Error) -> SearchError {
+    SearchError::new(error.to_string())
 }
 
-fn task_failure(task_uid: u64, task: TaskStatus) -> ApplicationError {
-    ApplicationError::Infrastructure(
+fn task_failure(task_uid: u64, task: TaskStatus) -> SearchError {
+    SearchError::new(
         task.error
             .and_then(|error| error.message)
             .unwrap_or_else(|| format!("Meilisearch task {task_uid} {}", task.status)),

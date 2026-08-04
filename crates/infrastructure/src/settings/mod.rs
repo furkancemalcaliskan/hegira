@@ -1,9 +1,10 @@
-use crate::{cache::CacheAdapter, config::AppConfig};
+use crate::config::AppConfig;
 use application::shared::{
     cache::Cache,
     errors::{ApplicationError, ApplicationResult},
     settings::{SettingKey, SettingsProvider},
 };
+use cache::CacheAdapter;
 use persistence::DatabasePool;
 #[cfg(feature = "db-postgres")]
 use sqlx::PgPool;
@@ -12,7 +13,7 @@ use sqlx::Row;
 use sqlx::SqlitePool;
 use std::{sync::Arc, time::Duration};
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum SettingsAdapter {
     Null(NullSettingsProvider),
     #[cfg(feature = "db-postgres")]
@@ -111,7 +112,7 @@ impl SettingsProvider for NullSettingsProvider {
 }
 
 #[cfg(feature = "db-postgres")]
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct SqlxSettingsProvider {
     pool: PgPool,
     cache: Arc<CacheAdapter>,
@@ -215,7 +216,7 @@ impl SettingsProvider for SqlxSettingsProvider {
 }
 
 #[cfg(feature = "db-sqlite")]
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct SqliteSettingsProvider {
     pool: SqlitePool,
     cache: Arc<CacheAdapter>,
@@ -321,10 +322,10 @@ impl SettingsProvider for SqliteSettingsProvider {
 mod tests {
     use super::*;
     use crate::{
-        cache::memory::MemoryCache,
         config::{DatabaseBackend, DatabaseConfig},
         db,
     };
+    use cache::MemoryCache;
 
     #[tokio::test]
     async fn sqlite_provider_satisfies_settings_contract() {

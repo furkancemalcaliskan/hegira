@@ -1,8 +1,4 @@
-use crate::config::MailerConfig;
-use application::shared::{
-    errors::{ApplicationError, ApplicationResult},
-    mail::{MailMessage, Mailer},
-};
+use crate::{MailError, MailMessage, Mailer, MailerSettings};
 use lettre::{
     AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor,
     message::{Mailbox, MultiPart, SinglePart},
@@ -19,7 +15,7 @@ pub struct SmtpMailer {
 }
 
 impl SmtpMailer {
-    pub fn new(config: &MailerConfig) -> ApplicationResult<Self> {
+    pub fn new(config: &MailerSettings) -> Result<Self, MailError> {
         let from = config.mailer_from()?;
         let mut builder =
             AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(config.smtp.host.as_str())
@@ -27,7 +23,7 @@ impl SmtpMailer {
 
         if config.smtp.starttls {
             let tls = TlsParameters::new(config.smtp.host.clone())
-                .map_err(|err| ApplicationError::Infrastructure(err.to_string()))?;
+                .map_err(|err| MailError::new(err.to_string()))?;
             builder = builder.tls(Tls::Required(tls));
         }
 
@@ -47,14 +43,14 @@ impl SmtpMailer {
 }
 
 impl Mailer for SmtpMailer {
-    type Error = ApplicationError;
+    type Error = MailError;
 
-    async fn send(&self, message: MailMessage) -> ApplicationResult<()> {
+    async fn send(&self, message: MailMessage) -> Result<(), MailError> {
         let to = message
             .to
             .email
             .parse::<Mailbox>()
-            .map_err(|err| ApplicationError::Validation(err.to_string()))?;
+            .map_err(|err| MailError::new(err.to_string()))?;
 
         let builder = Message::builder()
             .from(self.from.clone())
@@ -68,30 +64,30 @@ impl Mailer for SmtpMailer {
                         .singlepart(SinglePart::plain(message.text_body))
                         .singlepart(SinglePart::html(html_body)),
                 )
-                .map_err(|err| ApplicationError::Infrastructure(err.to_string()))?
+                .map_err(|err| MailError::new(err.to_string()))?
         } else {
             builder
                 .singlepart(SinglePart::plain(message.text_body))
-                .map_err(|err| ApplicationError::Infrastructure(err.to_string()))?
+                .map_err(|err| MailError::new(err.to_string()))?
         };
 
         self.transport
             .send(email)
             .await
-            .map_err(|err| ApplicationError::Infrastructure(err.to_string()))?;
+            .map_err(|err| MailError::new(err.to_string()))?;
 
         Ok(())
     }
 }
 
 trait MailerConfigExt {
-    fn mailer_from(&self) -> ApplicationResult<Mailbox>;
+    fn mailer_from(&self) -> Result<Mailbox, MailError>;
 }
 
-impl MailerConfigExt for MailerConfig {
-    fn mailer_from(&self) -> ApplicationResult<Mailbox> {
+impl MailerConfigExt for MailerSettings {
+    fn mailer_from(&self) -> Result<Mailbox, MailError> {
         self.from
             .parse::<Mailbox>()
-            .map_err(|err| ApplicationError::Validation(err.to_string()))
+            .map_err(|err| MailError::new(err.to_string()))
     }
 }

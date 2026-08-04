@@ -5,18 +5,18 @@ use application::identity::{
     permissions::service::PermissionAppService,
     users::{UserAppService, UserSearch},
 };
+use cache::CacheAdapter;
 use infrastructure::config::{AppConfig, OAuthProviderConfig};
 use infrastructure::{
     audit::AuditLoggerAdapter,
-    cache::CacheAdapter,
     identity::authorization::CachedAuthorization,
     identity::oauth::provider_client::ReqwestOAuthProviderClient,
     identity::{IdentityRepositoryAdapter, sessions::SessionRepositoryAdapter},
-    mail::MailerAdapter,
-    search::SearchAdapter,
     security::{password_hasher::Argon2PasswordHasher, token_service::JwtTokenService},
 };
+use mail::MailerAdapter;
 use persistence::DatabasePool;
+use search::SearchAdapter;
 
 // hegira:service-imports
 // hegira:service-imports:end
@@ -79,9 +79,10 @@ impl AppServices {
         config: &AppConfig,
         cache: CacheAdapter,
         search: SearchAdapter,
+        mailer: MailerAdapter,
     ) -> Self {
         Self {
-            auth: auth_service(pool.clone(), config),
+            auth: auth_service(pool.clone(), config, mailer),
             oauth: oauth_service(pool.clone(), config),
             users: user_service(pool.clone(), config, cache.clone(), search),
             permissions: permission_service(pool, config, cache),
@@ -91,7 +92,11 @@ impl AppServices {
     }
 }
 
-pub fn auth_service(pool: DatabasePool, config: &AppConfig) -> IdentityAuthService {
+pub fn auth_service(
+    pool: DatabasePool,
+    config: &AppConfig,
+    mailer: MailerAdapter,
+) -> IdentityAuthService {
     let repository = IdentityRepositoryAdapter::new(pool.clone());
     let sessions = SessionRepositoryAdapter::from_database(config, pool)
         .expect("failed to initialize session store");
@@ -104,7 +109,7 @@ pub fn auth_service(pool: DatabasePool, config: &AppConfig) -> IdentityAuthServi
         repository,
         Argon2PasswordHasher,
         JwtTokenService::new_with_lifetime(config.security.jwt_secret.clone(), max_lifetime),
-        MailerAdapter::from_config(config).expect("failed to initialize mailer"),
+        mailer,
         config.application.name.clone(),
         config.application.public_url.clone(),
         SessionPolicy {

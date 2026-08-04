@@ -11,14 +11,10 @@ use hegira::{
         },
         shared::{jobs::DurableJobHandler, mail::TransactionalMail},
     },
-    infrastructure::{
-        identity::SqlxIdentityRepository,
-        search::{
-            SearchAdapter,
-            jobs::{SearchIndexCommand, SearchIndexJobHandler},
-            null::NullSearch,
-        },
-        testing::reset_database_from_env,
+    infrastructure::{identity::SqlxIdentityRepository, testing::reset_database_from_env},
+    search::{
+        NullSearch, SearchAdapter,
+        jobs::{SearchIndexCommand, SearchIndexJobHandler},
     },
 };
 use std::sync::Arc;

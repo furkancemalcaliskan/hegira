@@ -837,6 +837,9 @@ dependencies = [
 [[package]]
 name = "cache"
 version = "0.3.0"
+dependencies = [
+ "redis",
+]
 
 [[package]]
 name = "camino"
@@ -1273,8 +1276,10 @@ checksum = "a4ae5f15dda3c708c0ade84bfee31ccab44a3da4f88015ed22f63732abe300c8"
 name = "db_migrator"
 version = "0.3.0"
 dependencies = [
+ "identity_sqlx",
  "infrastructure",
  "persistence",
+ "search",
  "tokio",
 ]
 
@@ -1843,6 +1848,7 @@ dependencies = [
  "application_contracts",
  "axum",
  "background_jobs",
+ "cache",
  "chrono",
  "configuration",
  "console_error_panic_hook",
@@ -1856,14 +1862,17 @@ dependencies = [
  "infrastructure",
  "leptos",
  "leptos_axum",
+ "mail",
  "observability",
  "persistence",
  "platform_core",
  "presentation",
  "runtime",
+ "search",
  "serde",
  "serde_json",
  "sqlx",
+ "storage",
  "test_support",
  "tokio",
  "tower",
@@ -2331,6 +2340,7 @@ dependencies = [
  "identity_domain",
  "identity_domain_shared",
  "persistence",
+ "search",
  "serde_json",
  "sqlx",
  "tokio",
@@ -2378,11 +2388,10 @@ dependencies = [
  "application",
  "application_contracts",
  "argon2",
- "aws-config",
- "aws-sdk-s3",
  "axum",
  "background_jobs",
  "base64 0.23.0",
+ "cache",
  "chrono",
  "configuration",
  "domain",
@@ -2390,7 +2399,6 @@ dependencies = [
  "hmac 0.13.0",
  "identity_sqlx",
  "ipnet",
- "lettre",
  "persistence",
  "platform_core",
  "rand_core 0.6.4",
@@ -2853,7 +2861,11 @@ checksum = "112b39cec0b298b6c1999fee3e31427f74f676e4cb9879ed1a121b43661a4154"
 name = "mail"
 version = "0.3.0"
 dependencies = [
+ "background_jobs",
+ "lettre",
  "serde",
+ "serde_json",
+ "tracing",
 ]
 
 [[package]]
@@ -3440,6 +3452,7 @@ dependencies = [
  "application",
  "application_contracts",
  "axum",
+ "cache",
  "chrono",
  "cookie",
  "domain_shared",
@@ -3447,10 +3460,13 @@ dependencies = [
  "infrastructure",
  "leptos_axum",
  "leptos_support",
+ "mail",
  "observability",
  "persistence",
+ "search",
  "serde",
  "serde_json",
+ "storage",
  "tokio",
  "tower",
  "tracing",
@@ -4202,8 +4218,15 @@ checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 name = "search"
 version = "0.3.0"
 dependencies = [
+ "background_jobs",
+ "chrono",
+ "reqwest 0.12.28",
  "serde",
  "serde_json",
+ "sqlx",
+ "tokio",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -4779,6 +4802,11 @@ checksum = "6ce2be8dc25455e1f91df71bfa12ad37d7af1092ae736f3a6cd0e37bc7810596"
 [[package]]
 name = "storage"
 version = "0.3.0"
+dependencies = [
+ "aws-config",
+ "aws-sdk-s3",
+ "tokio",
+]
 
 [[package]]
 name = "stringprep"

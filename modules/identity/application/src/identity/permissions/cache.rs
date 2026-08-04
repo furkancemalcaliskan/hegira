@@ -1,11 +1,11 @@
-use crate::shared::{cache::Cache, errors::ApplicationError};
+use crate::shared::cache::Cache;
 
 const VERSION_KEY: &str = "identity:authorization:version";
 const DEFAULT_VERSION: &str = "default";
 
 pub async fn current_version<CacheAdapter>(cache: &CacheAdapter) -> String
 where
-    CacheAdapter: Cache<Error = ApplicationError>,
+    CacheAdapter: Cache,
 {
     match cache.get_string(VERSION_KEY).await {
         Ok(Some(version)) => version,
@@ -23,7 +23,7 @@ pub fn user_permissions_key(version: &str, username: &str) -> String {
 
 pub async fn invalidate<CacheAdapter>(cache: &CacheAdapter)
 where
-    CacheAdapter: Cache<Error = ApplicationError>,
+    CacheAdapter: Cache,
 {
     let version = uuid::Uuid::new_v4().to_string();
     if let Err(error) = cache.set_string(VERSION_KEY, version, None).await {

@@ -36,23 +36,37 @@ async fn readyz(Extension(state): Extension<AppState>) -> (StatusCode, Json<Read
 
     let database =
         observability::health::check("database", true, probe_timeout, state.db.health_check());
-    let cache = observability::health::check(
-        "cache",
-        state.config.cache.enabled,
-        probe_timeout,
-        state.cache.health_check(),
-    );
+    let cache =
+        observability::health::check("cache", state.config.cache.enabled, probe_timeout, async {
+            state
+                .cache
+                .health_check()
+                .await
+                .map_err(|error| error.to_string())
+        });
     let storage = observability::health::check(
         "storage",
         state.config.storage.enabled,
         probe_timeout,
-        state.storage.health_check(),
+        async {
+            state
+                .storage
+                .health_check()
+                .await
+                .map_err(|error| error.to_string())
+        },
     );
     let search = observability::health::check(
         "search",
         state.config.search.enabled,
         probe_timeout,
-        state.search.health_check(),
+        async {
+            state
+                .search
+                .health_check()
+                .await
+                .map_err(|error| error.to_string())
+        },
     );
     let (database, cache, storage, search) = tokio::join!(database, cache, storage, search);
     let checks = vec![database, cache, storage, search];

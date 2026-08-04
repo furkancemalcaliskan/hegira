@@ -33,6 +33,14 @@ pub struct SendMailJob {
     pub mail: TransactionalMail,
 }
 
+impl ::mail::MailJobPayload for SendMailJob {
+    const JOB_NAME: &'static str = SEND_MAIL_JOB;
+
+    fn render(self) -> MailMessage {
+        self.mail.render()
+    }
+}
+
 impl TransactionalMail {
     pub fn recipient(&self) -> &str {
         match self {
