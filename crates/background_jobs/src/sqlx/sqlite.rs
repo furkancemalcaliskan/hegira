@@ -1,13 +1,12 @@
 use std::{sync::Arc, time::Duration};
 
-use background_jobs::{DurableJobOptions, DurableJobQueue};
 use chrono::Utc;
 use sqlx::{Row, SqlitePool};
 use uuid::Uuid;
 
 use crate::{
-    config::DurableJobsConfig,
-    jobs::{ClaimedMessage, DurableJobRegistry, JobObserver, NoopJobObserver},
+    ClaimedMessage, DurableJobOptions, DurableJobQueue, DurableJobRegistry, DurableWorkerConfig,
+    JobObserver, NoopJobObserver,
 };
 
 #[derive(Clone)]
@@ -19,8 +18,7 @@ pub struct SqliteDurableJobQueue {
 #[allow(clippy::items_after_test_module)]
 mod tests {
     use super::*;
-    use crate::config::{DatabaseBackend, DatabaseConfig};
-    use background_jobs::{DurableJobFuture, DurableJobHandler};
+    use crate::{DurableJobFuture, DurableJobHandler};
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     struct CountingHandler {
@@ -46,18 +44,44 @@ mod tests {
     }
 
     async fn pool() -> SqlitePool {
-        crate::db::connect_sqlite_with_application_migrations(&DatabaseConfig {
-            backend: DatabaseBackend::Sqlite,
-            url: "sqlite::memory:".to_string(),
-            max_connections: 4,
-            auto_migrate: true,
-        })
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::raw_sql(
+            "CREATE TABLE outbox_messages (
+                id TEXT PRIMARY KEY NOT NULL,
+                name TEXT NOT NULL,
+                payload TEXT NOT NULL,
+                idempotency_key TEXT,
+                attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0),
+                max_attempts INTEGER NOT NULL CHECK (max_attempts > 0),
+                available_at TEXT NOT NULL,
+                locked_at TEXT,
+                lock_owner TEXT,
+                processed_at TEXT,
+                last_error TEXT,
+                created_at TEXT NOT NULL
+            );
+            CREATE UNIQUE INDEX outbox_messages_idempotency_uq
+                ON outbox_messages (name, idempotency_key)
+                WHERE idempotency_key IS NOT NULL;
+            CREATE TABLE inbox_messages (
+                consumer TEXT NOT NULL,
+                message_id TEXT NOT NULL REFERENCES outbox_messages(id) ON DELETE CASCADE,
+                processed_at TEXT NOT NULL,
+                PRIMARY KEY (consumer, message_id)
+            );",
+        )
+        .execute(&pool)
         .await
-        .unwrap()
+        .unwrap();
+        pool
     }
 
-    fn config() -> DurableJobsConfig {
-        DurableJobsConfig {
+    fn config() -> DurableWorkerConfig {
+        DurableWorkerConfig {
             enabled: true,
             poll_interval_milliseconds: 10,
             batch_size: 20,
@@ -222,13 +246,17 @@ impl DurableJobQueue for SqliteDurableJobQueue {
 pub struct SqliteDurableJobWorker {
     pool: SqlitePool,
     registry: Arc<DurableJobRegistry>,
-    config: DurableJobsConfig,
+    config: DurableWorkerConfig,
     worker_id: String,
     observer: Arc<dyn JobObserver>,
 }
 
 impl SqliteDurableJobWorker {
-    pub fn new(pool: SqlitePool, registry: DurableJobRegistry, config: DurableJobsConfig) -> Self {
+    pub fn new(
+        pool: SqlitePool,
+        registry: DurableJobRegistry,
+        config: DurableWorkerConfig,
+    ) -> Self {
         Self {
             pool,
             registry: Arc::new(registry),

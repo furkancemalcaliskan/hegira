@@ -31,7 +31,7 @@ fn migrations_through(migrator: &Migrator, version: i64) -> Migrator {
 async fn sqlite_v020_upgrade_retires_catalog_state_and_preserves_history() {
     use crate::config::{DatabaseBackend, DatabaseConfig};
 
-    let pool = crate::db::connect_sqlite(&DatabaseConfig {
+    let pool = persistence::connect_sqlite(&DatabaseConfig {
         backend: DatabaseBackend::Sqlite,
         url: "sqlite::memory:".to_string(),
         max_connections: 1,
@@ -150,9 +150,7 @@ async fn postgres_v020_upgrade_retires_catalog_state_and_preserves_history() {
         max_connections: 1,
         auto_migrate: false,
     };
-    let pool = crate::db::connect_without_migrations(&config)
-        .await
-        .unwrap();
+    let pool = persistence::connect_postgres(&config).await.unwrap();
     crate::db::reset_schema(&pool).await.unwrap();
 
     let plan = MigrationPlan::new(

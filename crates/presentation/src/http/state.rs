@@ -8,7 +8,7 @@ use std::sync::Arc;
 #[derive(Clone)]
 pub struct AppState {
     pub config: Arc<AppConfig>,
-    pub db: infrastructure::db::DatabasePool,
+    pub db: persistence::DatabasePool,
     pub cache: Arc<CacheAdapter>,
     pub settings: Arc<SettingsAdapter>,
     pub storage: Arc<StorageAdapter>,
@@ -19,7 +19,7 @@ pub struct AppState {
 impl AppState {
     pub fn new(
         config: AppConfig,
-        db: infrastructure::db::DatabasePool,
+        db: persistence::DatabasePool,
         cache: CacheAdapter,
         storage: StorageAdapter,
         search: SearchAdapter,

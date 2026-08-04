@@ -6,7 +6,18 @@ license = "Apache-2.0"
 publish = false
 
 [dependencies]
+chrono = { version = "0.4.44", features = ["serde"], optional = true }
+serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
+sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio-rustls", "chrono", "uuid"], optional = true }
 tokio = { version = "1.52.3", features = ["rt", "time"] }
 tracing = "0.1.44"
 uuid = { version = "1.23.2", features = ["v4", "serde", "js"] }
+
+[features]
+default = []
+db-postgres = ["dep:sqlx", "sqlx/postgres"]
+db-sqlite = ["dep:chrono", "dep:sqlx", "sqlx/sqlite"]
+
+[dev-dependencies]
+tokio = { version = "1.52.3", features = ["macros", "rt"] }

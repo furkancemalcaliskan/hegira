@@ -33,7 +33,7 @@ fn migration_plan(backend: &infrastructure::config::DatabaseBackend) -> Migratio
 
 #[cfg(feature = "db-sqlite")]
 async fn sqlite_pool() -> sqlx::SqlitePool {
-    infrastructure::db::connect_sqlite(&infrastructure::config::DatabaseConfig {
+    persistence::connect_sqlite(&infrastructure::config::DatabaseConfig {
         backend: infrastructure::config::DatabaseBackend::Sqlite,
         url: "sqlite::memory:".to_string(),
         max_connections: 1,
@@ -48,7 +48,7 @@ async fn sqlite_pool() -> sqlx::SqlitePool {
 async fn sqlite_fresh_install_applies_the_generated_application_plan() {
     let pool = sqlite_pool().await;
     migration_plan(&infrastructure::config::DatabaseBackend::Sqlite)
-        .run(&infrastructure::db::DatabasePool::Sqlite(pool.clone()))
+        .run(&persistence::DatabasePool::Sqlite(pool.clone()))
         .await
         .expect("fresh SQLite migrations should succeed");
 

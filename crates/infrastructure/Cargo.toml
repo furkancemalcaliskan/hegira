@@ -40,8 +40,8 @@ axum = "0.8.9"
 
 [features]
 default = ["db-postgres", "db-sqlite"]
-db-postgres = ["dep:identity_sqlx", "identity_sqlx/db-postgres", "persistence/db-postgres", "sqlx/postgres"]
-db-sqlite = ["dep:identity_sqlx", "identity_sqlx/db-sqlite", "persistence/db-sqlite", "sqlx/sqlite"]
+db-postgres = ["background_jobs/db-postgres", "dep:identity_sqlx", "identity_sqlx/db-postgres", "persistence/db-postgres", "sqlx/postgres"]
+db-sqlite = ["background_jobs/db-sqlite", "dep:identity_sqlx", "identity_sqlx/db-sqlite", "persistence/db-sqlite", "sqlx/sqlite"]
 ssr = []
 cache-redis = ["dep:redis"]
 storage-s3 = ["dep:aws-config", "dep:aws-sdk-s3"]

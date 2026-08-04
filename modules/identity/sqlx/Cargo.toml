@@ -8,18 +8,21 @@ publish = false
 [dependencies]
 application = { package = "identity_application", path = "../application" }
 application_contracts = { package = "identity_application_contracts", path = "../application_contracts" }
+background_jobs = { path = "../../../crates/background_jobs" }
 chrono = { version = "0.4.44", features = ["serde"] }
 domain = { package = "identity_domain", path = "../domain" }
 domain_shared = { package = "identity_domain_shared", path = "../domain_shared" }
 persistence = { path = "../../../crates/persistence", default-features = false }
 serde_json = "1.0.145"
 sqlx = { version = "0.8.6", features = ["runtime-tokio-rustls", "migrate", "chrono", "uuid"] }
+tokio = { version = "1.52.3", features = ["rt", "time"] }
+tracing = "0.1.44"
 uuid = { version = "1.23.2", features = ["v4", "serde", "js"] }
 
 [features]
 default = ["db-postgres", "db-sqlite"]
-db-postgres = ["persistence/db-postgres", "sqlx/postgres"]
-db-sqlite = ["persistence/db-sqlite", "sqlx/sqlite"]
+db-postgres = ["background_jobs/db-postgres", "persistence/db-postgres", "sqlx/postgres"]
+db-sqlite = ["background_jobs/db-sqlite", "persistence/db-sqlite", "sqlx/sqlite"]
 ssr = []
 
 [dev-dependencies]

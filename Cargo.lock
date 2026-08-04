@@ -700,7 +700,10 @@ dependencies = [
 name = "background_jobs"
 version = "0.3.0"
 dependencies = [
+ "chrono",
+ "serde",
  "serde_json",
+ "sqlx",
  "tokio",
  "tracing",
  "uuid",
@@ -1849,6 +1852,7 @@ dependencies = [
  "http_support",
  "identity_http",
  "identity_leptos",
+ "identity_sqlx",
  "infrastructure",
  "leptos",
  "leptos_axum",
@@ -2320,6 +2324,7 @@ dependencies = [
 name = "identity_sqlx"
 version = "0.3.0"
 dependencies = [
+ "background_jobs",
  "chrono",
  "identity_application",
  "identity_application_contracts",
@@ -2329,6 +2334,7 @@ dependencies = [
  "serde_json",
  "sqlx",
  "tokio",
+ "tracing",
  "uuid",
 ]
 
@@ -3442,6 +3448,7 @@ dependencies = [
  "leptos_axum",
  "leptos_support",
  "observability",
+ "persistence",
  "serde",
  "serde_json",
  "tokio",

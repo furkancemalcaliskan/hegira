@@ -1,10 +1,10 @@
-use crate::db::DatabasePool;
 use crate::{cache::CacheAdapter, config::AppConfig};
 use application::shared::{
     cache::Cache,
     errors::{ApplicationError, ApplicationResult},
     settings::{SettingKey, SettingsProvider},
 };
+use persistence::DatabasePool;
 #[cfg(feature = "db-postgres")]
 use sqlx::PgPool;
 use sqlx::Row;

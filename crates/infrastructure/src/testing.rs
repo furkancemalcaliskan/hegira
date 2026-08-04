@@ -15,7 +15,7 @@ pub async fn reset_database(database_url: &str) -> Result<PgPool, String> {
         max_connections: 5,
         auto_migrate: false,
     };
-    db::ensure_database(&config)
+    persistence::ensure_database(&config)
         .await
         .map_err(|err| format!("failed to ensure test database exists: {err}"))?;
     let pool = sqlx::postgres::PgPoolOptions::new()
@@ -29,7 +29,7 @@ pub async fn reset_database(database_url: &str) -> Result<PgPool, String> {
             )
         })?;
 
-    db::reset_database(&db::DatabasePool::Postgres(pool.clone()))
+    db::reset_database(&persistence::DatabasePool::Postgres(pool.clone()))
         .await
         .map_err(|err| format!("failed to reset test database schema: {err}"))?;
     persistence::migrations::MigrationPlan::new(

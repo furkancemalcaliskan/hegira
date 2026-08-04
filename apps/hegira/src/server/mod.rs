@@ -90,7 +90,7 @@ async fn serve_configured(app_config: infrastructure::config::AppConfig) -> Resu
             && app_config.database.backend == infrastructure::config::DatabaseBackend::Postgres
         {
             tracing::info!("ensuring development database exists");
-            infrastructure::db::ensure_database(&app_config.database)
+            persistence::ensure_database(&app_config.database)
                 .await
                 .map_err(|err| {
                     format!(
@@ -203,7 +203,7 @@ async fn serve_configured(app_config: infrastructure::config::AppConfig) -> Resu
 }
 
 fn start_workers(
-    db: infrastructure::db::DatabasePool,
+    db: persistence::DatabasePool,
     app_config: &infrastructure::config::AppConfig,
     observer: std::sync::Arc<dyn background_jobs::JobObserver>,
     health: std::sync::Arc<worker_operations::WorkerHealth>,
@@ -225,20 +225,29 @@ fn start_workers(
                 heartbeat_grace,
             );
         }
+        let cleanup_schedule = identity_sqlx::identity::jobs::IdentityCleanupSchedule {
+            enabled: app_config.scheduler.enabled,
+            run_on_startup: app_config.scheduler.run_on_startup,
+            interval: std::time::Duration::from_secs(
+                app_config
+                    .scheduler
+                    .cleanup_expired_sessions_interval_seconds,
+            ),
+        };
         match &db {
             #[cfg(feature = "db-postgres")]
-            infrastructure::db::DatabasePool::Postgres(pool) => {
-                infrastructure::jobs::cleanup::start_recurring_jobs_with_observer(
+            persistence::DatabasePool::Postgres(pool) => {
+                identity_sqlx::identity::jobs::start_recurring_jobs_with_observer(
                     pool.clone(),
-                    &app_config.scheduler,
+                    cleanup_schedule,
                     observer.clone(),
                 )
             }
             #[cfg(feature = "db-sqlite")]
-            infrastructure::db::DatabasePool::Sqlite(pool) => {
-                infrastructure::jobs::cleanup::start_sqlite_recurring_jobs_with_observer(
+            persistence::DatabasePool::Sqlite(pool) => {
+                identity_sqlx::identity::jobs::start_sqlite_recurring_jobs_with_observer(
                     pool.clone(),
-                    &app_config.scheduler,
+                    cleanup_schedule,
                     observer.clone(),
                 )
             }
@@ -261,7 +270,7 @@ fn start_workers(
         }
         match &db {
             #[cfg(feature = "db-postgres")]
-            infrastructure::db::DatabasePool::Postgres(pool) => {
+            persistence::DatabasePool::Postgres(pool) => {
                 if app_config.search.enabled {
                     registry.register(
                         infrastructure::search::jobs::SearchIndexJobHandler::new(
@@ -271,7 +280,7 @@ fn start_workers(
                         .with_observer(observer.clone()),
                     )?;
                 }
-                infrastructure::jobs::durable::DurableJobWorker::new(
+                background_jobs::sqlx::postgres::DurableJobWorker::new(
                     pool.clone(),
                     registry,
                     app_config.jobs.durable.clone(),
@@ -280,7 +289,7 @@ fn start_workers(
                 .start();
             }
             #[cfg(feature = "db-sqlite")]
-            infrastructure::db::DatabasePool::Sqlite(pool) => {
+            persistence::DatabasePool::Sqlite(pool) => {
                 if app_config.search.enabled {
                     registry.register(
                         infrastructure::search::projection_sqlite::SqliteSearchIndexJobHandler::new(
@@ -289,7 +298,7 @@ fn start_workers(
                         ),
                     )?;
                 }
-                infrastructure::jobs::durable_sqlite::SqliteDurableJobWorker::new(
+                background_jobs::sqlx::sqlite::SqliteDurableJobWorker::new(
                     pool.clone(),
                     registry,
                     app_config.jobs.durable.clone(),
@@ -322,7 +331,7 @@ fn metrics_job_observer(
 
 async fn serve_worker_operations(
     app_config: infrastructure::config::AppConfig,
-    db: infrastructure::db::DatabasePool,
+    db: persistence::DatabasePool,
     health: std::sync::Arc<worker_operations::WorkerHealth>,
 ) -> Result<(), String> {
     let addr = app_config.worker_operations.addr;
@@ -341,7 +350,7 @@ async fn serve_worker_operations(
 
 async fn serve_http(
     app_config: infrastructure::config::AppConfig,
-    db: infrastructure::db::DatabasePool,
+    db: persistence::DatabasePool,
     search: infrastructure::search::SearchAdapter,
 ) -> Result<(), String> {
     use axum::{Router, middleware};

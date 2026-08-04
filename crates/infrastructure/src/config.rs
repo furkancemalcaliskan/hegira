@@ -1,6 +1,7 @@
 use serde::Deserialize;
 use std::net::SocketAddr;
 
+pub use background_jobs::DurableWorkerConfig as DurableJobsConfig;
 pub use persistence::{DatabaseBackend, DatabaseConfig};
 pub use platform_core::CompiledCapabilities;
 pub use runtime::RuntimeRole;
@@ -255,14 +256,6 @@ pub struct SchedulerConfig {
 #[derive(Debug, Clone, Deserialize)]
 pub struct JobsConfig {
     pub durable: DurableJobsConfig,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct DurableJobsConfig {
-    pub enabled: bool,
-    pub poll_interval_milliseconds: u64,
-    pub batch_size: u32,
-    pub lock_timeout_seconds: u64,
 }
 
 #[derive(Debug, Clone, Deserialize)]

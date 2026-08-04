@@ -165,6 +165,7 @@ test("accepts the documented ownership-class dependency directions", () => {
       !WORKSPACE_DEPENDENCY_POLICY.test_support.includes("application") &&
       WORKSPACE_DEPENDENCY_POLICY.hegira.includes("infrastructure") &&
       WORKSPACE_DEPENDENCY_POLICY.hegira.includes("persistence") &&
+      WORKSPACE_DEPENDENCY_POLICY.hegira.includes("identity_sqlx") &&
       WORKSPACE_DEPENDENCY_POLICY.db_migrator.includes("persistence") &&
       WORKSPACE_DEPENDENCY_POLICY.identity_domain.includes(
         "identity_domain_shared",
@@ -177,13 +178,15 @@ test("accepts the documented ownership-class dependency directions", () => {
       ) &&
       WORKSPACE_DEPENDENCY_POLICY.infrastructure.includes("identity_sqlx") &&
       WORKSPACE_DEPENDENCY_POLICY.identity_sqlx.includes("persistence") &&
+      WORKSPACE_DEPENDENCY_POLICY.identity_sqlx.includes("background_jobs") &&
       WORKSPACE_DEPENDENCY_POLICY.identity_http.includes("http_support") &&
       WORKSPACE_DEPENDENCY_POLICY.identity_leptos.includes(
         "identity_application_contracts",
       ) &&
       !WORKSPACE_DEPENDENCY_POLICY.identity_leptos.includes("web") &&
       !WORKSPACE_DEPENDENCY_POLICY.identity_leptos.includes("persistence") &&
-      WORKSPACE_DEPENDENCY_POLICY.presentation.includes("infrastructure"),
+      WORKSPACE_DEPENDENCY_POLICY.presentation.includes("infrastructure") &&
+      WORKSPACE_DEPENDENCY_POLICY.presentation.includes("persistence"),
   );
   assert.deepEqual(REPOSITORY_OWNERSHIP_POLICY.framework, ["framework"]);
   assert.deepEqual(REPOSITORY_OWNERSHIP_POLICY.module, [

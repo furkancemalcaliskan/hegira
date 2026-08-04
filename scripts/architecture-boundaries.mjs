@@ -16,6 +16,7 @@ export const WORKSPACE_DEPENDENCY_POLICY = Object.freeze({
     "http_support",
     "identity_http",
     "identity_leptos",
+    "identity_sqlx",
     "infrastructure",
     "observability",
     "persistence",
@@ -75,6 +76,7 @@ export const WORKSPACE_DEPENDENCY_POLICY = Object.freeze({
     "infrastructure",
     "leptos_support",
     "observability",
+    "persistence",
   ],
   web: [
     "application",
@@ -103,6 +105,7 @@ export const WORKSPACE_DEPENDENCY_POLICY = Object.freeze({
     "security",
   ],
   identity_sqlx: [
+    "background_jobs",
     "identity_application",
     "identity_application_contracts",
     "identity_domain",
@@ -163,7 +166,7 @@ export const WORKSPACE_PACKAGE_POLICY = Object.freeze({
   infrastructure: packageContract(
     "compatibility",
     "extract-and-retire",
-    [137, 138, 146],
+    [138, 146],
   ),
   presentation: packageContract(
     "compatibility",

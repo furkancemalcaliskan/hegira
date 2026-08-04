@@ -21,7 +21,8 @@ dependency allowlist below is the normative workspace contract.
 ```text
 apps/hegira
   -> platform_core, configuration, persistence, background_jobs, http_support,
-     identity_http, identity_leptos, observability, runtime, test_support, web,
+     identity_http, identity_leptos, identity_sqlx, observability, runtime,
+     test_support, web,
      presentation, infrastructure, application, application_contracts,
      domain, domain_shared
 
@@ -53,7 +54,7 @@ web
      domain_shared
 
 presentation
-  -> leptos_support, observability, infrastructure, application,
+  -> leptos_support, observability, persistence, infrastructure, application,
      application_contracts, domain_shared
 
 infrastructure
@@ -77,8 +78,8 @@ identity_application
      identity_domain, identity_domain_shared
 
 identity_sqlx
-  -> identity_application, identity_application_contracts, identity_domain,
-     identity_domain_shared, persistence
+  -> background_jobs, identity_application, identity_application_contracts,
+     identity_domain, identity_domain_shared, persistence
 
 identity_http
   -> identity_application, identity_application_contracts, http_support,
@@ -110,7 +111,7 @@ matching policy update.
 
 | Package | Permitted direct local dependencies |
 |---|---|
-| `hegira` | `application`, `application_contracts`, `background_jobs`, `configuration`, `domain`, `domain_shared`, `http_support`, `identity_http`, `identity_leptos`, `infrastructure`, `observability`, `persistence`, `platform_core`, `presentation`, `runtime`, `test_support`, `web` |
+| `hegira` | `application`, `application_contracts`, `background_jobs`, `configuration`, `domain`, `domain_shared`, `http_support`, `identity_http`, `identity_leptos`, `identity_sqlx`, `infrastructure`, `observability`, `persistence`, `platform_core`, `presentation`, `runtime`, `test_support`, `web` |
 | `platform_core` | None |
 | `audit` | None |
 | `cache` | None |
@@ -131,7 +132,7 @@ matching policy update.
 | `application_contracts` | `identity_application_contracts` |
 | `application` | `background_jobs`, `identity_application`, `settings`, `storage` |
 | `infrastructure` | `application`, `application_contracts`, `background_jobs`, `configuration`, `domain`, `domain_shared`, `identity_sqlx`, `persistence`, `platform_core`, `runtime` |
-| `presentation` | `application`, `application_contracts`, `domain_shared`, `infrastructure`, `leptos_support`, `observability` |
+| `presentation` | `application`, `application_contracts`, `domain_shared`, `infrastructure`, `leptos_support`, `observability`, `persistence` |
 | `web` | `application`, `application_contracts`, `domain_shared`, `identity_leptos`, `leptos_support`, `presentation` |
 | `runtime` | None |
 | `db_migrator` | `infrastructure`, `persistence` |
@@ -139,7 +140,7 @@ matching policy update.
 | `identity_domain` | `identity_domain_shared` |
 | `identity_application_contracts` | `identity_domain`, `identity_domain_shared` |
 | `identity_application` | `audit`, `cache`, `identity_application_contracts`, `identity_domain`, `identity_domain_shared`, `mail`, `search`, `security` |
-| `identity_sqlx` | `identity_application`, `identity_application_contracts`, `identity_domain`, `identity_domain_shared`, `persistence` |
+| `identity_sqlx` | `background_jobs`, `identity_application`, `identity_application_contracts`, `identity_domain`, `identity_domain_shared`, `persistence` |
 | `identity_http` | `http_support`, `identity_application`, `identity_application_contracts`, `leptos_support` |
 | `identity_leptos` | `identity_application`, `identity_application_contracts`, `identity_domain_shared`, `leptos_support` |
 | `template_renderer` | None |
@@ -195,7 +196,7 @@ the referenced follow-up issue has already been implemented.
 | `domain` | Compatibility | Extract and retire | #146 |
 | `application_contracts` | Compatibility | Extract and retire | #146 |
 | `application` | Compatibility | Extract and retire | #146 |
-| `infrastructure` | Compatibility | Extract and retire | #137, #138, #146 |
+| `infrastructure` | Compatibility | Extract and retire | #138, #146 |
 | `presentation` | Compatibility | Extract and retire | #139, #146 |
 | `web` | Compatibility | Extract and retire | #141, #146 |
 | `db_migrator` | Compatibility | Replace and retire | #142, #146 |
@@ -337,8 +338,8 @@ build consume the same manifests without leaking maintainer filesystem paths.
 | `settings` | `crates/settings` | Validated setting keys, typed serialization helpers, and settings port |
 | `storage` | `crates/storage` | Validated storage paths, stored objects, and object-storage port |
 | `configuration` | `crates/configuration` | Configuration profile sources and ordered validation orchestration |
-| `persistence` | `crates/persistence` | Database provider selection, pools, health checks, transaction primitives, and host-owned migration planning and execution |
-| `background_jobs` | `crates/background_jobs` | Job contracts, handler registration, observation, and recurring execution |
+| `persistence` | `crates/persistence` | Database provider selection, connections, pools, health checks, transaction primitives, and host-owned migration planning and execution |
+| `background_jobs` | `crates/background_jobs` | Job contracts, handler registration, observation, recurring execution, and PostgreSQL/SQLite durable queue workers |
 | `http_support` | `crates/http_support` | Application-independent Axum middleware, transport-policy markers, CSRF, trusted-proxy resolution, and rate limiting |
 | `leptos_support` | `crates/leptos_support` | Product-neutral Leptos UI, form, CRUD, routing, toast, cookie-session, mutation-state, context, and safe server-function primitives |
 | `observability` | `crates/observability` | Tracing initialization, health/readiness primitives, HTTP and background-job metrics, and Prometheus exposure |
@@ -347,7 +348,7 @@ build consume the same manifests without leaking maintainer filesystem paths.
 | `domain` | `crates/domain` | Current compatibility view of Identity entities and repository ports |
 | `application_contracts` | `crates/application_contracts` | Current compatibility view of Identity DTOs, inputs, permissions, and feature metadata |
 | `application` | `crates/application` | Current compatibility view of Identity use cases and framework capability ports |
-| `infrastructure` | `crates/infrastructure` | Host infrastructure composition and adapters for jobs, security, cache, mail, search, storage, and compatibility re-exports of the canonical Identity SQLx adapter |
+| `infrastructure` | `crates/infrastructure` | Compatibility host configuration, application migration/reset composition, remaining security/cache/mail/search/storage adapters, and compatibility re-exports of the canonical Identity SQLx adapter |
 | `presentation` | `crates/presentation` | Current compatibility service construction, host state, and operational probe composition |
 | `web` | `crates/web` | Leptos compatibility application shell and dashboard plus explicit consumption of the Identity Leptos adapter |
 | `runtime` | `crates/runtime` | Runtime roles, Tokio process lifecycle, and shutdown signaling |
@@ -356,7 +357,7 @@ build consume the same manifests without leaking maintainer filesystem paths.
 | `identity_domain` | `modules/identity/domain` | Identity entities, value objects, and provider-neutral repository ports |
 | `identity_application_contracts` | `modules/identity/application_contracts` | Identity DTOs, inputs, permission registry, and serialized application contracts |
 | `identity_application` | `modules/identity/application` | Transport-independent Identity use cases, authorization, validation, transaction intent, and provider-facing ports |
-| `identity_sqlx` | `modules/identity/sqlx` | PostgreSQL and SQLite Identity repositories, migrations, seeds, cleanup, reset, and search projection reads |
+| `identity_sqlx` | `modules/identity/sqlx` | PostgreSQL and SQLite Identity repositories, migrations, seeds, cleanup jobs, reset, and search projection reads |
 | `identity_http` | `modules/identity/http` | Identity Axum controllers, Bearer extraction, secure session-cookie handling, OpenAPI document, route contribution, and explicit cookie/Bearer transport-policy contribution |
 | `identity_leptos` | `modules/identity/leptos` | Identity authentication, account, user, and role pages; server functions; and explicit Leptos route and navigation contributions |
 | `template_renderer` | `tools/template_renderer` | Internal typed component resolution, deterministic rendering, local validation patching, collision detection, and atomic output publication |
@@ -526,11 +527,14 @@ outbox records are committed with state changes when asynchronous work must be
 published reliably.
 
 The `background_jobs` framework package owns job dispatch, durable queue and
-handler contracts, handler registration, observation, and recurring execution.
-PostgreSQL and SQLite outbox workers remain host infrastructure adapters because
-their SQL contract is backed by host-owned durable-message migrations. Identity
-mutations publish the stable mail and search payload contracts into that outbox
-inside the same SQLx transaction as the Identity state change.
+handler contracts, handler registration, observation, recurring execution, and
+the PostgreSQL and SQLite outbox queue and worker adapters. The application
+continues to own the durable-message migrations selected into its migration
+plan. Identity cleanup job definitions live with `identity_sqlx`, while the host
+explicitly selects their schedule and starts them only for worker-capable
+runtime roles. Identity mutations publish stable mail and search payload
+contracts into the outbox inside the same SQLx transaction as the Identity
+state change.
 
 ## Feature Registration
 
@@ -559,9 +563,11 @@ The `test_support` package owns reusable recording and in-memory implementations
 of framework capability ports plus generic Axum request and JSON response
 helpers. It depends directly on those provider-neutral contracts rather than
 the compatibility Application package; production feature graphs do not enable
-it. Host database helpers remain in
-`infrastructure`; canonical Identity migrations, focused provider tests, and
-seed behavior live with `identity_sqlx`.
+it. Application migration and reset composition helpers remain temporarily in
+`infrastructure`; database connections, pools, health checks, and transaction
+primitives are consumed from `persistence`, while canonical Identity
+migrations, cleanup jobs, focused provider tests, and seed behavior live with
+`identity_sqlx`.
 
 SSR renders the initial route and hydration adds browser interaction. Release
 WASM uses the `wasm-release` profile with size optimization, LTO, one codegen

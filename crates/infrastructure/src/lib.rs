@@ -8,8 +8,6 @@ pub mod db;
 #[cfg(feature = "ssr")]
 pub mod identity;
 #[cfg(feature = "ssr")]
-pub mod jobs;
-#[cfg(feature = "ssr")]
 pub mod mail;
 #[cfg(feature = "ssr")]
 pub mod search;

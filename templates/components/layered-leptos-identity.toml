@@ -54,6 +54,12 @@ default_features = false
 
 [[framework_dependencies]]
 manifest = "Cargo.toml"
+name = "identity_sqlx"
+path = "modules/identity/sqlx"
+default_features = false
+
+[[framework_dependencies]]
+manifest = "Cargo.toml"
 name = "infrastructure"
 path = "crates/infrastructure"
 default_features = false

@@ -6,12 +6,12 @@ use std::sync::{
 };
 
 use hegira::{
-    background_jobs::{DurableJobFuture, DurableJobHandler, DurableJobOptions, DurableJobQueue},
-    infrastructure::{
-        config::DurableJobsConfig,
-        jobs::durable::{DurableJobRegistry, DurableJobWorker, SqlxDurableJobQueue},
-        testing::reset_database_from_env,
+    background_jobs::{
+        DurableJobFuture, DurableJobHandler, DurableJobOptions, DurableJobQueue,
+        DurableJobRegistry, DurableWorkerConfig,
+        sqlx::postgres::{DurableJobWorker, SqlxDurableJobQueue},
     },
+    infrastructure::testing::reset_database_from_env,
 };
 
 struct CountingHandler {
@@ -100,7 +100,7 @@ async fn outbox_worker_is_idempotent_transactional_and_retry_bounded() {
     let worker = DurableJobWorker::new(
         pool.clone(),
         registry,
-        DurableJobsConfig {
+        DurableWorkerConfig {
             enabled: true,
             poll_interval_milliseconds: 10,
             batch_size: 20,

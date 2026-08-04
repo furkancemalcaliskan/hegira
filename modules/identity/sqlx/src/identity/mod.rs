@@ -1,6 +1,7 @@
 mod audit;
 pub mod authorization;
 pub mod cleanup;
+pub mod jobs;
 pub mod migrations;
 pub mod oauth;
 pub mod provider;
