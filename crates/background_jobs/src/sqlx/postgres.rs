@@ -5,12 +5,9 @@ use tracing::Instrument;
 use uuid::Uuid;
 
 use crate::{
-    config::DurableJobsConfig,
-    jobs::{ClaimedMessage, DurableQueueStats, JobObserver, NoopJobObserver},
+    ClaimedMessage, DurableJobOptions, DurableJobQueue, DurableJobRegistry, DurableQueueStats,
+    DurableWorkerConfig, JobObserver, NoopJobObserver,
 };
-use background_jobs::{DurableJobOptions, DurableJobQueue};
-
-pub use crate::jobs::DurableJobRegistry;
 
 #[derive(Clone)]
 pub struct SqlxDurableJobQueue {
@@ -76,13 +73,13 @@ async fn enqueue_with(
 pub struct DurableJobWorker {
     pool: PgPool,
     registry: Arc<DurableJobRegistry>,
-    config: DurableJobsConfig,
+    config: DurableWorkerConfig,
     worker_id: String,
     observer: Arc<dyn JobObserver>,
 }
 
 impl DurableJobWorker {
-    pub fn new(pool: PgPool, registry: DurableJobRegistry, config: DurableJobsConfig) -> Self {
+    pub fn new(pool: PgPool, registry: DurableJobRegistry, config: DurableWorkerConfig) -> Self {
         Self {
             pool,
             registry: Arc::new(registry),

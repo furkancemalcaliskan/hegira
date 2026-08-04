@@ -27,6 +27,7 @@ domain_shared.workspace = true
 http_support = { workspace = true, optional = true }
 identity_http = { workspace = true, optional = true }
 identity_leptos = { workspace = true, optional = true }
+identity_sqlx = { workspace = true, optional = true }
 infrastructure = { workspace = true, optional = true }
 observability = { workspace = true, optional = true }
 persistence = { workspace = true, optional = true }
@@ -50,7 +51,9 @@ db-postgres = [
     "app_infrastructure/db-postgres",
     "app_presentation/db-postgres",
     "app_web/db-postgres",
+    "background_jobs/db-postgres",
     "identity_http/db-postgres",
+    "identity_sqlx/db-postgres",
     "infrastructure/db-postgres",
     "persistence/db-postgres",
     "presentation/db-postgres",
@@ -60,7 +63,9 @@ db-sqlite = [
     "app_infrastructure/db-sqlite",
     "app_presentation/db-sqlite",
     "app_web/db-sqlite",
+    "background_jobs/db-sqlite",
     "identity_http/db-sqlite",
+    "identity_sqlx/db-sqlite",
     "infrastructure/db-sqlite",
     "persistence/db-sqlite",
     "presentation/db-sqlite",
@@ -88,6 +93,7 @@ ssr = [
     "dep:http_support",
     "dep:identity_http",
     "dep:identity_leptos",
+    "dep:identity_sqlx",
     "dep:infrastructure",
     "dep:leptos_axum",
     "dep:observability",

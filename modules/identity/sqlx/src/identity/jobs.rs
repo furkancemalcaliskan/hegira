@@ -1,4 +1,3 @@
-use crate::config::SchedulerConfig;
 #[cfg(feature = "db-postgres")]
 use background_jobs::NoopJobObserver;
 #[cfg(any(feature = "db-postgres", feature = "db-sqlite"))]
@@ -7,9 +6,18 @@ use background_jobs::{Job, JobObserver, spawn_recurring_with_observer};
 use sqlx::PgPool;
 #[cfg(feature = "db-sqlite")]
 use sqlx::SqlitePool;
-use std::{future::Future, sync::Arc, time::Duration};
+use std::time::Duration;
+#[cfg(any(feature = "db-postgres", feature = "db-sqlite"))]
+use std::{future::Future, sync::Arc};
 #[cfg(feature = "db-postgres")]
 use tracing::Instrument;
+
+#[derive(Debug, Clone, Copy)]
+pub struct IdentityCleanupSchedule {
+    pub enabled: bool,
+    pub run_on_startup: bool,
+    pub interval: Duration,
+}
 
 #[cfg(feature = "db-postgres")]
 #[derive(Debug, Clone)]
@@ -30,7 +38,7 @@ impl SqliteDeleteExpiredIdentityJob {
     }
 
     async fn run(&self) -> Result<u64, sqlx::Error> {
-        crate::identity::cleanup::delete_expired_sqlite(&self.pool).await
+        super::cleanup::delete_expired_sqlite(&self.pool).await
     }
 }
 
@@ -57,7 +65,7 @@ impl DeleteExpiredSessionsJob {
     }
 
     async fn run(&self) -> Result<Option<u64>, sqlx::Error> {
-        crate::identity::cleanup::delete_expired_postgres(&self.pool).await
+        super::cleanup::delete_expired_postgres(&self.pool).await
     }
 }
 
@@ -88,24 +96,24 @@ impl Job<()> for DeleteExpiredSessionsJob {
 }
 
 #[cfg(feature = "db-postgres")]
-pub fn start_recurring_jobs(pool: PgPool, config: &SchedulerConfig) {
-    start_recurring_jobs_with_observer(pool, config, Arc::new(NoopJobObserver));
+pub fn start_recurring_jobs(pool: PgPool, schedule: IdentityCleanupSchedule) {
+    start_recurring_jobs_with_observer(pool, schedule, Arc::new(NoopJobObserver));
 }
 
 #[cfg(feature = "db-postgres")]
 pub fn start_recurring_jobs_with_observer(
     pool: PgPool,
-    config: &SchedulerConfig,
+    schedule: IdentityCleanupSchedule,
     observer: Arc<dyn JobObserver>,
 ) {
-    if !config.enabled {
+    if !schedule.enabled {
         tracing::info!("scheduler disabled");
         return;
     }
 
     let job = DeleteExpiredSessionsJob::new(pool);
 
-    if config.run_on_startup {
+    if schedule.run_on_startup {
         let startup_job = job.clone();
         let startup_observer = observer.clone();
         tokio::spawn(async move {
@@ -147,8 +155,7 @@ pub fn start_recurring_jobs_with_observer(
         });
     }
 
-    let interval = Duration::from_secs(config.cleanup_expired_sessions_interval_seconds);
-    spawn_recurring_with_observer(job.name(), interval, observer, move || {
+    spawn_recurring_with_observer(job.name(), schedule.interval, observer, move || {
         let job = job.clone();
         async move { job.perform(()).await }
     });
@@ -157,14 +164,14 @@ pub fn start_recurring_jobs_with_observer(
 #[cfg(feature = "db-sqlite")]
 pub fn start_sqlite_recurring_jobs_with_observer(
     pool: SqlitePool,
-    config: &SchedulerConfig,
+    schedule: IdentityCleanupSchedule,
     observer: Arc<dyn JobObserver>,
 ) {
-    if !config.enabled {
+    if !schedule.enabled {
         return;
     }
     let job = SqliteDeleteExpiredIdentityJob::new(pool);
-    if config.run_on_startup {
+    if schedule.run_on_startup {
         let startup = job.clone();
         tokio::spawn(async move {
             if let Err(error) = startup.perform(()).await {
@@ -172,8 +179,7 @@ pub fn start_sqlite_recurring_jobs_with_observer(
             }
         });
     }
-    let interval = Duration::from_secs(config.cleanup_expired_sessions_interval_seconds);
-    spawn_recurring_with_observer(job.name(), interval, observer, move || {
+    spawn_recurring_with_observer(job.name(), schedule.interval, observer, move || {
         let job = job.clone();
         async move { job.perform(()).await }
     });

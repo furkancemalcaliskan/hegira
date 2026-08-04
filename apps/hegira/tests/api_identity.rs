@@ -218,7 +218,7 @@ async fn setup() -> Router {
     .expect("failed to seed api test identity data");
     let state = AppState::new(
         config,
-        infrastructure::db::DatabasePool::Postgres(pool),
+        persistence::DatabasePool::Postgres(pool),
         CacheAdapter::Null(Default::default()),
         StorageAdapter::Null(Default::default()),
         SearchAdapter::Null(Default::default()),
@@ -247,7 +247,7 @@ async fn setup_sqlite() -> Router {
     .unwrap();
     let state = AppState::new(
         config,
-        infrastructure::db::DatabasePool::Sqlite(pool),
+        persistence::DatabasePool::Sqlite(pool),
         CacheAdapter::Null(Default::default()),
         StorageAdapter::Null(Default::default()),
         SearchAdapter::Null(Default::default()),
@@ -267,7 +267,7 @@ async fn setup_without_database_with_config(config: AppConfig) -> Router {
     pool.close().await;
     let state = AppState::new(
         config,
-        infrastructure::db::DatabasePool::Postgres(pool),
+        persistence::DatabasePool::Postgres(pool),
         CacheAdapter::Null(Default::default()),
         StorageAdapter::Null(Default::default()),
         SearchAdapter::Null(Default::default()),

@@ -1,7 +1,5 @@
 #[cfg(feature = "db-postgres")]
 use super::{SEARCH_REBUILD_LOCK, SearchAdapter};
-#[cfg(feature = "db-postgres")]
-use crate::jobs::{JobObserver, NoopJobObserver};
 use application::shared::jobs::{DurableJobOptions, DurableJobQueue};
 pub use application::shared::search::{SEARCH_INDEX_JOB, SearchIndexCommand};
 #[cfg(feature = "db-postgres")]
@@ -9,6 +7,8 @@ use application::shared::{
     jobs::{DurableJobFuture, DurableJobHandler},
     search::SearchIndex,
 };
+#[cfg(feature = "db-postgres")]
+use background_jobs::{JobObserver, NoopJobObserver};
 #[cfg(feature = "db-postgres")]
 use sqlx::PgPool;
 #[cfg(feature = "db-postgres")]

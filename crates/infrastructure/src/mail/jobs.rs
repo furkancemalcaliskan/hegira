@@ -1,12 +1,14 @@
 use super::MailerAdapter;
-#[cfg(feature = "db-postgres")]
-use crate::jobs::durable::SqlxDurableJobQueue;
+#[cfg(any(feature = "db-postgres", test))]
+use application::shared::mail::TransactionalMail;
 use application::shared::{
     jobs::{DurableJobFuture, DurableJobHandler},
-    mail::{Mailer, TransactionalMail},
+    mail::Mailer,
 };
 #[cfg(feature = "db-postgres")]
 use background_jobs::DurableJobOptions;
+#[cfg(feature = "db-postgres")]
+use background_jobs::sqlx::postgres::SqlxDurableJobQueue;
 
 pub use application::shared::mail::{SEND_MAIL_JOB, SendMailJob};
 

@@ -9,7 +9,6 @@ use infrastructure::config::{AppConfig, OAuthProviderConfig};
 use infrastructure::{
     audit::AuditLoggerAdapter,
     cache::CacheAdapter,
-    db::DatabasePool,
     identity::authorization::CachedAuthorization,
     identity::oauth::provider_client::ReqwestOAuthProviderClient,
     identity::{IdentityRepositoryAdapter, sessions::SessionRepositoryAdapter},
@@ -17,6 +16,7 @@ use infrastructure::{
     search::SearchAdapter,
     security::{password_hasher::Argon2PasswordHasher, token_service::JwtTokenService},
 };
+use persistence::DatabasePool;
 
 // hegira:service-imports
 // hegira:service-imports:end

@@ -1,9 +1,9 @@
 use crate::config::AppConfig;
-use crate::db::DatabasePool;
 use application::shared::{
     audit::{AuditLogEntry, AuditLogger},
     errors::{ApplicationError, ApplicationResult},
 };
+use persistence::DatabasePool;
 #[cfg(feature = "db-postgres")]
 use sqlx::PgPool;
 #[cfg(feature = "db-sqlite")]

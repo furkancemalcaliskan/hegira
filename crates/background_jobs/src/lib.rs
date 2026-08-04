@@ -3,6 +3,31 @@ use std::{collections::HashMap, future::Future, pin::Pin, sync::Arc, time::Durat
 use tracing::Instrument;
 use uuid::Uuid;
 
+pub mod sqlx {
+    #[cfg(feature = "db-postgres")]
+    pub mod postgres;
+    #[cfg(feature = "db-sqlite")]
+    pub mod sqlite;
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct DurableWorkerConfig {
+    pub enabled: bool,
+    pub poll_interval_milliseconds: u64,
+    pub batch_size: u32,
+    pub lock_timeout_seconds: u64,
+}
+
+#[cfg(any(feature = "db-postgres", feature = "db-sqlite"))]
+#[derive(Debug, Clone, PartialEq)]
+struct ClaimedMessage {
+    id: Uuid,
+    name: String,
+    payload: serde_json::Value,
+    attempts: i32,
+    max_attempts: i32,
+}
+
 pub trait Job<Args>: Send + Sync + Clone + 'static {
     fn name(&self) -> &'static str;
     fn perform(&self, args: Args) -> impl Future<Output = Result<(), String>> + Send;

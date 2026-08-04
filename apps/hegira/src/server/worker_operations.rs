@@ -122,14 +122,14 @@ impl JobObserver for RuntimeJobObserver {
 #[derive(Clone)]
 pub struct OperationsState {
     config: Arc<infrastructure::config::AppConfig>,
-    db: infrastructure::db::DatabasePool,
+    db: persistence::DatabasePool,
     health: Arc<WorkerHealth>,
 }
 
 impl OperationsState {
     pub fn new(
         config: infrastructure::config::AppConfig,
-        db: infrastructure::db::DatabasePool,
+        db: persistence::DatabasePool,
         health: Arc<WorkerHealth>,
     ) -> Self {
         Self {
@@ -247,11 +247,7 @@ mod tests {
         let db = sqlx::postgres::PgPoolOptions::new()
             .connect_lazy(&config.database.url)
             .expect("lazy pool should initialize");
-        OperationsState::new(
-            config,
-            infrastructure::db::DatabasePool::Postgres(db),
-            health,
-        )
+        OperationsState::new(config, persistence::DatabasePool::Postgres(db), health)
     }
 
     #[test]
@@ -311,11 +307,7 @@ mod tests {
             .expect("SQLite should initialize");
         let health = Arc::new(WorkerHealth::default());
         health.activate("durable", Duration::from_secs(1), Duration::from_secs(1));
-        let state = OperationsState::new(
-            config,
-            infrastructure::db::DatabasePool::Sqlite(pool),
-            health,
-        );
+        let state = OperationsState::new(config, persistence::DatabasePool::Sqlite(pool), health);
 
         let (status, response) = readyz(State(state)).await;
         assert_eq!(status, StatusCode::OK);

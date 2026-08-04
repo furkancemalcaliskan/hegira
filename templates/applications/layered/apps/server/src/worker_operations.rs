@@ -122,14 +122,14 @@ impl JobObserver for RuntimeJobObserver {
 #[derive(Clone)]
 pub struct OperationsState {
     config: Arc<infrastructure::config::AppConfig>,
-    db: infrastructure::db::DatabasePool,
+    db: persistence::DatabasePool,
     health: Arc<WorkerHealth>,
 }
 
 impl OperationsState {
     pub fn new(
         config: infrastructure::config::AppConfig,
-        db: infrastructure::db::DatabasePool,
+        db: persistence::DatabasePool,
         health: Arc<WorkerHealth>,
     ) -> Self {
         Self {
@@ -249,7 +249,7 @@ mod tests {
             .expect("lazy pool should initialize");
         OperationsState::new(
             config,
-            infrastructure::db::DatabasePool::Postgres(db),
+            persistence::DatabasePool::Postgres(db),
             health,
         )
     }
@@ -313,7 +313,7 @@ mod tests {
         health.activate("durable", Duration::from_secs(1), Duration::from_secs(1));
         let state = OperationsState::new(
             config,
-            infrastructure::db::DatabasePool::Sqlite(pool),
+            persistence::DatabasePool::Sqlite(pool),
             health,
         );
 

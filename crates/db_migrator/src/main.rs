@@ -120,7 +120,7 @@ async fn ensure_database_exists_if_allowed(config: &AppConfig) -> Result<(), Str
 
     #[cfg(feature = "db-postgres")]
     {
-        db::ensure_database(&config.database)
+        persistence::ensure_database(&config.database)
             .await
             .map_err(|err| format!("failed to ensure database: {err}"))
     }

@@ -4,15 +4,13 @@ pub mod redis_session;
 #[cfg(any(feature = "db-postgres", feature = "db-sqlite"))]
 pub use identity_sqlx::identity::sessions::repository;
 
+use crate::config::{AppConfig, SessionBackend};
 #[cfg(feature = "db-postgres")]
 use crate::identity::SqlxIdentityRepository;
-use crate::{
-    config::{AppConfig, SessionBackend},
-    db::DatabasePool,
-};
 use chrono::{DateTime, Utc};
 use domain::identity::sessions::{Session, SessionRepository};
 use domain_shared::common::errors::DomainError;
+use persistence::DatabasePool;
 #[cfg(feature = "db-postgres")]
 use sqlx::PgPool;
 
