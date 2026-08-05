@@ -294,10 +294,14 @@ list. It defines a brand-neutral `apps/server` composition root and explicit
 Domain Shared, Domain, Application Contracts, Application, Infrastructure, and
 Presentation packages. Its `apps/web` package owns the default Leptos shell,
 branding assets, neutral dashboard, routes, and hydration entry point. The
-server explicitly composes the Identity HTTP adapter, and the client explicitly
-composes the Identity Leptos adapter; neither surface discovers module
-contributions implicitly. The rendered base owns its application configuration
-profiles, full-stack Dockerfile, and local PostgreSQL contract.
+server depends on no compatibility Application, Infrastructure, or Presentation
+package. It explicitly composes application-owned configuration and outward
+adapters, framework persistence, jobs, providers, observability, and the
+official Identity Application, SQLx, HTTP, and Leptos adapter surfaces. The
+client explicitly composes the Identity Leptos adapter; neither surface
+discovers module contributions implicitly. The rendered base owns its
+application configuration profiles, immutable host migration history,
+full-stack Dockerfile, and local PostgreSQL contract.
 
 Framework dependencies in the canonical manifest use the pinned `v0.3.0` Git
 source rather than paths into this repository. The typed template manifest
@@ -426,6 +430,15 @@ workspace. The existing `apps/hegira` package remains the full-stack
 compatibility host while the canonical template provides the default Leptos
 and Identity composition for newly rendered applications.
 
+Within that generated application, `apps/server` is the runtime composition
+root and `app_infrastructure` owns application configuration, host migration
+selection, Identity service construction, and application-specific security,
+session, audit, settings, and OAuth provider adapters. Those adapters consume
+official module ports and framework primitives directly. They do not route
+through the repository's compatibility `application`, `infrastructure`, or
+`presentation` packages. Configuration validation completes before database,
+Redis, SMTP, object-storage, search, or telemetry initialization.
+
 ## Request Boundaries
 
 The browser-facing Leptos application uses a BFF session model:
@@ -515,12 +528,14 @@ SQLx histories remain valid. Repository policy permits only these exact
 checksummed exceptions outside `identity_sqlx`; new Identity schema SQL remains
 module-owned.
 
-The deployable application and the dedicated `db_migrator` are hosts: each
-explicitly selects both the host and Identity sources, builds one validated
-plan, and delegates execution to `persistence`. Existing migration numbers,
-SQL, and checksums remain immutable so databases created by v0.2.0 retain valid
-SQLx history. New module sources must use globally unique migration numbers
-across the complete host plan.
+The compatibility deployable application, the canonical generated server, and
+the dedicated `db_migrator` are hosts: each explicitly selects both the host
+and Identity sources, builds one validated plan, and delegates execution to
+`persistence`. The canonical server selects those sources through its
+application-owned Infrastructure layer rather than compatibility operations.
+Existing migration numbers, SQL, and checksums remain immutable so databases
+created by v0.2.0 retain valid SQLx history. New module sources must use
+globally unique migration numbers across the complete host plan.
 
 Standard mutations follow this order:
 

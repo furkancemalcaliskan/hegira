@@ -11,16 +11,45 @@ app_application.workspace = true
 app_application_contracts.workspace = true
 app_domain.workspace = true
 app_domain_shared.workspace = true
+audit.workspace = true
+background_jobs.workspace = true
+cache.workspace = true
 configuration.workspace = true
+identity_application.workspace = true
+identity_application_contracts.workspace = true
+identity_domain.workspace = true
+identity_domain_shared.workspace = true
+identity_sqlx.workspace = true
+mail.workspace = true
 observability.workspace = true
 persistence.workspace = true
 platform_core.workspace = true
 runtime.workspace = true
+search.workspace = true
+security.workspace = true
 serde.workspace = true
-url.workspace = true
+settings.workspace = true
+argon2.workspace = true
+base64.workspace = true
+chrono.workspace = true
+hmac.workspace = true
+ipnet.workspace = true
+redis = { workspace = true, optional = true }
+rand_core.workspace = true
+reqwest.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+sqlx.workspace = true
+tracing.workspace = true
+uuid.workspace = true
 
 [features]
 default = []
-db-postgres = ["persistence/db-postgres"]
-db-sqlite = ["persistence/db-sqlite"]
+db-postgres = ["identity_sqlx/db-postgres", "persistence/db-postgres", "sqlx/postgres"]
+db-sqlite = ["identity_sqlx/db-sqlite", "persistence/db-sqlite", "sqlx/sqlite"]
+cache-redis = ["cache/redis", "dep:redis"]
 otel-otlp = ["observability/otel-otlp"]
+
+[dev-dependencies]
+axum.workspace = true
+tokio.workspace = true

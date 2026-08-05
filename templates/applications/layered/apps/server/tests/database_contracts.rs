@@ -23,9 +23,9 @@ fn migrations_through(migrator: &Migrator, version: i64) -> Migrator {
     }
 }
 
-fn migration_plan(backend: &infrastructure::config::DatabaseBackend) -> MigrationPlan {
+fn migration_plan(backend: &app_infrastructure::config::DatabaseBackend) -> MigrationPlan {
     MigrationPlan::new(
-        infrastructure::db::application_migration_sources(backend)
+        app_infrastructure::database::application_migration_sources(backend)
             .expect("the selected provider must contribute application migrations"),
     )
     .expect("the generated application migration plan must remain valid")
@@ -33,8 +33,8 @@ fn migration_plan(backend: &infrastructure::config::DatabaseBackend) -> Migratio
 
 #[cfg(feature = "db-sqlite")]
 async fn sqlite_pool() -> sqlx::SqlitePool {
-    persistence::connect_sqlite(&infrastructure::config::DatabaseConfig {
-        backend: infrastructure::config::DatabaseBackend::Sqlite,
+    persistence::connect_sqlite(&app_infrastructure::config::DatabaseConfig {
+        backend: app_infrastructure::config::DatabaseBackend::Sqlite,
         url: "sqlite::memory:".to_string(),
         max_connections: 1,
         auto_migrate: false,
@@ -47,7 +47,7 @@ async fn sqlite_pool() -> sqlx::SqlitePool {
 #[tokio::test]
 async fn sqlite_fresh_install_applies_the_generated_application_plan() {
     let pool = sqlite_pool().await;
-    migration_plan(&infrastructure::config::DatabaseBackend::Sqlite)
+    migration_plan(&app_infrastructure::config::DatabaseBackend::Sqlite)
         .run(&persistence::DatabasePool::Sqlite(pool.clone()))
         .await
         .expect("fresh SQLite migrations should succeed");
@@ -67,7 +67,7 @@ async fn sqlite_fresh_install_applies_the_generated_application_plan() {
 #[tokio::test]
 async fn sqlite_v020_upgrade_retires_catalog_state_and_preserves_history() {
     let pool = sqlite_pool().await;
-    let plan = migration_plan(&infrastructure::config::DatabaseBackend::Sqlite);
+    let plan = migration_plan(&app_infrastructure::config::DatabaseBackend::Sqlite);
     let migrator = plan.migrator();
     migrations_through(migrator, SQLITE_V020_LAST_MIGRATION)
         .run(&pool)
@@ -201,7 +201,7 @@ async fn postgres_fresh_install_and_v020_upgrade_pass() {
         .connect(&disposable_postgres_url())
         .await
         .expect("the disposable PostgreSQL database should connect");
-    let plan = migration_plan(&infrastructure::config::DatabaseBackend::Postgres);
+    let plan = migration_plan(&app_infrastructure::config::DatabaseBackend::Postgres);
     let migrator = plan.migrator();
 
     reset_postgres(&pool).await;

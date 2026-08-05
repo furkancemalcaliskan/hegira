@@ -40,8 +40,39 @@ fn layered_template_renders_release_dependencies_and_binary_assets() {
     );
     let manifest = fs::read_to_string(output.join("Cargo.toml")).expect("manifest should exist");
     assert!(manifest.contains(
-        r#"application = { git = "https://github.com/furkancemalcaliskan/hegira.git", tag = "v0.3.0", default-features = false }"#
+        r#"identity_application = { git = "https://github.com/furkancemalcaliskan/hegira.git", tag = "v0.3.0", default-features = false }"#
     ));
+    for compatibility_dependency in [
+        "application",
+        "application_contracts",
+        "domain",
+        "domain_shared",
+        "infrastructure",
+        "presentation",
+    ] {
+        assert!(
+            !manifest
+                .lines()
+                .any(|line| line.starts_with(&format!("{compatibility_dependency} = "))),
+            "canonical manifest must not depend on compatibility package `{compatibility_dependency}`"
+        );
+    }
+    for official_dependency in [
+        "identity_application",
+        "identity_application_contracts",
+        "identity_domain",
+        "identity_domain_shared",
+        "identity_http",
+        "identity_leptos",
+        "identity_sqlx",
+    ] {
+        assert!(
+            manifest
+                .lines()
+                .any(|line| line.starts_with(&format!("{official_dependency} = "))),
+            "canonical manifest must select official package `{official_dependency}`"
+        );
+    }
     assert!(!manifest.contains("{{"));
     assert!(!manifest.contains(&repository.to_string_lossy().into_owned()));
 
@@ -64,9 +95,9 @@ fn repository_validation_can_patch_framework_dependencies_locally() {
     render(&request).expect("locally patched render should succeed");
 
     let manifest = fs::read_to_string(output.join("Cargo.toml")).expect("manifest should exist");
-    let application_path = repository.join("crates/application");
+    let application_path = repository.join("modules/identity/application");
     assert!(manifest.contains(&format!(
-        "application = {{ path = {:?}, default-features = false }}",
+        "identity_application = {{ path = {:?}, default-features = false }}",
         application_path.to_string_lossy()
     )));
     assert!(!manifest.contains(" git = "));
@@ -85,7 +116,7 @@ fn repository_validation_can_use_a_safe_relative_framework_path() {
 
     let manifest = fs::read_to_string(output.join("Cargo.toml")).expect("manifest should exist");
     assert!(manifest.contains(
-        r#"application = { path = ".hegira-validation/framework/crates/application", default-features = false }"#
+        r#"identity_application = { path = ".hegira-validation/framework/modules/identity/application", default-features = false }"#
     ));
 }
 

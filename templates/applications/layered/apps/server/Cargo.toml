@@ -11,29 +11,21 @@ default-run = "app_server"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-app_application.workspace = true
-app_application_contracts.workspace = true
-app_domain.workspace = true
-app_domain_shared.workspace = true
 app_infrastructure = { workspace = true, optional = true }
 app_presentation = { workspace = true, optional = true }
 app_web = { workspace = true }
-application = { workspace = true, optional = true }
-application_contracts.workspace = true
 background_jobs = { workspace = true, optional = true }
 cache = { workspace = true, optional = true }
 configuration = { workspace = true, optional = true }
-domain.workspace = true
-domain_shared.workspace = true
 http_support = { workspace = true, optional = true }
+identity_application = { workspace = true, optional = true }
+identity_application_contracts.workspace = true
 identity_http = { workspace = true, optional = true }
 identity_leptos = { workspace = true, optional = true }
 identity_sqlx = { workspace = true, optional = true }
-infrastructure = { workspace = true, optional = true }
 observability = { workspace = true, optional = true }
 persistence = { workspace = true, optional = true }
 platform_core = { workspace = true, optional = true }
-presentation = { workspace = true, optional = true }
 runtime = { workspace = true, optional = true }
 search = { workspace = true, optional = true }
 storage = { workspace = true, optional = true }
@@ -58,9 +50,7 @@ db-postgres = [
     "background_jobs/db-postgres",
     "identity_http/db-postgres",
     "identity_sqlx/db-postgres",
-    "infrastructure/db-postgres",
     "persistence/db-postgres",
-    "presentation/db-postgres",
     "search/db-postgres",
     "sqlx/postgres",
 ]
@@ -71,9 +61,7 @@ db-sqlite = [
     "background_jobs/db-sqlite",
     "identity_http/db-sqlite",
     "identity_sqlx/db-sqlite",
-    "infrastructure/db-sqlite",
     "persistence/db-sqlite",
-    "presentation/db-sqlite",
     "search/db-sqlite",
     "sqlx/sqlite",
 ]
@@ -85,29 +73,25 @@ hydrate = [
 ]
 ssr = [
     "app_web/ssr",
-    "application/ssr",
-    "infrastructure/ssr",
+    "identity_application/ssr",
     "identity_leptos/ssr",
-    "presentation/ssr",
     "leptos/ssr",
     "dep:app_infrastructure",
     "dep:app_presentation",
-    "dep:application",
     "dep:axum",
     "dep:background_jobs",
     "dep:cache",
     "dep:configuration",
     "dep:http_support",
     "dep:identity_http",
+    "dep:identity_application",
     "dep:identity_leptos",
     "dep:identity_sqlx",
-    "dep:infrastructure",
     "dep:leptos_axum",
     "dep:mail",
     "dep:observability",
     "dep:persistence",
     "dep:platform_core",
-    "dep:presentation",
     "dep:runtime",
     "dep:search",
     "dep:serde",
@@ -117,9 +101,9 @@ ssr = [
     "dep:tracing",
     "dep:storage",
 ]
-openapi = ["ssr", "application_contracts/openapi", "identity_http/openapi"]
+openapi = ["ssr", "identity_application_contracts/openapi", "identity_http/openapi"]
 wasm-split = ["app_web/wasm-split"]
-cache-redis = ["ssr", "cache/redis", "infrastructure/cache-redis", "http_support/cache-redis"]
+cache-redis = ["ssr", "app_infrastructure/cache-redis", "cache/redis", "http_support/cache-redis"]
 metrics-prometheus = ["ssr", "observability/metrics-prometheus"]
 otel-otlp = ["ssr", "app_infrastructure/otel-otlp", "http_support/otel-otlp", "observability/otel-otlp"]
 search-meilisearch = ["ssr", "search/meilisearch"]
