@@ -54,10 +54,12 @@ commands change. Never describe planned work as implemented.
   and checksums outside the Identity SQLx migration source.
 - `templates/applications/layered/` contains the workspace-external,
   layered full-stack application base. Its brand-neutral server composition
-  explicitly selects the Identity HTTP adapter, while `apps/web` owns the
-  default Leptos shell and explicitly selects the Identity Leptos adapter. It
-  consumes framework packages through a pinned release source; repository
-  validation rewrites those dependencies only in a disposable staging copy.
+  depends on application-owned layers, framework primitives, and official
+  Identity Application, SQLx, HTTP, and Leptos adapters without using legacy
+  framework-layer packages. `apps/web` owns the default Leptos shell and
+  explicitly selects the Identity Leptos adapter. It consumes framework
+  packages through a pinned release source; repository validation rewrites
+  those dependencies only in a disposable staging copy.
 - `templates/components/` contains typed component manifests for the canonical
   application template.
 - `tools/template_renderer/` contains the internal deterministic and atomic

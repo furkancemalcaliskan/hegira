@@ -7,21 +7,18 @@ use observability::{
     health::{LivenessResponse, ReadinessResponse},
     worker_health::{WorkerHealth, WorkerReadinessExtension},
 };
-use std::{
-    sync::Arc,
-    time::Duration,
-};
+use std::{sync::Arc, time::Duration};
 
 #[derive(Clone)]
 pub struct OperationsState {
-    config: Arc<infrastructure::config::AppConfig>,
+    config: Arc<app_infrastructure::config::AppConfig>,
     db: persistence::DatabasePool,
     health: Arc<WorkerHealth>,
 }
 
 impl OperationsState {
     pub fn new(
-        config: infrastructure::config::AppConfig,
+        config: app_infrastructure::config::AppConfig,
         db: persistence::DatabasePool,
         health: Arc<WorkerHealth>,
     ) -> Self {
@@ -110,22 +107,18 @@ mod tests {
     use super::*;
 
     fn test_state(health: Arc<WorkerHealth>) -> OperationsState {
-        let mut config = infrastructure::config::AppConfig::load().expect("config should load");
+        let mut config = app_infrastructure::config::AppConfig::load().expect("config should load");
         config.application.name = "worker-test".to_string();
         config.health.readiness_timeout_milliseconds = 1;
 
         #[cfg(feature = "db-sqlite")]
         {
-            config.database.backend = infrastructure::config::DatabaseBackend::Sqlite;
+            config.database.backend = app_infrastructure::config::DatabaseBackend::Sqlite;
             config.database.url = "sqlite::memory:".to_string();
             let db = sqlx::sqlite::SqlitePoolOptions::new()
                 .connect_lazy(&config.database.url)
                 .expect("lazy pool should initialize");
-            OperationsState::new(
-                config,
-                persistence::DatabasePool::Sqlite(db),
-                health,
-            )
+            OperationsState::new(config, persistence::DatabasePool::Sqlite(db), health)
         }
 
         #[cfg(all(not(feature = "db-sqlite"), feature = "db-postgres"))]
@@ -160,20 +153,18 @@ mod tests {
 
     #[tokio::test]
     async fn sqlite_readiness_accepts_healthy_database_and_worker_loop() {
-        let mut config = infrastructure::config::AppConfig::load().expect("config should load");
-        config.database.backend = infrastructure::config::DatabaseBackend::Sqlite;
+        let mut config = app_infrastructure::config::AppConfig::load().expect("config should load");
+        config.database.backend = app_infrastructure::config::DatabaseBackend::Sqlite;
         config.database.url = "sqlite::memory:".to_string();
         config.database.max_connections = 1;
-        let pool = infrastructure::db::connect_sqlite_with_application_migrations(&config.database)
-            .await
-            .expect("SQLite should initialize");
+        let pool = app_infrastructure::database::connect_sqlite_with_application_migrations(
+            &config.database,
+        )
+        .await
+        .expect("SQLite should initialize");
         let health = Arc::new(WorkerHealth::default());
         health.activate("durable", Duration::from_secs(1), Duration::from_secs(1));
-        let state = OperationsState::new(
-            config,
-            persistence::DatabasePool::Sqlite(pool),
-            health,
-        );
+        let state = OperationsState::new(config, persistence::DatabasePool::Sqlite(pool), health);
 
         let (status, response) = readyz(State(state)).await;
         assert_eq!(status, StatusCode::OK);
