@@ -121,9 +121,3 @@ manifest = "Cargo.toml"
 name = "storage"
 path = "crates/storage"
 default_features = false
-
-[[framework_dependencies]]
-manifest = "Cargo.toml"
-name = "web"
-path = "crates/web"
-default_features = false

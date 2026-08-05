@@ -61,7 +61,6 @@ search = { git = "{{framework_repository}}", tag = "{{framework_version}}", defa
 security = { git = "{{framework_repository}}", tag = "{{framework_version}}" }
 settings = { git = "{{framework_repository}}", tag = "{{framework_version}}" }
 storage = { git = "{{framework_repository}}", tag = "{{framework_version}}", default-features = false }
-web = { git = "{{framework_repository}}", tag = "{{framework_version}}", default-features = false }
 
 axum = "0.8.9"
 argon2 = "0.5.3"
@@ -69,6 +68,7 @@ base64 = "0.23.0"
 chrono = { version = "0.4.44", features = ["serde"] }
 console_error_panic_hook = "0.1.7"
 hmac = "0.13.0"
+icons = { version = "0.18.3", features = ["leptos"] }
 ipnet = "2.12.0"
 leptos = "0.8.19"
 leptos_axum = "0.8.9"

@@ -56,10 +56,11 @@ commands change. Never describe planned work as implemented.
   layered full-stack application base. Its brand-neutral server composition
   depends on application-owned layers, framework primitives, and official
   Identity Application, SQLx, HTTP, and Leptos adapters without using legacy
-  framework-layer packages. `apps/web` owns the default Leptos shell and
-  explicitly selects the Identity Leptos adapter. It consumes framework
-  packages through a pinned release source; repository validation rewrites
-  those dependencies only in a disposable staging copy.
+  framework-layer packages. `apps/web` owns the default Leptos shell,
+  application navigation and localization, and explicitly selects the Identity
+  Leptos adapter without depending on the compatibility `web` package. It
+  consumes framework packages through a pinned release source; repository
+  validation rewrites those dependencies only in a disposable staging copy.
 - `templates/components/` contains typed component manifests for the canonical
   application template.
 - `tools/template_renderer/` contains the internal deterministic and atomic
