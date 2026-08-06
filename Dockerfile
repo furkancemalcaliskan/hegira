@@ -1,4 +1,4 @@
-FROM node:22-bookworm-slim AS node-toolchain
+FROM node:26-bookworm-slim AS node-toolchain
 
 FROM rust:1.97.0-bookworm AS chef
 
