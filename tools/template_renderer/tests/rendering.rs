@@ -49,6 +49,7 @@ fn layered_template_renders_release_dependencies_and_binary_assets() {
         "domain_shared",
         "infrastructure",
         "presentation",
+        "web",
     ] {
         assert!(
             !manifest
@@ -76,7 +77,8 @@ fn layered_template_renders_release_dependencies_and_binary_assets() {
     assert!(!manifest.contains("{{"));
     assert!(!manifest.contains(&repository.to_string_lossy().into_owned()));
 
-    let source_logo = repository.join("crates/web/src/public/assets/branding/hegira-logo.png");
+    let source_logo = repository
+        .join("templates/applications/layered/apps/web/src/public/assets/branding/hegira-logo.png");
     let rendered_logo = output.join("apps/web/src/public/assets/branding/hegira-logo.png");
     assert_eq!(
         fs::read(source_logo).expect("source logo should exist"),

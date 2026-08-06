@@ -7,9 +7,10 @@ use leptos_router::{
 };
 
 use identity_leptos::identity::routes::IdentityRoutes;
-use web::{app::shell::AppShell, shared::feedback::not_found::NotFound};
 
-use crate::dashboard::DashboardRoute;
+use crate::{
+    app::shell::AppShell, dashboard::DashboardRoute, shared::feedback::not_found::NotFound,
+};
 
 #[component]
 #[cfg(not(feature = "wasm-split"))]

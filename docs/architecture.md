@@ -293,13 +293,15 @@ Cargo workspace and is deliberately absent from the framework workspace member
 list. It defines a brand-neutral `apps/server` composition root and explicit
 Domain Shared, Domain, Application Contracts, Application, Infrastructure, and
 Presentation packages. Its `apps/web` package owns the default Leptos shell,
-branding assets, neutral dashboard, routes, and hydration entry point. The
+branding assets, application navigation and localization, neutral dashboard,
+routes, and hydration entry point. The
 server depends on no compatibility Application, Infrastructure, or Presentation
 package. It explicitly composes application-owned configuration and outward
 adapters, framework persistence, jobs, providers, observability, and the
 official Identity Application, SQLx, HTTP, and Leptos adapter surfaces. The
-client explicitly composes the Identity Leptos adapter; neither surface
-discovers module contributions implicitly. The rendered base owns its
+client depends directly on `leptos_support` and explicitly composes the
+Identity Leptos adapter without using the compatibility `web` package; neither
+surface discovers module contributions implicitly. The rendered base owns its
 application configuration profiles, immutable host migration history,
 full-stack Dockerfile, and local PostgreSQL contract.
 
@@ -576,6 +578,12 @@ explicit because Rust and the relevant proc macros require concrete types.
 The `web` crate contains the compatibility app shell, dashboard, and branding.
 It depends on `identity_leptos` and explicitly selects the module's route,
 navigation, state, localization, and host-layout contributions.
+The canonical generated application's `apps/web` package owns the corresponding
+application shell, navigation, localization, dashboard, not-found surface,
+branding, SSR shell, and hydration entry point directly. It consumes reusable
+UI primitives from `leptos_support` and explicitly selects Identity routes,
+navigation, authorization presentation state, and host-layout contributions
+from `identity_leptos`; it does not depend on the compatibility `web` package.
 `identity_leptos` owns the Identity authentication, account, user, and role
 pages and their feature-local server functions. Product-neutral visual
 components, form state, mutation state, CRUD helpers, routing helpers, toast
