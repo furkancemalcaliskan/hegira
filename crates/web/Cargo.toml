@@ -25,7 +25,7 @@ serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
 strum = { version = "0.28.0", features = ["derive"] }
 tw_merge = { version = "0.1.21", features = ["variant"] }
-validator = "0.20.0"
+validator = "0.21.0"
 uuid = { version = "1.23.2", features = ["serde", "js"] }
 web-sys = { version = "0.3.91", features = ["Document", "DomTokenList", "Element", "Event", "HtmlDocument", "HtmlElement", "Location", "Storage", "Window"] }
 
