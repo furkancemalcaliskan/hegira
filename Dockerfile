@@ -1,6 +1,6 @@
 FROM node:22-bookworm-slim AS node-toolchain
 
-FROM rust:1.97.0-bookworm AS chef
+FROM rust:1.98.0-bookworm AS chef
 
 COPY --from=node-toolchain /usr/local/ /usr/local/
 
