@@ -308,7 +308,7 @@ pub struct SeedConfig {
     pub admin_password: String,
 }
 
-impl crate::identity::seed::IdentitySeedSettings for SeedConfig {
+impl identity_sqlx::identity::seed::IdentitySeedSettings for SeedConfig {
     fn seed_admin(&self) -> bool {
         self.seed_admin
     }

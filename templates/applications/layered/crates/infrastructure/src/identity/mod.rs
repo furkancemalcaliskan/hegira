@@ -3,7 +3,7 @@ pub mod oauth;
 pub mod services;
 pub mod sessions;
 
-pub use identity_sqlx::identity::{IdentityRepositoryAdapter, migrations, search, seed};
+pub use identity_sqlx::identity::{IdentityRepositoryAdapter, search};
 
 #[cfg(feature = "db-postgres")]
 pub use identity_sqlx::identity::SqlxIdentityRepository;

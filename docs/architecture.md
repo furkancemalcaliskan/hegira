@@ -303,6 +303,7 @@ client depends directly on `leptos_support` and explicitly composes the
 Identity Leptos adapter without using the compatibility `web` package; neither
 surface discovers module contributions implicitly. The rendered base owns its
 application configuration profiles, immutable host migration history,
+application-owned migration, seed, and disposable-reset composition,
 full-stack Dockerfile, and local PostgreSQL contract.
 
 Framework dependencies in the canonical manifest use the pinned `v0.3.0` Git
@@ -433,13 +434,17 @@ compatibility host while the canonical template provides the default Leptos
 and Identity composition for newly rendered applications.
 
 Within that generated application, `apps/server` is the runtime composition
-root and `app_infrastructure` owns application configuration, host migration
-selection, Identity service construction, and application-specific security,
-session, audit, settings, and OAuth provider adapters. Those adapters consume
-official module ports and framework primitives directly. They do not route
-through the repository's compatibility `application`, `infrastructure`, or
-`presentation` packages. Configuration validation completes before database,
-Redis, SMTP, object-storage, search, or telemetry initialization.
+root and `app_infrastructure` owns application configuration, database
+lifecycle composition, Identity service construction, and application-specific
+security, session, audit, settings, and OAuth provider adapters. Its database
+operation surface validates and executes the application plus Identity
+migration plan, performs configured Identity seed behavior, and exposes reset
+only through an explicit disposable-database authorization token. Those
+adapters consume official module ports and framework primitives directly. They
+do not route through the repository's compatibility `application`,
+`infrastructure`, `db_migrator`, or `presentation` packages. Configuration
+validation completes before database, Redis, SMTP, object-storage, search, or
+telemetry initialization.
 
 ## Request Boundaries
 
@@ -533,11 +538,15 @@ module-owned.
 The compatibility deployable application, the canonical generated server, and
 the dedicated `db_migrator` are hosts: each explicitly selects both the host
 and Identity sources, builds one validated plan, and delegates execution to
-`persistence`. The canonical server selects those sources through its
-application-owned Infrastructure layer rather than compatibility operations.
-Existing migration numbers, SQL, and checksums remain immutable so databases
-created by v0.2.0 retain valid SQLx history. New module sources must use
-globally unique migration numbers across the complete host plan.
+`persistence`. The canonical server delegates startup migration and seed to
+its application-owned Infrastructure operation surface. Generated-application
+validation uses that same migration plan and reset composition; reset requires
+an explicit disposable-database opt-in before it can call application and
+Identity reset behavior. It does not depend on compatibility Infrastructure or
+the repository-only `db_migrator`. Existing migration numbers, SQL, and
+checksums remain immutable so databases created by v0.2.0 retain valid SQLx
+history. New module sources must use globally unique migration numbers across
+the complete host plan.
 
 Standard mutations follow this order:
 
@@ -597,11 +606,12 @@ The `test_support` package owns reusable recording and in-memory implementations
 of framework capability ports plus generic Axum request and JSON response
 helpers. It depends directly on those provider-neutral contracts rather than
 the compatibility Application package; production feature graphs do not enable
-it. Application migration and reset composition helpers remain temporarily in
-`infrastructure`; database connections, pools, health checks, and transaction
-primitives are consumed from `persistence`, while canonical Identity
-migrations, cleanup jobs, focused provider tests, and seed behavior live with
-`identity_sqlx`.
+it. The compatibility `infrastructure` package still contains its legacy
+migration and reset composition for the compatibility host. The canonical
+generated application instead owns host composition in `app_infrastructure`,
+consumes database connections, pools, health checks, and transaction primitives
+from `persistence`, and selects Identity migrations, reset, and seed behavior
+from `identity_sqlx`.
 
 SSR renders the initial route and hydration adds browser interaction. Release
 WASM uses the `wasm-release` profile with size optimization, LTO, one codegen
