@@ -37,6 +37,8 @@ fi
   export PATH
   CARGO_TARGET_DIR="$repo_root/target/layered-template-check" \
     cargo check --workspace --all-targets --all-features
+  node "$repo_root/scripts/architecture-boundaries.mjs" \
+    check-generated --root "$staging_root"
   CARGO_TARGET_DIR="$repo_root/target/layered-template-check" \
     cargo check -p app_server --no-default-features --features hydrate \
       --target wasm32-unknown-unknown

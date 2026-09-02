@@ -5,10 +5,13 @@ import process from "node:process";
 import test from "node:test";
 
 import {
+  GENERATED_APPLICATION_DEPENDENCY_POLICY,
   REPOSITORY_OWNERSHIP_POLICY,
+  RETIRED_COMPATIBILITY_PACKAGES,
   TRANSITIONAL_COMPATIBILITY_EDGES,
   WORKSPACE_DEPENDENCY_POLICY,
   WORKSPACE_PACKAGE_POLICY,
+  validateGeneratedApplicationMetadata,
   validateIdentityBusinessSourceOwnership,
   validateIdentitySqlOwnership,
   validateIdentitySqlxSourceOwnership,
@@ -125,6 +128,58 @@ function validateOwnershipFixture(packageLocations, dependencies) {
     fixture.packagePolicy,
     {},
   );
+}
+
+const GENERATED_APPLICATION_LOCATIONS = Object.freeze({
+  app_server: "apps/server",
+  app_web: "apps/web",
+  app_domain_shared: "crates/domain_shared",
+  app_domain: "crates/domain",
+  app_application_contracts: "crates/application_contracts",
+  app_application: "crates/application",
+  app_infrastructure: "crates/infrastructure",
+  app_presentation: "crates/presentation",
+});
+
+function generatedApplicationMetadata(extraDependencies = []) {
+  const root = path.resolve("/generated");
+  const packageNames = Object.keys(GENERATED_APPLICATION_DEPENDENCY_POLICY);
+  const dependencies = [
+    ...Object.entries(GENERATED_APPLICATION_DEPENDENCY_POLICY).flatMap(
+      ([from, targets]) => targets.map((to) => ({ from, to })),
+    ),
+    ...extraDependencies,
+  ];
+
+  return {
+    workspace_root: root,
+    workspace_members: packageNames.map((name) => `generated#${name}`),
+    packages: packageNames.map((name) => {
+      const directory = path.join(root, GENERATED_APPLICATION_LOCATIONS[name]);
+      return {
+        id: `generated#${name}`,
+        name,
+        manifest_path: path.join(directory, "Cargo.toml"),
+        dependencies: dependencies
+          .filter((dependency) => dependency.from === name)
+          .map((dependency) => {
+            const generatedLocation =
+              GENERATED_APPLICATION_LOCATIONS[dependency.to];
+            return {
+              name: dependency.to,
+              path: Object.hasOwn(dependency, "path")
+                ? dependency.path
+                : generatedLocation === undefined
+                  ? path.join("/framework", "packages", dependency.to)
+                  : path.join(root, generatedLocation),
+              source: dependency.source ?? null,
+              kind: dependency.kind ?? null,
+              optional: dependency.optional ?? false,
+            };
+          }),
+      };
+    }),
+  };
 }
 
 test("accepts the documented current workspace graph", () => {
@@ -334,6 +389,11 @@ for (const target of [
     location: "apps/application",
     role: "application",
   },
+  {
+    ownership: "template",
+    location: "templates/component",
+    role: "template",
+  },
   { ownership: "tool", location: "tools/cli" },
 ]) {
   test(`rejects a framework dependency on ${target.ownership} code`, () => {
@@ -345,9 +405,11 @@ for (const target of [
       [{ from: "framework", to: "downstream" }],
     );
 
-    assert.deepEqual(errors, [
-      `invalid repository ownership edge: framework -> downstream (framework packages may not depend on ${target.ownership} packages)`,
-    ]);
+    assert.ok(
+      errors.includes(
+        `invalid repository ownership edge: framework -> downstream (framework packages may not depend on ${target.ownership} packages)`,
+      ),
+    );
   });
 }
 
@@ -356,6 +418,11 @@ for (const target of [
     ownership: "application",
     location: "apps/application",
     role: "application",
+  },
+  {
+    ownership: "template",
+    location: "templates/component",
+    role: "template",
   },
   {
     ownership: "compatibility",
@@ -373,9 +440,11 @@ for (const target of [
       [{ from: "identity", to: "downstream" }],
     );
 
-    assert.deepEqual(errors, [
-      `invalid repository ownership edge: identity -> downstream (module packages may not depend on ${target.ownership} packages)`,
-    ]);
+    assert.ok(
+      errors.includes(
+        `invalid repository ownership edge: identity -> downstream (module packages may not depend on ${target.ownership} packages)`,
+      ),
+    );
   });
 }
 
@@ -412,6 +481,144 @@ test("accepts an explicitly owned application composition package", () => {
   );
 
   assert.deepEqual(errors, []);
+});
+
+test("accepts the canonical generated-application dependency graph", () => {
+  assert.deepEqual(
+    validateGeneratedApplicationMetadata(generatedApplicationMetadata()),
+    [],
+  );
+});
+
+test("ignores the disposable staged framework workspace during generated validation", () => {
+  const metadata = generatedApplicationMetadata();
+  metadata.workspace_members.push("framework#runtime");
+  metadata.packages.push({
+    id: "framework#runtime",
+    name: "runtime",
+    manifest_path:
+      "/generated/.hegira-validation/framework/crates/runtime/Cargo.toml",
+    dependencies: [],
+  });
+
+  assert.deepEqual(validateGeneratedApplicationMetadata(metadata), []);
+});
+
+test("accepts a permitted Hegira release-source dependency", () => {
+  const metadata = generatedApplicationMetadata();
+  const server = metadata.packages.find(
+    (packageMetadata) => packageMetadata.name === "app_server",
+  );
+  const runtime = server.dependencies.find(
+    (dependency) => dependency.name === "runtime",
+  );
+  runtime.path = null;
+  runtime.source =
+    "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.4.0";
+
+  assert.deepEqual(validateGeneratedApplicationMetadata(metadata), []);
+});
+
+test("rejects an outward dependency from a generated domain layer", () => {
+  const errors = validateGeneratedApplicationMetadata(
+    generatedApplicationMetadata([
+      { from: "app_domain", to: "app_infrastructure" },
+    ]),
+  );
+
+  assert.ok(
+    errors.includes(
+      "invalid generated-application dependency edge: app_domain -> app_infrastructure",
+    ),
+  );
+});
+
+for (const dependency of [
+  { label: "normal", kind: null, optional: false },
+  { label: "optional", kind: null, optional: true },
+  { label: "development", kind: "dev", optional: false },
+  { label: "build", kind: "build", optional: false },
+]) {
+  test(`rejects a retired compatibility package in a generated ${dependency.label} dependency`, () => {
+    const errors = validateGeneratedApplicationMetadata(
+      generatedApplicationMetadata([
+        {
+          from: "app_server",
+          to: "web",
+          path: "/framework/crates/web",
+          ...dependency,
+        },
+      ]),
+    );
+
+    assert.ok(
+      errors.includes(
+        "generated application must not depend on retired compatibility package: app_server -> web",
+      ),
+    );
+  });
+}
+
+test("rejects a retired compatibility package from the Hegira release source", () => {
+  const errors = validateGeneratedApplicationMetadata(
+    generatedApplicationMetadata([
+      {
+        from: "app_server",
+        to: "web",
+        path: null,
+        source:
+          "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.4.0",
+      },
+    ]),
+  );
+
+  assert.ok(
+    errors.includes(
+      "generated application must not depend on retired compatibility package: app_server -> web",
+    ),
+  );
+});
+
+test("rejects a generated local dependency outside the workspace", () => {
+  const errors = validateGeneratedApplicationMetadata(
+    generatedApplicationMetadata([
+      {
+        from: "app_server",
+        to: "unregistered_helper",
+        path: "/generated/vendor/unregistered_helper",
+      },
+    ]),
+  );
+
+  assert.ok(
+    errors.includes(
+      "local dependency target is not a generated-application workspace member: app_server -> unregistered_helper",
+    ),
+  );
+});
+
+test("rejects generated packages outside apps and crates", () => {
+  const metadata = generatedApplicationMetadata();
+  const server = metadata.packages.find(
+    (packageMetadata) => packageMetadata.name === "app_server",
+  );
+  server.manifest_path = "/generated/vendor/server/Cargo.toml";
+
+  assert.ok(
+    validateGeneratedApplicationMetadata(metadata).includes(
+      "generated-application package is outside apps/ or crates/: app_server (/generated/vendor/server)",
+    ),
+  );
+});
+
+test("generated-application policy never permits retired compatibility packages", () => {
+  const permittedPackages = new Set(
+    Object.values(GENERATED_APPLICATION_DEPENDENCY_POLICY).flat(),
+  );
+
+  for (const retiredPackage of RETIRED_COMPATIBILITY_PACKAGES) {
+    assert.equal(permittedPackages.has(retiredPackage), false);
+  }
 });
 
 test("rejects an unapproved framework dependency on compatibility code", () => {

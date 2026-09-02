@@ -104,9 +104,11 @@ The repository validation workflow separates these responsibilities:
 - `official-modules` validates the canonical Identity layers and their host
   integration against a separate disposable PostgreSQL service;
 - `templates` validates manifests, deterministic rendering, the workspace-
-  external layered application, hydration, and release output;
+  external layered application's locked dependency boundaries, hydration, and
+  release output;
 - `generated-application` validates fresh SQLite and PostgreSQL applications,
-  the supported v0.2.0 upgrade, and the rendered production container;
+  the supported v0.2.0 upgrade, locked application dependency boundaries, and
+  the rendered production container;
 - `quality` aggregates the four repository ownership gates under the existing
   required status context;
 - `supply-chain` runs dependency policy and vulnerability checks.
@@ -154,6 +156,7 @@ dependencies in a normal render and does not write maintainer paths into
 template source files. For repository validation, the internal renderer patches
 declared framework dependencies only in the disposable output. The check runs
 the renderer snapshot and failure-path tests, installs the client package lock,
+validates the rendered workspace's direct application and Hegira dependencies,
 validates native workspace targets and tests, compiles the hydration target,
 and produces the full-stack Cargo Leptos release output.
 
@@ -183,7 +186,9 @@ upgrade tests in memory, and starts an ephemeral PostgreSQL container for the
 equivalent PostgreSQL contracts. It then builds the rendered application image,
 boots it against the disposable database, and verifies readiness, hydration
 assets, security headers, and unauthenticated Bearer API behavior. The check
-stages a credential-free framework source view under the disposable render so
+also validates the rendered workspace's locked direct dependency graph and
+rejects retired compatibility packages. It stages a credential-free framework
+source view under the disposable render so
 the same relative Cargo paths work on the host and inside the Docker build. It
 generates runtime-only database and JWT values and removes its containers,
 network, database state, and rendered output on exit. It never targets the
