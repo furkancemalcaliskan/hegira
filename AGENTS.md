@@ -61,6 +61,9 @@ commands change. Never describe planned work as implemented.
   Leptos adapter without depending on the compatibility `web` package. It
   consumes framework packages through a pinned release source; repository
   validation rewrites those dependencies only in a disposable staging copy.
+  Its Infrastructure operation surface owns startup migration and Identity
+  seed composition plus explicitly authorized disposable-database reset for
+  validation; it does not use compatibility migration helpers or `db_migrator`.
 - `templates/components/` contains typed component manifests for the canonical
   application template.
 - `tools/template_renderer/` contains the internal deterministic and atomic

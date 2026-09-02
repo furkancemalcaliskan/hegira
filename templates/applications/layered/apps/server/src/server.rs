@@ -190,44 +190,7 @@ async fn serve_configured(app_config: app_infrastructure::config::AppConfig) -> 
         "runtime starting"
     );
 
-    #[cfg(feature = "db-postgres")]
-    {
-        if app_config.startup.ensure_database
-            && !app_config.is_production()
-            && app_config.database.backend == app_infrastructure::config::DatabaseBackend::Postgres
-        {
-            tracing::info!("ensuring development database exists");
-            persistence::ensure_database(&app_config.database)
-                .await
-                .map_err(|err| {
-                    format!(
-                        "failed to ensure development database at {}: {err}",
-                        app_config.database.safe_url()
-                    )
-                })?;
-        }
-    }
-
-    let migration_plan = app_config
-        .database
-        .auto_migrate
-        .then(|| app_infrastructure::database::migration_plan(&app_config.database.backend))
-        .transpose()?;
-
-    let db = persistence::connect_database(&app_config.database)
-        .await
-        .map_err(|err| {
-            format!(
-                "failed to initialize database at {}: {err}",
-                app_config.database.safe_url()
-            )
-        })?;
-    if let Some(migration_plan) = migration_plan {
-        migration_plan
-            .run(&db)
-            .await
-            .map_err(|error| format!("failed to run application migrations: {error}"))?;
-    }
+    let db = app_infrastructure::operations::initialize_database(&app_config).await?;
     app_infrastructure::identity::sessions::SessionRepositoryAdapter::from_database(
         &app_config,
         db.clone(),
@@ -249,19 +212,6 @@ async fn serve_configured(app_config: app_infrastructure::config::AppConfig) -> 
             .map_err(|err| format!("search index initialization failed: {err}"))?;
     }
     let search = std::sync::Arc::new(search);
-
-    if app_config.startup.seed_identity {
-        tracing::info!("running identity seed at startup");
-        let seed_repository =
-            app_infrastructure::identity::IdentityRepositoryAdapter::new(db.clone());
-        app_infrastructure::identity::seed::seed_identity(
-            &seed_repository,
-            &app_infrastructure::security::password_hasher::Argon2PasswordHasher,
-            &app_config.seed,
-        )
-        .await
-        .map_err(|err| format!("failed to seed identity data: {err}"))?;
-    }
 
     let worker_health = std::sync::Arc::new(observability::worker_health::WorkerHealth::default());
     let job_observer = std::sync::Arc::new(observability::worker_health::RuntimeJobObserver::new(
