@@ -8,9 +8,10 @@ This repository has three distinct application-facing roles. Retained framework
 packages and official modules provide reusable source,
 `templates/applications/layered/` is the canonical source for an independently
 owned generated application, and `apps/hegira/` plus the legacy layered crates
-form the current compatibility application used to exercise framework
-integration. The compatibility host is not the generated application's
-ownership model, and the internal renderer is not a public CLI.
+form the current compatibility application pending retirement. Required
+integration and release validation no longer consumes that compatibility host;
+it renders the canonical application as an external framework consumer. The
+internal renderer is not a public CLI.
 
 ## Dependency Direction
 
@@ -179,7 +180,7 @@ the referenced follow-up issue has already been implemented.
 
 | Package | Role | Disposition | Follow-up |
 |---|---|---|---|
-| `hegira` | Compatibility host | Replace and retire | #145, #146 |
+| `hegira` | Compatibility host | Replace and retire | #146 |
 | `platform_core` | Framework | Retain | None |
 | `audit` | Framework | Retain | None |
 | `cache` | Framework | Retain | None |

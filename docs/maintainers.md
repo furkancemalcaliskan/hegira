@@ -84,7 +84,7 @@ Keep these exact status checks required for both `develop` and `main`:
 - `feature-matrix (distributed-providers)`
 
 The stable `quality` context is an aggregate gate. It reports failure unless
-the `framework`, `official-modules`, `templates`, and `generated-application`
+the `framework`, `official-modules`, `tooling`, and `generated-application`
 jobs all succeed. Generated-application database, release-build, production
 container, and HTTP/security validation is therefore release-blocking without
 requiring a new protected-branch context.
@@ -96,16 +96,16 @@ integration ref.
 
 The repository validation workflow separates these responsibilities:
 
-- `feature-matrix` compiles SQLite, PostgreSQL, WASM hydration, observability,
-  and distributed-provider capability sets;
-- `framework` validates framework crates, host composition, minimal- and
-  all-capability platform contracts, provider fail-fast behavior, and ignored
-  PostgreSQL integration tests against a disposable service;
-- `official-modules` validates the canonical Identity layers and their host
-  integration against a separate disposable PostgreSQL service;
-- `templates` validates manifests, deterministic rendering, the workspace-
-  external layered application's locked dependency boundaries, hydration, and
-  release output;
+- `feature-matrix` independently renders the canonical application and compiles
+  its SQLite, PostgreSQL, WASM hydration, observability, and distributed-provider
+  capability sets as an external framework consumer;
+- `framework` validates only application-independent framework packages under
+  minimal and all-capability contracts;
+- `official-modules` validates the canonical Identity packages directly,
+  including ignored SQLx contracts against a disposable PostgreSQL service;
+- `tooling` validates the DX baseline, rendering tool, component manifests,
+  workspace-external layered application, locked dependency boundaries,
+  hydration, and release output;
 - `generated-application` validates fresh SQLite and PostgreSQL applications,
   the supported v0.2.0 upgrade, locked application dependency boundaries, and
   the rendered production container;
@@ -113,9 +113,9 @@ The repository validation workflow separates these responsibilities:
   required status context;
 - `supply-chain` runs dependency policy and vulnerability checks.
 
-The two PostgreSQL service containers use trust authentication only inside
-their isolated GitHub-hosted runners. They contain disposable test data, expose
-no repository secret, and are destroyed with the runner after validation.
+Disposable PostgreSQL containers use trust authentication only inside isolated
+GitHub-hosted runners. They contain disposable test data, expose no repository
+secret, and are destroyed after validation.
 
 The former standalone full-stack and production-container pull-request
 workflows are removed because the template and generated-application jobs own
@@ -207,9 +207,9 @@ Run the backend gate without ignored PostgreSQL tests:
 sh scripts/backend-check.sh
 ```
 
-This aggregate runs the framework/host, official-module, and canonical layered-template
-checks. Run an ownership gate directly while iterating when the change is confined to that
-surface:
+This aggregate runs the framework, official-module, and canonical layered
+application tooling checks. Run an ownership gate directly while iterating
+when the change is confined to that surface:
 
 ```sh
 sh scripts/framework-check.sh
@@ -258,11 +258,10 @@ The `release` workflow supports manual release-candidate validation from
   package;
 - generate and verify an SPDX JSON SBOM from a clean checkout before build
   outputs exist;
-- validate framework packages and the compatibility host, including their
-  database-backed contracts against disposable PostgreSQL;
-- validate official Identity module packages and integration against a
-  separate disposable PostgreSQL database;
-- validate typed template rendering, the independent layered workspace,
+- validate application-independent framework packages directly;
+- validate official Identity module packages, including SQLx contracts against
+  a disposable PostgreSQL database;
+- validate typed rendering tooling, the independent layered workspace,
   hydration, and release output;
 - validate fresh SQLite and PostgreSQL generated applications, supported
   v0.2.0 upgrades, and the rendered production container and HTTP contract.
