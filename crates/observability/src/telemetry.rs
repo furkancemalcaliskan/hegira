@@ -122,3 +122,32 @@ fn init_with_optional_otlp(settings: &TelemetrySettings) -> Result<TelemetryGuar
         provider: Some(provider),
     })
 }
+
+#[cfg(all(test, not(feature = "otel-otlp")))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn enabled_uncompiled_exporter_fails_before_subscriber_initialization() {
+        let error = init(&TelemetrySettings {
+            service_name: "test".to_string(),
+            service_version: "0.0.0",
+            environment: "test".to_string(),
+            role: "all".to_string(),
+            logging_filter: "info".to_string(),
+            exporter: Some(OtlpExporterSettings {
+                protocol: OtlpProtocol::Grpc,
+                endpoint: "http://unreachable.invalid:4317".to_string(),
+                timeout: std::time::Duration::from_secs(1),
+                sample_ratio: 1.0,
+            }),
+        })
+        .err()
+        .expect("an unavailable compiled capability should fail");
+
+        assert_eq!(
+            error,
+            "telemetry.enabled=true requires building with --features otel-otlp"
+        );
+    }
+}

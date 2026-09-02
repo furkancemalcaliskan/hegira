@@ -713,4 +713,27 @@ mod tests {
             ConfiguredRateLimitBackend::Memory(_)
         ));
     }
+
+    #[cfg(not(feature = "cache-redis"))]
+    #[test]
+    fn enabled_uncompiled_redis_limiter_fails_before_initialization() {
+        let error = RateLimiter::from_options(
+            &RateLimitOptions {
+                enabled: true,
+                max_requests: 20,
+                window: Duration::from_secs(60),
+                backend: RateLimitBackend::Redis {
+                    url: "redis://unreachable.invalid:6379".to_string(),
+                },
+            },
+            &[],
+        )
+        .err()
+        .expect("an unavailable compiled capability should fail");
+
+        assert_eq!(
+            error,
+            "security.rate_limit.backend=redis requires building with --features cache-redis"
+        );
+    }
 }

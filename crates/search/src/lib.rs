@@ -256,4 +256,26 @@ mod tests {
 
         assert!(matches!(adapter, SearchAdapter::Null(_)));
     }
+
+    #[cfg(not(feature = "meilisearch"))]
+    #[test]
+    fn enabled_uncompiled_meilisearch_fails_before_initialization() {
+        let error = SearchAdapter::from_settings(&SearchSettings {
+            enabled: true,
+            backend: SearchBackend::Meilisearch,
+            index_prefix: "test".to_string(),
+            task_timeout_milliseconds: 1_000,
+            meilisearch: MeilisearchSettings {
+                url: "http://unreachable.invalid:7700".to_string(),
+                api_key: None,
+            },
+        })
+        .err()
+        .expect("an unavailable compiled capability should fail");
+
+        assert_eq!(
+            error.to_string(),
+            "Meilisearch support is not compiled into this binary"
+        );
+    }
 }

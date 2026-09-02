@@ -152,4 +152,21 @@ mod tests {
 
         assert!(matches!(adapter, CacheAdapter::Null(_)));
     }
+
+    #[cfg(not(feature = "redis"))]
+    #[test]
+    fn enabled_uncompiled_redis_cache_fails_before_initialization() {
+        let error = CacheAdapter::from_settings(&CacheSettings {
+            enabled: true,
+            backend: CacheBackend::Redis,
+            redis_url: "redis://unreachable.invalid:6379".to_string(),
+        })
+        .err()
+        .expect("an unavailable compiled capability should fail");
+
+        assert_eq!(
+            error.to_string(),
+            "Redis cache support is not compiled into this binary"
+        );
+    }
 }

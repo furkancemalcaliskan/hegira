@@ -196,4 +196,28 @@ mod tests {
 
         assert!(matches!(adapter, MailerAdapter::Null(_)));
     }
+
+    #[cfg(not(feature = "smtp"))]
+    #[test]
+    fn enabled_uncompiled_smtp_mailer_fails_before_initialization() {
+        let error = MailerAdapter::from_settings(&MailerSettings {
+            enabled: true,
+            backend: MailerBackend::Smtp,
+            from: "no-reply@example.com".to_string(),
+            smtp: SmtpSettings {
+                host: "unreachable.invalid".to_string(),
+                port: 587,
+                username: None,
+                password: None,
+                starttls: true,
+            },
+        })
+        .err()
+        .expect("an unavailable compiled capability should fail");
+
+        assert_eq!(
+            error.to_string(),
+            "SMTP mail support is not compiled into this binary"
+        );
+    }
 }

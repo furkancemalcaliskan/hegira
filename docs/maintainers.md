@@ -98,8 +98,9 @@ The repository validation workflow separates these responsibilities:
 
 - `feature-matrix` compiles SQLite, PostgreSQL, WASM hydration, observability,
   and distributed-provider capability sets;
-- `framework` validates framework crates, host composition, provider contracts,
-  and ignored PostgreSQL integration tests against a disposable service;
+- `framework` validates framework crates, host composition, minimal- and
+  all-capability platform contracts, provider fail-fast behavior, and ignored
+  PostgreSQL integration tests against a disposable service;
 - `official-modules` validates the canonical Identity layers and their host
   integration against a separate disposable PostgreSQL service;
 - `templates` validates manifests, deterministic rendering, the workspace-
