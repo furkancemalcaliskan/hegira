@@ -27,20 +27,10 @@ commands change. Never describe planned work as implemented.
 
 - The repository root is a virtual Cargo workspace and the documented command
   entry point.
-- `apps/hegira/` contains the deployable Axum/Leptos package, server
-  composition, binary and hydration entry points, package metadata, and
-  integration tests.
 - `crates/` contains application-independent platform core, audit, cache, mail,
   search, security, settings, storage, configuration, persistence,
-  background-work, and runtime packages alongside the current layered domain,
-  application, infrastructure, presentation, web, and database-migrator
-  packages.
-  The package-level ownership and disposition contract in
-  `docs/architecture.md` classifies the latter packages as compatibility code;
-  their physical location under `crates/` does not make them final framework
-  packages. Do not add new framework or module dependencies on compatibility
-  code. Only the exact issue-bound transition edges enforced by
-  `scripts/architecture-boundaries.mjs` are temporarily permitted.
+  background-work, HTTP, Leptos, observability, test-support, and runtime
+  packages. These packages are application-independent framework source.
 - `modules/identity/` contains the canonical Identity Domain Shared, Domain,
   Application Contracts, Application, SQLx, Axum HTTP, and Leptos adapter
   packages.
@@ -58,7 +48,7 @@ commands change. Never describe planned work as implemented.
   Identity Application, SQLx, HTTP, and Leptos adapters without using legacy
   framework-layer packages. `apps/web` owns the default Leptos shell,
   application navigation and localization, and explicitly selects the Identity
-  Leptos adapter without depending on the compatibility `web` package. It
+  Leptos adapter directly. It
   consumes framework packages through a pinned release source; repository
   validation rewrites those dependencies only in a disposable staging copy.
   Its Infrastructure operation surface owns startup migration and Identity
@@ -69,8 +59,7 @@ commands change. Never describe planned work as implemented.
 - `tools/template_renderer/` contains the internal deterministic and atomic
   template renderer used by repository validation. It is not the public Hegira
   CLI.
-- `config/` contains environment profiles.
-- `scripts/` contains local validation, smoke, operations, and release helpers.
+- `scripts/` contains local validation and release helpers.
 - `.github/workflows/` contains validation and release automation.
 
 Do not create future-facing directories, manifests, modules, tools, clients, or
@@ -79,19 +68,23 @@ implementation.
 
 ## Setup And Run
 
-Install the current development prerequisites:
+Render the current canonical application with the internal maintainer tool,
+then install its development prerequisites:
 
 ```sh
+cargo run --locked -p template_renderer -- render \
+  --repository-root . --template layered --output ../my-application
+cd ../my-application
 rustup target add wasm32-unknown-unknown
 cargo install cargo-leptos
-npm ci --prefix crates/web/src
+npm ci --prefix apps/web/src
 ```
 
 Start the current SQLite profile:
 
 ```sh
-APP_ENV=sqlite cargo run -p db_migrator --no-default-features --features ssr,db-sqlite -- migrate
-APP_ENV=sqlite cargo leptos watch -p hegira --bin-features ssr,db-sqlite --lib-features hydrate
+APP_ENV=sqlite cargo leptos watch -p app_server \
+  --bin-features ssr,db-sqlite --lib-features hydrate
 ```
 
 The application listens on `http://127.0.0.1:3000`. See
@@ -186,26 +179,14 @@ Focused release identity and source-first workflow validation:
 sh scripts/release-policy.sh
 ```
 
-Production container validation:
-
-```sh
-sh scripts/container-smoke.sh
-```
-
-Full-stack release-output validation:
-
-```sh
-sh scripts/full-stack-build-check.sh
-```
-
 Basic focused commands include:
 
 ```sh
 cargo fmt --all -- --check
-cargo check -p hegira --features ssr
-cargo check -p hegira --no-default-features --features hydrate --target wasm32-unknown-unknown
-cargo test -p hegira --features ssr --lib
-cargo leptos build -p hegira --release --bin-features ssr,db-postgres --lib-features hydrate
+cargo check --workspace --all-targets
+cargo test --workspace
+cargo run --locked -p template_renderer -- render \
+  --repository-root . --template layered --output /tmp/hegira-layered
 ```
 
 PostgreSQL tests marked `ignored` reset their target database. Run them only

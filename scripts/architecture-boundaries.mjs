@@ -1,35 +1,10 @@
 import { spawnSync } from "node:child_process";
-import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
 
 export const WORKSPACE_DEPENDENCY_POLICY = Object.freeze({
-  hegira: [
-    "application",
-    "application_contracts",
-    "background_jobs",
-    "cache",
-    "configuration",
-    "domain",
-    "domain_shared",
-    "http_support",
-    "identity_http",
-    "identity_leptos",
-    "identity_sqlx",
-    "infrastructure",
-    "mail",
-    "observability",
-    "persistence",
-    "platform_core",
-    "presentation",
-    "runtime",
-    "search",
-    "storage",
-    "test_support",
-    "web",
-  ],
   platform_core: [],
   audit: [],
   cache: [],
@@ -52,50 +27,7 @@ export const WORKSPACE_DEPENDENCY_POLICY = Object.freeze({
     "settings",
     "storage",
   ],
-  domain_shared: ["identity_domain_shared"],
-  domain: ["identity_domain"],
-  application_contracts: ["identity_application_contracts"],
-  application: [
-    "background_jobs",
-    "identity_application",
-    "settings",
-    "storage",
-  ],
-  infrastructure: [
-    "application",
-    "application_contracts",
-    "background_jobs",
-    "cache",
-    "configuration",
-    "domain",
-    "domain_shared",
-    "identity_sqlx",
-    "persistence",
-    "platform_core",
-    "runtime",
-  ],
-  presentation: [
-    "application",
-    "application_contracts",
-    "cache",
-    "domain_shared",
-    "infrastructure",
-    "leptos_support",
-    "mail",
-    "persistence",
-    "search",
-    "storage",
-  ],
-  web: [
-    "application",
-    "application_contracts",
-    "domain_shared",
-    "identity_leptos",
-    "leptos_support",
-    "presentation",
-  ],
   runtime: [],
-  db_migrator: ["identity_sqlx", "infrastructure", "persistence", "search"],
   identity_domain_shared: [],
   identity_domain: ["identity_domain_shared"],
   identity_application_contracts: [
@@ -140,7 +72,6 @@ const packageContract = (role, disposition, issues = []) =>
   Object.freeze({ role, disposition, issues: Object.freeze(issues) });
 
 export const WORKSPACE_PACKAGE_POLICY = Object.freeze({
-  hegira: packageContract("compatibility", "replace-and-retire", [145, 146]),
   platform_core: packageContract("framework", "retain"),
   audit: packageContract("framework", "retain"),
   cache: packageContract("framework", "retain"),
@@ -156,43 +87,7 @@ export const WORKSPACE_PACKAGE_POLICY = Object.freeze({
   leptos_support: packageContract("framework", "retain"),
   observability: packageContract("framework", "retain"),
   test_support: packageContract("framework", "retain"),
-  domain_shared: packageContract(
-    "compatibility",
-    "extract-and-retire",
-    [146],
-  ),
-  domain: packageContract("compatibility", "extract-and-retire", [146]),
-  application_contracts: packageContract(
-    "compatibility",
-    "extract-and-retire",
-    [146],
-  ),
-  application: packageContract(
-    "compatibility",
-    "extract-and-retire",
-    [146],
-  ),
-  infrastructure: packageContract(
-    "compatibility",
-    "extract-and-retire",
-    [146],
-  ),
-  presentation: packageContract(
-    "compatibility",
-    "extract-and-retire",
-    [146],
-  ),
-  web: packageContract(
-    "compatibility",
-    "extract-and-retire",
-    [141, 146],
-  ),
   runtime: packageContract("framework", "retain"),
-  db_migrator: packageContract(
-    "compatibility",
-    "replace-and-retire",
-    [142, 146],
-  ),
   identity_domain_shared: packageContract("module", "retain"),
   identity_domain: packageContract("module", "retain"),
   identity_application_contracts: packageContract("module", "retain"),
@@ -304,107 +199,22 @@ const PACKAGE_DISPOSITIONS = new Set([
   "replace-and-retire",
 ]);
 
-const IDENTITY_SQL_PATTERN =
-  /\b(?:select|from|join|insert\s+into|update|delete\s+from|create\s+table|alter\s+table|drop\s+table)\b[^\n]*\b(?:users|sessions|roles|permissions|user_roles|role_permissions|oauth_states|user_oauth_connections|oauth_pending_signups)\b/i;
-
-const HISTORICAL_APPLICATION_IDENTITY_SQL = Object.freeze({
-  "crates/infrastructure/src/db/migrations/022_retire_catalog_persistence.sql":
-    "36cee0eac99d95ce134bce3bde5efc0cae646403ef1da3dcf020b991a4d0a01c4048e24a9f6916215c7ae7abd484f362",
-  "crates/infrastructure/src/db/migrations_sqlite/009_retire_catalog_persistence.sql":
-    "c3485487deb6ff20755cce6a76b80de70c2c1129c72075989ea4a2c76b0b3e4634f5985f01fb569d50a0ae3650ad38e7",
-});
-
-const HISTORICAL_APPLICATION_IDENTITY_SQL_TESTS = new Set([
-  "crates/infrastructure/src/db/retirement_tests.rs",
+export const RETIRED_COMPATIBILITY_PATHS = Object.freeze([
+  "apps/hegira",
+  "crates/domain_shared",
+  "crates/domain",
+  "crates/application_contracts",
+  "crates/application",
+  "crates/infrastructure",
+  "crates/presentation",
+  "crates/web",
+  "crates/db_migrator",
 ]);
 
-function sha384(content) {
-  return crypto.createHash("sha384").update(content).digest("hex");
-}
-
-export function validateIdentitySqlOwnership(files) {
-  const errors = [];
-  for (const { location, content } of files) {
-    if (!location.startsWith("crates/") || !IDENTITY_SQL_PATTERN.test(content)) {
-      continue;
-    }
-
-    if (HISTORICAL_APPLICATION_IDENTITY_SQL_TESTS.has(location)) {
-      continue;
-    }
-
-    const historicalChecksum = HISTORICAL_APPLICATION_IDENTITY_SQL[location];
-    if (historicalChecksum === undefined) {
-      errors.push(
-        `Identity SQL must be module-owned under modules/identity/sqlx: ${location}`,
-      );
-    } else if (sha384(content) !== historicalChecksum) {
-      errors.push(
-        `historical application migration checksum changed: ${location}`,
-      );
-    }
-  }
-  return errors;
-}
-
-const IDENTITY_BUSINESS_COMPATIBILITY_ROOTS = [
-  "crates/domain_shared/",
-  "crates/domain/",
-  "crates/application_contracts/",
-  "crates/application/",
-];
-
-const IDENTITY_BUSINESS_SOURCE_REFERENCE =
-  /(?:#\s*\[\s*path\s*=\s*"|include!\s*\(\s*")[^"]*modules\/identity\/(?:domain_shared|domain|application_contracts|application)\//;
-
-export function validateIdentityBusinessSourceOwnership(files) {
-  return files
-    .filter(
-      ({ location, content }) =>
-        IDENTITY_BUSINESS_COMPATIBILITY_ROOTS.some((root) =>
-          location.startsWith(root),
-        ) && IDENTITY_BUSINESS_SOURCE_REFERENCE.test(content),
-    )
-    .map(
-      ({ location }) =>
-        `Identity business source must be compiled by its module package, not included by compatibility code: ${location}`,
-    );
-}
-
-const IDENTITY_SQLX_SOURCE_REFERENCE =
-  /(?:#\s*\[\s*path\s*=\s*"|include!\s*\(\s*")[^"]*modules\/identity\/sqlx\//;
-
-export function validateIdentitySqlxSourceOwnership(files) {
-  return files
-    .filter(
-      ({ location, content }) =>
-        location.startsWith("crates/infrastructure/") &&
-        IDENTITY_SQLX_SOURCE_REFERENCE.test(content),
-    )
-    .map(
-      ({ location }) =>
-        `Identity SQLx source must be compiled by identity_sqlx, not included by compatibility infrastructure: ${location}`,
-    );
-}
-
-function repositorySourceFiles(root) {
-  const files = [];
-  const visit = (directory) => {
-    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
-      const location = path.join(directory, entry.name);
-      if (entry.isDirectory()) {
-        visit(location);
-      } else if (entry.isFile() && /\.(?:rs|sql)$/.test(entry.name)) {
-        files.push({
-          location: path.relative(root, location).split(path.sep).join("/"),
-          content: fs.readFileSync(location, "utf8"),
-        });
-      }
-    }
-  };
-
-  visit(path.join(root, "crates"));
-  return files;
+export function validateRetiredCompatibilityPaths(root) {
+  return RETIRED_COMPATIBILITY_PATHS.filter((location) =>
+    fs.existsSync(path.join(root, location, "Cargo.toml")),
+  ).map((location) => `retired compatibility path was reintroduced: ${location}`);
 }
 
 const REPOSITORY_PACKAGE_ROOTS = Object.freeze([
@@ -867,12 +677,9 @@ function runCli() {
     return;
   }
 
-  const sourceFiles = repositorySourceFiles(root);
   const errors = [
     ...validateWorkspaceMetadata(metadata),
-    ...validateIdentityBusinessSourceOwnership(sourceFiles),
-    ...validateIdentitySqlxSourceOwnership(sourceFiles),
-    ...validateIdentitySqlOwnership(sourceFiles),
+    ...validateRetiredCompatibilityPaths(root),
   ];
   if (errors.length > 0) {
     for (const error of errors) {

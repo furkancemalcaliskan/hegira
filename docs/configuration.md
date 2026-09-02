@@ -1,10 +1,9 @@
 # Configuration
 
-The current compatibility host loads configuration from the repository root at
-`config/{APP_ENV}.yaml` and then applies environment-variable overrides. A canonical rendered
-application owns the equivalent `config/` directory inside its independent application
-workspace; it does not read profiles from the framework repository. Nested keys use double
-underscores:
+A canonical rendered application loads its application-owned
+`config/{APP_ENV}.yaml` profile and then applies environment-variable overrides. Generated
+applications do not read runtime profiles from the framework repository. Nested keys use
+double underscores:
 
 ```sh
 APP_ENV=production
@@ -134,7 +133,8 @@ split web/worker roles backed by a local SQLite database. Structural provider,
 URL, metric, lifetime, and worker-operation checks apply in every environment.
 
 Keep `database.auto_migrate=false` and `startup.seed_identity=false` in
-production. Run `db_migrator` as an explicit release step.
+production. Migration execution is composed by the generated application's infrastructure
+layer; deployment automation must run that application-owned migration plan before rollout.
 
 `security.trusted_proxies` is empty by default. Add only the IPv4 and IPv6
 CIDRs of reverse proxies that connect directly to Hegira. Direct clients cannot

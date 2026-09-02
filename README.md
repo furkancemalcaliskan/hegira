@@ -65,12 +65,11 @@ ownership:
 
 | Surface | Responsibility |
 |---|---|
-| `crates/` | Application-independent framework primitives, layered compatibility packages, providers, and runtime support |
+| `crates/` | Application-independent framework primitives, providers, and runtime support |
 | `modules/identity/` | Canonical source for the official layered Identity module and its SQLx, Axum, and Leptos adapters |
 | `templates/applications/layered/` | Workspace-external, brand-neutral layered application base with application-owned server, web, configuration, migration composition, and deployment files |
 | `templates/components/` | Typed component manifests that define the canonical application composition |
 | `tools/template_renderer/` | Internal deterministic renderer used by repository validation; it is not a public CLI |
-| `apps/hegira/` | Current deployable compatibility host used to validate framework integration |
 
 The canonical rendered application is an independent Cargo workspace and consumes framework
 packages from a pinned release source. Releases are source-first, and the repository does not
@@ -78,10 +77,17 @@ currently implement a public application-generation command.
 
 ## Quick Start
 
-Run the following commands from the repository root to start the current compatibility host.
-The root coordinates the Cargo workspace, while the deployable package lives at
-`apps/hegira`. See [Architecture](docs/architecture.md) for the separate canonical generated
-application contract.
+Until the public CLI is implemented, the repository's internal renderer can materialize the
+canonical application source. The renderer is maintainer tooling rather than a stable public
+command contract:
+
+```sh
+cargo run --locked -p template_renderer -- render \
+  --repository-root . \
+  --template layered \
+  --output ../my-application
+cd ../my-application
+```
 
 Install the Rust WASM target, `cargo-leptos`, and lockfile-pinned frontend
 tooling:
@@ -89,18 +95,19 @@ tooling:
 ```sh
 rustup target add wasm32-unknown-unknown
 cargo install cargo-leptos
-npm ci --prefix crates/web/src
+npm ci --prefix apps/web/src
 ```
 
 Start with SQLite and no external services:
 
 ```sh
-APP_ENV=sqlite cargo run -p db_migrator --no-default-features --features ssr,db-sqlite -- migrate
-APP_ENV=sqlite cargo leptos watch -p hegira --bin-features ssr,db-sqlite --lib-features hydrate
+APP_ENV=sqlite cargo leptos watch -p app_server \
+  --bin-features ssr,db-sqlite --lib-features hydrate
 ```
 
 Open `http://127.0.0.1:3000`. The SQLite profile seeds the development admin
-configured in `config/sqlite.yaml`.
+configured in the generated application's `config/sqlite.yaml`. Development startup owns its
+SQLite database creation, migrations, and configured seed behavior.
 
 ## Documentation
 
@@ -136,19 +143,8 @@ sh scripts/generated-application-check.sh
 ```
 
 The CI official-module job sets `WITH_IGNORED_DB_TESTS=true` and supplies a
-disposable PostgreSQL database. The generated-application job owns application
-database, container, and HTTP integration. The compatibility host checks below
-remain optional diagnostics until that source is retired:
-
-```sh
-sh scripts/full-stack-build-check.sh
-```
-
-Verify the production container contract separately when Docker is available:
-
-```sh
-sh scripts/container-smoke.sh
-```
+disposable PostgreSQL database. The generated-application job is the sole owner of application
+database, provider, upgrade, container, hydration, and HTTP integration coverage.
 
 PostgreSQL tests marked `ignored` require a disposable `DATABASE_URL` because
 they reset the target database.

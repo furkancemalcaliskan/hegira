@@ -1,25 +1,23 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
-import process from "node:process";
 import test from "node:test";
 
 import {
   GENERATED_APPLICATION_DEPENDENCY_POLICY,
   REPOSITORY_OWNERSHIP_POLICY,
   RETIRED_COMPATIBILITY_PACKAGES,
+  RETIRED_COMPATIBILITY_PATHS,
   TRANSITIONAL_COMPATIBILITY_EDGES,
   WORKSPACE_DEPENDENCY_POLICY,
   WORKSPACE_PACKAGE_POLICY,
   validateGeneratedApplicationMetadata,
-  validateIdentityBusinessSourceOwnership,
-  validateIdentitySqlOwnership,
-  validateIdentitySqlxSourceOwnership,
+  validateRetiredCompatibilityPaths,
   validateWorkspaceMetadata,
 } from "./architecture-boundaries.mjs";
 
 const PACKAGE_LOCATIONS = Object.freeze({
-  hegira: "apps/hegira",
   identity_domain_shared: "modules/identity/domain_shared",
   identity_domain: "modules/identity/domain",
   identity_application_contracts: "modules/identity/application_contracts",
@@ -218,16 +216,6 @@ test("accepts the documented ownership-class dependency directions", () => {
       WORKSPACE_DEPENDENCY_POLICY.observability.includes("background_jobs") &&
       WORKSPACE_DEPENDENCY_POLICY.test_support.includes("audit") &&
       !WORKSPACE_DEPENDENCY_POLICY.test_support.includes("application") &&
-      WORKSPACE_DEPENDENCY_POLICY.hegira.includes("infrastructure") &&
-      WORKSPACE_DEPENDENCY_POLICY.hegira.includes("persistence") &&
-      WORKSPACE_DEPENDENCY_POLICY.hegira.includes("identity_sqlx") &&
-      WORKSPACE_DEPENDENCY_POLICY.hegira.includes("cache") &&
-      WORKSPACE_DEPENDENCY_POLICY.hegira.includes("mail") &&
-      WORKSPACE_DEPENDENCY_POLICY.hegira.includes("search") &&
-      WORKSPACE_DEPENDENCY_POLICY.hegira.includes("storage") &&
-      WORKSPACE_DEPENDENCY_POLICY.db_migrator.includes("persistence") &&
-      WORKSPACE_DEPENDENCY_POLICY.db_migrator.includes("identity_sqlx") &&
-      WORKSPACE_DEPENDENCY_POLICY.db_migrator.includes("search") &&
       WORKSPACE_DEPENDENCY_POLICY.identity_domain.includes(
         "identity_domain_shared",
       ) &&
@@ -237,7 +225,6 @@ test("accepts the documented ownership-class dependency directions", () => {
       WORKSPACE_DEPENDENCY_POLICY.identity_application.includes(
         "identity_application_contracts",
       ) &&
-      WORKSPACE_DEPENDENCY_POLICY.infrastructure.includes("identity_sqlx") &&
       WORKSPACE_DEPENDENCY_POLICY.identity_sqlx.includes("persistence") &&
       WORKSPACE_DEPENDENCY_POLICY.identity_sqlx.includes("background_jobs") &&
       WORKSPACE_DEPENDENCY_POLICY.identity_sqlx.includes("search") &&
@@ -246,14 +233,7 @@ test("accepts the documented ownership-class dependency directions", () => {
         "identity_application_contracts",
       ) &&
       !WORKSPACE_DEPENDENCY_POLICY.identity_leptos.includes("web") &&
-      !WORKSPACE_DEPENDENCY_POLICY.identity_leptos.includes("persistence") &&
-      WORKSPACE_DEPENDENCY_POLICY.presentation.includes("infrastructure") &&
-      WORKSPACE_DEPENDENCY_POLICY.presentation.includes("persistence") &&
-      WORKSPACE_DEPENDENCY_POLICY.presentation.includes("cache") &&
-      WORKSPACE_DEPENDENCY_POLICY.presentation.includes("mail") &&
-      WORKSPACE_DEPENDENCY_POLICY.presentation.includes("search") &&
-      WORKSPACE_DEPENDENCY_POLICY.presentation.includes("storage") &&
-      !WORKSPACE_DEPENDENCY_POLICY.presentation.includes("observability"),
+      !WORKSPACE_DEPENDENCY_POLICY.identity_leptos.includes("persistence"),
   );
   assert.deepEqual(REPOSITORY_OWNERSHIP_POLICY.framework, ["framework"]);
   assert.deepEqual(REPOSITORY_OWNERSHIP_POLICY.module, [
@@ -345,29 +325,14 @@ test("completed Identity module boundaries expose no compatibility dependency", 
   }
 });
 
-test("rejects a dependency from a framework package to the compatibility host", () => {
-  const errors = validateWorkspaceMetadata(
-    workspaceMetadata([{ from: "runtime", to: "hegira" }]),
-  );
-  assert.ok(
-    errors.some(
-      (error) =>
-        error.includes("runtime -> hegira") &&
-        error.includes(
-          "framework packages may not depend on compatibility packages",
-        ),
-    ),
-  );
-});
-
-test("accepts valid framework module tool and compatibility directions", () => {
+test("accepts valid framework module tool and application directions", () => {
   const packages = [
     { name: "framework_core", location: "crates/framework_core" },
     { name: "framework_http", location: "crates/framework_http" },
     { name: "identity_domain", location: "modules/identity/domain" },
     { name: "identity_http", location: "modules/identity/http" },
     { name: "template_renderer", location: "tools/template_renderer" },
-    { name: "compatibility_host", location: "apps/example" },
+    { name: "application_host", location: "apps/example", role: "application" },
   ];
   const dependencies = [
     { from: "framework_http", to: "framework_core" },
@@ -375,8 +340,8 @@ test("accepts valid framework module tool and compatibility directions", () => {
     { from: "identity_http", to: "identity_domain" },
     { from: "identity_http", to: "framework_http" },
     { from: "template_renderer", to: "identity_http" },
-    { from: "compatibility_host", to: "identity_http" },
-    { from: "compatibility_host", to: "framework_http" },
+    { from: "application_host", to: "identity_http" },
+    { from: "application_host", to: "framework_http" },
   ];
 
   assert.deepEqual(validateOwnershipFixture(packages, dependencies), []);
@@ -721,27 +686,27 @@ test("rejects a workspace package outside an owned repository location", () => {
   ]);
 });
 
-test("rejects an outward dependency from the domain layer", () => {
+test("rejects an outward dependency from an official domain layer", () => {
   const errors = validateWorkspaceMetadata(
-    workspaceMetadata([{ from: "domain", to: "infrastructure" }]),
+    workspaceMetadata([{ from: "identity_domain", to: "identity_sqlx" }]),
   );
   assert.ok(
     errors.some(
       (error) =>
-        error.includes("domain -> infrastructure") &&
+        error.includes("identity_domain -> identity_sqlx") &&
         error.includes("not permitted"),
     ),
   );
 });
 
-test("rejects an outward dependency from the application layer", () => {
+test("rejects an outward dependency from an official application layer", () => {
   const errors = validateWorkspaceMetadata(
-    workspaceMetadata([{ from: "application", to: "presentation" }]),
+    workspaceMetadata([{ from: "identity_application", to: "identity_http" }]),
   );
   assert.ok(
     errors.some(
       (error) =>
-        error.includes("application -> presentation") &&
+        error.includes("identity_application -> identity_http") &&
         error.includes("not permitted"),
     ),
   );
@@ -777,10 +742,10 @@ test("requires every workspace package to have a policy entry", () => {
 
 test("rejects a local dependency target outside the workspace", () => {
   const metadata = workspaceMetadata();
-  const domain = metadata.packages.find(
-    (packageMetadata) => packageMetadata.name === "domain",
+  const runtime = metadata.packages.find(
+    (packageMetadata) => packageMetadata.name === "runtime",
   );
-  domain.dependencies.push({
+  runtime.dependencies.push({
     name: "unregistered",
     path: path.join(metadata.workspace_root, "vendor", "unregistered"),
   });
@@ -788,107 +753,19 @@ test("rejects a local dependency target outside the workspace", () => {
   const errors = validateWorkspaceMetadata(metadata);
   assert.ok(
     errors.some((error) =>
-      error.includes("domain -> unregistered"),
+      error.includes("runtime -> unregistered"),
     ),
   );
 });
 
-test("requires Identity SQL to remain module-owned", () => {
-  assert.deepEqual(
-    validateIdentitySqlOwnership([
-      {
-        location: "crates/infrastructure/src/users.rs",
-        content: "SELECT id FROM users WHERE deleted_at IS NULL",
-      },
-      {
-        location: "modules/identity/sqlx/src/users.rs",
-        content: "SELECT id FROM users WHERE deleted_at IS NULL",
-      },
-      {
-        location: "crates/storage/src/path.rs",
-        content: 'StoragePath::from_segments(["identity", "users"])',
-      },
-      {
-        location:
-          "crates/infrastructure/src/db/migrations/022_retire_catalog_persistence.sql",
-        content: fs.readFileSync(
-          path.join(
-            process.cwd(),
-            "crates/infrastructure/src/db/migrations/022_retire_catalog_persistence.sql",
-          ),
-          "utf8",
-        ),
-      },
-      {
-        location: "crates/infrastructure/src/db/retirement_tests.rs",
-        content: "SELECT name FROM permissions WHERE name LIKE 'Catalog.%'",
-      },
-    ]),
-    [
-      "Identity SQL must be module-owned under modules/identity/sqlx: crates/infrastructure/src/users.rs",
-    ],
-  );
-});
+test("rejects reintroduced retired compatibility paths", (context) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "hegira-retired-paths-"));
+  context.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const retiredPath = RETIRED_COMPATIBILITY_PATHS[0];
+  fs.mkdirSync(path.join(root, retiredPath), { recursive: true });
+  fs.writeFileSync(path.join(root, retiredPath, "Cargo.toml"), "[package]\n");
 
-test("rejects changes to historical application-owned Identity SQL", () => {
-  assert.deepEqual(
-    validateIdentitySqlOwnership([
-      {
-        location:
-          "crates/infrastructure/src/db/migrations/022_retire_catalog_persistence.sql",
-        content: "DELETE FROM permissions WHERE name LIKE 'Catalog.%';",
-      },
-    ]),
-    [
-      "historical application migration checksum changed: crates/infrastructure/src/db/migrations/022_retire_catalog_persistence.sql",
-    ],
-  );
-});
-
-test("requires Identity business source to compile from module packages", () => {
-  assert.deepEqual(
-    validateIdentityBusinessSourceOwnership([
-      {
-        location: "crates/application/src/lib.rs",
-        content:
-          '#[path = "../../../modules/identity/application/src/identity/mod.rs"]',
-      },
-      {
-        location: "modules/identity/application/src/lib.rs",
-        content: "pub mod identity;",
-      },
-      {
-        location: "crates/domain/src/lib.rs",
-        content:
-          'include!("../../../modules/identity/domain/src/identity/mod.rs");',
-      },
-      {
-        location: "crates/presentation/src/lib.rs",
-        content: '#[path = "../../../modules/identity/http/src/lib.rs"]',
-      },
-    ]),
-    [
-      "Identity business source must be compiled by its module package, not included by compatibility code: crates/application/src/lib.rs",
-      "Identity business source must be compiled by its module package, not included by compatibility code: crates/domain/src/lib.rs",
-    ],
-  );
-});
-
-test("requires Identity SQLx source to compile from the module adapter", () => {
-  assert.deepEqual(
-    validateIdentitySqlxSourceOwnership([
-      {
-        location: "crates/infrastructure/src/identity/mod.rs",
-        content:
-          '#[path = "../../../../modules/identity/sqlx/src/identity/provider.rs"]',
-      },
-      {
-        location: "modules/identity/sqlx/src/identity/mod.rs",
-        content: "pub mod provider;",
-      },
-    ]),
-    [
-      "Identity SQLx source must be compiled by identity_sqlx, not included by compatibility infrastructure: crates/infrastructure/src/identity/mod.rs",
-    ],
-  );
+  assert.deepEqual(validateRetiredCompatibilityPaths(root), [
+    `retired compatibility path was reintroduced: ${retiredPath}`,
+  ]);
 });

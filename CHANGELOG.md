@@ -4,6 +4,22 @@ All notable changes are documented here. Releases follow Semantic Versioning.
 
 ## [Unreleased]
 
+### Changed
+
+- Retired the repository compatibility host and legacy layered compatibility
+  packages after generated-application validation became the authoritative
+  framework integration consumer.
+- Reduced the root Cargo workspace to application-independent framework
+  packages, official modules, and internal repository tooling.
+- Moved repository setup, architecture, deployment, and operations guidance to
+  the canonical rendered-application ownership model.
+
+### Removed
+
+- Removed compatibility-host configuration, container, smoke, packaging,
+  backup, restore, and frontend-size helpers that no longer had a runnable root
+  application target.
+
 ## [0.3.0] - 2026-08-01
 
 ### Added

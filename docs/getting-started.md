@@ -1,116 +1,77 @@
 # Getting Started
 
-This guide starts the repository's current Axum and Leptos compatibility host locally. It is
-the deployable integration surface used while framework packages, the official Identity
-module, and the canonical layered application template are validated independently. Use SQLite
-for a zero-service development environment or PostgreSQL when database-specific behavior must
-match production.
-
-Run the commands in this guide from the repository root. It is the Cargo
-workspace entry point; the compatibility host package is located at `apps/hegira`. The
-repository does not currently provide a public application-generation command.
-
-## Repository Surfaces
-
-| Location | Current role |
-|---|---|
-| `apps/hegira/` | Deployable compatibility host started by this guide |
-| `crates/` | Framework primitives, providers, runtime support, and compatibility packages |
-| `modules/identity/` | Canonical official Identity module source and adapters |
-| `templates/applications/layered/` | Independent layered application source rendered during validation |
-| `tools/template_renderer/` | Internal validation renderer, not a public CLI |
-
-See [Architecture](architecture.md) for package ownership and dependency direction.
+Hegira currently ships framework source, official modules, and a canonical
+layered application base. The public CLI is not implemented yet. The internal
+renderer below exists for source validation and can materialize the current
+template, but its command-line interface is not a stable public contract.
 
 ## Prerequisites
 
-- Current stable Rust toolchain
-- `wasm32-unknown-unknown` Rust target
-- `cargo-leptos`
-- Node.js and npm for Tailwind assets
+- the Rust toolchain pinned by `rust-toolchain.toml`;
+- the `wasm32-unknown-unknown` target;
+- `cargo-leptos`;
+- Node.js and npm for the Leptos stylesheet toolchain.
+
+From the framework repository root:
 
 ```sh
 rustup target add wasm32-unknown-unknown
 cargo install cargo-leptos
-npm ci --prefix crates/web/src
+cargo run --locked -p template_renderer -- render \
+  --repository-root . \
+  --template layered \
+  --output ../my-application
 ```
 
-The npm command installs the lockfile-pinned frontend tooling used by
-Cargo-Leptos. Keep the working directory at the repository root for the
-remaining commands.
+The output is an independent Cargo workspace. Its normal dependencies use the
+framework repository and release tag declared by the template rather than
+paths into the maintainer checkout.
 
-## SQLite Development
-
-SQLite needs no container or external service. Migrate the local database and
-start the Leptos development server:
+## Run With SQLite
 
 ```sh
-APP_ENV=sqlite cargo run -p db_migrator --no-default-features --features ssr,db-sqlite -- migrate
-APP_ENV=sqlite cargo leptos watch -p hegira --bin-features ssr,db-sqlite --lib-features hydrate
+cd ../my-application
+npm ci --prefix apps/web/src
+APP_ENV=sqlite cargo leptos watch -p app_server \
+  --bin-features ssr,db-sqlite --lib-features hydrate
 ```
 
-Open `http://127.0.0.1:3000` and sign in with the admin credentials configured
-under `seed` in `config/sqlite.yaml`. Change these credentials in any shared
-development environment.
+Open `http://127.0.0.1:3000`. The SQLite development profile creates its local
+database, runs the application-owned migration plan, and applies configured
+Identity seed behavior at startup. Review `config/sqlite.yaml` before using the
+application in a shared environment.
 
-Useful migrator commands:
+## Run With PostgreSQL
+
+Start a disposable local database from the generated application:
 
 ```sh
-APP_ENV=sqlite cargo run -p db_migrator --no-default-features --features ssr,db-sqlite -- seed
-ALLOW_DB_RESET=true APP_ENV=sqlite cargo run -p db_migrator --no-default-features --features ssr,db-sqlite -- recreate
+POSTGRES_PASSWORD=local-development-only docker compose up -d database
+APP_ENV=development \
+APP__DATABASE__URL=postgres://postgres:local-development-only@localhost:5432/application \
+cargo leptos watch -p app_server \
+  --bin-features ssr,db-postgres --lib-features hydrate
 ```
 
-`reset` and `recreate` are guarded by `APP_ENV=test` or
-`ALLOW_DB_RESET=true`.
+The development profile may run migrations and seed data automatically.
+Production intentionally disables both behaviors; deployment automation must
+execute the application-owned migration plan before rollout.
 
-## PostgreSQL Development
+## Validate Framework Source
 
-Create a PostgreSQL database and override its URL when necessary:
-
-```sh
-export APP__DATABASE__URL=postgres://postgres:postgres@localhost:5432/hegira
-cargo run -p db_migrator --no-default-features --features ssr,db-postgres -- migrate
-cargo leptos watch -p hegira --bin-features ssr,db-postgres --lib-features hydrate
-```
-
-PostgreSQL and SQLite migrations are intentionally separate. Add and test both
-when a schema change belongs to a provider-independent feature.
-
-## Development URLs
-
-| URL | Purpose |
-|---|---|
-| `/` | Leptos application |
-| `/dashboard` | Authenticated application dashboard |
-| `/healthz` | Process liveness |
-| `/readyz` | Dependency readiness |
-| `/swagger-ui` | OpenAPI UI when compiled and enabled |
-
-Compile OpenAPI explicitly:
-
-```sh
-APP__OPENAPI__ENABLED=true \
-cargo run -p hegira --no-default-features --features ssr,db-sqlite,openapi
-```
-
-## Verify The Workspace
+Run framework-repository checks from the Hegira repository root:
 
 ```sh
 sh scripts/repository-policy.sh
 sh scripts/backend-check.sh
 ```
 
-Template or generated-application changes additionally require:
+The complete generated application contract requires Docker and uses only
+disposable state:
 
 ```sh
-sh scripts/layered-template-check.sh
 sh scripts/generated-application-check.sh
 ```
 
-The generated-application check requires Docker and creates only disposable rendered output,
-containers, and databases. PostgreSQL tests marked `ignored` reset their target database and
-must never point at persistent or production data.
-
-The default test matrix runs without external Redis, Meilisearch, S3, or SMTP.
-See [Configuration](configuration.md) before enabling optional capabilities and
-[Deployment](deployment.md) before producing a release image.
+See [Architecture](architecture.md), [Configuration](configuration.md), and
+[Deployment](deployment.md) before changing providers or production defaults.
