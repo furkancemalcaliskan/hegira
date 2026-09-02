@@ -115,14 +115,6 @@ pass the generated-application gate with disposable Docker state:
 sh scripts/generated-application-check.sh
 ```
 
-Changes to the compatibility host's production image or release output must also pass the
-applicable focused checks:
-
-```sh
-sh scripts/full-stack-build-check.sh
-sh scripts/container-smoke.sh
-```
-
 Never point ignored integration tests at persistent or production data. See the
 [maintainer workflow](docs/maintainers.md) for the current CI and release
 contract.

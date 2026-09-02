@@ -1,198 +1,73 @@
 # Deployment
 
-An application built on Hegira can run as one process or as separately scaled web and worker
-processes. Choose the smallest topology that meets the workload. Commands in this guide target
-the repository's current `apps/hegira` compatibility host unless a section explicitly refers
-to the canonical rendered application.
+Deployment belongs to each generated application. The Hegira framework
+repository does not ship a deployable compatibility host, official application
+image, or root runtime configuration.
 
-## Topologies
+## Build Contract
 
-### Single Process
-
-Use `APP__RUNTIME__ROLE=all`. The process serves HTTP and runs scheduler and
-durable job loops. This is the default for SQLite and small PostgreSQL systems.
-
-### Separate Web And Worker
-
-Use the same compiled binary with different configuration:
-
-```text
-web replicas:    APP__RUNTIME__ROLE=web
-worker replicas: APP__RUNTIME__ROLE=worker
-```
-
-Web replicas expose the application port. Worker replicas may expose the
-isolated operations listener when `worker_operations.enabled=true`. This
-topology requires PostgreSQL; enable distributed locking where scheduled work
-must have one active executor.
-
-## Release Build
-
-The committed production profile is the minimal PostgreSQL contract: database
-sessions, in-process rate limiting, and disabled optional external providers.
-It matches the Dockerfile's default `ssr,db-postgres` server feature set.
-
-Run release commands from the repository root. Cargo selects the deployable
-package at `apps/hegira` by its package name, `hegira`; Cargo-Leptos reads its
-build metadata there while writing outputs to the workspace-level `target`
-directory.
-
-Build the minimal profile with:
+From a rendered application workspace, install the lockfile-pinned frontend
+dependencies and build the default PostgreSQL production profile:
 
 ```sh
-cargo leptos build -p hegira --release \
-  --bin-features ssr,db-postgres \
-  --lib-features hydrate
+npm ci --prefix apps/web/src
+PATH="$PWD/apps/web/src/node_modules/.bin:$PATH" \
+  cargo leptos build -p app_server --release \
+  --bin-features ssr,db-postgres --lib-features hydrate
 ```
 
-Compile optional integrations explicitly for a distributed profile:
+
+The output contains the `app_server` executable and the hydrated site under
+`target/site`. Optional Redis, SMTP, S3, Meilisearch, Prometheus, and OTLP
+adapters must be selected explicitly at compile time and configured at runtime.
+
+## Container Contract
+
+The rendered application owns its Dockerfile. It builds the server and hydrated
+client from the application workspace, copies the application-owned production
+profile, exposes port `3000`, and starts `app_server` with `APP_ENV=production`.
 
 ```sh
-cargo leptos build -p hegira --release \
-  --bin-features ssr,db-postgres,cache-redis,mailer-smtp,storage-s3,search-meilisearch,metrics-prometheus,otel-otlp \
-  --lib-features hydrate
+docker build -t my-application .
+docker run --rm -p 3000:3000 \
+  -e APP__DATABASE__URL \
+  -e APP__SECURITY__JWT_SECRET \
+  my-application
 ```
 
-OpenAPI is intentionally omitted from production builds.
-Compiling a capability does not enable it at runtime. Override the matching
-configuration backend and credentials when enabling Redis, SMTP, S3,
-Meilisearch, Prometheus, or OTLP.
+Do not place real credentials in the image, Compose file, repository, or shell
+history. Supply them through the deployment platform's secret mechanism.
 
-The two supported production capability contracts are:
+## Database Lifecycle
 
-| Contract | Server features | Runtime expectation |
-|---|---|---|
-| Minimal | `ssr,db-postgres` | Database sessions, in-process rate limiting, optional providers disabled |
-| Distributed | `ssr,db-postgres,cache-redis,mailer-smtp,storage-s3,search-meilisearch,metrics-prometheus,otel-otlp` | Enable only the external providers that are provisioned and configured |
+The generated infrastructure layer composes application migrations with the
+migrations of selected official modules. Production defaults keep
+`database.auto_migrate=false` and `startup.seed_identity=false`. Deployment
+automation must execute the application-owned migration plan as a one-shot step
+before new application instances receive traffic. Do not enable destructive
+reset outside explicitly disposable validation databases.
 
-The distributed build makes adapters available; it does not turn them on.
-Runtime configuration that selects an adapter missing from the binary fails
-capability preflight before dependency initialization.
+## Runtime Topology
 
-Both commands produce the server at `target/release/hegira` and the hydrated
-site under `target/site`. Frontend source, styles, and public assets remain
-under `crates/web`; they are inputs to the application-owned Cargo-Leptos
-package rather than independent deployment units.
+`runtime.role=all` runs HTTP and background work in one process.
+`runtime.role=web` serves HTTP traffic, while `runtime.role=worker` runs
+background work and its configured operational endpoint. Independently scaled
+SQLite web and worker processes are rejected; use PostgreSQL for split roles.
 
-## Canonical Rendered Application
+Operational endpoints include liveness and readiness checks. Expose metrics and
+worker operational ports only to trusted infrastructure. Configure
+`security.trusted_proxies` with only the CIDRs that connect directly to the
+application.
 
-`templates/applications/layered/` defines the canonical application deployment contract. A
-normal render produces an independent Cargo workspace with an `app_server` composition root,
-an application-owned Leptos web package, layered application packages, configuration profiles,
-explicit migration composition, a Dockerfile, and a local PostgreSQL Compose file. Its framework
-dependencies use the release tag pinned in the template manifest rather than paths into a
-Hegira checkout.
+## Repository Validation
 
-The internal renderer and `scripts/generated-application-check.sh` validate this contract in
-disposable output. The check exercises fresh SQLite and PostgreSQL databases, the supported
-v0.2.0 upgrade, the production image, readiness, hydration assets, security headers, and
-unauthenticated Bearer API behavior. The renderer is repository tooling, not a public Hegira
-CLI, so no end-user generation command is documented yet.
-
-## Source Distribution
-
-Hegira is released as framework and template source rather than as a compiled application.
-Each stable release is identified by a signed `vMAJOR.MINOR.PATCH` tag and a
-GitHub Release. GitHub provides `.zip` and `.tar.gz` archives of the tagged
-source; the only custom release asset is an SPDX JSON SBOM generated from that
-source checkout.
-
-The release workflow validates framework packages, official modules, the canonical template,
-and the rendered application's database, build, HTTP, security, and production-container
-contracts. These are source-distribution gates, not published binaries or images. Hegira does
-not publish a platform-specific executable, Linux application bundle, official
-container image, crate, CLI package, preview application, or production deployment.
-
-## Database Release Step
-
-Run migrations once before rolling out application replicas:
+Hegira releases validate the rendered application rather than a repository
+host:
 
 ```sh
-APP_ENV=production \
-cargo run -p db_migrator --release --no-default-features \
-  --features ssr,db-postgres -- migrate
+sh scripts/generated-application-check.sh
 ```
 
-Do not rely on multiple web replicas racing to auto-migrate. Backward-compatible
-schema changes should be deployed before code that requires them.
-
-## Docker
-
-The Dockerfile defaults to `ssr,db-postgres` and provides three targets:
-
-| Target | Purpose |
-|---|---|
-| `final` | Default web image |
-| `web-runtime` | Explicit web role with Leptos assets |
-| `worker-runtime` | Worker role with operations port `9091` |
-
-Build a normal web image:
-
-```sh
-docker build -t hegira:latest .
-```
-
-This image matches the committed minimal production profile and does not
-require Redis, SMTP, S3, Meilisearch, Prometheus, or an OTLP collector.
-
-### Production Container Smoke Test
-
-Run the release smoke test locally with:
-
-```sh
-sh scripts/container-smoke.sh
-```
-
-The test builds the default `ssr,db-postgres` production image, starts a
-disposable PostgreSQL database, applies migrations as a one-shot task, and
-verifies `/healthz`, `/readyz`, the application page, and generated CSS and
-JavaScript assets. Failure logs are printed before the complete stack and its
-volumes are removed.
-
-The smoke workflow validates the container contract only. It does not create a
-preview application, publish a public URL, use a GitHub Environment, or require
-deployment credentials.
-
-Build explicit role images with the same capability set:
-
-```sh
-docker build --target web-runtime \
-  --build-arg SERVER_FEATURES=ssr,db-postgres,cache-redis,mailer-smtp \
-  -t hegira-web:latest .
-
-docker build --target worker-runtime \
-  --build-arg SERVER_FEATURES=ssr,db-postgres,cache-redis,mailer-smtp \
-  -t hegira-worker:latest .
-```
-
-Pass configuration as environment variables or mounted secret-provider output.
-Do not bake credentials into the image.
-
-## Rollout Contract
-
-1. Back up the production database.
-2. Run the migrator as a one-shot release task.
-3. Deploy worker-compatible schema before new workers.
-4. Roll out web replicas and wait for `/readyz`.
-5. Roll out workers and wait for their operations `/readyz`.
-6. Verify metrics, traces, queue depth, and representative user workflows.
-
-Use rolling replacement only for backward-compatible changes. Destructive
-schema changes need an expand/migrate/contract sequence across releases.
-
-## Required Production Overrides
-
-At minimum set:
-
-```text
-APP_ENV=production
-APP__APPLICATION__PUBLIC_URL
-APP__DATABASE__URL
-APP__SECURITY__JWT_SECRET
-APP__SECURITY__CORS__ALLOWED_ORIGINS
-APP__RUNTIME__ROLE
-```
-
-Add provider credentials only for capabilities compiled into the image. See
-[Configuration](configuration.md) for the feature matrix and
-[Operations](operations.md) for post-deployment checks.
+That gate verifies fresh and upgraded databases, the release build, production
+container startup, hydration assets, readiness, security headers, and Bearer
+API behavior using disposable state.

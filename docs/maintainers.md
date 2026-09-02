@@ -117,17 +117,16 @@ Disposable PostgreSQL containers use trust authentication only inside isolated
 GitHub-hosted runners. They contain disposable test data, expose no repository
 secret, and are destroyed after validation.
 
-The former standalone full-stack and production-container pull-request
-workflows are removed because the template and generated-application jobs own
-those contracts. Their scripts remain available for focused validation of the
-repository's current compatibility host but are not framework release gates.
+The former compatibility-host full-stack and production-container workflows and
+scripts are retired. The generated-application job is the single integration
+owner for those contracts.
 
 ## Local Validation
 
-Run the commands in this section from the repository root. The root virtual workspace
-coordinates the compatibility host under `apps/hegira`, framework and compatibility packages
-under `crates/`, official module packages under `modules/`, the workspace-external application
-base under `templates/`, and internal repository tooling under `tools/`.
+Run the commands in this section from the repository root. The virtual workspace coordinates
+framework packages under `crates/`, official module packages under `modules/`, and internal
+repository tooling under `tools/`. The canonical application under `templates/` remains an
+independent workspace and is rendered into disposable directories for integration validation.
 
 Validate repository documentation, agent adapters, and policy fixtures:
 
@@ -217,12 +216,6 @@ sh scripts/official-modules-check.sh
 sh scripts/layered-template-check.sh
 ```
 
-Verify the full-stack release outputs without creating a release archive:
-
-```sh
-sh scripts/full-stack-build-check.sh
-```
-
 To include the framework and official-module gates' ignored PostgreSQL tests locally, provide
 a disposable PostgreSQL database and opt in explicitly:
 
@@ -231,12 +224,6 @@ APP_ENV=test \
 DATABASE_URL=postgres://postgres:postgres@localhost:5432/hegira_test \
 WITH_IGNORED_DB_TESTS=true \
 sh scripts/backend-check.sh
-```
-
-Validate the production container contract with Docker:
-
-```sh
-sh scripts/container-smoke.sh
 ```
 
 Never point the ignored database tests at persistent or production data.

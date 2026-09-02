@@ -40,7 +40,7 @@ cargo run --locked --quiet -p template_renderer -- render \
   --framework-root "$repo_root" \
   --framework-path .hegira-validation/framework
 
-if find "$repo_root/.cargo" "$repo_root/apps" "$repo_root/crates" \
+if find "$repo_root/.cargo" "$repo_root/crates" \
   "$repo_root/modules" "$repo_root/tools" \
   -name node_modules -prune -o -type l -print -quit | grep . >/dev/null; then
   echo "framework validation source contains a symbolic link" >&2
@@ -57,7 +57,7 @@ tar -C "$repo_root" \
   --exclude='*.sqlite3-shm' \
   --exclude='*.sqlite3-wal' \
   -cf - \
-  Cargo.toml Cargo.lock rust-toolchain.toml .cargo apps crates modules tools |
+  Cargo.toml Cargo.lock rust-toolchain.toml .cargo crates modules tools |
   tar -xf - -C "$framework_root"
 
 (
