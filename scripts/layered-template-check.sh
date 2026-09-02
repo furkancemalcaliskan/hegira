@@ -17,6 +17,8 @@ if cargo metadata --locked --no-deps --format-version 1 |
   exit 1
 fi
 
+cargo fmt --all -- --check
+sh "$repo_root/scripts/dx-audit.sh"
 cargo test --locked -p template_renderer
 cargo run --locked --quiet -p template_renderer -- render \
   --repository-root "$repo_root" \

@@ -135,9 +135,10 @@ production image, and HTTP contract, with disposable Docker state:
 sh scripts/generated-application-check.sh
 ```
 
-The CI framework and official-module jobs also set `WITH_IGNORED_DB_TESTS=true` and supply
-disposable PostgreSQL databases. Verify the compatibility host's full-stack release outputs
-without creating a platform archive:
+The CI official-module job sets `WITH_IGNORED_DB_TESTS=true` and supplies a
+disposable PostgreSQL database. The generated-application job owns application
+database, container, and HTTP integration. The compatibility host checks below
+remain optional diagnostics until that source is retired:
 
 ```sh
 sh scripts/full-stack-build-check.sh
@@ -161,8 +162,10 @@ through a pull request before tagging a release.
 
 The repository validation workflow runs for pull requests targeting `develop`
 or `main`, post-merge pushes to those branches, and explicit manual dispatches.
-It separates framework, official-module, template, generated-application,
-capability-matrix, and supply-chain responsibilities. The stable `quality`
+It separates framework, official-module, tooling, generated-application,
+capability-matrix, and supply-chain responsibilities. Every capability-matrix
+entry renders and compiles the canonical application as an external framework
+consumer. The stable `quality`
 status succeeds only when every repository ownership gate passes. Plain
 feature-branch pushes do not run these gates unless they update an open pull
 request. Superseded runs for the same pull request or integration ref are
@@ -171,7 +174,7 @@ cancelled.
 Release automation publishes source-first GitHub Releases only for stable
 `vMAJOR.MINOR.PATCH` tags. GitHub provides the source archives, and the
 source-scoped SPDX SBOM is the only custom release asset. Release automation validates the
-framework, official modules, canonical template, and generated application; it does not publish
+framework, official modules, rendering tooling, and generated application; it does not publish
 an executable, crate, CLI package, container image, preview application, public URL, or GitHub
 Environment. Immutable GitHub Releases receive GitHub's automatic release attestation. See
 the [maintainer workflow](docs/maintainers.md) for the complete trigger and

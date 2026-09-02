@@ -11,7 +11,7 @@ const REQUIRED_WORKFLOW_CONTRACTS = [
   ["release identity validation", "scripts/release-policy.sh"],
   ["framework validation", "scripts/framework-check.sh"],
   ["official module validation", "scripts/official-modules-check.sh"],
-  ["template validation", "scripts/layered-template-check.sh"],
+  ["tooling validation", "scripts/layered-template-check.sh"],
   ["generated application validation", "scripts/generated-application-check.sh"],
   ["source SBOM generation", "anchore/sbom-action@v0"],
   ["disabled implicit SBOM publication", "upload-release-assets: false"],
@@ -31,6 +31,8 @@ const OBSOLETE_WORKFLOW_CONTRACTS = [
   ["updatable release action", "softprops/action-gh-release"],
   ["compatibility-host full-stack validation", "scripts/full-stack-build-check.sh"],
   ["compatibility-host container validation", "scripts/container-smoke.sh"],
+  ["compatibility-host package validation", "-p hegira"],
+  ["compatibility-host package validation", "--package hegira"],
   ["Cargo registry publication", "cargo publish"],
   ["Cargo registry credential", "CARGO_REGISTRY_TOKEN"],
   ["crates.io publication", "crates.io"],
@@ -78,15 +80,20 @@ function readWorkspaceMetadata(root) {
   }
 }
 
-function currentReleaseRef(metadata) {
+export function currentReleaseRef(metadata) {
   const packages = workspacePackages(metadata);
-  const hegira = packages.find(
-    (packageMetadata) => packageMetadata.name === "hegira",
-  );
-  if (hegira === undefined) {
-    throw new Error("workspace package is missing: hegira");
+  if (packages.length === 0) {
+    throw new Error("Cargo metadata contains no workspace packages");
   }
-  return `v${hegira.version}`;
+  const versions = new Set(
+    packages.map((packageMetadata) => packageMetadata.version),
+  );
+  if (versions.size !== 1) {
+    throw new Error(
+      "workspace package versions must agree before deriving the release ref",
+    );
+  }
+  return `v${packages[0].version}`;
 }
 
 export function validateReleaseMetadata(metadata, releaseRef) {
@@ -218,7 +225,7 @@ export function validateReleaseWorkflow(workflow) {
       "validate",
       "framework",
       "official-modules",
-      "templates",
+      "tooling",
       "generated-application",
     ]) {
       if (!publishPreamble.includes(`- ${dependency}`)) {

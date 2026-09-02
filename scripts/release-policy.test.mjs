@@ -5,15 +5,16 @@ import path from "node:path";
 import test from "node:test";
 
 import {
+  currentReleaseRef,
   validateReleaseFiles,
   validateReleaseMetadata,
   validateReleaseWorkflow,
 } from "./release-policy.mjs";
 
 function metadata(overrides = {}) {
-  const hegira = {
-    id: "hegira 0.2.0 (path+file:///workspace/apps/hegira)",
-    name: "hegira",
+  const framework = {
+    id: "runtime 0.2.0 (path+file:///workspace/crates/runtime)",
+    name: "runtime",
     version: "0.2.0",
     publish: [],
   };
@@ -24,8 +25,8 @@ function metadata(overrides = {}) {
     publish: [],
   };
   return {
-    workspace_members: [hegira.id, domain.id],
-    packages: [hegira, domain],
+    workspace_members: [framework.id, domain.id],
+    packages: [framework, domain],
     ...overrides,
   };
 }
@@ -61,7 +62,7 @@ jobs:
   official-modules:
     steps:
       - run: sh scripts/official-modules-check.sh
-  templates:
+  tooling:
     steps:
       - run: sh scripts/layered-template-check.sh
   generated-application:
@@ -73,7 +74,7 @@ jobs:
       - validate
       - framework
       - official-modules
-      - templates
+      - tooling
       - generated-application
     permissions:
       contents: write
@@ -86,6 +87,10 @@ jobs:
 
 test("accepts consistent workspace versions", () => {
   assert.deepEqual(validateReleaseMetadata(metadata(), "v0.2.0"), []);
+});
+
+test("derives the release ref without a compatibility host package", () => {
+  assert.equal(currentReleaseRef(metadata()), "v0.2.0");
 });
 
 test("rejects a non-stable release ref", () => {
@@ -199,6 +204,17 @@ test("rejects compatibility-host release validation", () => {
   assert.ok(
     errors.some((error) =>
       error.includes("compatibility-host full-stack validation"),
+    ),
+  );
+});
+
+test("rejects compatibility-host package validation", () => {
+  const errors = validateReleaseWorkflow(
+    `${validWorkflow}\nrun: cargo check -p hegira\n`,
+  );
+  assert.ok(
+    errors.some((error) =>
+      error.includes("compatibility-host package validation"),
     ),
   );
 });
