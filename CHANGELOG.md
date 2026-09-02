@@ -6,6 +6,9 @@ All notable changes are documented here. Releases follow Semantic Versioning.
 
 ### Changed
 
+- Added the versioned and validated `hegira.toml` generated-application
+  identity contract with deterministic serialization and explicit framework,
+  component, database-adapter, and client-adapter selections.
 - Retired the repository compatibility host and legacy layered compatibility
   packages after generated-application validation became the authoritative
   framework integration consumer.

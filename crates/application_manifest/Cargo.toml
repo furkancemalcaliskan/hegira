@@ -1,5 +1,5 @@
 [package]
-name = "template_renderer"
+name = "application_manifest"
 version = "0.3.0"
 edition = "2024"
 license = "Apache-2.0"
@@ -7,6 +7,7 @@ publish = false
 rust-version = "1.96"
 
 [dependencies]
-application_manifest = { path = "../../crates/application_manifest" }
+semver = "1.0.27"
 serde = { version = "1.0.228", features = ["derive"] }
 toml = "1.1.2"
+url = "2.5.7"

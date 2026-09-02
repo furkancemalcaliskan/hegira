@@ -5,6 +5,8 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use application_manifest::ApplicationManifest;
+
 use crate::{
     ComponentManifest, ManifestCatalog, RendererError, Result,
     manifest::{ensure_inside, validate_variable},
@@ -72,6 +74,8 @@ fn build_plan(request: &RenderRequest) -> Result<RenderPlan> {
         collect_component_files(component, catalog.templates_root(), &variables, &mut files)?;
     }
 
+    validate_application_manifest(&components, &files)?;
+
     reject_repository_path_leaks(catalog.repository_root(), &files)?;
     if let Some(framework_root) = &request.framework_root {
         let framework_path = request.framework_path.as_deref().unwrap_or(framework_root);
@@ -87,6 +91,25 @@ fn build_plan(request: &RenderRequest) -> Result<RenderPlan> {
             .collect(),
         files,
     })
+}
+
+fn validate_application_manifest(
+    components: &[&ComponentManifest],
+    files: &BTreeMap<PathBuf, PlannedFile>,
+) -> Result<()> {
+    let Some(planned) = files.get(Path::new("hegira.toml")) else {
+        return Ok(());
+    };
+    let source = std::str::from_utf8(&planned.bytes)
+        .map_err(|_| RendererError::new("generated application manifest is not UTF-8"))?;
+    let manifest = ApplicationManifest::from_toml(source).map_err(|error| {
+        RendererError::new(format!("invalid generated application manifest: {error}"))
+    })?;
+    manifest
+        .validate_rendered_components(components.iter().map(|component| component.id.as_str()))
+        .map_err(|error| {
+            RendererError::new(format!("invalid generated application manifest: {error}"))
+        })
 }
 
 fn resolve_variables(

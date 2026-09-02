@@ -5,6 +5,7 @@ use std::{
     sync::atomic::{AtomicU64, Ordering},
 };
 
+use application_manifest::{ApplicationManifest, ClientAdapter, DatabaseAdapter};
 use template_renderer::{RenderRequest, plan_snapshot, render};
 
 static NEXT_TEST_DIRECTORY: AtomicU64 = AtomicU64::new(0);
@@ -77,6 +78,21 @@ fn layered_template_renders_release_dependencies_and_binary_assets() {
     assert!(!manifest.contains("{{"));
     assert!(!manifest.contains(&repository.to_string_lossy().into_owned()));
 
+    let application_manifest = ApplicationManifest::read(output.join("hegira.toml"))
+        .expect("generated application manifest should be valid");
+    assert_eq!(application_manifest.application, "application");
+    assert_eq!(application_manifest.framework.version, "v0.3.0");
+    assert_eq!(
+        application_manifest.selection.databases,
+        [DatabaseAdapter::Postgres, DatabaseAdapter::Sqlite]
+            .into_iter()
+            .collect()
+    );
+    assert_eq!(
+        application_manifest.selection.clients,
+        [ClientAdapter::Leptos].into_iter().collect()
+    );
+
     let source_logo = repository
         .join("templates/applications/layered/apps/web/src/public/assets/branding/hegira-logo.png");
     let rendered_logo = output.join("apps/web/src/public/assets/branding/hegira-logo.png");
@@ -84,6 +100,27 @@ fn layered_template_renders_release_dependencies_and_binary_assets() {
         fs::read(source_logo).expect("source logo should exist"),
         fs::read(rendered_logo).expect("rendered logo should exist")
     );
+}
+
+#[test]
+fn application_identity_override_is_validated_before_output() {
+    let repository = repository_root();
+    let output_parent = TestDirectory::new("application-identity");
+    let output = output_parent.path().join("application");
+    let mut request = canonical_request(&repository, output.clone());
+    request.variables.insert(
+        "application_name".to_string(),
+        "../unsafe-application".to_string(),
+    );
+
+    let error = render(&request).expect_err("unsafe application identity should fail");
+
+    assert!(
+        error
+            .to_string()
+            .contains("invalid application manifest name")
+    );
+    assert!(!output.exists());
 }
 
 #[test]

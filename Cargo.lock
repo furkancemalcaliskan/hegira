@@ -51,6 +51,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2a4385e2e34eb35d6b3efe798b9eb88096925d87726c0798709bf56d9ed84af3"
 
 [[package]]
+name = "application_manifest"
+version = "0.3.0"
+dependencies = [
+ "semver",
+ "serde",
+ "toml",
+ "url",
+]
+
+[[package]]
 name = "arbitrary"
 version = "1.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4677,6 +4687,7 @@ dependencies = [
 name = "template_renderer"
 version = "0.3.0"
 dependencies = [
+ "application_manifest",
  "serde",
  "toml",
 ]

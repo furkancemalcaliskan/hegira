@@ -66,6 +66,7 @@ The direct local dependency allowlist is enforced from locked Cargo metadata by
 
 | Workspace package | Permitted direct local dependencies |
 |---|---|
+| `application_manifest` | None |
 | `platform_core` | None |
 | `audit` | None |
 | `cache` | None |
@@ -89,7 +90,7 @@ The direct local dependency allowlist is enforced from locked Cargo metadata by
 | `identity_sqlx` | `background_jobs`, `identity_application`, `identity_application_contracts`, `identity_domain`, `identity_domain_shared`, `persistence`, `search` |
 | `identity_http` | `http_support`, `identity_application`, `identity_application_contracts`, `leptos_support` |
 | `identity_leptos` | `identity_application`, `identity_application_contracts`, `identity_domain_shared`, `leptos_support` |
-| `template_renderer` | None |
+| `template_renderer` | `application_manifest` |
 
 Normal, optional, development, and build dependencies use the same ownership
 checks. The retired package names `hegira`, `domain_shared`, `domain`,
@@ -101,6 +102,7 @@ framework compatibility surfaces or consumed by generated applications.
 
 | Package | Responsibility |
 |---|---|
+| `application_manifest` | Versioned, validated, deterministic `hegira.toml` generation-state contract |
 | `platform_core` | Compiled capability identities and application-independent primitives |
 | `audit` | Provider-neutral audit records and logging port |
 | `cache` | Cache port plus null, memory, and optional Redis adapters |
@@ -167,6 +169,7 @@ crates/presentation         HTTP-facing application composition
 config                      application-owned environment profiles
 Dockerfile                  application production image
 docker-compose.yml          local PostgreSQL dependency
+hegira.toml                 generation identity and selected adapters
 ```
 
 The generated dependency contract is:
@@ -207,6 +210,15 @@ Normal renders retain pinned release-source dependencies. Repository
 validation explicitly rewrites only a disposable render to consume a staged,
 credential-free view of the current framework source. Machine-local maintainer
 paths must never appear in canonical template files or normal output.
+
+Every render includes schema-versioned `hegira.toml`. It records the
+application identifier, HTTPS framework repository and stable SemVer tag,
+resolved component set, and selected database and client adapters. The parser
+rejects unknown fields, unsupported values, invalid component combinations,
+credentials, local framework paths, and mismatches between the recorded and
+actually rendered component sets. Deterministic serialization makes the file a
+future CLI and upgrade-tool input; it is not a runtime configuration or secret
+store.
 
 Use these focused gates:
 
