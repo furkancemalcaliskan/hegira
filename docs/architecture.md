@@ -243,6 +243,29 @@ independently owned generated repository. They must not be added to the Hegira
 framework workspace. General third-party dependency policy remains the
 responsibility of the supply-chain checks.
 
+The following allowlist covers direct application-owned and Hegira dependencies
+in the rendered workspace. Entries are permitted edges rather than required
+dependencies. Normal, optional, development, and build dependencies are all
+validated from locked Cargo metadata.
+
+| Generated package | Permitted direct application and Hegira dependencies |
+|---|---|
+| `app_domain_shared` | None |
+| `app_domain` | `app_domain_shared` |
+| `app_application_contracts` | `app_domain`, `app_domain_shared` |
+| `app_application` | `app_application_contracts`, `app_domain`, `app_domain_shared` |
+| `app_infrastructure` | `app_application`, `app_application_contracts`, `app_domain`, `app_domain_shared`, `audit`, `background_jobs`, `cache`, `configuration`, `identity_application`, `identity_application_contracts`, `identity_domain`, `identity_domain_shared`, `identity_sqlx`, `mail`, `observability`, `persistence`, `platform_core`, `runtime`, `search`, `security`, `settings` |
+| `app_presentation` | `app_application`, `app_application_contracts`, `app_domain_shared`, `http_support` |
+| `app_web` | `identity_leptos`, `leptos_support` |
+| `app_server` | `app_infrastructure`, `app_presentation`, `app_web`, `background_jobs`, `cache`, `configuration`, `http_support`, `identity_application`, `identity_application_contracts`, `identity_http`, `identity_leptos`, `identity_sqlx`, `mail`, `observability`, `persistence`, `platform_core`, `runtime`, `search`, `storage` |
+
+Rendered applications may use independent third-party crates, but every local
+dependency inside the generated repository must resolve to a workspace member.
+The compatibility packages `hegira`, `domain_shared`, `domain`,
+`application_contracts`, `application`, `infrastructure`, `presentation`,
+`web`, and `db_migrator` are explicitly rejected. Canonical-template and
+generated-application validation both enforce this contract before release.
+
 ## Repository Layout
 
 The repository root is a virtual Cargo workspace and remains the command entry

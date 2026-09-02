@@ -67,6 +67,8 @@ tar -C "$repo_root" \
       --test database_contracts
   CARGO_TARGET_DIR="$repo_root/target/generated-application-check" \
     cargo check -p app_server --no-default-features --features ssr,db-postgres
+  node "$repo_root/scripts/architecture-boundaries.mjs" \
+    check-generated --root "$generated_root"
 )
 
 compose up --detach postgres
