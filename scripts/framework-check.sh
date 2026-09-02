@@ -17,6 +17,14 @@ run_step "SSR check" cargo check -p hegira --features ssr
 run_step "Hydrate check" cargo check -p hegira --no-default-features --features hydrate --target wasm32-unknown-unknown
 run_step "OpenAPI check" cargo check -p hegira --features openapi
 run_step "All server features" cargo check -p hegira --all-features
+run_step "Minimal-capability platform contracts" cargo test --locked --no-default-features \
+  -p platform_core -p audit -p background_jobs -p cache -p configuration \
+  -p http_support -p leptos_support -p mail -p observability -p persistence \
+  -p runtime -p search -p security -p settings -p storage -p test_support
+run_step "All-capability platform contracts" cargo test --locked --all-features \
+  -p platform_core -p audit -p background_jobs -p cache -p configuration \
+  -p http_support -p leptos_support -p mail -p observability -p persistence \
+  -p runtime -p search -p security -p settings -p storage -p test_support
 run_step "DbMigrator check" cargo check -p db_migrator --features ssr
 run_step "SQLite migrator smoke" env APP_ENV=sqlite APP__DATABASE__URL=sqlite::memory: ALLOW_DB_RESET=true cargo run -q -p db_migrator --features ssr -- recreate
 run_step "Library tests" cargo test -p hegira --features ssr --lib

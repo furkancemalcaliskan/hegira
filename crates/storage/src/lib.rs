@@ -267,4 +267,28 @@ mod tests {
 
         assert!(matches!(adapter, StorageAdapter::Null(_)));
     }
+
+    #[cfg(not(feature = "s3"))]
+    #[tokio::test]
+    async fn enabled_uncompiled_s3_storage_fails_before_initialization() {
+        let error = StorageAdapter::from_settings(&StorageSettings {
+            enabled: true,
+            backend: StorageBackend::S3,
+            local_root: "storage/test".to_string(),
+            s3: S3Settings {
+                bucket: "test".to_string(),
+                region: "us-east-1".to_string(),
+                endpoint_url: Some("http://unreachable.invalid:9000".to_string()),
+                force_path_style: true,
+            },
+        })
+        .await
+        .err()
+        .expect("an unavailable compiled capability should fail");
+
+        assert_eq!(
+            error.to_string(),
+            "S3 storage support is not compiled into this binary"
+        );
+    }
 }
