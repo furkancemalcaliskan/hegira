@@ -28,7 +28,7 @@ maintainer tooling, not the public Hegira CLI.
 │   │   └── layered/         independent full-stack application source
 │   └── components/          typed application-component manifests
 ├── tools/
-│   └── template_renderer/   internal deterministic renderer
+│   └── template_renderer/   render core and repository-validation adapter
 ├── docs/                    current technical and maintainer documentation
 ├── scripts/                 validation and release helpers
 ├── Cargo.toml               virtual framework workspace manifest
@@ -200,16 +200,19 @@ authorization token and is never part of normal startup.
 ## Rendering And Validation
 
 Component manifests select the layered base and the Leptos Identity adapter.
-The renderer resolves requirements and conflicts, substitutes declared
-variables, detects output collisions, rejects symbolic links and path
+The reusable renderer exposes typed request, plan, publication-result, and
+error-category contracts. It resolves requirements and conflicts, substitutes
+declared variables, detects output collisions, rejects symbolic links and path
 traversal, constructs the entire output plan before writing, and atomically
-publishes into a previously absent destination. It does not execute component
-scripts.
+publishes into a previously absent destination. It has no network, process, or
+repository-event dependency and does not execute component scripts.
 
 Normal renders retain pinned release-source dependencies. Repository
-validation explicitly rewrites only a disposable render to consume a staged,
-credential-free view of the current framework source. Machine-local maintainer
-paths must never appear in canonical template files or normal output.
+validation selects a separate adapter that rewrites only a disposable render
+to consume a staged, credential-free view of the current framework source.
+The normal renderer command does not expose this adapter's local-source
+options. Machine-local maintainer paths must never appear in canonical
+template files, normal output, or user-facing validation diagnostics.
 
 Every render includes schema-versioned `hegira.toml`. It records the
 application identifier, HTTPS framework repository and stable SemVer tag,

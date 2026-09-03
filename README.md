@@ -69,7 +69,7 @@ ownership:
 | `modules/identity/` | Canonical source for the official layered Identity module and its SQLx, Axum, and Leptos adapters |
 | `templates/applications/layered/` | Workspace-external, brand-neutral layered application base with application-owned server, web, configuration, migration composition, and deployment files |
 | `templates/components/` | Typed component manifests that define the canonical application composition |
-| `tools/template_renderer/` | Internal deterministic renderer used by repository validation; it is not a public CLI |
+| `tools/template_renderer/` | Reusable deterministic render core with a separate disposable repository-validation adapter; it is not a public CLI |
 
 The canonical rendered application is an independent Cargo workspace, consumes framework
 packages from a pinned release source, and records its generation identity and selected
@@ -81,7 +81,7 @@ application-generation command.
 
 Until the public CLI is implemented, the repository's internal renderer can materialize the
 canonical application source. The renderer is maintainer tooling rather than a stable public
-command contract:
+command contract. Normal rendering always preserves pinned release-source dependencies:
 
 ```sh
 cargo run --locked -p template_renderer -- render \

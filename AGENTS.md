@@ -58,9 +58,11 @@ commands change. Never describe planned work as implemented.
   adapters. Runtime configuration and secrets do not belong in that manifest.
 - `templates/components/` contains typed component manifests for the canonical
   application template.
-- `tools/template_renderer/` contains the internal deterministic and atomic
-  template renderer used by repository validation. It is not the public Hegira
-  CLI.
+- `tools/template_renderer/` contains the reusable deterministic and atomic
+  render core plus an explicitly separate repository-validation adapter. The
+  normal render contract preserves pinned release sources; only disposable
+  maintainer checks may select the adapter that rewrites them. It is not the
+  public Hegira CLI.
 - `scripts/` contains local validation and release helpers.
 - `.github/workflows/` contains validation and release automation.
 

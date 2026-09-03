@@ -6,7 +6,10 @@ use std::{
 };
 
 use application_manifest::{ApplicationManifest, ClientAdapter, DatabaseAdapter};
-use template_renderer::{RenderRequest, plan_snapshot, render};
+use template_renderer::{
+    RenderRequest, RendererErrorKind, plan, plan_snapshot, render,
+    repository_validation::{RepositoryValidationRequest, render as render_for_validation},
+};
 
 static NEXT_TEST_DIRECTORY: AtomicU64 = AtomicU64::new(0);
 
@@ -25,6 +28,22 @@ fn layered_template_snapshot_is_deterministic() {
         include_str!("snapshots/layered.txt"),
         "canonical template snapshot changed"
     );
+}
+
+#[test]
+fn reusable_plan_exposes_components_and_files_before_publication() {
+    let repository = repository_root();
+    let output_parent = TestDirectory::new("plan-contract");
+    let output = output_parent.path().join("application");
+
+    let plan = plan(&canonical_request(&repository, output.clone())).expect("plan should succeed");
+
+    assert_eq!(
+        plan.components(),
+        ["layered-base", "layered-leptos-identity"]
+    );
+    assert!(plan.files().any(|path| path == Path::new("hegira.toml")));
+    assert!(!output.exists());
 }
 
 #[test]
@@ -120,6 +139,7 @@ fn application_identity_override_is_validated_before_output() {
             .to_string()
             .contains("invalid application manifest name")
     );
+    assert_eq!(error.kind(), RendererErrorKind::ApplicationManifest);
     assert!(!output.exists());
 }
 
@@ -128,10 +148,13 @@ fn repository_validation_can_patch_framework_dependencies_locally() {
     let repository = repository_root();
     let output_parent = TestDirectory::new("framework-patch");
     let output = output_parent.path().join("application");
-    let mut request = canonical_request(&repository, output.clone());
-    request.framework_root = Some(repository.clone());
+    let request = RepositoryValidationRequest {
+        render: canonical_request(&repository, output.clone()),
+        framework_root: repository.clone(),
+        framework_path: None,
+    };
 
-    render(&request).expect("locally patched render should succeed");
+    render_for_validation(&request).expect("locally patched render should succeed");
 
     let manifest = fs::read_to_string(output.join("Cargo.toml")).expect("manifest should exist");
     let application_path = repository.join("modules/identity/application");
@@ -147,11 +170,13 @@ fn repository_validation_can_use_a_safe_relative_framework_path() {
     let repository = repository_root();
     let output_parent = TestDirectory::new("relative-framework-patch");
     let output = output_parent.path().join("application");
-    let mut request = canonical_request(&repository, output.clone());
-    request.framework_root = Some(repository);
-    request.framework_path = Some(PathBuf::from(".hegira-validation/framework"));
+    let request = RepositoryValidationRequest {
+        render: canonical_request(&repository, output.clone()),
+        framework_root: repository,
+        framework_path: Some(PathBuf::from(".hegira-validation/framework")),
+    };
 
-    render(&request).expect("relative framework patch should succeed");
+    render_for_validation(&request).expect("relative framework patch should succeed");
 
     let manifest = fs::read_to_string(output.join("Cargo.toml")).expect("manifest should exist");
     assert!(manifest.contains(
@@ -164,13 +189,21 @@ fn unsafe_relative_framework_paths_are_rejected_before_output() {
     let repository = repository_root();
     let output_parent = TestDirectory::new("unsafe-framework-patch");
     let output = output_parent.path().join("application");
-    let mut request = canonical_request(&repository, output.clone());
-    request.framework_root = Some(repository);
-    request.framework_path = Some(PathBuf::from("../framework"));
+    let request = RepositoryValidationRequest {
+        render: canonical_request(&repository, output.clone()),
+        framework_root: repository.clone(),
+        framework_path: Some(PathBuf::from("../framework")),
+    };
 
-    let error = render(&request).expect_err("unsafe framework path should fail");
+    let error = render_for_validation(&request).expect_err("unsafe framework path should fail");
 
     assert!(error.to_string().contains("unsafe component"));
+    assert_eq!(error.kind(), RendererErrorKind::RepositoryValidation);
+    assert!(
+        !error
+            .to_string()
+            .contains(&repository.to_string_lossy().into_owned())
+    );
     assert!(!output.exists());
 }
 
@@ -188,6 +221,7 @@ fn missing_component_fails_before_creating_output() {
     let error = render(&fixture.request(output.clone())).expect_err("render should fail");
 
     assert!(error.to_string().contains("does not exist"));
+    assert_eq!(error.kind(), RendererErrorKind::ComponentResolution);
     assert!(!output.exists());
 }
 
@@ -223,6 +257,12 @@ fn executable_component_fields_are_rejected() {
     let error = render(&fixture.request(output.clone())).expect_err("render should fail");
 
     assert!(error.to_string().contains("unknown field"));
+    assert_eq!(error.kind(), RendererErrorKind::Catalog);
+    assert!(
+        !error
+            .to_string()
+            .contains(&fixture.root.path().to_string_lossy().into_owned())
+    );
     assert!(!output.exists());
 }
 
@@ -255,6 +295,7 @@ fn output_collisions_fail_before_creating_output() {
     let error = render(&fixture.request(output.clone())).expect_err("render should fail");
 
     assert!(error.to_string().contains("output collision"));
+    assert_eq!(error.kind(), RendererErrorKind::Collision);
     assert!(!output.exists());
 }
 
@@ -268,6 +309,7 @@ fn missing_variables_leave_no_partial_output() {
     let error = render(&fixture.request(output.clone())).expect_err("render should fail");
 
     assert!(error.to_string().contains("missing template variable"));
+    assert_eq!(error.kind(), RendererErrorKind::Variables);
     assert!(!output.exists());
     assert!(
         fs::read_dir(fixture.root.path())
@@ -292,10 +334,21 @@ fn an_existing_output_is_never_overwritten() {
     let error = render(&fixture.request(output.clone())).expect_err("render should fail");
 
     assert!(error.to_string().contains("already exists"));
+    assert_eq!(error.kind(), RendererErrorKind::Output);
     assert_eq!(
         fs::read_to_string(output.join("preserved.txt")).expect("sentinel should remain"),
         "preserved"
     );
+}
+
+#[test]
+fn normal_renderer_cli_does_not_expose_repository_rewrites() {
+    let normal_cli = include_str!("../src/main.rs");
+    let validation_adapter = include_str!("../examples/repository_validation_renderer.rs");
+
+    assert!(!normal_cli.contains("--framework-root"));
+    assert!(!normal_cli.contains("--framework-path"));
+    assert!(validation_adapter.contains("--framework-root"));
 }
 
 fn canonical_request(repository: &Path, output: PathBuf) -> RenderRequest {
@@ -304,8 +357,6 @@ fn canonical_request(repository: &Path, output: PathBuf) -> RenderRequest {
         template: "layered".to_string(),
         output,
         variables: BTreeMap::new(),
-        framework_root: None,
-        framework_path: None,
     }
 }
 
@@ -375,8 +426,6 @@ impl Fixture {
             template: "test".to_string(),
             output,
             variables: BTreeMap::new(),
-            framework_root: None,
-            framework_path: None,
         }
     }
 }
