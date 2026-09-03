@@ -1,0 +1,11 @@
+schema = 1
+application = "{{application_name}}"
+
+[framework]
+repository = "{{framework_repository}}"
+version = "{{framework_version}}"
+
+[selection]
+components = ["layered-base", "layered-leptos-identity"]
+databases = ["postgres", "sqlite"]
+clients = ["leptos"]

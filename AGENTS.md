@@ -27,7 +27,8 @@ commands change. Never describe planned work as implemented.
 
 - The repository root is a virtual Cargo workspace and the documented command
   entry point.
-- `crates/` contains application-independent platform core, audit, cache, mail,
+- `crates/` contains the application-manifest contract and
+  application-independent platform core, audit, cache, mail,
   search, security, settings, storage, configuration, persistence,
   background-work, HTTP, Leptos, observability, test-support, and runtime
   packages. These packages are application-independent framework source.
@@ -37,11 +38,9 @@ commands change. Never describe planned work as implemented.
   The HTTP adapter contributes Identity routes, OpenAPI, Bearer extraction,
   secure session-cookie handling, and explicit cookie/Bearer security policies
   to the host. The Leptos adapter owns Identity pages, server functions, and
-  explicit route and navigation contributions. Identity business compatibility
-  packages and the SQLx compatibility surface re-export the canonical module
-  packages instead of compiling duplicate implementations. Historical
-  application-owned retirement migrations retain their original identities
-  and checksums outside the Identity SQLx migration source.
+  explicit route and navigation contributions. Historical application-owned
+  retirement migrations retain their original identities and checksums in the
+  canonical application template outside the Identity SQLx migration source.
 - `templates/applications/layered/` contains the workspace-external,
   layered full-stack application base. Its brand-neutral server composition
   depends on application-owned layers, framework primitives, and official
@@ -54,6 +53,9 @@ commands change. Never describe planned work as implemented.
   Its Infrastructure operation surface owns startup migration and Identity
   seed composition plus explicitly authorized disposable-database reset for
   validation; it does not use compatibility migration helpers or `db_migrator`.
+  Each render owns a validated `hegira.toml` containing only application
+  identity, framework source/version, selected components, and database/client
+  adapters. Runtime configuration and secrets do not belong in that manifest.
 - `templates/components/` contains typed component manifests for the canonical
   application template.
 - `tools/template_renderer/` contains the internal deterministic and atomic

@@ -5,6 +5,7 @@ import process from "node:process";
 import { pathToFileURL } from "node:url";
 
 export const WORKSPACE_DEPENDENCY_POLICY = Object.freeze({
+  application_manifest: [],
   platform_core: [],
   audit: [],
   cache: [],
@@ -65,13 +66,14 @@ export const WORKSPACE_DEPENDENCY_POLICY = Object.freeze({
     "identity_domain_shared",
     "leptos_support",
   ],
-  template_renderer: [],
+  template_renderer: ["application_manifest"],
 });
 
 const packageContract = (role, disposition, issues = []) =>
   Object.freeze({ role, disposition, issues: Object.freeze(issues) });
 
 export const WORKSPACE_PACKAGE_POLICY = Object.freeze({
+  application_manifest: packageContract("framework", "retain"),
   platform_core: packageContract("framework", "retain"),
   audit: packageContract("framework", "retain"),
   cache: packageContract("framework", "retain"),

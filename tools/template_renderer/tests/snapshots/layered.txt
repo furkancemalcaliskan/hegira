@@ -79,3 +79,4 @@ c4723abea8cac667 crates/infrastructure/src/operations.rs
 28acfa4312676a72 crates/presentation/src/http.rs
 66a33630de351b9c crates/presentation/src/lib.rs
 1309f45751c079e0 docker-compose.yml
+62dc1e349ec15d96 hegira.toml
