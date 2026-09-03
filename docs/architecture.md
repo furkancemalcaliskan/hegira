@@ -24,6 +24,7 @@ maintainer tooling, not the public Hegira CLI.
 ├── modules/
 │   └── identity/            official layered Identity module and adapters
 ├── templates/
+│   ├── package.toml         versioned canonical package contract
 │   ├── applications/
 │   │   └── layered/         independent full-stack application source
 │   └── components/          typed application-component manifests
@@ -200,6 +201,15 @@ authorization token and is never part of normal startup.
 ## Rendering And Validation
 
 Component manifests select the layered base and the Leptos Identity adapter.
+`templates/package.toml` gives this data-only graph a release-aligned package
+identity, declares its compatible HTTPS framework source and stable SemVer
+tag, enumerates the contained template and components, and locks every
+manifest and included source path with a deterministic SHA-256 digest. Package
+loading rejects unknown or unsorted identities, source-tree changes, local or
+credentialed framework locations, mismatched versions, and undeclared
+component manifests before planning output. Component manifests cannot define
+execution hooks.
+
 The reusable renderer exposes typed request, plan, publication-result, and
 error-category contracts. It resolves requirements and conflicts, substitutes
 declared variables, detects output collisions, rejects symbolic links and path
@@ -213,6 +223,10 @@ to consume a staged, credential-free view of the current framework source.
 The normal renderer command does not expose this adapter's local-source
 options. Machine-local maintainer paths must never appear in canonical
 template files, normal output, or user-facing validation diagnostics.
+The package owns the reserved framework repository and version variables, so a
+normal render cannot replace its compatible release source through a variable
+override. Both normal rendering and the repository-validation adapter load and
+verify this same canonical package contract.
 
 Every render includes schema-versioned `hegira.toml`. It records the
 application identifier, HTTPS framework repository and stable SemVer tag,

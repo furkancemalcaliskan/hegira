@@ -68,14 +68,17 @@ ownership:
 | `crates/` | Application-independent framework primitives, application-manifest contract, providers, and runtime support |
 | `modules/identity/` | Canonical source for the official layered Identity module and its SQLx, Axum, and Leptos adapters |
 | `templates/applications/layered/` | Workspace-external, brand-neutral layered application base with application-owned server, web, configuration, migration composition, and deployment files |
-| `templates/components/` | Typed component manifests that define the canonical application composition |
+| `templates/package.toml` | Versioned canonical component-package identity, framework compatibility, component graph, and source digest |
+| `templates/components/` | Typed data-only component manifests that define the canonical application composition |
 | `tools/template_renderer/` | Reusable deterministic render core with a separate disposable repository-validation adapter; it is not a public CLI |
 
 The canonical rendered application is an independent Cargo workspace, consumes framework
 packages from a pinned release source, and records its generation identity and selected
 components in a validated `hegira.toml`. Runtime configuration and secrets remain outside that
-manifest. Releases are source-first, and the repository does not currently implement a public
-application-generation command.
+manifest. The canonical package locks its source inputs with a deterministic SHA-256 digest so
+repository-local or untracked files cannot silently enter generated output. Releases are
+source-first, and the repository does not currently implement a public application-generation
+command.
 
 ## Quick Start
 

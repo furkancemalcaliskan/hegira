@@ -2,7 +2,10 @@ mod manifest;
 mod render;
 pub mod repository_validation;
 
-pub use manifest::{ComponentManifest, FrameworkDependency, ManifestCatalog, TemplateManifest};
+pub use manifest::{
+    ComponentManifest, ComponentPackageManifest, FrameworkDependency, ManifestCatalog,
+    TemplateManifest,
+};
 pub use render::{RenderPlan, RenderRequest, RenderResult, plan, plan_snapshot, publish, render};
 
 use std::fmt::{Display, Formatter};

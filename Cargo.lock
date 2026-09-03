@@ -4689,6 +4689,7 @@ version = "0.3.0"
 dependencies = [
  "application_manifest",
  "serde",
+ "sha2 0.10.9",
  "toml",
 ]
 

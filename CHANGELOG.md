@@ -4,6 +4,12 @@ All notable changes are documented here. Releases follow Semantic Versioning.
 
 ## [Unreleased]
 
+### Added
+
+- Added a release-aligned canonical component-package contract with explicit
+  framework compatibility, a declared data-only component graph, and a
+  deterministic SHA-256 source digest.
+
 ### Changed
 
 - Separated the reusable template rendering request, plan, publication, result,
