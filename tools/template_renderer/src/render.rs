@@ -398,6 +398,14 @@ fn reject_repository_path_leaks(
 }
 
 fn publish_atomically(output: &Path, plan: &RenderPlan) -> Result<()> {
+    publish_atomically_with(output, plan, |path, bytes| fs::write(path, bytes))
+}
+
+fn publish_atomically_with(
+    output: &Path,
+    plan: &RenderPlan,
+    mut write_file: impl FnMut(&Path, &[u8]) -> std::io::Result<()>,
+) -> Result<()> {
     let output = absolute_path(output)?;
     if fs::symlink_metadata(&output).is_ok() {
         return Err(RendererError::new(format!(
@@ -427,7 +435,7 @@ fn publish_atomically(output: &Path, plan: &RenderPlan) -> Result<()> {
                 ))
             })?;
         }
-        fs::write(&target, &file.bytes).map_err(|error| {
+        write_file(&target, &file.bytes).map_err(|error| {
             RendererError::new(format!(
                 "failed to write rendered file {}: {error}",
                 target.display()
@@ -516,5 +524,62 @@ impl Drop for TemporaryDirectory {
         if self.armed {
             let _ = fs::remove_dir_all(&self.path);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn injected_write_failure_removes_staging_and_never_publishes_output() {
+        let parent = std::env::temp_dir().join(format!(
+            "hegira-render-write-failure-{}",
+            std::process::id()
+        ));
+        let output = parent.join("application");
+        let _ = fs::remove_dir_all(&parent);
+        fs::create_dir(&parent).expect("test parent should be created");
+        let plan = RenderPlan {
+            package: None,
+            components: vec!["test".to_string()],
+            files: BTreeMap::from([
+                (
+                    PathBuf::from("first.txt"),
+                    PlannedFile {
+                        bytes: b"first".to_vec(),
+                        owner: "test".to_string(),
+                    },
+                ),
+                (
+                    PathBuf::from("second.txt"),
+                    PlannedFile {
+                        bytes: b"second".to_vec(),
+                        owner: "test".to_string(),
+                    },
+                ),
+            ]),
+        };
+        let mut writes = 0;
+
+        let error = publish_atomically_with(&output, &plan, |path, bytes| {
+            writes += 1;
+            if writes == 2 {
+                return Err(std::io::Error::other("injected write failure"));
+            }
+            fs::write(path, bytes)
+        })
+        .expect_err("injected write failure should abort publication");
+
+        assert!(error.to_string().contains("injected write failure"));
+        assert!(!output.exists());
+        assert!(
+            fs::read_dir(&parent)
+                .expect("test parent should remain readable")
+                .next()
+                .is_none(),
+            "staging directory should be removed"
+        );
+        fs::remove_dir_all(parent).expect("test parent should be removed");
     }
 }
