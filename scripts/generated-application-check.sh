@@ -33,7 +33,8 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-cargo run --locked --quiet -p template_renderer -- render \
+cargo run --locked --quiet -p template_renderer \
+  --example repository_validation_renderer -- render \
   --repository-root "$repo_root" \
   --template layered \
   --output "$generated_root" \

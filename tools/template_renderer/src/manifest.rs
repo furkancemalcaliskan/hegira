@@ -140,14 +140,12 @@ impl ManifestCatalog {
             }
         }
 
-        let catalog = Self {
+        Ok(Self {
             repository_root,
             templates_root,
             template,
             components,
-        };
-        catalog.resolve_components()?;
-        Ok(catalog)
+        })
     }
 
     pub fn repository_root(&self) -> &Path {

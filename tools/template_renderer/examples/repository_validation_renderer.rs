@@ -1,12 +1,15 @@
 use std::{collections::BTreeMap, env, path::PathBuf, process::ExitCode};
 
-use template_renderer::{RenderRequest, render};
+use template_renderer::{
+    RenderRequest,
+    repository_validation::{RepositoryValidationRequest, render},
+};
 
 fn main() -> ExitCode {
     match run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
-            eprintln!("template renderer: {error}");
+            eprintln!("repository validation renderer: {error}");
             ExitCode::FAILURE
         }
     }
@@ -21,6 +24,8 @@ fn run() -> Result<(), String> {
     let mut repository_root = None;
     let mut template = None;
     let mut output = None;
+    let mut framework_root = None;
+    let mut framework_path = None;
     let mut variables = BTreeMap::new();
 
     while let Some(flag) = arguments.next() {
@@ -29,6 +34,8 @@ fn run() -> Result<(), String> {
             "--repository-root" => repository_root = Some(PathBuf::from(value)),
             "--template" => template = Some(value),
             "--output" => output = Some(PathBuf::from(value)),
+            "--framework-root" => framework_root = Some(PathBuf::from(value)),
+            "--framework-path" => framework_path = Some(PathBuf::from(value)),
             "--set" => {
                 let (name, value) = value
                     .split_once('=')
@@ -44,16 +51,20 @@ fn run() -> Result<(), String> {
         }
     }
 
-    let request = RenderRequest {
-        repository_root: repository_root.ok_or_else(usage)?,
-        template: template.ok_or_else(usage)?,
-        output: output.ok_or_else(usage)?,
-        variables,
+    let request = RepositoryValidationRequest {
+        render: RenderRequest {
+            repository_root: repository_root.ok_or_else(usage)?,
+            template: template.ok_or_else(usage)?,
+            output: output.ok_or_else(usage)?,
+            variables,
+        },
+        framework_root: framework_root.ok_or_else(usage)?,
+        framework_path,
     };
     let result = render(&request).map_err(|error| error.to_string())?;
     println!(
-        "rendered template {} with {} components and {} files to {}",
-        request.template,
+        "rendered repository validation template {} with {} components and {} files to {}",
+        request.render.template,
         result.components.len(),
         result.files.len(),
         result.output.display()
@@ -62,5 +73,5 @@ fn run() -> Result<(), String> {
 }
 
 fn usage() -> String {
-    "usage: template_renderer render --repository-root <path> --template <id> --output <path> [--set NAME=VALUE]".to_string()
+    "usage: repository_validation_renderer render --repository-root <path> --template <id> --output <path> --framework-root <path> [--framework-path <path>] [--set NAME=VALUE]".to_string()
 }

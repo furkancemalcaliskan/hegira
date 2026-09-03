@@ -150,10 +150,12 @@ current framework checkout:
 sh scripts/layered-template-check.sh
 ```
 
-The check works on a disposable copy. It preserves pinned release-style
-dependencies in a normal render and does not write maintainer paths into
-template source files. For repository validation, the internal renderer patches
-declared framework dependencies only in the disposable output. The check runs
+The check works on a disposable copy. The reusable render core preserves pinned
+release-style dependencies and does not write maintainer paths into template
+source files. Repository checks explicitly select the separate validation
+adapter, which patches declared framework dependencies only in the disposable
+output. These local-source options are absent from the normal renderer command.
+The check runs
 the renderer snapshot and failure-path tests, installs the client package lock,
 validates the rendered workspace's direct application and Hegira dependencies,
 validates native workspace targets and tests, compiles the hydration target,

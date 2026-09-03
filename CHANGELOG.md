@@ -6,6 +6,9 @@ All notable changes are documented here. Releases follow Semantic Versioning.
 
 ### Changed
 
+- Separated the reusable template rendering request, plan, publication, result,
+  and typed diagnostic contracts from the repository-only local dependency
+  rewrite adapter.
 - Added the versioned and validated `hegira.toml` generated-application
   identity contract with deterministic serialization and explicit framework,
   component, database-adapter, and client-adapter selections.
