@@ -155,6 +155,18 @@ release-style dependencies and does not write maintainer paths into template
 source files. Repository checks explicitly select the separate validation
 adapter, which patches declared framework dependencies only in the disposable
 output. These local-source options are absent from the normal renderer command.
+Before either path plans output, it verifies the canonical package identity,
+framework compatibility, declared component set, and locked source digest.
+After an intentional package-source change, calculate the replacement digest
+with the same library contract used by rendering:
+
+```sh
+cargo run --locked -p template_renderer --example package_digest -- \
+  --repository-root . --template layered
+```
+
+Review the complete package diff before replacing `content_digest` in
+`templates/package.toml`.
 The check runs
 the renderer snapshot and failure-path tests, installs the client package lock,
 validates the rendered workspace's direct application and Hegira dependencies,

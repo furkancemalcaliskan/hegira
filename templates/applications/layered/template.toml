@@ -4,5 +4,3 @@ components = ["layered-leptos-identity"]
 
 [variables]
 application_name = "application"
-framework_repository = "https://github.com/furkancemalcaliskan/hegira.git"
-framework_version = "v0.3.0"

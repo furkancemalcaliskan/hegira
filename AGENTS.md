@@ -56,8 +56,11 @@ commands change. Never describe planned work as implemented.
   Each render owns a validated `hegira.toml` containing only application
   identity, framework source/version, selected components, and database/client
   adapters. Runtime configuration and secrets do not belong in that manifest.
-- `templates/components/` contains typed component manifests for the canonical
-  application template.
+- `templates/package.toml` identifies the versioned canonical, data-only
+  component package, its compatible framework release source, contained
+  templates/components, and locked source digest. `templates/components/`
+  contains that package's typed component manifests. Package-controlled
+  framework source variables cannot be overridden by a normal render.
 - `tools/template_renderer/` contains the reusable deterministic and atomic
   render core plus an explicitly separate repository-validation adapter. The
   normal render contract preserves pinned release sources; only disposable

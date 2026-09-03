@@ -37,6 +37,12 @@ pub struct FrameworkContract {
     pub version: String,
 }
 
+impl FrameworkContract {
+    pub fn validate(&self) -> Result<(), ManifestError> {
+        validate_framework_contract(self)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ApplicationSelection {

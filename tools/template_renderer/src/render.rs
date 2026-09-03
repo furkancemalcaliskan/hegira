@@ -8,8 +8,8 @@ use std::{
 use application_manifest::ApplicationManifest;
 
 use crate::{
-    ComponentManifest, ManifestCatalog, RendererError, RendererErrorKind, Result,
-    manifest::validate_variable,
+    ComponentManifest, ComponentPackageManifest, ManifestCatalog, RendererError, RendererErrorKind,
+    Result, manifest::validate_variable,
 };
 
 #[derive(Debug)]
@@ -23,12 +23,14 @@ pub struct RenderRequest {
 #[derive(Debug, PartialEq, Eq)]
 pub struct RenderResult {
     pub output: PathBuf,
+    pub package: Option<ComponentPackageManifest>,
     pub components: Vec<String>,
     pub files: Vec<PathBuf>,
 }
 
 #[derive(Debug)]
 pub struct RenderPlan {
+    pub(crate) package: Option<ComponentPackageManifest>,
     pub(crate) components: Vec<String>,
     pub(crate) files: BTreeMap<PathBuf, PlannedFile>,
 }
@@ -46,7 +48,18 @@ pub fn render(request: &RenderRequest) -> Result<RenderResult> {
 
 pub fn plan_snapshot(request: &RenderRequest) -> Result<String> {
     let plan = plan(request)?;
-    let mut snapshot = format!("components={}\n", plan.components.join(","));
+    let mut snapshot = String::new();
+    if let Some(package) = &plan.package {
+        snapshot.push_str(&format!(
+            "package={}@{}\nframework={}#{}\ndigest={}\n",
+            package.id,
+            package.version,
+            package.framework.repository,
+            package.framework.version,
+            package.content_digest
+        ));
+    }
+    snapshot.push_str(&format!("components={}\n", plan.components.join(",")));
     for (path, file) in plan.files {
         snapshot.push_str(&format!(
             "{:016x} {}\n",
@@ -80,6 +93,7 @@ fn build_plan(request: &RenderRequest) -> Result<RenderPlan> {
 
     reject_repository_path_leaks(catalog.repository_root(), &files)?;
     Ok(RenderPlan {
+        package: catalog.package().cloned(),
         components: components
             .into_iter()
             .map(|component| component.id.clone())
@@ -89,6 +103,10 @@ fn build_plan(request: &RenderRequest) -> Result<RenderPlan> {
 }
 
 impl RenderPlan {
+    pub fn package(&self) -> Option<&ComponentPackageManifest> {
+        self.package.as_ref()
+    }
+
     pub fn components(&self) -> &[String] {
         &self.components
     }
@@ -104,6 +122,7 @@ pub fn publish(output: &Path, plan: RenderPlan) -> Result<RenderResult> {
     Ok(RenderResult {
         output: absolute_path(output)
             .map_err(|error| error.classified(RendererErrorKind::Output))?,
+        package: plan.package,
         components: plan.components,
         files: plan.files.into_keys().collect(),
     })
@@ -152,6 +171,19 @@ fn resolve_variables(
             ));
         }
         variables.insert(name.clone(), value.clone());
+    }
+    if let Some(package) = catalog.package() {
+        for (name, value) in [
+            ("framework_repository", &package.framework.repository),
+            ("framework_version", &package.framework.version),
+        ] {
+            if variables.insert(name.to_string(), value.clone()).is_some() {
+                return Err(RendererError::with_kind(
+                    RendererErrorKind::Catalog,
+                    format!("reserved package variable is declared by the template: {name}"),
+                ));
+            }
+        }
     }
     Ok(variables)
 }

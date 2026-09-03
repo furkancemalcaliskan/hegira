@@ -7,7 +7,7 @@ use std::{
 
 use application_manifest::{ApplicationManifest, ClientAdapter, DatabaseAdapter};
 use template_renderer::{
-    RenderRequest, RendererErrorKind, plan, plan_snapshot, render,
+    ManifestCatalog, RenderRequest, RendererErrorKind, plan, plan_snapshot, render,
     repository_validation::{RepositoryValidationRequest, render as render_for_validation},
 };
 
@@ -38,6 +38,13 @@ fn reusable_plan_exposes_components_and_files_before_publication() {
 
     let plan = plan(&canonical_request(&repository, output.clone())).expect("plan should succeed");
 
+    let package = plan
+        .package()
+        .expect("canonical render should use a package");
+    let current_release = format!("v{}", env!("CARGO_PKG_VERSION"));
+    assert_eq!(package.id, "hegira-canonical");
+    assert_eq!(package.version, current_release);
+    assert_eq!(package.framework.version, current_release);
     assert_eq!(
         plan.components(),
         ["layered-base", "layered-leptos-identity"]
@@ -57,6 +64,10 @@ fn layered_template_renders_release_dependencies_and_binary_assets() {
     assert_eq!(
         result.components,
         ["layered-base", "layered-leptos-identity"]
+    );
+    assert_eq!(
+        result.package.as_ref().map(|package| package.id.as_str()),
+        Some("hegira-canonical")
     );
     let manifest = fs::read_to_string(output.join("Cargo.toml")).expect("manifest should exist");
     assert!(manifest.contains(
@@ -119,6 +130,75 @@ fn layered_template_renders_release_dependencies_and_binary_assets() {
         fs::read(source_logo).expect("source logo should exist"),
         fs::read(rendered_logo).expect("rendered logo should exist")
     );
+}
+
+#[test]
+fn package_digest_rejects_untracked_component_content() {
+    let repository = repository_root();
+    let fixture = TestDirectory::new("package-tamper");
+    copy_directory(
+        &repository.join("templates"),
+        &fixture.path().join("templates"),
+    );
+    let injected = fixture
+        .path()
+        .join("templates/applications/layered/config/untracked.yaml");
+    fs::write(injected, "untracked = true\n").expect("untracked package input should be written");
+    let output = fixture.path().join("application");
+
+    let calculated = ManifestCatalog::calculate_package_digest(fixture.path(), "layered")
+        .expect("maintainer tooling should calculate the changed digest");
+
+    let error = render(&canonical_request(fixture.path(), output.clone()))
+        .expect_err("changed package content should fail");
+
+    assert_eq!(error.kind(), RendererErrorKind::Catalog);
+    assert!(error.to_string().contains("content digest mismatch"));
+    assert!(error.to_string().contains(&calculated));
+    assert!(!output.exists());
+}
+
+#[test]
+fn package_framework_identity_cannot_be_overridden() {
+    let repository = repository_root();
+    let output_parent = TestDirectory::new("package-framework-override");
+    let output = output_parent.path().join("application");
+    let mut request = canonical_request(&repository, output.clone());
+    request
+        .variables
+        .insert("framework_version".to_string(), "v9.9.9".to_string());
+
+    let error = render(&request).expect_err("package framework version should be immutable");
+
+    assert_eq!(error.kind(), RendererErrorKind::Variables);
+    assert!(error.to_string().contains("not declared"));
+    assert!(!output.exists());
+}
+
+#[test]
+fn package_rejects_framework_sources_with_credentials() {
+    let repository = repository_root();
+    let fixture = TestDirectory::new("package-framework-credentials");
+    copy_directory(
+        &repository.join("templates"),
+        &fixture.path().join("templates"),
+    );
+    let package_path = fixture.path().join("templates/package.toml");
+    let package = fs::read_to_string(&package_path)
+        .expect("component package manifest should be readable")
+        .replace(
+            "https://github.com/furkancemalcaliskan/hegira.git",
+            "https://identity@github.com/furkancemalcaliskan/hegira.git",
+        );
+    fs::write(package_path, package).expect("component package manifest should be updated");
+    let output = fixture.path().join("application");
+
+    let error = render(&canonical_request(fixture.path(), output.clone()))
+        .expect_err("credentialed framework source should fail");
+
+    assert_eq!(error.kind(), RendererErrorKind::Catalog);
+    assert!(error.to_string().contains("invalid framework repository"));
+    assert!(!output.exists());
 }
 
 #[test]
@@ -454,5 +534,32 @@ impl TestDirectory {
 impl Drop for TestDirectory {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.path);
+    }
+}
+
+fn copy_directory(source: &Path, destination: &Path) {
+    fs::create_dir_all(destination).expect("copy destination should be created");
+    let mut entries = fs::read_dir(source)
+        .expect("copy source should be readable")
+        .map(|entry| entry.expect("copy source entry should be readable").path())
+        .collect::<Vec<_>>();
+    entries.sort();
+    for source_entry in entries {
+        let destination_entry = destination.join(
+            source_entry
+                .file_name()
+                .expect("copy source entry should have a name"),
+        );
+        let metadata =
+            fs::symlink_metadata(&source_entry).expect("copy source metadata should be readable");
+        assert!(
+            !metadata.file_type().is_symlink(),
+            "test source is a symlink"
+        );
+        if metadata.is_dir() {
+            copy_directory(&source_entry, &destination_entry);
+        } else {
+            fs::copy(&source_entry, &destination_entry).expect("test source should be copied");
+        }
     }
 }
