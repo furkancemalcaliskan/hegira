@@ -66,6 +66,9 @@ commands change. Never describe planned work as implemented.
   normal render contract preserves pinned release sources; only disposable
   maintainer checks may select the adapter that rewrites them. It is not the
   public Hegira CLI.
+- `tools/hegira_cli/` contains the source-runnable `hegira` command shell,
+  stable process outcomes, and user-facing diagnostic contract. Application
+  generation is not implemented by the command yet.
 - `scripts/` contains local validation and release helpers.
 - `.github/workflows/` contains validation and release automation.
 
@@ -160,6 +163,12 @@ Focused framework and official-module validation:
 ```sh
 sh scripts/framework-check.sh
 sh scripts/official-modules-check.sh
+```
+
+Focused source-runnable CLI validation:
+
+```sh
+sh scripts/cli-check.sh
 ```
 
 Focused workspace dependency-boundary validation:

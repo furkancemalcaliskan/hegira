@@ -103,9 +103,9 @@ The repository validation workflow separates these responsibilities:
   minimal and all-capability contracts;
 - `official-modules` validates the canonical Identity packages directly,
   including ignored SQLx contracts against a disposable PostgreSQL service;
-- `tooling` validates the DX baseline, rendering tool, component manifests,
-  workspace-external layered application, locked dependency boundaries,
-  hydration, and release output;
+- `tooling` validates the DX baseline, source-runnable CLI, rendering tool,
+  component manifests, workspace-external layered application, locked
+  dependency boundaries, hydration, and release output;
 - `generated-application` validates fresh SQLite and PostgreSQL applications,
   the supported v0.2.0 upgrade, locked application dependency boundaries, and
   the rendered production container;
@@ -142,6 +142,17 @@ those focused contracts directly with:
 sh scripts/architecture-boundaries.sh
 sh scripts/release-policy.sh
 ```
+
+Validate the source-runnable CLI command, diagnostic, and process-outcome
+contracts:
+
+```sh
+sh scripts/cli-check.sh
+```
+
+The CLI tests invoke the compiled `hegira` binary without user-home or global
+configuration variables. The current `new` command exposes help but does not
+perform application generation.
 
 Validate the workspace-external canonical layered application base against the
 current framework checkout:
@@ -220,14 +231,15 @@ Run the backend gate without ignored PostgreSQL tests:
 sh scripts/backend-check.sh
 ```
 
-This aggregate runs the framework, official-module, and canonical layered
-application tooling checks. Run an ownership gate directly while iterating
-when the change is confined to that surface:
+This aggregate runs the framework, official-module, canonical layered
+application, and source-runnable CLI tooling checks. Run an ownership gate
+directly while iterating when the change is confined to that surface:
 
 ```sh
 sh scripts/framework-check.sh
 sh scripts/official-modules-check.sh
 sh scripts/layered-template-check.sh
+sh scripts/cli-check.sh
 ```
 
 To include the framework and official-module gates' ignored PostgreSQL tests locally, provide

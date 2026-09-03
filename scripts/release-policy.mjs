@@ -12,6 +12,7 @@ const REQUIRED_WORKFLOW_CONTRACTS = [
   ["framework validation", "scripts/framework-check.sh"],
   ["official module validation", "scripts/official-modules-check.sh"],
   ["tooling validation", "scripts/layered-template-check.sh"],
+  ["CLI validation", "scripts/cli-check.sh"],
   ["generated application validation", "scripts/generated-application-check.sh"],
   ["source SBOM generation", "anchore/sbom-action@v0"],
   ["disabled implicit SBOM publication", "upload-release-assets: false"],

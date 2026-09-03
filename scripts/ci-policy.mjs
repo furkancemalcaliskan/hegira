@@ -16,6 +16,7 @@ const REQUIRED_CONTRACTS = [
   ["framework validation", "sh scripts/framework-check.sh"],
   ["official module validation", "sh scripts/official-modules-check.sh"],
   ["tooling validation", "sh scripts/layered-template-check.sh"],
+  ["CLI validation", "sh scripts/cli-check.sh"],
   ["generated application validation", "sh scripts/generated-application-check.sh"],
   ["explicit disposable PostgreSQL authentication", "POSTGRES_HOST_AUTH_METHOD: trust"],
   ["dependency policy", "EmbarkStudios/cargo-deny-action@v2"],

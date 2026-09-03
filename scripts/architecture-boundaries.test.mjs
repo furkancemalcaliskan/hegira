@@ -25,6 +25,7 @@ const PACKAGE_LOCATIONS = Object.freeze({
   identity_sqlx: "modules/identity/sqlx",
   identity_http: "modules/identity/http",
   identity_leptos: "modules/identity/leptos",
+  hegira_cli: "tools/hegira_cli",
   template_renderer: "tools/template_renderer",
 });
 

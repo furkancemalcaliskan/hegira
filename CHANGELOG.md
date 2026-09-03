@@ -6,6 +6,9 @@ All notable changes are documented here. Releases follow Semantic Versioning.
 
 ### Added
 
+- Added the source-runnable `hegira` CLI foundation with top-level and `new`
+  help, version reporting, separated output and diagnostics, and stable process
+  outcomes for usage, validation, conflict, and internal failures.
 - Added a release-aligned canonical component-package contract with explicit
   framework compatibility, a declared data-only component graph, and a
   deterministic SHA-256 source digest.

@@ -29,6 +29,7 @@ maintainer tooling, not the public Hegira CLI.
 │   │   └── layered/         independent full-stack application source
 │   └── components/          typed application-component manifests
 ├── tools/
+│   ├── hegira_cli/          source-runnable CLI command shell
 │   └── template_renderer/   render core and repository-validation adapter
 ├── docs/                    current technical and maintainer documentation
 ├── scripts/                 validation and release helpers
@@ -91,6 +92,7 @@ The direct local dependency allowlist is enforced from locked Cargo metadata by
 | `identity_sqlx` | `background_jobs`, `identity_application`, `identity_application_contracts`, `identity_domain`, `identity_domain_shared`, `persistence`, `search` |
 | `identity_http` | `http_support`, `identity_application`, `identity_application_contracts`, `leptos_support` |
 | `identity_leptos` | `identity_application`, `identity_application_contracts`, `identity_domain_shared`, `leptos_support` |
+| `hegira_cli` | None |
 | `template_renderer` | `application_manifest` |
 
 Normal, optional, development, and build dependencies use the same ownership
@@ -124,6 +126,19 @@ framework compatibility surfaces or consumed by generated applications.
 These packages expose reusable primitives and provider adapters. They do not
 contain application domain, application service, presentation, host
 composition, or product UI code.
+
+## Source-runnable CLI
+
+`tools/hegira_cli` owns the `hegira` binary command shell. It defines top-level
+help, version reporting, the `new` command namespace, concise diagnostics, and
+stable process outcomes without reading a user home directory or global
+configuration. Help and version information are written to standard output;
+usage and failure diagnostics are written to standard error.
+
+The process outcomes are `0` for success, `1` for an internal error, `2` for
+invalid usage, `3` for validation failure, and `4` for a destination or state
+conflict. The current command is a foundation only: `hegira new --help` is
+available, but `hegira new` does not generate an application yet.
 
 ## Official Identity Module
 
@@ -244,6 +259,7 @@ sh scripts/architecture-boundaries.sh
 sh scripts/framework-check.sh
 sh scripts/official-modules-check.sh
 sh scripts/layered-template-check.sh
+sh scripts/cli-check.sh
 sh scripts/generated-application-check.sh
 ```
 

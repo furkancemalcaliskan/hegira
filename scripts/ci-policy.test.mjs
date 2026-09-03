@@ -48,6 +48,7 @@ jobs:
   tooling:
     steps:
       - run: sh scripts/layered-template-check.sh
+      - run: sh scripts/cli-check.sh
   generated-application:
     steps:
       - run: sh scripts/generated-application-check.sh
@@ -108,6 +109,13 @@ test("rejects a missing tooling gate", () => {
     validWorkflow.replace("sh scripts/layered-template-check.sh", "true"),
   );
   assert.ok(errors.some((error) => error.includes("tooling validation")));
+});
+
+test("rejects a missing CLI gate", () => {
+  const errors = validateRepositoryValidationWorkflow(
+    validWorkflow.replace("sh scripts/cli-check.sh", "true"),
+  );
+  assert.ok(errors.some((error) => error.includes("CLI validation")));
 });
 
 test("rejects compatibility-host feature validation", () => {
