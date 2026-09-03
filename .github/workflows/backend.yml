@@ -117,6 +117,8 @@ jobs:
           cache-dependency-path: templates/applications/layered/apps/web/src/package-lock.json
       - name: Validate rendering tooling and canonical application source
         run: sh scripts/layered-template-check.sh
+      - name: Validate Hegira CLI command contracts
+        run: sh scripts/cli-check.sh
 
   generated-application:
     name: generated-application

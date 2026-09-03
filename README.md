@@ -70,6 +70,7 @@ ownership:
 | `templates/applications/layered/` | Workspace-external, brand-neutral layered application base with application-owned server, web, configuration, migration composition, and deployment files |
 | `templates/package.toml` | Versioned canonical component-package identity, framework compatibility, component graph, and source digest |
 | `templates/components/` | Typed data-only component manifests that define the canonical application composition |
+| `tools/hegira_cli/` | Source-runnable `hegira` command shell with stable help, diagnostics, and exit outcomes |
 | `tools/template_renderer/` | Reusable deterministic render core with a separate disposable repository-validation adapter; it is not a public CLI |
 
 The canonical rendered application is an independent Cargo workspace, consumes framework
@@ -79,6 +80,18 @@ manifest. The canonical package locks its source inputs with a deterministic SHA
 repository-local or untracked files cannot silently enter generated output. Releases are
 source-first, and the repository does not currently implement a public application-generation
 command.
+
+The source-runnable CLI foundation exposes its current command contract without
+performing application generation:
+
+```sh
+cargo run --locked -p hegira_cli -- --help
+cargo run --locked -p hegira_cli -- new --help
+```
+
+Its stable process outcomes are success (`0`), internal error (`1`), usage
+error (`2`), validation error (`3`), and conflict (`4`). Human-readable help
+and version output use standard output; diagnostics use standard error.
 
 ## Quick Start
 
@@ -134,7 +147,8 @@ Validate repository governance and workspace dependency boundaries:
 sh scripts/repository-policy.sh
 ```
 
-Run the aggregate backend gate for framework, official-module, and template ownership:
+Run the aggregate backend gate for framework, official-module, template, and
+source-runnable CLI ownership:
 
 ```sh
 sh scripts/backend-check.sh
