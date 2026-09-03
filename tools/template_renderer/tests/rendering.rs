@@ -31,6 +31,25 @@ fn layered_template_snapshot_is_deterministic() {
 }
 
 #[test]
+fn identical_generation_inputs_render_byte_equivalent_output_trees() {
+    let repository = repository_root();
+    let output_parent = TestDirectory::new("byte-determinism");
+    let first_output = output_parent.path().join("first");
+    let second_output = output_parent.path().join("second");
+
+    render(&canonical_request(&repository, first_output.clone()))
+        .expect("first render should succeed");
+    render(&canonical_request(&repository, second_output.clone()))
+        .expect("second render should succeed");
+
+    assert_eq!(
+        output_tree(&first_output),
+        output_tree(&second_output),
+        "identical requests should produce byte-equivalent output trees"
+    );
+}
+
+#[test]
 fn reusable_plan_exposes_components_and_files_before_publication() {
     let repository = repository_root();
     let output_parent = TestDirectory::new("plan-contract");
@@ -198,6 +217,38 @@ fn package_rejects_framework_sources_with_credentials() {
 
     assert_eq!(error.kind(), RendererErrorKind::Catalog);
     assert!(error.to_string().contains("invalid framework repository"));
+    assert!(!output.exists());
+}
+
+#[test]
+fn package_and_framework_versions_must_match() {
+    let repository = repository_root();
+    let fixture = TestDirectory::new("package-version-mismatch");
+    copy_directory(
+        &repository.join("templates"),
+        &fixture.path().join("templates"),
+    );
+    let package_path = fixture.path().join("templates/package.toml");
+    let current_version = format!("version = \"v{}\"", env!("CARGO_PKG_VERSION"));
+    let original =
+        fs::read_to_string(&package_path).expect("component package manifest should be readable");
+    let package = original.replacen(&current_version, "version = \"v9.9.9\"", 1);
+    assert_ne!(
+        package, original,
+        "fixture package version should be replaced"
+    );
+    fs::write(package_path, package).expect("component package manifest should be updated");
+    let output = fixture.path().join("application");
+
+    let error = render(&canonical_request(fixture.path(), output.clone()))
+        .expect_err("incompatible package version should fail");
+
+    assert_eq!(error.kind(), RendererErrorKind::Catalog);
+    assert!(
+        error
+            .to_string()
+            .contains("does not match framework version")
+    );
     assert!(!output.exists());
 }
 
@@ -375,7 +426,78 @@ fn output_collisions_fail_before_creating_output() {
     let error = render(&fixture.request(output.clone())).expect_err("render should fail");
 
     assert!(error.to_string().contains("output collision"));
+    assert!(error.to_string().contains("shared.txt"));
+    assert!(error.to_string().contains("alpha"));
+    assert!(error.to_string().contains("beta"));
     assert_eq!(error.kind(), RendererErrorKind::Collision);
+    assert!(!output.exists());
+}
+
+#[test]
+fn traversing_component_paths_fail_before_creating_output() {
+    let fixture = Fixture::new("path-traversal");
+    fixture.write_template("components = [\"feature\"]\n");
+    fixture.write_component("feature", "", &[("feature.txt", "feature")]);
+    fixture.replace_component_manifest(
+        "feature",
+        "source = \"applications/test/source\"",
+        "source = \"../outside\"",
+    );
+    let output = fixture.root.path().join("output");
+
+    let error = render(&fixture.request(output.clone())).expect_err("traversal should fail");
+
+    assert_eq!(error.kind(), RendererErrorKind::Catalog);
+    assert!(error.to_string().contains("non-traversing relative path"));
+    assert!(!output.exists());
+}
+
+#[test]
+fn absolute_component_paths_fail_before_creating_output() {
+    let fixture = Fixture::new("absolute-path");
+    fixture.write_template("components = [\"feature\"]\n");
+    fixture.write_component("feature", "", &[("feature.txt", "feature")]);
+    let absolute =
+        toml::Value::String(fixture.root.path().to_string_lossy().into_owned()).to_string();
+    fixture.replace_component_manifest(
+        "feature",
+        "source = \"applications/test/source\"",
+        &format!("source = {absolute}"),
+    );
+    let output = fixture.root.path().join("output");
+
+    let error = render(&fixture.request(output.clone())).expect_err("absolute path should fail");
+
+    assert_eq!(error.kind(), RendererErrorKind::Catalog);
+    assert!(error.to_string().contains("non-traversing relative path"));
+    assert!(!output.exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn symbolic_links_in_component_content_fail_before_creating_output() {
+    use std::os::unix::fs::symlink;
+
+    let fixture = Fixture::new("source-symlink");
+    fixture.write_template("components = [\"feature\"]\n");
+    fixture.write_component("feature", "", &[("safe.txt", "safe")]);
+    fixture.replace_component_manifest("feature", "include = [\"safe.txt\"]", "include = [\".\"]");
+    let external = fixture.root.path().join("external.txt");
+    fs::write(&external, "external").expect("external source should be written");
+    symlink(
+        &external,
+        fixture
+            .root
+            .path()
+            .join("templates/applications/test/source/link.txt"),
+    )
+    .expect("source symlink should be created");
+    let output = fixture.root.path().join("output");
+
+    let error = render(&fixture.request(output.clone())).expect_err("source symlink should fail");
+
+    assert_eq!(error.kind(), RendererErrorKind::Rendering);
+    assert!(error.to_string().contains("may not be a symbolic link"));
     assert!(!output.exists());
 }
 
@@ -500,6 +622,21 @@ impl Fixture {
         }
     }
 
+    fn replace_component_manifest(&self, id: &str, from: &str, to: &str) {
+        let path = self
+            .root
+            .path()
+            .join("templates/components")
+            .join(format!("{id}.toml"));
+        let manifest = fs::read_to_string(&path).expect("component manifest should be readable");
+        assert!(
+            manifest.contains(from),
+            "fixture manifest should contain replacement source"
+        );
+        fs::write(path, manifest.replacen(from, to, 1))
+            .expect("component manifest should be updated");
+    }
+
     fn request(&self, output: PathBuf) -> RenderRequest {
         RenderRequest {
             repository_root: self.root.path().to_path_buf(),
@@ -562,4 +699,37 @@ fn copy_directory(source: &Path, destination: &Path) {
             fs::copy(&source_entry, &destination_entry).expect("test source should be copied");
         }
     }
+}
+
+fn output_tree(root: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
+    fn collect(root: &Path, directory: &Path, files: &mut BTreeMap<PathBuf, Vec<u8>>) {
+        let mut entries = fs::read_dir(directory)
+            .expect("rendered directory should be readable")
+            .map(|entry| entry.expect("rendered entry should be readable").path())
+            .collect::<Vec<_>>();
+        entries.sort();
+        for entry in entries {
+            let metadata = fs::symlink_metadata(&entry).expect("rendered metadata should exist");
+            assert!(
+                !metadata.file_type().is_symlink(),
+                "rendered output must not contain symlinks"
+            );
+            if metadata.is_dir() {
+                collect(root, &entry, files);
+            } else {
+                let relative = entry
+                    .strip_prefix(root)
+                    .expect("rendered file should remain inside output")
+                    .to_path_buf();
+                files.insert(
+                    relative,
+                    fs::read(entry).expect("rendered file should be readable"),
+                );
+            }
+        }
+    }
+
+    let mut files = BTreeMap::new();
+    collect(root, root, &mut files);
+    files
 }
