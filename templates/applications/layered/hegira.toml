@@ -6,6 +6,6 @@ repository = "{{framework_repository}}"
 version = "{{framework_version}}"
 
 [selection]
-components = ["layered-base", "layered-leptos-identity"]
-databases = ["postgres", "sqlite"]
-clients = ["leptos"]
+components = ["layered-base", "{{component_id}}"]
+databases = ["{{database_adapter}}"]
+clients = ["{{client_adapter}}"]

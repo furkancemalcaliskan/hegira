@@ -133,9 +133,7 @@ fn layered_template_renders_release_dependencies_and_binary_assets() {
     assert_eq!(application_manifest.framework.version, "v0.3.0");
     assert_eq!(
         application_manifest.selection.databases,
-        [DatabaseAdapter::Postgres, DatabaseAdapter::Sqlite]
-            .into_iter()
-            .collect()
+        [DatabaseAdapter::Sqlite].into_iter().collect()
     );
     assert_eq!(
         application_manifest.selection.clients,

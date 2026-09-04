@@ -1,6 +1,12 @@
-use std::{ffi::OsString, io::Write};
+use std::{
+    collections::BTreeMap,
+    ffi::OsString,
+    io::Write,
+    path::{Path, PathBuf},
+};
 
-use clap::{Args, Parser, Subcommand, error::ErrorKind};
+use clap::{Args, Parser, Subcommand, ValueEnum, error::ErrorKind};
+use template_renderer::{RenderRequest, RendererError, RendererErrorKind, render};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
@@ -38,7 +44,82 @@ enum CliCommand {
 }
 
 #[derive(Debug, Args)]
-struct NewCommand {}
+struct NewCommand {
+    /// Application identity recorded in hegira.toml.
+    #[arg(value_name = "NAME")]
+    name: String,
+
+    /// Directory that will own the generated application.
+    #[arg(long, value_name = "PATH")]
+    destination: PathBuf,
+
+    /// Default database adapter.
+    #[arg(long, value_enum, default_value_t = DatabaseChoice::Sqlite)]
+    database: DatabaseChoice,
+
+    /// Browser client adapter.
+    #[arg(long, value_enum, default_value_t = ClientChoice::Leptos)]
+    client: ClientChoice,
+
+    /// Official application component.
+    #[arg(long, value_enum, default_value_t = ComponentChoice::Identity)]
+    component: ComponentChoice,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+enum DatabaseChoice {
+    Sqlite,
+    Postgres,
+}
+
+impl DatabaseChoice {
+    const fn adapter(self) -> &'static str {
+        match self {
+            Self::Sqlite => "sqlite",
+            Self::Postgres => "postgres",
+        }
+    }
+
+    const fn feature(self) -> &'static str {
+        match self {
+            Self::Sqlite => "db-sqlite",
+            Self::Postgres => "db-postgres",
+        }
+    }
+
+    const fn environment(self) -> &'static str {
+        match self {
+            Self::Sqlite => "sqlite",
+            Self::Postgres => "development",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+enum ClientChoice {
+    Leptos,
+}
+
+impl ClientChoice {
+    const fn adapter(self) -> &'static str {
+        match self {
+            Self::Leptos => "leptos",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+enum ComponentChoice {
+    Identity,
+}
+
+impl ComponentChoice {
+    const fn id(self) -> &'static str {
+        match self {
+            Self::Identity => "layered-leptos-identity",
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CliDiagnosticKind {
@@ -114,15 +195,101 @@ where
         Err(error) => return write_parser_result(error, output, diagnostics),
     };
 
-    match cli.command {
-        CliCommand::New(_) => write_diagnostic(
-            CliDiagnostic::usage(
-                "application generation arguments are not available in this CLI foundation",
-                "run `hegira new --help` to inspect the command contract",
-            ),
-            diagnostics,
-        ),
+    run_command(cli.command, source_repository_root(), output, diagnostics)
+}
+
+fn run_command(
+    command: CliCommand,
+    repository_root: PathBuf,
+    output: &mut impl Write,
+    diagnostics: &mut impl Write,
+) -> CliExit {
+    match command {
+        CliCommand::New(command) => {
+            create_application(command, repository_root, output, diagnostics)
+        }
     }
+}
+
+fn create_application(
+    command: NewCommand,
+    repository_root: PathBuf,
+    output: &mut impl Write,
+    diagnostics: &mut impl Write,
+) -> CliExit {
+    let mut variables = BTreeMap::new();
+    variables.insert("application_name".to_string(), command.name.clone());
+    variables.insert(
+        "client_adapter".to_string(),
+        command.client.adapter().to_string(),
+    );
+    variables.insert(
+        "component_id".to_string(),
+        command.component.id().to_string(),
+    );
+    variables.insert(
+        "database_adapter".to_string(),
+        command.database.adapter().to_string(),
+    );
+    variables.insert(
+        "database_feature".to_string(),
+        command.database.feature().to_string(),
+    );
+
+    let request = RenderRequest {
+        repository_root,
+        template: "layered".to_string(),
+        output: command.destination.clone(),
+        variables,
+    };
+    if let Err(error) = render(&request) {
+        return write_diagnostic(
+            renderer_diagnostic(error, &command.destination),
+            diagnostics,
+        );
+    }
+
+    let destination = command.destination.display();
+    let database = command.database.environment();
+    if writeln!(output, "Created {} at {destination}", command.name).is_err()
+        || writeln!(output).is_err()
+        || writeln!(output, "Next steps:").is_err()
+        || writeln!(output, "  cd {destination}").is_err()
+        || writeln!(output, "  rustup target add wasm32-unknown-unknown").is_err()
+        || writeln!(output, "  cargo install cargo-leptos").is_err()
+        || writeln!(output, "  npm ci --prefix apps/web/src").is_err()
+        || writeln!(
+            output,
+            "  APP_ENV={database} cargo leptos watch -p app_server --bin-features ssr,{} --lib-features hydrate",
+            command.database.feature()
+        )
+        .is_err()
+    {
+        return CliExit::Internal;
+    }
+
+    CliExit::Success
+}
+
+fn renderer_diagnostic(error: RendererError, destination: &Path) -> CliDiagnostic {
+    match error.kind() {
+        RendererErrorKind::ApplicationManifest | RendererErrorKind::Variables => {
+            CliDiagnostic::validation(error.to_string())
+        }
+        RendererErrorKind::Output if destination.exists() => CliDiagnostic::conflict(format!(
+            "destination already exists: {}",
+            destination.display()
+        )),
+        _ => CliDiagnostic::internal(format!("application generation failed: {error}")),
+    }
+}
+
+fn source_repository_root() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(Path::parent)
+        .expect("hegira_cli should live under the repository tools directory")
+        .to_path_buf()
 }
 
 fn write_parser_result(

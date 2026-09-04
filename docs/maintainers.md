@@ -151,8 +151,10 @@ sh scripts/cli-check.sh
 ```
 
 The CLI tests invoke the compiled `hegira` binary without user-home or global
-configuration variables. The current `new` command exposes help but does not
-perform application generation.
+configuration variables. They verify default and explicit application
+selections, independent release-source dependencies, deterministic output,
+destination conflicts, and the absence of interactive or global
+configuration requirements.
 
 Validate the workspace-external canonical layered application base against the
 current framework checkout:

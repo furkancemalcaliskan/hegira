@@ -16,7 +16,7 @@ leptos_router.workspace = true
 web-sys = { version = "0.3.91", features = ["Document", "DomTokenList", "Element", "Storage", "Window"] }
 
 [features]
-default = ["db-sqlite"]
+default = ["{{database_feature}}"]
 db-postgres = ["identity_leptos/db-postgres"]
 db-sqlite = ["identity_leptos/db-sqlite"]
 hydrate = ["identity_leptos/hydrate", "leptos_support/hydrate", "leptos/hydrate"]

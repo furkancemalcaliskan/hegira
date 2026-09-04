@@ -67,8 +67,8 @@ commands change. Never describe planned work as implemented.
   maintainer checks may select the adapter that rewrites them. It is not the
   public Hegira CLI.
 - `tools/hegira_cli/` contains the source-runnable `hegira` command shell,
-  stable process outcomes, and user-facing diagnostic contract. Application
-  generation is not implemented by the command yet.
+  deterministic non-interactive layered application creation, stable process
+  outcomes, and user-facing diagnostic contract.
 - `scripts/` contains local validation and release helpers.
 - `.github/workflows/` contains validation and release automation.
 
@@ -78,12 +78,12 @@ implementation.
 
 ## Setup And Run
 
-Render the current canonical application with the internal maintainer tool,
-then install its development prerequisites:
+Create the current canonical application with the source-runnable CLI, then
+install its development prerequisites:
 
 ```sh
-cargo run --locked -p template_renderer -- render \
-  --repository-root . --template layered --output ../my-application
+cargo run --locked -p hegira_cli -- new my-application \
+  --destination ../my-application
 cd ../my-application
 rustup target add wasm32-unknown-unknown
 cargo install cargo-leptos
