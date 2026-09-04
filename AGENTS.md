@@ -67,8 +67,8 @@ commands change. Never describe planned work as implemented.
   maintainer checks may select the adapter that rewrites them. It is not the
   public Hegira CLI.
 - `tools/hegira_cli/` contains the source-runnable `hegira` command shell,
-  deterministic non-interactive layered application creation, stable process
-  outcomes, and user-facing diagnostic contract.
+  deterministic interactive and non-interactive layered application creation,
+  stable process outcomes, and user-facing diagnostic contract.
 - `scripts/` contains local validation and release helpers.
 - `.github/workflows/` contains validation and release automation.
 

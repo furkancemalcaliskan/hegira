@@ -1,7 +1,7 @@
 use std::{
     collections::BTreeMap,
     ffi::OsString,
-    io::Write,
+    io::{BufRead, ErrorKind as IoErrorKind, Write},
     path::{Path, PathBuf},
 };
 
@@ -47,22 +47,31 @@ enum CliCommand {
 struct NewCommand {
     /// Application identity recorded in hegira.toml.
     #[arg(value_name = "NAME")]
-    name: String,
+    name: Option<String>,
 
     /// Directory that will own the generated application.
     #[arg(long, value_name = "PATH")]
-    destination: PathBuf,
+    destination: Option<PathBuf>,
 
     /// Default database adapter.
-    #[arg(long, value_enum, default_value_t = DatabaseChoice::Sqlite)]
-    database: DatabaseChoice,
+    #[arg(long, value_enum)]
+    database: Option<DatabaseChoice>,
 
     /// Browser client adapter.
-    #[arg(long, value_enum, default_value_t = ClientChoice::Leptos)]
-    client: ClientChoice,
+    #[arg(long, value_enum)]
+    client: Option<ClientChoice>,
 
     /// Official application component.
-    #[arg(long, value_enum, default_value_t = ComponentChoice::Identity)]
+    #[arg(long, value_enum)]
+    component: Option<ComponentChoice>,
+}
+
+#[derive(Debug)]
+struct ResolvedNewCommand {
+    name: String,
+    destination: PathBuf,
+    database: DatabaseChoice,
+    client: ClientChoice,
     component: ComponentChoice,
 }
 
@@ -117,6 +126,12 @@ impl ComponentChoice {
     const fn id(self) -> &'static str {
         match self {
             Self::Identity => "layered-leptos-identity",
+        }
+    }
+
+    const fn name(self) -> &'static str {
+        match self {
+            Self::Identity => "identity",
         }
     }
 }
@@ -190,29 +205,268 @@ where
     I: IntoIterator<Item = T>,
     T: Into<OsString> + Clone,
 {
+    run_from_mode(arguments, None, output, diagnostics)
+}
+
+pub fn run_interactive_from<I, T>(
+    arguments: I,
+    input: &mut impl BufRead,
+    output: &mut impl Write,
+    diagnostics: &mut impl Write,
+) -> CliExit
+where
+    I: IntoIterator<Item = T>,
+    T: Into<OsString> + Clone,
+{
+    run_from_mode(arguments, Some(input), output, diagnostics)
+}
+
+fn run_from_mode<I, T>(
+    arguments: I,
+    input: Option<&mut dyn BufRead>,
+    output: &mut impl Write,
+    diagnostics: &mut impl Write,
+) -> CliExit
+where
+    I: IntoIterator<Item = T>,
+    T: Into<OsString> + Clone,
+{
     let cli = match Cli::try_parse_from(arguments) {
         Ok(cli) => cli,
         Err(error) => return write_parser_result(error, output, diagnostics),
     };
 
-    run_command(cli.command, source_repository_root(), output, diagnostics)
+    run_command(
+        cli.command,
+        source_repository_root(),
+        input,
+        output,
+        diagnostics,
+    )
 }
 
 fn run_command(
     command: CliCommand,
     repository_root: PathBuf,
+    input: Option<&mut dyn BufRead>,
     output: &mut impl Write,
     diagnostics: &mut impl Write,
 ) -> CliExit {
     match command {
-        CliCommand::New(command) => {
-            create_application(command, repository_root, output, diagnostics)
+        CliCommand::New(command) => match resolve_new_command(command, input, output) {
+            Ok(Some(command)) => create_application(command, repository_root, output, diagnostics),
+            Ok(None) => CliExit::Success,
+            Err(diagnostic) => write_diagnostic(diagnostic, diagnostics),
+        },
+    }
+}
+
+fn resolve_new_command(
+    command: NewCommand,
+    input: Option<&mut dyn BufRead>,
+    output: &mut impl Write,
+) -> Result<Option<ResolvedNewCommand>, CliDiagnostic> {
+    let guided = command.name.is_none() || command.destination.is_none();
+    if !guided {
+        return Ok(Some(ResolvedNewCommand {
+            name: command.name.expect("complete command should have a name"),
+            destination: command
+                .destination
+                .expect("complete command should have a destination"),
+            database: command.database.unwrap_or(DatabaseChoice::Sqlite),
+            client: command.client.unwrap_or(ClientChoice::Leptos),
+            component: command.component.unwrap_or(ComponentChoice::Identity),
+        }));
+    }
+
+    let Some(input) = input else {
+        return Err(CliDiagnostic::usage(
+            "non-interactive application creation requires a name and destination",
+            "provide `hegira new <NAME> --destination <PATH>` or run the command in a terminal",
+        ));
+    };
+
+    let Some(name) = resolve_name(command.name, input, output)? else {
+        return cancel(output);
+    };
+    let Some(destination) = resolve_destination(command.destination, &name, input, output)? else {
+        return cancel(output);
+    };
+    let Some(database) = resolve_database(command.database, input, output)? else {
+        return cancel(output);
+    };
+    let Some(client) = resolve_client(command.client, input, output)? else {
+        return cancel(output);
+    };
+    let Some(component) = resolve_component(command.component, input, output)? else {
+        return cancel(output);
+    };
+
+    writeln!(output, "\nApplication summary:")
+        .and_then(|()| writeln!(output, "  Name: {name}"))
+        .and_then(|()| writeln!(output, "  Destination: {}", destination.display()))
+        .and_then(|()| writeln!(output, "  Database: {}", database.adapter()))
+        .and_then(|()| writeln!(output, "  Client: {}", client.adapter()))
+        .and_then(|()| writeln!(output, "  Component: {}", component.name()))
+        .map_err(output_diagnostic)?;
+
+    match confirm(input, output)? {
+        Some(true) => Ok(Some(ResolvedNewCommand {
+            name,
+            destination,
+            database,
+            client,
+            component,
+        })),
+        Some(false) | None => cancel(output),
+    }
+}
+
+fn resolve_name(
+    value: Option<String>,
+    input: &mut dyn BufRead,
+    output: &mut impl Write,
+) -> Result<Option<String>, CliDiagnostic> {
+    if value.is_some() {
+        return Ok(value);
+    }
+    loop {
+        let Some(value) = prompt(input, output, "Application name: ")? else {
+            return Ok(None);
+        };
+        if !value.is_empty() {
+            return Ok(Some(value));
+        }
+        writeln!(output, "Please enter an application name.").map_err(output_diagnostic)?;
+    }
+}
+
+fn resolve_destination(
+    value: Option<PathBuf>,
+    name: &str,
+    input: &mut dyn BufRead,
+    output: &mut impl Write,
+) -> Result<Option<PathBuf>, CliDiagnostic> {
+    if value.is_some() {
+        return Ok(value);
+    }
+    let prompt_text = format!("Destination [{name}]: ");
+    Ok(prompt(input, output, &prompt_text)?.map(|value| {
+        if value.is_empty() {
+            PathBuf::from(name)
+        } else {
+            PathBuf::from(value)
+        }
+    }))
+}
+
+fn resolve_database(
+    value: Option<DatabaseChoice>,
+    input: &mut dyn BufRead,
+    output: &mut impl Write,
+) -> Result<Option<DatabaseChoice>, CliDiagnostic> {
+    if value.is_some() {
+        return Ok(value);
+    }
+    loop {
+        let Some(value) = prompt(input, output, "Database [sqlite] (sqlite/postgres): ")? else {
+            return Ok(None);
+        };
+        match value.to_ascii_lowercase().as_str() {
+            "" | "sqlite" => return Ok(Some(DatabaseChoice::Sqlite)),
+            "postgres" => return Ok(Some(DatabaseChoice::Postgres)),
+            _ => writeln!(output, "Please choose `sqlite` or `postgres`.")
+                .map_err(output_diagnostic)?,
         }
     }
 }
 
+fn resolve_client(
+    value: Option<ClientChoice>,
+    input: &mut dyn BufRead,
+    output: &mut impl Write,
+) -> Result<Option<ClientChoice>, CliDiagnostic> {
+    if value.is_some() {
+        return Ok(value);
+    }
+    loop {
+        let Some(value) = prompt(input, output, "Client [leptos]: ")? else {
+            return Ok(None);
+        };
+        match value.to_ascii_lowercase().as_str() {
+            "" | "leptos" => return Ok(Some(ClientChoice::Leptos)),
+            _ => writeln!(output, "The currently supported client is `leptos`.")
+                .map_err(output_diagnostic)?,
+        }
+    }
+}
+
+fn resolve_component(
+    value: Option<ComponentChoice>,
+    input: &mut dyn BufRead,
+    output: &mut impl Write,
+) -> Result<Option<ComponentChoice>, CliDiagnostic> {
+    if value.is_some() {
+        return Ok(value);
+    }
+    loop {
+        let Some(value) = prompt(input, output, "Component [identity]: ")? else {
+            return Ok(None);
+        };
+        match value.to_ascii_lowercase().as_str() {
+            "" | "identity" => return Ok(Some(ComponentChoice::Identity)),
+            _ => writeln!(output, "The currently supported component is `identity`.")
+                .map_err(output_diagnostic)?,
+        }
+    }
+}
+
+fn confirm(
+    input: &mut dyn BufRead,
+    output: &mut impl Write,
+) -> Result<Option<bool>, CliDiagnostic> {
+    loop {
+        let Some(value) = prompt(input, output, "Create application? [Y/n]: ")? else {
+            return Ok(None);
+        };
+        match value.to_ascii_lowercase().as_str() {
+            "" | "y" | "yes" => return Ok(Some(true)),
+            "n" | "no" => return Ok(Some(false)),
+            _ => writeln!(output, "Please answer `yes` or `no`.").map_err(output_diagnostic)?,
+        }
+    }
+}
+
+fn prompt(
+    input: &mut dyn BufRead,
+    output: &mut impl Write,
+    message: &str,
+) -> Result<Option<String>, CliDiagnostic> {
+    write!(output, "{message}")
+        .and_then(|()| output.flush())
+        .map_err(output_diagnostic)?;
+    let mut value = String::new();
+    match input.read_line(&mut value) {
+        Ok(0) => Ok(None),
+        Ok(_) => Ok(Some(value.trim().to_string())),
+        Err(error) if error.kind() == IoErrorKind::Interrupted => Ok(None),
+        Err(error) => Err(CliDiagnostic::internal(format!(
+            "failed to read interactive input: {error}"
+        ))),
+    }
+}
+
+fn cancel(output: &mut impl Write) -> Result<Option<ResolvedNewCommand>, CliDiagnostic> {
+    writeln!(output, "\nCancelled; no files were written.").map_err(output_diagnostic)?;
+    Ok(None)
+}
+
+fn output_diagnostic(error: std::io::Error) -> CliDiagnostic {
+    CliDiagnostic::internal(format!("failed to write command output: {error}"))
+}
+
 fn create_application(
-    command: NewCommand,
+    command: ResolvedNewCommand,
     repository_root: PathBuf,
     output: &mut impl Write,
     diagnostics: &mut impl Write,

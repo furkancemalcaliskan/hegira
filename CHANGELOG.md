@@ -12,6 +12,9 @@ All notable changes are documented here. Releases follow Semantic Versioning.
 - Added deterministic non-interactive `hegira new` application creation with
   SQLite, Leptos, and Identity defaults, explicit supported selections,
   release-source dependencies, and side-effect-free next-step guidance.
+- Added guided `hegira new` prompts for missing application inputs and
+  implemented selections, including a final summary, confirmation, safe
+  cancellation, deterministic prompt tests, and non-TTY safeguards.
 - Added a release-aligned canonical component-package contract with explicit
   framework compatibility, a declared data-only component graph, and a
   deterministic SHA-256 source digest.
