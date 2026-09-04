@@ -153,8 +153,10 @@ sh scripts/cli-check.sh
 The CLI tests invoke the compiled `hegira` binary without user-home or global
 configuration variables. They verify default and explicit application
 selections, independent release-source dependencies, deterministic output,
-destination conflicts, and the absence of interactive or global
-configuration requirements.
+destination conflicts, interactive default equivalence, supported-choice
+mapping, cancellation, non-TTY behavior, and the absence of global
+configuration requirements. Prompt tests inject deterministic input and capture
+output without relying on a host terminal.
 
 Validate the workspace-external canonical layered application base against the
 current framework checkout:

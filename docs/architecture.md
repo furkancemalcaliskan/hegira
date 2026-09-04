@@ -146,6 +146,14 @@ client, and component selections can also be stated explicitly. Generation
 writes the destination atomically and never executes generated or external
 commands.
 
+When an application name or destination is omitted in an interactive terminal,
+the same command gathers missing values through a guided workflow, displays the
+implemented selections and defaults, and requires confirmation after a final
+summary. The prompt path resolves into the same render request used by explicit
+arguments. Cancellation or end-of-input occurs before rendering and leaves no
+destination. Non-TTY execution never reads prompt input and requires both the
+name and destination.
+
 ## Official Identity Module
 
 `modules/identity/` contains seven separately compiled packages:

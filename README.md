@@ -89,6 +89,11 @@ cargo run --locked -p hegira_cli -- new my-application \
   --destination ../my-application
 ```
 
+Run `cargo run --locked -p hegira_cli -- new` in an interactive terminal for a guided workflow.
+The prompts show the implemented choices and defaults, summarize the resulting application, and
+ask for confirmation before any files are written. Non-interactive terminals never wait for
+prompt input and require the application name and destination explicitly.
+
 Its stable process outcomes are success (`0`), internal error (`1`), usage
 error (`2`), validation error (`3`), and conflict (`4`). Human-readable help
 and version output use standard output; diagnostics use standard error.

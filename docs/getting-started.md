@@ -6,6 +6,17 @@ non-interactively. The CLI writes the selected source tree and next-step
 instructions; it does not install dependencies, run migrations, initialize a
 Git repository, or execute generated code.
 
+In an interactive terminal, the guided form can collect the application name,
+destination, and implemented adapter selections:
+
+```sh
+cargo run --locked -p hegira_cli -- new
+```
+
+It shows defaults and a final summary before writing files. Cancellation leaves
+no generated application. Scripts, CI, redirected input, and other non-TTY
+execution must provide the name and destination explicitly as shown below.
+
 ## Prerequisites
 
 - the Rust toolchain pinned by `rust-toolchain.toml`;

@@ -1,5 +1,7 @@
 use std::{
+    ffi::OsString,
     fs,
+    io::Cursor,
     path::{Path, PathBuf},
     process::{Command, Output},
     sync::atomic::{AtomicU64, Ordering},
@@ -70,9 +72,86 @@ fn new_requires_an_application_name_and_destination() {
     assert_eq!(result.status.code(), Some(2));
     assert!(result.stdout.is_empty());
     let diagnostic = String::from_utf8(result.stderr).expect("diagnostic should be UTF-8");
-    assert!(diagnostic.contains("required arguments were not provided"));
-    assert!(diagnostic.contains("<NAME>"));
-    assert!(diagnostic.contains("--destination <PATH>"));
+    assert!(
+        diagnostic.contains("non-interactive application creation requires a name and destination")
+    );
+    assert!(diagnostic.contains("provide `hegira new <NAME> --destination <PATH>`"));
+}
+
+#[test]
+fn interactive_defaults_match_explicit_default_generation() {
+    let output = TestDirectory::new("interactive-defaults");
+    let guided_destination = output.path().join("guided");
+    let explicit_destination = output.path().join("explicit");
+    let input = format!("guided-app\n{}\n\n\n\n\n", guided_destination.display());
+
+    let (exit, stdout, diagnostics) = interactive_hegira(&["new"], &input);
+    assert_eq!(exit, 0, "{diagnostics}");
+    assert!(diagnostics.is_empty());
+    assert!(stdout.contains("Application name: "));
+    assert!(stdout.contains("Database [sqlite] (sqlite/postgres): "));
+    assert!(stdout.contains("Application summary:"));
+    assert!(stdout.contains("Database: sqlite"));
+
+    let result = hegira(&[
+        "new",
+        "guided-app",
+        "--destination",
+        path_argument(&explicit_destination),
+    ]);
+    assert!(result.status.success(), "{:?}", result.stderr);
+    assert_eq!(
+        output_tree(&guided_destination),
+        output_tree(&explicit_destination)
+    );
+}
+
+#[test]
+fn interactive_selection_reprompts_and_maps_to_supported_values() {
+    let output = TestDirectory::new("interactive-postgres");
+    let destination = output.path().join("ApplicationOutput");
+    let input = format!(
+        "guided-postgres\n{}\nmysql\nPostgres\nunknown\nLeptos\nother\nIdentity\nyes\n",
+        destination.display()
+    );
+
+    let (exit, stdout, diagnostics) = interactive_hegira(&["new"], &input);
+
+    assert_eq!(exit, 0, "{diagnostics}");
+    assert!(diagnostics.is_empty());
+    assert!(stdout.contains("Please choose `sqlite` or `postgres`."));
+    assert!(stdout.contains("The currently supported client is `leptos`."));
+    assert!(stdout.contains("The currently supported component is `identity`."));
+    assert!(stdout.contains("Destination: "));
+    assert!(stdout.contains("Database: postgres"));
+    let manifest = fs::read_to_string(destination.join("hegira.toml"))
+        .expect("application manifest should exist");
+    assert!(manifest.contains("databases = [\"postgres\"]"));
+}
+
+#[test]
+fn interactive_cancellation_leaves_no_output() {
+    let output = TestDirectory::new("interactive-cancel");
+    let destination = output.path().join("cancelled");
+    let input = format!("cancelled-app\n{}\n\n\n\nn\n", destination.display());
+
+    let (exit, stdout, diagnostics) = interactive_hegira(&["new"], &input);
+
+    assert_eq!(exit, 0);
+    assert!(diagnostics.is_empty());
+    assert!(stdout.contains("Application summary:"));
+    assert!(stdout.contains("Cancelled; no files were written."));
+    assert!(!destination.exists());
+}
+
+#[test]
+fn interactive_end_of_input_cancels_safely() {
+    let (exit, stdout, diagnostics) = interactive_hegira(&["new"], "");
+
+    assert_eq!(exit, 0);
+    assert!(diagnostics.is_empty());
+    assert!(stdout.contains("Application name: "));
+    assert!(stdout.contains("Cancelled; no files were written."));
 }
 
 #[test]
@@ -187,6 +266,22 @@ fn existing_destination_is_a_conflict_and_is_not_modified() {
 
 fn path_argument(path: &Path) -> &str {
     path.to_str().expect("test path should be UTF-8")
+}
+
+fn interactive_hegira(arguments: &[&str], input: &str) -> (u8, String, String) {
+    let arguments = std::iter::once(OsString::from("hegira"))
+        .chain(arguments.iter().map(OsString::from))
+        .collect::<Vec<_>>();
+    let mut input = Cursor::new(input.as_bytes());
+    let mut output = Vec::new();
+    let mut diagnostics = Vec::new();
+    let exit =
+        hegira_cli::run_interactive_from(arguments, &mut input, &mut output, &mut diagnostics);
+    (
+        exit.code(),
+        String::from_utf8(output).expect("interactive output should be UTF-8"),
+        String::from_utf8(diagnostics).expect("interactive diagnostics should be UTF-8"),
+    )
 }
 
 fn repository_root() -> PathBuf {
