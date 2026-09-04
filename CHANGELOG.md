@@ -9,6 +9,9 @@ All notable changes are documented here. Releases follow Semantic Versioning.
 - Added the source-runnable `hegira` CLI foundation with top-level and `new`
   help, version reporting, separated output and diagnostics, and stable process
   outcomes for usage, validation, conflict, and internal failures.
+- Added deterministic non-interactive `hegira new` application creation with
+  SQLite, Leptos, and Identity defaults, explicit supported selections,
+  release-source dependencies, and side-effect-free next-step guidance.
 - Added a release-aligned canonical component-package contract with explicit
   framework compatibility, a declared data-only component graph, and a
   deterministic SHA-256 source digest.

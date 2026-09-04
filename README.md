@@ -77,16 +77,16 @@ The canonical rendered application is an independent Cargo workspace, consumes f
 packages from a pinned release source, and records its generation identity and selected
 components in a validated `hegira.toml`. Runtime configuration and secrets remain outside that
 manifest. The canonical package locks its source inputs with a deterministic SHA-256 digest so
-repository-local or untracked files cannot silently enter generated output. Releases are
-source-first, and the repository does not currently implement a public application-generation
-command.
+repository-local or untracked files cannot silently enter generated output. Releases remain
+source-first.
 
-The source-runnable CLI foundation exposes its current command contract without
-performing application generation:
+The source-runnable CLI can create the canonical layered application non-interactively with
+explicit, automation-friendly inputs:
 
 ```sh
 cargo run --locked -p hegira_cli -- --help
-cargo run --locked -p hegira_cli -- new --help
+cargo run --locked -p hegira_cli -- new my-application \
+  --destination ../my-application
 ```
 
 Its stable process outcomes are success (`0`), internal error (`1`), usage
@@ -95,17 +95,19 @@ and version output use standard output; diagnostics use standard error.
 
 ## Quick Start
 
-Until the public CLI is implemented, the repository's internal renderer can materialize the
-canonical application source. The renderer is maintainer tooling rather than a stable public
-command contract. Normal rendering always preserves pinned release-source dependencies:
+Create the default layered application with SQLite, Leptos, and the official Identity
+component. Generation writes files only; it does not install tools, run migrations, initialize
+Git, or execute generated code:
 
 ```sh
-cargo run --locked -p template_renderer -- render \
-  --repository-root . \
-  --template layered \
-  --output ../my-application
+cargo run --locked -p hegira_cli -- new my-application \
+  --destination ../my-application
 cd ../my-application
 ```
+
+Pass `--database postgres` to make PostgreSQL the generated application's selected and default
+database adapter. `--client leptos` and `--component identity` may be supplied explicitly for
+automation; they are the currently supported client and official component selections.
 
 Install the Rust WASM target, `cargo-leptos`, and lockfile-pinned frontend
 tooling:

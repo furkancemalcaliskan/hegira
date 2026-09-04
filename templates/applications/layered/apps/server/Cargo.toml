@@ -42,7 +42,7 @@ tracing = { workspace = true, optional = true }
 wasm-bindgen = { workspace = true, optional = true }
 
 [features]
-default = ["db-sqlite"]
+default = ["{{database_feature}}"]
 db-postgres = [
     "app_infrastructure/db-postgres",
     "app_presentation/db-postgres",

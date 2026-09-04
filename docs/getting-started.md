@@ -1,9 +1,10 @@
 # Getting Started
 
-Hegira currently ships framework source, official modules, and a canonical
-layered application base. The public CLI is not implemented yet. The internal
-renderer below exists for source validation and can materialize the current
-template, but its command-line interface is not a stable public contract.
+Hegira currently ships framework source, official modules, a canonical layered
+application base, and a source-runnable CLI that creates that application
+non-interactively. The CLI writes the selected source tree and next-step
+instructions; it does not install dependencies, run migrations, initialize a
+Git repository, or execute generated code.
 
 ## Prerequisites
 
@@ -17,15 +18,24 @@ From the framework repository root:
 ```sh
 rustup target add wasm32-unknown-unknown
 cargo install cargo-leptos
-cargo run --locked -p template_renderer -- render \
-  --repository-root . \
-  --template layered \
-  --output ../my-application
+cargo run --locked -p hegira_cli -- new my-application \
+  --destination ../my-application
 ```
 
 The output is an independent Cargo workspace. Its normal dependencies use the
 framework repository and release tag declared by the template rather than
 paths into the maintainer checkout.
+
+SQLite, Leptos, and Identity are the defaults. For an explicit PostgreSQL
+application, use:
+
+```sh
+cargo run --locked -p hegira_cli -- new my-application \
+  --destination ../my-application \
+  --database postgres \
+  --client leptos \
+  --component identity
+```
 
 ## Run With SQLite
 

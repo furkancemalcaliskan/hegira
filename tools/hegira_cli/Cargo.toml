@@ -19,3 +19,4 @@ clap = { version = "4.5", default-features = false, features = [
   "suggestions",
   "usage",
 ] }
+template_renderer = { path = "../template_renderer" }
