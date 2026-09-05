@@ -584,6 +584,48 @@ mod tests {
     use super::*;
 
     #[test]
+    fn renderer_catalog_failure_is_internal_and_leaves_destination_untouched() {
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root =
+            std::env::temp_dir().join(format!("hegira-cli-catalog-{}-{nonce}", std::process::id()));
+        std::fs::create_dir(&root).unwrap();
+        struct Cleanup(PathBuf);
+        impl Drop for Cleanup {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_dir_all(&self.0);
+            }
+        }
+        let _cleanup = Cleanup(root.clone());
+        let destination = root.join("application");
+        let cli = Cli::try_parse_from([
+            "hegira",
+            "new",
+            "safe-app",
+            "--destination",
+            destination.to_str().unwrap(),
+        ])
+        .unwrap();
+        let mut stdout = Vec::new();
+        let mut stderr = Vec::new();
+        let exit = run_command(
+            cli.command,
+            root.join("missing-source"),
+            None,
+            &mut stdout,
+            &mut stderr,
+        );
+        assert_eq!(exit, CliExit::Internal);
+        assert!(stdout.is_empty());
+        let diagnostic = String::from_utf8(stderr).unwrap();
+        assert!(diagnostic.starts_with("error: application generation failed:"));
+        assert!(!diagnostic.contains("stack backtrace"));
+        assert_eq!(std::fs::read_dir(&root).unwrap().count(), 0);
+    }
+
+    #[test]
     fn exit_codes_are_stable() {
         assert_eq!(CliExit::Success.code(), 0);
         assert_eq!(CliExit::Internal.code(), 1);

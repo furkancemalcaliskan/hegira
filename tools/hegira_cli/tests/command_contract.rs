@@ -10,13 +10,23 @@ use std::{
 static NEXT_DIRECTORY: AtomicU64 = AtomicU64::new(0);
 
 fn hegira(arguments: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_hegira"))
+    let environment = TestDirectory::new("process-environment");
+    let result = Command::new(env!("CARGO_BIN_EXE_hegira"))
         .args(arguments)
-        .env_remove("HOME")
-        .env_remove("USERPROFILE")
-        .env_remove("XDG_CONFIG_HOME")
+        .env_clear()
+        .env("HOME", environment.path())
+        .env("USERPROFILE", environment.path())
+        .env("XDG_CONFIG_HOME", environment.path())
+        .env("PATH", "")
+        .current_dir(environment.path())
         .output()
-        .expect("hegira command should run")
+        .expect("hegira command should run");
+    assert_eq!(
+        fs::read_dir(environment.path()).unwrap().count(),
+        0,
+        "CLI must not write working-directory or user-home state"
+    );
+    result
 }
 
 #[test]
@@ -355,6 +365,9 @@ fn non_utf8_destination_is_rejected_before_writing() {
     let root = TestDirectory::new("non-utf8");
     let destination = root.path().join(OsString::from_vec(vec![b'a', 0xff]));
     let result = Command::new(env!("CARGO_BIN_EXE_hegira"))
+        .env_clear()
+        .env("HOME", root.path())
+        .current_dir(root.path())
         .args(["new", "safe-app", "--destination"])
         .arg(destination)
         .output()
@@ -369,12 +382,195 @@ fn explicit_sibling_destination_still_works() {
     let cwd = root.path().join("caller");
     fs::create_dir(&cwd).unwrap();
     let result = Command::new(env!("CARGO_BIN_EXE_hegira"))
+        .env_clear()
+        .env("HOME", root.path())
         .current_dir(cwd)
         .args(["new", "sibling-app", "--destination", "../application"])
         .output()
         .unwrap();
     assert!(result.status.success(), "{:?}", result.stderr);
     assert!(root.path().join("application/hegira.toml").is_file());
+}
+
+#[test]
+fn provider_snapshots_and_interactive_requests_match() {
+    for (database, expected) in [
+        ("sqlite", 15404944393434526964_u64),
+        ("postgres", 18439555348730687483_u64),
+    ] {
+        let root = TestDirectory::new(database);
+        let explicit = root.path().join("explicit");
+        let guided = root.path().join("guided");
+        let result = hegira(&[
+            "new",
+            "snapshot-app",
+            "--destination",
+            path_argument(&explicit),
+            "--database",
+            database,
+            "--client",
+            "leptos",
+            "--component",
+            "identity",
+        ]);
+        assert!(result.status.success(), "{:?}", result.stderr);
+        let input = format!(
+            "snapshot-app\n{}\n{database}\nleptos\nidentity\ny\n",
+            guided.display()
+        );
+        let (exit, _, diagnostics) = interactive_hegira(&["new"], &input);
+        assert_eq!(exit, 0, "{diagnostics}");
+        let tree = output_tree(&explicit);
+        assert_eq!(tree, output_tree(&guided));
+        let manifest = fs::read_to_string(explicit.join("hegira.toml")).unwrap();
+        assert!(manifest.contains("application = \"snapshot-app\""));
+        assert!(manifest.contains(&format!("databases = [\"{database}\"]")));
+        assert!(manifest.contains("clients = [\"leptos\"]"));
+        assert!(manifest.contains("\"layered-leptos-identity\""));
+        let workspace = fs::read_to_string(explicit.join("Cargo.toml")).unwrap();
+        assert!(workspace.contains("tag = \"v0.3.0\""));
+        assert!(!workspace.contains(repository_root().to_str().unwrap()));
+        assert!(!explicit.join(".git").exists());
+        assert!(!explicit.join("target").exists());
+        // A committed fingerprint of every path and byte, including binary assets.
+        // This is a regression snapshot, not a cryptographic integrity check.
+        let mut fingerprint = 0xcbf29ce484222325_u64;
+        for (path, bytes) in &tree {
+            for part in [path.to_str().unwrap().as_bytes(), bytes.as_slice()] {
+                for byte in (part.len() as u64).to_le_bytes().iter().chain(part) {
+                    fingerprint = (fingerprint ^ u64::from(*byte)).wrapping_mul(0x100000001b3);
+                }
+            }
+        }
+        assert_eq!(
+            fingerprint, expected,
+            "review {database} output before updating its snapshot"
+        );
+    }
+}
+
+#[test]
+fn unsupported_selections_are_usage_errors_without_output() {
+    let root = TestDirectory::new("unsupported");
+    let destination = root.path().join("application");
+    for extra in [
+        vec!["--database", "mysql"],
+        vec!["--client", "sveltekit"],
+        vec!["--component", "catalog"],
+        vec!["--force"],
+        vec!["--framework-root", "/tmp"],
+    ] {
+        let mut args = vec![
+            "new",
+            "safe-app",
+            "--destination",
+            path_argument(&destination),
+        ];
+        args.extend(extra);
+        let result = hegira(&args);
+        assert_eq!(result.status.code(), Some(2));
+        assert!(result.stdout.is_empty());
+        assert!(String::from_utf8_lossy(&result.stderr).starts_with("error:"));
+        assert_eq!(fs::read_dir(root.path()).unwrap().count(), 0);
+    }
+}
+
+#[test]
+fn empty_directory_and_file_are_conflicts_without_staging() {
+    let root = TestDirectory::new("existing-entries");
+    let directory = root.path().join("empty");
+    let file = root.path().join("file");
+    fs::create_dir(&directory).unwrap();
+    fs::write(&file, "preserved").unwrap();
+    for destination in [&directory, &file] {
+        let result = hegira(&[
+            "new",
+            "safe-app",
+            "--destination",
+            path_argument(destination),
+        ]);
+        assert_eq!(result.status.code(), Some(4));
+        assert!(result.stdout.is_empty());
+        assert!(
+            String::from_utf8_lossy(&result.stderr)
+                .starts_with("error: destination already exists")
+        );
+        assert_eq!(fs::read_dir(root.path()).unwrap().count(), 2);
+    }
+    assert_eq!(fs::read_dir(directory).unwrap().count(), 0);
+    assert_eq!(fs::read_to_string(file).unwrap(), "preserved");
+}
+
+#[test]
+fn end_of_input_at_each_prompt_leaves_no_staging_or_application() {
+    let root = TestDirectory::new("cancel-prompts");
+    let destination = root.path().join("application");
+    let answers = [
+        "cancel-app",
+        path_argument(&destination),
+        "sqlite",
+        "leptos",
+        "identity",
+    ];
+    for count in 0..=answers.len() {
+        let input = if count == 0 {
+            String::new()
+        } else {
+            format!("{}\n", answers[..count].join("\n"))
+        };
+        let (exit, stdout, stderr) = interactive_hegira(&["new"], &input);
+        assert_eq!(exit, 0);
+        assert!(stderr.is_empty());
+        assert!(stdout.contains("Cancelled; no files were written."));
+        assert_eq!(fs::read_dir(root.path()).unwrap().count(), 0);
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn real_write_failure_cleans_staging_and_allows_retry() {
+    let root = TestDirectory::new("write-failure");
+    let destination = root.path().join("application");
+    fs::write(root.path().join("sentinel"), "preserved").unwrap();
+    // Limit only the child process. Ignore SIGXFSZ so write returns EFBIG,
+    // exercising normal renderer cleanup instead of killing the process.
+    let result = Command::new("/bin/bash")
+        .env_clear()
+        .env("HOME", root.path())
+        .env("PATH", "")
+        .current_dir(root.path())
+        .args([
+            "-c",
+            "ulimit -f 1; trap '' XFSZ; exec \"$@\"",
+            "write-failure",
+        ])
+        .arg(env!("CARGO_BIN_EXE_hegira"))
+        .args([
+            "new",
+            "safe-app",
+            "--destination",
+            path_argument(&destination),
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(result.status.code(), Some(3), "{:?}", result.stderr);
+    assert!(result.stdout.is_empty());
+    assert!(String::from_utf8_lossy(&result.stderr).contains("failed to write rendered file"));
+    assert_eq!(fs::read_dir(root.path()).unwrap().count(), 1);
+    assert_eq!(
+        fs::read_to_string(root.path().join("sentinel")).unwrap(),
+        "preserved"
+    );
+    assert!(
+        hegira(&[
+            "new",
+            "safe-app",
+            "--destination",
+            path_argument(&destination)
+        ])
+        .status
+        .success()
+    );
 }
 
 fn interactive_hegira(arguments: &[&str], input: &str) -> (u8, String, String) {
@@ -435,11 +631,14 @@ struct TestDirectory {
 impl TestDirectory {
     fn new(name: &str) -> Self {
         let sequence = NEXT_DIRECTORY.fetch_add(1, Ordering::Relaxed);
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
         let path = std::env::temp_dir().join(format!(
-            "hegira-cli-{name}-{}-{sequence}",
+            "hegira-cli-{name}-{}-{sequence}-{nonce}",
             std::process::id()
         ));
-        let _ = fs::remove_dir_all(&path);
         fs::create_dir(&path).expect("test directory should be created");
         Self { path }
     }

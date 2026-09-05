@@ -6,6 +6,9 @@ All notable changes are documented here. Releases follow Semantic Versioning.
 
 ### Added
 
+- Added CLI regression coverage for both provider output snapshots, guided/flag
+  parity, prompt cancellation, isolated process state, invalid selections, and
+  renderer failure recovery with a real child-process write limit on Linux.
 - Added the source-runnable `hegira` CLI foundation with top-level and `new`
   help, version reporting, separated output and diagnostics, and stable process
   outcomes for usage, validation, conflict, and internal failures.
