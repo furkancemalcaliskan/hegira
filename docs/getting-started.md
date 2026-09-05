@@ -37,6 +37,26 @@ The output is an independent Cargo workspace. Its normal dependencies use the
 framework repository and release tag declared by the template rather than
 paths into the maintainer checkout.
 
+Application identity uses 1–64 lowercase ASCII letters, digits, and single
+internal hyphens, starting with a letter. Rust keywords, Cargo's `target`, and
+portable device names such as `con`, `aux`, and `com1` are reserved. This same
+identity is shown in the CLI summary and stored in `hegira.toml`; application
+crate names remain the template's brand-neutral `app_*` names.
+
+The destination's final directory name accepts 1–64 ASCII letters, digits,
+hyphens, and underscores, starting with a letter or digit. Reserved names are
+rejected case-insensitively. Its parent must already exist without symlinks.
+Absolute destinations and leading `../` for sibling locations are supported;
+traversal through a named directory (`child/../application`) is rejected.
+Existing files, empty directories, non-empty directories, and dangling symlinks
+are all conflicts. There is no overwrite or force mode.
+
+Safe publication uses directory handles and an exclusive atomic rename on
+Linux/Android and Apple platforms. Linux is covered by repository validation;
+other platforms and filesystems without this primitive fail closed. On systems
+where an ancestor is an alias (for example `/tmp` on macOS), use its real path.
+Generated files and directories start with owner-only permissions (0600/0700).
+
 SQLite, Leptos, and Identity are the defaults. For an explicit PostgreSQL
 application, use:
 

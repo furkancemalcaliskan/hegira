@@ -202,6 +202,11 @@ The destination must not already exist. Component manifests declare their
 requirements, conflicts, source inputs, and repository-validation dependency
 patches. They cannot execute shell commands.
 
+Destination parents must already exist and must not contain symlinks. Publication
+uses the same no-overwrite policy for normal rendering and repository validation.
+Renderer tests inject target creation after the final absence check, parent
+replacement, and partial-write failures to verify conflict handling and cleanup.
+
 Validate a rendered application against both database providers, the supported
 v0.2.0 database upgrade, and the production container contract:
 

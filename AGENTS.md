@@ -69,6 +69,9 @@ commands change. Never describe planned work as implemented.
 - `tools/hegira_cli/` contains the source-runnable `hegira` command shell,
   deterministic interactive and non-interactive layered application creation,
   stable process outcomes, and user-facing diagnostic contract.
+  Generation validates project identity and destination before rendering and
+  requires a new destination under an existing parent without symlinks. Safe
+  atomic publication fails closed on unsupported platforms.
 - `scripts/` contains local validation and release helpers.
 - `.github/workflows/` contains validation and release automation.
 

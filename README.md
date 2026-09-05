@@ -114,6 +114,10 @@ Pass `--database postgres` to make PostgreSQL the generated application's select
 database adapter. `--client leptos` and `--component identity` may be supplied explicitly for
 automation; they are the currently supported client and official component selections.
 
+Use a new destination under an existing real parent directory. Existing entries
+are never overwritten. See [Getting started](docs/getting-started.md) for identity,
+path, and safe-publication platform requirements.
+
 Install the Rust WASM target, `cargo-leptos`, and lockfile-pinned frontend
 tooling:
 

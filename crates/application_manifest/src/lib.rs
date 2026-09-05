@@ -128,7 +128,7 @@ impl ApplicationManifest {
     }
 }
 
-fn validate_application_name(name: &str) -> Result<(), ManifestError> {
+pub fn validate_application_name(name: &str) -> Result<(), ManifestError> {
     let valid = !name.is_empty()
         && name.len() <= 64
         && name.bytes().enumerate().all(|(index, character)| {
@@ -140,11 +140,77 @@ fn validate_application_name(name: &str) -> Result<(), ManifestError> {
                     && name.as_bytes()[index - 1] != b'-')
         })
         && name.as_bytes().first().is_some_and(u8::is_ascii_lowercase);
-    if valid {
+    if valid && !reserved_project_name(name) {
         Ok(())
     } else {
         Err(ManifestError::InvalidApplicationName(name.to_owned()))
     }
+}
+
+/// Names that collide with Rust keywords, Cargo output, or portable device names.
+pub fn reserved_project_name(name: &str) -> bool {
+    let name = name.to_ascii_lowercase();
+    matches!(
+        name.as_str(),
+        "as" | "async"
+            | "await"
+            | "break"
+            | "const"
+            | "continue"
+            | "crate"
+            | "dyn"
+            | "else"
+            | "enum"
+            | "extern"
+            | "false"
+            | "fn"
+            | "for"
+            | "if"
+            | "impl"
+            | "in"
+            | "let"
+            | "loop"
+            | "match"
+            | "mod"
+            | "move"
+            | "mut"
+            | "pub"
+            | "ref"
+            | "return"
+            | "self"
+            | "static"
+            | "struct"
+            | "super"
+            | "trait"
+            | "true"
+            | "type"
+            | "unsafe"
+            | "use"
+            | "where"
+            | "while"
+            | "abstract"
+            | "become"
+            | "box"
+            | "do"
+            | "final"
+            | "gen"
+            | "macro"
+            | "override"
+            | "priv"
+            | "try"
+            | "typeof"
+            | "unsized"
+            | "virtual"
+            | "yield"
+            | "union"
+            | "target"
+            | "con"
+            | "prn"
+            | "aux"
+            | "nul"
+    ) || ((name.starts_with("com") || name.starts_with("lpt"))
+        && name.len() == 4
+        && matches!(name.as_bytes()[3], b'1'..=b'9'))
 }
 
 fn validate_framework_contract(contract: &FrameworkContract) -> Result<(), ManifestError> {

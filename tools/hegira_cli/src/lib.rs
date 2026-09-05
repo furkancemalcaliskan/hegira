@@ -289,9 +289,11 @@ fn resolve_new_command(
     let Some(name) = resolve_name(command.name, input, output)? else {
         return cancel(output);
     };
+    template_renderer::validate_project_identity(&name).map_err(renderer_diagnostic)?;
     let Some(destination) = resolve_destination(command.destination, &name, input, output)? else {
         return cancel(output);
     };
+    template_renderer::validate_destination(&destination).map_err(renderer_diagnostic)?;
     let Some(database) = resolve_database(command.database, input, output)? else {
         return cancel(output);
     };
@@ -448,7 +450,7 @@ fn prompt(
     let mut value = String::new();
     match input.read_line(&mut value) {
         Ok(0) => Ok(None),
-        Ok(_) => Ok(Some(value.trim().to_string())),
+        Ok(_) => Ok(Some(value.trim_end_matches(['\r', '\n']).to_string())),
         Err(error) if error.kind() == IoErrorKind::Interrupted => Ok(None),
         Err(error) => Err(CliDiagnostic::internal(format!(
             "failed to read interactive input: {error}"
@@ -471,6 +473,11 @@ fn create_application(
     output: &mut impl Write,
     diagnostics: &mut impl Write,
 ) -> CliExit {
+    if let Err(error) = template_renderer::validate_project_identity(&command.name)
+        .and_then(|()| template_renderer::validate_destination(&command.destination))
+    {
+        return write_diagnostic(renderer_diagnostic(error), diagnostics);
+    }
     let mut variables = BTreeMap::new();
     variables.insert("application_name".to_string(), command.name.clone());
     variables.insert(
@@ -497,10 +504,7 @@ fn create_application(
         variables,
     };
     if let Err(error) = render(&request) {
-        return write_diagnostic(
-            renderer_diagnostic(error, &command.destination),
-            diagnostics,
-        );
+        return write_diagnostic(renderer_diagnostic(error), diagnostics);
     }
 
     let destination = command.destination.display();
@@ -508,7 +512,7 @@ fn create_application(
     if writeln!(output, "Created {} at {destination}", command.name).is_err()
         || writeln!(output).is_err()
         || writeln!(output, "Next steps:").is_err()
-        || writeln!(output, "  cd {destination}").is_err()
+        || writeln!(output, "  cd -- '{}'", command.destination.to_string_lossy().replace('\'', "'\\''")).is_err()
         || writeln!(output, "  rustup target add wasm32-unknown-unknown").is_err()
         || writeln!(output, "  cargo install cargo-leptos").is_err()
         || writeln!(output, "  npm ci --prefix apps/web/src").is_err()
@@ -525,15 +529,12 @@ fn create_application(
     CliExit::Success
 }
 
-fn renderer_diagnostic(error: RendererError, destination: &Path) -> CliDiagnostic {
+fn renderer_diagnostic(error: RendererError) -> CliDiagnostic {
     match error.kind() {
-        RendererErrorKind::ApplicationManifest | RendererErrorKind::Variables => {
-            CliDiagnostic::validation(error.to_string())
-        }
-        RendererErrorKind::Output if destination.exists() => CliDiagnostic::conflict(format!(
-            "destination already exists: {}",
-            destination.display()
-        )),
+        RendererErrorKind::ApplicationManifest
+        | RendererErrorKind::Variables
+        | RendererErrorKind::Safety => CliDiagnostic::validation(error.to_string()),
+        RendererErrorKind::Conflict => CliDiagnostic::conflict(error.to_string()),
         _ => CliDiagnostic::internal(format!("application generation failed: {error}")),
     }
 }

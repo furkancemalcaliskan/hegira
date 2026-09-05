@@ -154,6 +154,17 @@ arguments. Cancellation or end-of-input occurs before rendering and leaves no
 destination. Non-TTY execution never reads prompt input and requires both the
 name and destination.
 
+Project identity validation is shared with `application_manifest`. The CLI
+validates identity and destination before rendering. The renderer requires an
+existing real parent, opens every ancestor without following symlinks, and
+creates private staging content through directory-relative operations. Before
+publication it rechecks the parent's identity, staging identity, and destination
+absence; an exclusive atomic rename also rejects destinations created after
+the final check. Cleanup is anchored to the open directories and removes only
+tracked staging entries. Unsupported publication platforms fail before writes.
+The [getting-started contract](getting-started.md) defines the accepted names,
+paths, permissions, and platform limitations.
+
 ## Official Identity Module
 
 `modules/identity/` contains seven separately compiled packages:
