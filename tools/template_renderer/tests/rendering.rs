@@ -534,7 +534,7 @@ fn an_existing_output_is_never_overwritten() {
     let error = render(&fixture.request(output.clone())).expect_err("render should fail");
 
     assert!(error.to_string().contains("already exists"));
-    assert_eq!(error.kind(), RendererErrorKind::Output);
+    assert_eq!(error.kind(), RendererErrorKind::Conflict);
     assert_eq!(
         fs::read_to_string(output.join("preserved.txt")).expect("sentinel should remain"),
         "preserved"

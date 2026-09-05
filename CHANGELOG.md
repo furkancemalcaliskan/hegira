@@ -21,6 +21,11 @@ All notable changes are documented here. Releases follow Semantic Versioning.
 
 ### Changed
 
+- Enforced shared project-identity validation, portable destination names,
+  existing real parents, and explicit no-overwrite behavior. Renderer publication
+  now uses private directory-relative staging and exclusive atomic rename with
+  race checks; unsupported platforms fail closed before writing.
+
 - Separated the reusable template rendering request, plan, publication, result,
   and typed diagnostic contracts from the repository-only local dependency
   rewrite adapter.

@@ -1,7 +1,9 @@
+mod destination;
 mod manifest;
 mod render;
 pub mod repository_validation;
 
+pub use destination::validate_destination;
 pub use manifest::{
     ComponentManifest, ComponentPackageManifest, FrameworkDependency, ManifestCatalog,
     TemplateManifest,
@@ -13,6 +15,13 @@ use std::path::Path;
 
 pub type Result<T> = std::result::Result<T, RendererError>;
 
+pub fn validate_project_identity(name: &str) -> Result<()> {
+    application_manifest::validate_application_name(name).map_err(|_| RendererError::with_kind(
+        RendererErrorKind::Variables,
+        "application identity must be 1–64 lowercase ASCII letters, digits and single internal hyphens, start with a letter, and not be a reserved Rust/Cargo/device name",
+    ))
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RendererErrorKind {
     Catalog,
@@ -23,6 +32,7 @@ pub enum RendererErrorKind {
     Rendering,
     ApplicationManifest,
     Output,
+    Conflict,
     RepositoryValidation,
 }
 

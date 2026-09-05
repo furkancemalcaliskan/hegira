@@ -268,6 +268,115 @@ fn path_argument(path: &Path) -> &str {
     path.to_str().expect("test path should be UTF-8")
 }
 
+#[test]
+fn adversarial_identities_fail_before_creating_parent_or_output() {
+    let root = TestDirectory::new("invalid-identities");
+    let destination = root.path().join("missing/application");
+    for name in [
+        "../escape",
+        "/absolute",
+        "BadName",
+        "naïve",
+        "app\nname",
+        "app\u{1b}name",
+        "con",
+        "aux",
+        "com1",
+        "type",
+        "self",
+        "gen",
+        "target",
+        "a--b",
+    ] {
+        let result = hegira(&["new", name, "--destination", path_argument(&destination)]);
+        assert_eq!(
+            result.status.code(),
+            Some(3),
+            "{name:?}: {:?}",
+            result.stderr
+        );
+        assert!(result.stdout.is_empty());
+        assert!(!root.path().join("missing").exists());
+    }
+}
+
+#[test]
+fn adversarial_destinations_leave_user_data_unchanged() {
+    let root = TestDirectory::new("invalid-destinations");
+    fs::write(root.path().join("sentinel"), "preserved").unwrap();
+    for path in [
+        "child/../escape",
+        "missing/application",
+        "CON",
+        "aux",
+        "com1",
+        "foo.",
+        "foo/.",
+        "naïve",
+        "app\nname",
+        "app\\name",
+    ] {
+        let destination = root.path().join(path);
+        let result = hegira(&[
+            "new",
+            "safe-app",
+            "--destination",
+            path_argument(&destination),
+        ]);
+        assert_eq!(
+            result.status.code(),
+            Some(3),
+            "{path:?}: {:?}",
+            result.stderr
+        );
+        assert!(result.stdout.is_empty());
+        assert_eq!(fs::read_dir(root.path()).unwrap().count(), 1);
+    }
+    assert_eq!(
+        fs::read_to_string(root.path().join("sentinel")).unwrap(),
+        "preserved"
+    );
+}
+
+#[test]
+fn interactive_identity_is_validated_without_silent_normalization() {
+    let root = TestDirectory::new("interactive-invalid");
+    let destination = root.path().join("application");
+    let input = format!(" bad-name \n{}\n\n\n\ny\n", destination.display());
+    let (exit, _, _) = interactive_hegira(&["new"], &input);
+    assert_eq!(exit, 3);
+    assert!(!destination.exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn non_utf8_destination_is_rejected_before_writing() {
+    use std::os::unix::ffi::OsStringExt;
+    let root = TestDirectory::new("non-utf8");
+    let destination = root.path().join(OsString::from_vec(vec![b'a', 0xff]));
+    let result = Command::new(env!("CARGO_BIN_EXE_hegira"))
+        .args(["new", "safe-app", "--destination"])
+        .arg(destination)
+        .output()
+        .unwrap();
+    assert_eq!(result.status.code(), Some(3));
+    assert_eq!(fs::read_dir(root.path()).unwrap().count(), 0);
+}
+
+#[test]
+fn explicit_sibling_destination_still_works() {
+    let root = TestDirectory::new("sibling");
+    let cwd = root.path().join("caller");
+    fs::create_dir(&cwd).unwrap();
+    let result = Command::new(env!("CARGO_BIN_EXE_hegira"))
+        .current_dir(cwd)
+        .args(["new", "sibling-app", "--destination", "../application"])
+        .output()
+        .unwrap();
+    assert!(result.status.success(), "{:?}", result.stderr);
+    assert!(root.path().join("application/hegira.toml").is_file());
+}
+
 fn interactive_hegira(arguments: &[&str], input: &str) -> (u8, String, String) {
     let arguments = std::iter::once(OsString::from("hegira"))
         .chain(arguments.iter().map(OsString::from))

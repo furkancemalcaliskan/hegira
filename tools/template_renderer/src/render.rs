@@ -2,7 +2,6 @@ use std::{
     collections::BTreeMap,
     fs,
     path::{Path, PathBuf},
-    time::{SystemTime, UNIX_EPOCH},
 };
 
 use application_manifest::ApplicationManifest;
@@ -42,8 +41,10 @@ pub(crate) struct PlannedFile {
 }
 
 pub fn render(request: &RenderRequest) -> Result<RenderResult> {
+    let output = crate::destination::checked_path(&request.output)?;
+    crate::validate_destination(&output)?;
     let plan = plan(request)?;
-    publish(&request.output, plan)
+    publish(&output, plan)
 }
 
 pub fn plan_snapshot(request: &RenderRequest) -> Result<String> {
@@ -117,11 +118,10 @@ impl RenderPlan {
 }
 
 pub fn publish(output: &Path, plan: RenderPlan) -> Result<RenderResult> {
-    publish_atomically(output, &plan)
-        .map_err(|error| error.classified(RendererErrorKind::Output))?;
+    let output = crate::destination::checked_path(output)?;
+    crate::destination::platform::publish(&output, &plan)?;
     Ok(RenderResult {
-        output: absolute_path(output)
-            .map_err(|error| error.classified(RendererErrorKind::Output))?,
+        output,
         package: plan.package,
         components: plan.components,
         files: plan.files.into_keys().collect(),
@@ -397,104 +397,6 @@ fn reject_repository_path_leaks(
     Ok(())
 }
 
-fn publish_atomically(output: &Path, plan: &RenderPlan) -> Result<()> {
-    publish_atomically_with(output, plan, |path, bytes| fs::write(path, bytes))
-}
-
-fn publish_atomically_with(
-    output: &Path,
-    plan: &RenderPlan,
-    mut write_file: impl FnMut(&Path, &[u8]) -> std::io::Result<()>,
-) -> Result<()> {
-    let output = absolute_path(output)?;
-    if fs::symlink_metadata(&output).is_ok() {
-        return Err(RendererError::new(format!(
-            "render output already exists: {}",
-            output.display()
-        )));
-    }
-    let parent = output.parent().ok_or_else(|| {
-        RendererError::new(format!("render output has no parent: {}", output.display()))
-    })?;
-    fs::create_dir_all(parent).map_err(|error| {
-        RendererError::new(format!(
-            "failed to create render output parent {}: {error}",
-            parent.display()
-        ))
-    })?;
-
-    let temporary = create_temporary_directory(parent, &output)?;
-    let mut guard = TemporaryDirectory::new(temporary.clone());
-    for (path, file) in &plan.files {
-        let target = temporary.join(path);
-        if let Some(directory) = target.parent() {
-            fs::create_dir_all(directory).map_err(|error| {
-                RendererError::new(format!(
-                    "failed to create rendered directory {}: {error}",
-                    directory.display()
-                ))
-            })?;
-        }
-        write_file(&target, &file.bytes).map_err(|error| {
-            RendererError::new(format!(
-                "failed to write rendered file {}: {error}",
-                target.display()
-            ))
-        })?;
-    }
-
-    fs::rename(&temporary, &output).map_err(|error| {
-        RendererError::new(format!(
-            "failed to publish rendered output {}: {error}",
-            output.display()
-        ))
-    })?;
-    guard.disarm();
-    Ok(())
-}
-
-fn create_temporary_directory(parent: &Path, output: &Path) -> Result<PathBuf> {
-    let output_name = output
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or("application");
-    let nonce = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_err(|error| RendererError::new(format!("system clock error: {error}")))?
-        .as_nanos();
-
-    for attempt in 0..32_u8 {
-        let candidate = parent.join(format!(
-            ".{output_name}.hegira-render-{}-{nonce}-{attempt}",
-            std::process::id()
-        ));
-        match fs::create_dir(&candidate) {
-            Ok(()) => return Ok(candidate),
-            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
-            Err(error) => {
-                return Err(RendererError::new(format!(
-                    "failed to create render staging directory {}: {error}",
-                    candidate.display()
-                )));
-            }
-        }
-    }
-    Err(RendererError::new(
-        "failed to allocate a unique render staging directory",
-    ))
-}
-
-fn absolute_path(path: &Path) -> Result<PathBuf> {
-    if path.is_absolute() {
-        return Ok(path.to_path_buf());
-    }
-    std::env::current_dir()
-        .map(|directory| directory.join(path))
-        .map_err(|error| {
-            RendererError::new(format!("failed to resolve current directory: {error}"))
-        })
-}
-
 fn fnv1a64(bytes: &[u8]) -> u64 {
     let mut hash = 0xcbf29ce484222325_u64;
     for byte in bytes {
@@ -502,84 +404,4 @@ fn fnv1a64(bytes: &[u8]) -> u64 {
         hash = hash.wrapping_mul(0x100000001b3);
     }
     hash
-}
-
-struct TemporaryDirectory {
-    path: PathBuf,
-    armed: bool,
-}
-
-impl TemporaryDirectory {
-    fn new(path: PathBuf) -> Self {
-        Self { path, armed: true }
-    }
-
-    fn disarm(&mut self) {
-        self.armed = false;
-    }
-}
-
-impl Drop for TemporaryDirectory {
-    fn drop(&mut self) {
-        if self.armed {
-            let _ = fs::remove_dir_all(&self.path);
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn injected_write_failure_removes_staging_and_never_publishes_output() {
-        let parent = std::env::temp_dir().join(format!(
-            "hegira-render-write-failure-{}",
-            std::process::id()
-        ));
-        let output = parent.join("application");
-        let _ = fs::remove_dir_all(&parent);
-        fs::create_dir(&parent).expect("test parent should be created");
-        let plan = RenderPlan {
-            package: None,
-            components: vec!["test".to_string()],
-            files: BTreeMap::from([
-                (
-                    PathBuf::from("first.txt"),
-                    PlannedFile {
-                        bytes: b"first".to_vec(),
-                        owner: "test".to_string(),
-                    },
-                ),
-                (
-                    PathBuf::from("second.txt"),
-                    PlannedFile {
-                        bytes: b"second".to_vec(),
-                        owner: "test".to_string(),
-                    },
-                ),
-            ]),
-        };
-        let mut writes = 0;
-
-        let error = publish_atomically_with(&output, &plan, |path, bytes| {
-            writes += 1;
-            if writes == 2 {
-                return Err(std::io::Error::other("injected write failure"));
-            }
-            fs::write(path, bytes)
-        })
-        .expect_err("injected write failure should abort publication");
-
-        assert!(error.to_string().contains("injected write failure"));
-        assert!(!output.exists());
-        assert!(
-            fs::read_dir(&parent)
-                .expect("test parent should remain readable")
-                .next()
-                .is_none(),
-            "staging directory should be removed"
-        );
-        fs::remove_dir_all(parent).expect("test parent should be removed");
-    }
 }
