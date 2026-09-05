@@ -150,13 +150,24 @@ contracts:
 sh scripts/cli-check.sh
 ```
 
-The CLI tests invoke the compiled `hegira` binary without user-home or global
-configuration variables. They verify default and explicit application
+The CLI process tests use disposable working and home directories and an empty
+command search path rather than the maintainer's global configuration. They
+verify default and explicit application
 selections, independent release-source dependencies, deterministic output,
 destination conflicts, interactive default equivalence, supported-choice
 mapping, cancellation, non-TTY behavior, and the absence of global
 configuration requirements. Prompt tests inject deterministic input and capture
 output without relying on a host terminal.
+
+SQLite and PostgreSQL requests have committed whole-tree fingerprints covering
+file paths and bytes, including binary assets, and are compared with equivalent
+interactive requests. Review generated content before updating these regression
+snapshots in `tools/hegira_cli/tests/command_contract.rs`; they are not security
+digests. Tests also cover unsupported selections and EOF at every prompt.
+On Linux, a child-only file-size limit exercises actual renderer write failure,
+staging cleanup, sentinel preservation, and a successful retry. Catalog failure
+is tested through the CLI dispatcher with a disposable missing source. These
+tests neither build generated applications nor require network access.
 
 Validate the workspace-external canonical layered application base against the
 current framework checkout:
