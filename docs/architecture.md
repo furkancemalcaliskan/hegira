@@ -260,6 +260,13 @@ repository-event dependency and does not execute component scripts.
 Normal renders retain pinned release-source dependencies. Repository
 validation selects a separate adapter that rewrites only a disposable render
 to consume a staged, credential-free view of the current framework source.
+The generated-application gate first invokes the public CLI for SQLite and
+PostgreSQL. Its staging adapter verifies the CLI output paths and bytes against
+the canonical request, then patches declared dependencies in a separate copy.
+An in-tree framework copy is excluded from automatic Cargo workspace membership
+so application checks cannot enable framework/module defaults accidentally.
+Native tests, hydration, release builds, upgrades, and production-container
+checks consume these verified copies; the original CLI outputs remain unchanged.
 The normal renderer command does not expose this adapter's local-source
 options. Machine-local maintainer paths must never appear in canonical
 template files, normal output, or user-facing validation diagnostics.

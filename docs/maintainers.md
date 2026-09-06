@@ -225,8 +225,18 @@ v0.2.0 database upgrade, and the production container contract:
 sh scripts/generated-application-check.sh
 ```
 
-The check renders into a disposable directory, runs SQLite fresh-install and
-upgrade tests in memory, and starts an ephemeral PostgreSQL container for the
+The check invokes the public `hegira new` command for default SQLite and explicit
+PostgreSQL applications. The normal CLI output retains pinned release sources.
+The repository-only adapter verifies every generated file against the requested
+canonical output before publishing a separate validation copy with local framework
+dependencies and an explicit workspace exclusion for that staged framework.
+The CLI outputs are never rewritten. Each provider copy runs native
+workspace checks and tests, WASM hydration checks, and a Cargo-Leptos release build.
+This requires Node/npm, `cargo-leptos`, and the `wasm32-unknown-unknown` target;
+the generated-application CI jobs install these prerequisites explicitly.
+
+The check runs SQLite fresh-install and upgrade tests in memory, and starts an
+ephemeral PostgreSQL container for the
 equivalent PostgreSQL contracts. It then builds the rendered application image,
 boots it against the disposable database, and verifies readiness, hydration
 assets, security headers, and unauthenticated Bearer API behavior. The check
@@ -235,8 +245,9 @@ rejects retired compatibility packages. It stages a credential-free framework
 source view under the disposable render so
 the same relative Cargo paths work on the host and inside the Docker build. It
 generates runtime-only database and JWT values and removes its containers,
-network, database state, and rendered output on exit. It never targets the
-maintainer's configured database.
+network, database state, validation image, and rendered output on exit. Compose
+project and image names are assigned by the check rather than inherited from
+the caller. It never targets the maintainer's configured database.
 
 To reproduce pull request metadata validation with a saved GitHub
 `pull_request` event:

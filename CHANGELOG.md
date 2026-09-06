@@ -6,6 +6,11 @@ All notable changes are documented here. Releases follow Semantic Versioning.
 
 ### Added
 
+- Added release validation through public CLI-generated SQLite and PostgreSQL
+  applications, verified disposable dependency staging, native and hydration
+  builds, historical database upgrades, and production HTTP/asset contracts.
+  Scoped the SQLite worker-readiness test to its provider so PostgreSQL-only
+  generated test targets compile without enabling SQLite.
 - Added CLI regression coverage for both provider output snapshots, guided/flag
   parity, prompt cancellation, isolated process state, invalid selections, and
   renderer failure recovery with a real child-process write limit on Linux.

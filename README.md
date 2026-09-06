@@ -165,7 +165,7 @@ source-runnable CLI ownership:
 sh scripts/backend-check.sh
 ```
 
-Validate the canonical rendered application, including its fresh and upgrade migration paths,
+Validate CLI-generated SQLite and PostgreSQL applications, including their fresh and upgrade migration paths,
 production image, and HTTP contract, with disposable Docker state:
 
 ```sh
