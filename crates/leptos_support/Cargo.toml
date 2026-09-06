@@ -18,7 +18,7 @@ serde_json = "1.0.145"
 strum = { version = "0.28.0", features = ["derive"] }
 tracing = "0.1.44"
 tw_merge = { version = "0.1.21", features = ["variant"] }
-validator = "0.20.0"
+validator = "0.21.0"
 web-sys = { version = "0.3.91", features = ["Event", "HtmlElement", "Storage", "Window"] }
 
 [features]
