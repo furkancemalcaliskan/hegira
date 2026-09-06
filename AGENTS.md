@@ -73,6 +73,9 @@ commands change. Never describe planned work as implemented.
   requires a new destination under an existing parent without symlinks. Safe
   atomic publication fails closed on unsupported platforms.
 - `scripts/` contains local validation and release helpers.
+  The generated-application gate uses public CLI output for both database
+  profiles, verifies it before staging local dependencies in a separate copy,
+  and exercises native, hydration, upgrade, and production-container contracts.
 - `.github/workflows/` contains validation and release automation.
 
 Do not create future-facing directories, manifests, modules, tools, clients, or

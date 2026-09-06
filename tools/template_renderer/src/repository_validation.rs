@@ -1,7 +1,7 @@
 //! Repository-only rendering adapter.
 //!
 //! This module exists for Hegira's disposable integration checks. Applications
-//! and the future public CLI must use the normal renderer, which preserves the
+//! and the public CLI use the normal renderer, which preserves the
 //! release-source dependencies declared by canonical components.
 
 use std::{
@@ -27,7 +27,111 @@ pub fn render(request: &RepositoryValidationRequest) -> Result<RenderResult> {
 }
 
 pub fn plan(request: &RepositoryValidationRequest) -> Result<RenderPlan> {
-    let mut render_plan = core_plan(&request.render)?;
+    patch_plan(request, core_plan(&request.render)?)
+}
+
+/// Stage an untouched CLI output for disposable repository validation.
+/// Every source path and byte must match the requested canonical generation.
+/// Declared dependencies are rewritten and an in-tree framework is excluded
+/// from automatic workspace membership only in the new validation output.
+pub fn stage_generated(
+    request: &RepositoryValidationRequest,
+    source: &Path,
+) -> Result<RenderResult> {
+    let mut generated = core_plan(&request.render)?;
+    let mut files = std::collections::BTreeMap::new();
+    read_generated_tree(source, source, &mut files)?;
+    if files.len() != generated.files.len() {
+        return Err(validation_error(
+            "CLI output file set differs from the canonical request",
+        ));
+    }
+    for (path, planned) in &mut generated.files {
+        let bytes = files
+            .remove(path)
+            .ok_or_else(|| validation_error("CLI output is missing a canonical file"))?;
+        if bytes != planned.bytes {
+            return Err(validation_error(format!(
+                "CLI output differs from the canonical request: {}",
+                path.display()
+            )));
+        }
+        planned.bytes = bytes;
+    }
+    let mut staged = patch_plan(request, generated)?;
+    // In-tree path dependencies would otherwise become automatic workspace
+    // members and enable official-module defaults during --workspace checks.
+    if let Some(path) = &request.framework_path
+        && path.is_relative()
+    {
+        let manifest = staged
+            .files
+            .get_mut(Path::new("Cargo.toml"))
+            .ok_or_else(|| validation_error("generated workspace manifest is missing"))?;
+        let content = std::str::from_utf8(&manifest.bytes)
+            .map_err(|_| validation_error("generated workspace manifest is not UTF-8"))?;
+        let parsed: toml::Value = toml::from_str(content)
+            .map_err(|_| validation_error("generated workspace manifest is invalid"))?;
+        if parsed
+            .get("workspace")
+            .and_then(|w| w.get("exclude"))
+            .is_some()
+            || content.matches("[workspace]\n").count() != 1
+        {
+            return Err(validation_error(
+                "cannot safely isolate staged framework workspace",
+            ));
+        }
+        let exclude = toml::Value::String(path.to_string_lossy().into_owned());
+        manifest.bytes = content
+            .replacen(
+                "[workspace]\n",
+                &format!("[workspace]\nexclude = [{exclude}]\n"),
+                1,
+            )
+            .into_bytes();
+    }
+    publish(&request.render.output, staged)
+}
+
+fn read_generated_tree(
+    root: &Path,
+    path: &Path,
+    files: &mut std::collections::BTreeMap<PathBuf, Vec<u8>>,
+) -> Result<()> {
+    let metadata =
+        fs::symlink_metadata(path).map_err(|_| validation_error("cannot inspect CLI output"))?;
+    if metadata.is_dir() {
+        let mut empty = true;
+        for entry in
+            fs::read_dir(path).map_err(|_| validation_error("cannot read CLI output directory"))?
+        {
+            empty = false;
+            let entry = entry.map_err(|_| validation_error("cannot read CLI output entry"))?;
+            read_generated_tree(root, &entry.path(), files)?;
+        }
+        if empty {
+            return Err(validation_error(
+                "CLI output contains an unexpected empty directory",
+            ));
+        }
+    } else if metadata.is_file() {
+        files.insert(
+            path.strip_prefix(root).unwrap().to_path_buf(),
+            fs::read(path).map_err(|_| validation_error("cannot read CLI output file"))?,
+        );
+    } else {
+        return Err(validation_error(
+            "CLI output must contain only real directories and files",
+        ));
+    }
+    Ok(())
+}
+
+fn patch_plan(
+    request: &RepositoryValidationRequest,
+    mut render_plan: RenderPlan,
+) -> Result<RenderPlan> {
     let catalog = ManifestCatalog::load(&request.render.repository_root, &request.render.template)
         .map_err(classify)?;
     let components = catalog.resolve_components().map_err(classify)?;

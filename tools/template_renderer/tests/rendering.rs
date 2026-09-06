@@ -14,6 +14,101 @@ use template_renderer::{
 static NEXT_TEST_DIRECTORY: AtomicU64 = AtomicU64::new(0);
 
 #[test]
+fn stages_verified_generated_bytes_without_mutating_release_source() {
+    let repository = repository_root();
+    let parent = TestDirectory::new("verified-stage");
+    let source = parent.path().join("source");
+    render(&canonical_request(&repository, source.clone())).unwrap();
+    let before = output_tree(&source);
+    let destination = parent.path().join("validation");
+    let request = RepositoryValidationRequest {
+        render: canonical_request(&repository, destination.clone()),
+        framework_root: repository,
+        framework_path: Some(PathBuf::from(".hegira-validation/framework")),
+    };
+    template_renderer::repository_validation::stage_generated(&request, &source).unwrap();
+    assert_eq!(before, output_tree(&source));
+    let staged = output_tree(&destination);
+    assert!(
+        fs::read_to_string(destination.join("Cargo.toml"))
+            .unwrap()
+            .contains("exclude = [\".hegira-validation/framework\"]")
+    );
+    assert_eq!(
+        before.keys().collect::<Vec<_>>(),
+        staged.keys().collect::<Vec<_>>()
+    );
+    for (path, bytes) in &before {
+        if path.file_name().unwrap() != "Cargo.toml" {
+            assert_eq!(bytes, &staged[path], "{}", path.display());
+        }
+    }
+    assert!(
+        fs::read_to_string(destination.join("Cargo.toml"))
+            .unwrap()
+            .contains("path = \".hegira-validation/framework/")
+    );
+}
+
+#[test]
+fn staging_rejects_modified_missing_and_extra_generated_files_before_writes() {
+    for mutation in ["modified", "missing", "extra", "empty-directory"] {
+        let repository = repository_root();
+        let parent = TestDirectory::new(mutation);
+        let source = parent.path().join("source");
+        render(&canonical_request(&repository, source.clone())).unwrap();
+        match mutation {
+            "modified" => fs::write(source.join("hegira.toml"), "modified").unwrap(),
+            "missing" => fs::remove_file(source.join("hegira.toml")).unwrap(),
+            "empty-directory" => fs::create_dir(source.join("unexpected")).unwrap(),
+            _ => fs::write(source.join("unexpected"), "unexpected").unwrap(),
+        }
+        let before = output_tree(&source);
+        let destination = parent.path().join("validation");
+        let request = RepositoryValidationRequest {
+            render: canonical_request(&repository, destination.clone()),
+            framework_root: repository,
+            framework_path: None,
+        };
+        let error = template_renderer::repository_validation::stage_generated(&request, &source)
+            .unwrap_err();
+        assert_eq!(error.kind(), RendererErrorKind::RepositoryValidation);
+        assert!(!destination.exists());
+        assert_eq!(before, output_tree(&source));
+        assert_eq!(fs::read_dir(parent.path()).unwrap().count(), 1);
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn staging_rejects_symlinked_generated_content() {
+    let repository = repository_root();
+    let parent = TestDirectory::new("staging-symlink");
+    let source = parent.path().join("source");
+    render(&canonical_request(&repository, source.clone())).unwrap();
+    let manifest = source.join("hegira.toml");
+    let outside = parent.path().join("original");
+    fs::rename(&manifest, &outside).unwrap();
+    std::os::unix::fs::symlink(&outside, &manifest).unwrap();
+    let request = RepositoryValidationRequest {
+        render: canonical_request(&repository, parent.path().join("validation")),
+        framework_root: repository,
+        framework_path: None,
+    };
+    let error =
+        template_renderer::repository_validation::stage_generated(&request, &source).unwrap_err();
+    assert_eq!(error.kind(), RendererErrorKind::RepositoryValidation);
+    assert!(!request.render.output.exists());
+    assert!(
+        fs::symlink_metadata(manifest)
+            .unwrap()
+            .file_type()
+            .is_symlink()
+    );
+    assert!(outside.is_file());
+}
+
+#[test]
 fn layered_template_snapshot_is_deterministic() {
     let repository = repository_root();
     let output_parent = TestDirectory::new("snapshot");

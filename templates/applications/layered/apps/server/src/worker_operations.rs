@@ -151,6 +151,7 @@ mod tests {
         assert_eq!(response.0.checks[1].status, "unavailable");
     }
 
+    #[cfg(feature = "db-sqlite")]
     #[tokio::test]
     async fn sqlite_readiness_accepts_healthy_database_and_worker_loop() {
         let mut config = app_infrastructure::config::AppConfig::load().expect("config should load");
