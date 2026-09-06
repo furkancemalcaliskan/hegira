@@ -22,7 +22,7 @@ released before publishing technical details.
 
 ## Deployment Responsibility
 
-This repository is an application template, not a managed service. Operators
-remain responsible for secret management, TLS termination, network policy,
+Hegira is an application framework, not a managed service. Operators of generated
+applications remain responsible for secret management, TLS termination, network policy,
 database access, backup/restore testing, dependency updates, and validation of
 optional external providers in their own environment.

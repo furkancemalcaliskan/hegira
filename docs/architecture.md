@@ -1,6 +1,7 @@
 # Architecture
 
-Hegira uses an ABP-inspired layered design adapted to Rust, Axum, Leptos, SQLx,
+Hegira is a production-oriented, opinionated full-stack application framework.
+It uses an ABP-inspired layered design adapted to Rust, Axum, Leptos, SQLx,
 and explicit compile-time composition. It avoids runtime reflection, assembly
 scanning, ambient request transactions, and a universal repository.
 
@@ -17,6 +18,12 @@ an external framework consumer. `tools/template_renderer` is internal
 maintainer tooling, not the public Hegira CLI.
 
 ## Repository Layout
+
+The framework is the reusable system, an official module is a layered capability
+such as Identity, and an application template is source consumed during generation.
+A generated application is the independent, application-owned result, not the
+framework repository itself. These terms describe ownership, not a promise of
+automatic module discovery, application upgrades, or registry distribution.
 
 ```text
 .
