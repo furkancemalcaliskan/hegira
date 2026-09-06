@@ -4,6 +4,8 @@ All notable changes are documented here. Releases follow Semantic Versioning.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-06
+
 ### Added
 
 - Added release validation through public CLI-generated SQLite and PostgreSQL
@@ -29,6 +31,14 @@ All notable changes are documented here. Releases follow Semantic Versioning.
 
 ### Changed
 
+- Removed legacy-layer dependencies from the official Identity packages and
+  moved reusable ports, providers, persistence, background work, telemetry, and
+  runtime support to application-independent framework packages.
+- Made canonical application server/web composition and migration, seed, and
+  explicitly authorized disposable-reset operations application-owned, with
+  enforced framework/module/application dependency boundaries.
+- Aligned all 26 framework workspace packages and the canonical component
+  package with v0.4.0; generated framework dependencies now pin that release.
 - Identified Hegira consistently as a production-oriented, opinionated full-stack
   application framework in current project documentation and tooling metadata.
   Template terminology remains specific to generation sources and rendering
@@ -60,6 +70,17 @@ All notable changes are documented here. Releases follow Semantic Versioning.
 - Removed compatibility-host configuration, container, smoke, packaging,
   backup, restore, and frontend-size helpers that no longer had a runnable root
   application target.
+
+### Upgrade And Maintainer Notes
+
+- Consumers of the retired compatibility host/layers must migrate their source
+  and composition explicitly; there are no compatibility aliases or automatic
+  application upgrades. Generated applications retain their own source ownership.
+- Fresh SQLite/PostgreSQL schemas and the supported v0.2.0 database history
+  remain validation contracts; historical migration identities are preserved.
+- Distribution remains source-only, with no crates.io publication, executable
+  bundles, container images, or previews. See the
+  [v0.4.0 release notes](docs/releases/v0.4.0.md) for limitations and guidance.
 
 ## [0.3.0] - 2026-08-01
 

@@ -194,7 +194,7 @@ fn new_generates_the_default_layered_application_without_prompts() {
         .expect("workspace manifest should exist");
     assert!(server_manifest.contains("default = [\"db-sqlite\"]"));
     assert!(workspace_manifest.contains("git = \"https://github.com/"));
-    assert!(workspace_manifest.contains("tag = \"v0.3.0\""));
+    assert!(workspace_manifest.contains("tag = \"v0.4.0\""));
     assert!(!workspace_manifest.contains(repository_root().to_string_lossy().as_ref()));
 }
 
@@ -395,8 +395,8 @@ fn explicit_sibling_destination_still_works() {
 #[test]
 fn provider_snapshots_and_interactive_requests_match() {
     for (database, expected) in [
-        ("sqlite", 11257477063831739404_u64),
-        ("postgres", 6616676083931145367_u64),
+        ("sqlite", 15487919659099468535_u64),
+        ("postgres", 6188907983057865708_u64),
     ] {
         let root = TestDirectory::new(database);
         let explicit = root.path().join("explicit");
@@ -428,7 +428,7 @@ fn provider_snapshots_and_interactive_requests_match() {
         assert!(manifest.contains("clients = [\"leptos\"]"));
         assert!(manifest.contains("\"layered-leptos-identity\""));
         let workspace = fs::read_to_string(explicit.join("Cargo.toml")).unwrap();
-        assert!(workspace.contains("tag = \"v0.3.0\""));
+        assert!(workspace.contains("tag = \"v0.4.0\""));
         assert!(!workspace.contains(repository_root().to_str().unwrap()));
         assert!(!explicit.join(".git").exists());
         assert!(!explicit.join("target").exists());

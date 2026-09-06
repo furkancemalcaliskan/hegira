@@ -185,7 +185,7 @@ fn layered_template_renders_release_dependencies_and_binary_assets() {
     );
     let manifest = fs::read_to_string(output.join("Cargo.toml")).expect("manifest should exist");
     assert!(manifest.contains(
-        r#"identity_application = { git = "https://github.com/furkancemalcaliskan/hegira.git", tag = "v0.3.0", default-features = false }"#
+        r#"identity_application = { git = "https://github.com/furkancemalcaliskan/hegira.git", tag = "v0.4.0", default-features = false }"#
     ));
     for compatibility_dependency in [
         "application",
@@ -225,7 +225,7 @@ fn layered_template_renders_release_dependencies_and_binary_assets() {
     let application_manifest = ApplicationManifest::read(output.join("hegira.toml"))
         .expect("generated application manifest should be valid");
     assert_eq!(application_manifest.application, "application");
-    assert_eq!(application_manifest.framework.version, "v0.3.0");
+    assert_eq!(application_manifest.framework.version, "v0.4.0");
     assert_eq!(
         application_manifest.selection.databases,
         [DatabaseAdapter::Sqlite].into_iter().collect()
