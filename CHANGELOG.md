@@ -29,6 +29,10 @@ All notable changes are documented here. Releases follow Semantic Versioning.
 
 ### Changed
 
+- Identified Hegira consistently as a production-oriented, opinionated full-stack
+  application framework in current project documentation and tooling metadata.
+  Template terminology remains specific to generation sources and rendering
+  contracts; this is a terminology correction, not a runtime feature.
 - Clarified source-runnable CLI setup, guided and non-interactive creation,
   supported selections, manifest semantics, and generated-application ownership
   in the current documentation, including source-only distribution limitations.

@@ -1,5 +1,6 @@
 [package]
 name = "template_renderer"
+description = "Deterministic application template rendering for the Hegira full-stack application framework"
 version = "0.3.0"
 edition = "2024"
 license = "Apache-2.0"

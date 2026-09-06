@@ -287,8 +287,9 @@ Never point the ignored database tests at persistent or production data.
 
 ## Release Contract
 
-Hegira is distributed as source. A release consists of an immutable signed
-stable SemVer tag, a GitHub Release, versioned release notes, GitHub-provided
+Hegira is an application framework distributed as source, including its official
+modules, application templates, and source-runnable tooling. A release consists
+of an immutable signed stable SemVer tag, a GitHub Release, versioned release notes, GitHub-provided
 source archives, and a source-scoped SPDX JSON SBOM. It does not contain a
 platform executable, application bundle, published crate or CLI package,
 official container image, or deployment.
@@ -353,6 +354,21 @@ and never updates an existing one.
 Versioned release notes are historical records. The v0.1.x notes continue to
 describe the platform bundle artifacts actually published for those versions;
 the source-first contract applies beginning with v0.2.0.
+
+## Public Project Description
+
+Use this description for the GitHub About field:
+
+```text
+A production-oriented, opinionated full-stack application framework built with Axum, Leptos, SQLx, and an ABP-inspired layered architecture.
+```
+
+Current release language identifies Hegira as the framework and reserves
+application/component template terminology for generation sources and rendering
+contracts. Published release notes retain the terminology of their release.
+This terminology does not imply crates.io publication, standalone CLI bundles,
+or additional clients. GitHub About is an external repository setting and must
+be updated by an authorized maintainer; editing this document does not change it.
 
 ## No Preview Deployment
 

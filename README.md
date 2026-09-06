@@ -7,14 +7,15 @@
 <p align="center"><strong>Your destination. A proven path.</strong></p>
 
 <p align="center">
-  An opinionated full-stack application template for the journey from idea to production.
+  An opinionated full-stack application framework for the journey from idea to production.
 </p>
 
-Hegira is a production-oriented, opinionated application foundation built around Axum,
-Leptos, SQLx, an ABP-inspired layered architecture, and DDD-oriented layers. Its canonical
-full-stack template provides more than an empty starter: authentication, authorization,
-persistence, observability, background work, deployment, and security are approached through
-sensible defaults and explicit conventions.
+Hegira is a production-oriented, opinionated full-stack application framework built around
+Axum, Leptos, SQLx, an ABP-inspired layered architecture, and DDD-oriented layers. It provides
+reusable framework packages, an official Identity module, a canonical layered application
+template, and a source-runnable CLI. Authentication, authorization, persistence, observability,
+background work, deployment, and security are approached through sensible defaults and explicit
+conventions.
 
 The product and its destination remain yours. Hegira provides a proven path through recurring
 architectural and infrastructure decisions so that development can focus on the application
@@ -54,9 +55,9 @@ The destination belongs to the developer. Hegira simply makes the road clearer.
 - Durable jobs, scheduler, health checks, metrics, and tracing
 - Single-process or separated web/worker deployment
 
-The template supports a containers-free SQLite development profile and a PostgreSQL deployment
-profile. Redis, Meilisearch, S3, SMTP, Prometheus, and OpenTelemetry remain optional compile-time
-capabilities.
+The canonical application template supports a containers-free SQLite development profile and
+a PostgreSQL deployment profile. Redis, Meilisearch, S3, SMTP, Prometheus, and OpenTelemetry
+remain optional compile-time capabilities.
 
 ## Repository Model
 
