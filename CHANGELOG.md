@@ -6,6 +6,13 @@ All notable changes are documented here. Releases follow Semantic Versioning.
 
 ## [0.4.0] - 2026-09-06
 
+### Security
+
+- Updated `event-listener` to 5.4.2 and raised the S3 SDK minimum to 1.144.0
+  to resolve `lru` through its patched 0.18 series. Explicit dependency bans
+  reject the versions affected by RUSTSEC-2026-0221 and RUSTSEC-2026-0253
+  without adding advisory exceptions or disabling optional S3 support.
+
 ### Added
 
 - Added release validation through public CLI-generated SQLite and PostgreSQL

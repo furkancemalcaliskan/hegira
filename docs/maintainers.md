@@ -121,6 +121,16 @@ The former compatibility-host full-stack and production-container workflows and
 scripts are retired. The generated-application job is the single integration
 owner for those contracts.
 
+`deny.toml` explicitly rejects the `event-listener` and `lru` version ranges
+affected by RUSTSEC-2026-0221 and RUSTSEC-2026-0253. These informational
+unsoundness advisories must not silently regress to non-failing audit warnings.
+Generated workspaces resolve their own dependency graphs rather than inheriting
+the framework lockfile. When reviewing dependency fixes, check both generated
+database profiles with all features, including optional S3, against the same
+policy using `cargo deny --manifest-path <application>/Cargo.toml --all-features
+check --config <framework>/deny.toml bans advisories` and audit their lockfiles.
+Use disposable repository-validation copies for unreleased framework source.
+
 ## Local Validation
 
 Run the commands in this section from the repository root. The virtual workspace coordinates

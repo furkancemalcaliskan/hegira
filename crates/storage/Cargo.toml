@@ -7,7 +7,7 @@ publish = false
 
 [dependencies]
 aws-config = { version = "1.8.18", default-features = false, features = ["behavior-version-latest", "default-https-client", "rt-tokio"], optional = true }
-aws-sdk-s3 = { version = "1.137.0", default-features = false, features = ["default-https-client", "rt-tokio"], optional = true }
+aws-sdk-s3 = { version = "1.144.0", default-features = false, features = ["default-https-client", "rt-tokio"], optional = true }
 tokio = { version = "1.52.3", features = ["fs"] }
 
 [features]
