@@ -22,6 +22,11 @@ allow = [
 ]
 
 [bans]
+# RustSec informational unsoundness advisories must not regress to warnings.
+deny = [
+    { name = "event-listener", version = ">=5.1.0, <5.4.2" }, # RUSTSEC-2026-0221
+    { name = "lru", version = "<0.18.2" }, # RUSTSEC-2026-0253
+]
 multiple-versions = "warn"
 wildcards = "allow"
 highlight = "all"
