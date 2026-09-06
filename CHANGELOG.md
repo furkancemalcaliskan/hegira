@@ -29,6 +29,9 @@ All notable changes are documented here. Releases follow Semantic Versioning.
 
 ### Changed
 
+- Clarified source-runnable CLI setup, guided and non-interactive creation,
+  supported selections, manifest semantics, and generated-application ownership
+  in the current documentation, including source-only distribution limitations.
 - Enforced shared project-identity validation, portable destination names,
   existing real parents, and explicit no-overwrite behavior. Renderer publication
   now uses private directory-relative staging and exclusive atomic rename with

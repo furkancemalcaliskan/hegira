@@ -43,6 +43,16 @@ configuration, migrations, deployment files, dependency lock, and future
 product changes. The framework repository does not own an application runtime
 configuration or production image.
 
+Template changes affect subsequent generation, not existing applications.
+Generated files are application-owned source, not a synchronized view of the
+template. Official Identity implementations stay under `modules/identity/` in
+the framework source and are consumed through pinned Cargo dependencies; they
+are not an application-local module fork. Product rules belong in the generated
+DDD layers, while server and web composition explicitly select adapters.
+Changing an existing application's framework version, module composition, or
+database requires coordinated source, dependency, configuration, and migration
+review; the current CLI does not perform those changes.
+
 ## Dependency Direction
 
 Framework packages cannot depend on official modules, generated applications,
@@ -130,7 +140,7 @@ composition, or product UI code.
 ## Source-runnable CLI
 
 `tools/hegira_cli` owns the `hegira` binary command shell. It defines top-level
-help, version reporting, deterministic non-interactive application creation,
+help, version reporting, guided and deterministic non-interactive application creation,
 concise diagnostics, and stable process outcomes without reading a user home
 directory or global configuration. It delegates canonical component planning
 and atomic publication to `template_renderer`; repository-local dependency
@@ -280,9 +290,11 @@ application identifier, HTTPS framework repository and stable SemVer tag,
 resolved component set, and selected database and client adapters. The parser
 rejects unknown fields, unsupported values, invalid component combinations,
 credentials, local framework paths, and mismatches between the recorded and
-actually rendered component sets. Deterministic serialization makes the file a
-future CLI and upgrade-tool input; it is not a runtime configuration or secret
-store.
+actually rendered component sets. Deterministic serialization records the
+validated generation contract; it is not a runtime configuration or secret
+store. Editing it does not trigger regeneration or upgrades. The field-level
+contract is documented in
+[Getting started](getting-started.md#generated-ownership-and-hegiratoml).
 
 Use these focused gates:
 

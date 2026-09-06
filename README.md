@@ -70,7 +70,7 @@ ownership:
 | `templates/applications/layered/` | Workspace-external, brand-neutral layered application base with application-owned server, web, configuration, migration composition, and deployment files |
 | `templates/package.toml` | Versioned canonical component-package identity, framework compatibility, component graph, and source digest |
 | `templates/components/` | Typed data-only component manifests that define the canonical application composition |
-| `tools/hegira_cli/` | Source-runnable `hegira` command shell with stable help, diagnostics, and exit outcomes |
+| `tools/hegira_cli/` | Source-runnable `hegira new` with guided and non-interactive application creation, stable diagnostics, and exit outcomes |
 | `tools/template_renderer/` | Reusable deterministic render core with a separate disposable repository-validation adapter; it is not a public CLI |
 
 The canonical rendered application is an independent Cargo workspace, consumes framework
@@ -78,7 +78,8 @@ packages from a pinned release source, and records its generation identity and s
 components in a validated `hegira.toml`. Runtime configuration and secrets remain outside that
 manifest. The canonical package locks its source inputs with a deterministic SHA-256 digest so
 repository-local or untracked files cannot silently enter generated output. Releases remain
-source-first.
+source-only; the CLI is not distributed through crates.io or as a standalone
+executable. Keep the source tree available when running the source-built CLI.
 
 The source-runnable CLI can create the canonical layered application non-interactively with
 explicit, automation-friendly inputs:
@@ -89,10 +90,16 @@ cargo run --locked -p hegira_cli -- new my-application \
   --destination ../my-application
 ```
 
+See [Building and invoking the CLI](docs/getting-started.md#build-and-invoke-the-cli)
+for source requirements and the distinction between released and unreleased generation inputs.
+
 Run `cargo run --locked -p hegira_cli -- new` in an interactive terminal for a guided workflow.
 The prompts show the implemented choices and defaults, summarize the resulting application, and
 ask for confirmation before any files are written. Non-interactive terminals never wait for
 prompt input and require the application name and destination explicitly.
+Supplying both inputs skips prompts and confirmation. Only SQLite/PostgreSQL,
+Leptos, and Identity selections are supported; generation does not provide
+module management, code generators, or automatic upgrades.
 
 Its stable process outcomes are success (`0`), internal error (`1`), usage
 error (`2`), validation error (`3`), and conflict (`4`). Human-readable help
