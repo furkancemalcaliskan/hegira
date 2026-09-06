@@ -3,5 +3,8 @@ id = "layered"
 components = ["layered-leptos-identity"]
 
 [variables]
-framework_repository = "https://github.com/furkancemalcaliskan/hegira.git"
-framework_version = "v0.3.0"
+application_name = "application"
+client_adapter = "leptos"
+component_id = "layered-leptos-identity"
+database_adapter = "sqlite"
+database_feature = "db-sqlite"

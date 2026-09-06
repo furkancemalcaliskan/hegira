@@ -39,34 +39,51 @@ app_web = { path = "apps/web", default-features = false }
 
 # Framework packages are consumed as release dependencies. Repository
 # validation patches this source in a disposable copy of the template.
-application = { git = "{{framework_repository}}", tag = "{{framework_version}}", default-features = false }
-application_contracts = { git = "{{framework_repository}}", tag = "{{framework_version}}" }
+audit = { git = "{{framework_repository}}", tag = "{{framework_version}}" }
 background_jobs = { git = "{{framework_repository}}", tag = "{{framework_version}}" }
+cache = { git = "{{framework_repository}}", tag = "{{framework_version}}" }
 configuration = { git = "{{framework_repository}}", tag = "{{framework_version}}" }
-domain = { git = "{{framework_repository}}", tag = "{{framework_version}}" }
-domain_shared = { git = "{{framework_repository}}", tag = "{{framework_version}}" }
 http_support = { git = "{{framework_repository}}", tag = "{{framework_version}}" }
+identity_application = { git = "{{framework_repository}}", tag = "{{framework_version}}", default-features = false }
+identity_application_contracts = { git = "{{framework_repository}}", tag = "{{framework_version}}" }
+identity_domain = { git = "{{framework_repository}}", tag = "{{framework_version}}" }
+identity_domain_shared = { git = "{{framework_repository}}", tag = "{{framework_version}}" }
 identity_http = { git = "{{framework_repository}}", tag = "{{framework_version}}", default-features = false }
 identity_leptos = { git = "{{framework_repository}}", tag = "{{framework_version}}", default-features = false }
-infrastructure = { git = "{{framework_repository}}", tag = "{{framework_version}}", default-features = false }
+identity_sqlx = { git = "{{framework_repository}}", tag = "{{framework_version}}", default-features = false }
 leptos_support = { git = "{{framework_repository}}", tag = "{{framework_version}}", default-features = false }
+mail = { git = "{{framework_repository}}", tag = "{{framework_version}}" }
 observability = { git = "{{framework_repository}}", tag = "{{framework_version}}" }
 persistence = { git = "{{framework_repository}}", tag = "{{framework_version}}", default-features = false }
 platform_core = { git = "{{framework_repository}}", tag = "{{framework_version}}" }
-presentation = { git = "{{framework_repository}}", tag = "{{framework_version}}", default-features = false }
 runtime = { git = "{{framework_repository}}", tag = "{{framework_version}}" }
-web = { git = "{{framework_repository}}", tag = "{{framework_version}}", default-features = false }
+search = { git = "{{framework_repository}}", tag = "{{framework_version}}", default-features = false }
+security = { git = "{{framework_repository}}", tag = "{{framework_version}}" }
+settings = { git = "{{framework_repository}}", tag = "{{framework_version}}" }
+storage = { git = "{{framework_repository}}", tag = "{{framework_version}}", default-features = false }
 
 axum = "0.8.9"
+argon2 = "0.5.3"
+base64 = "0.23.0"
+chrono = { version = "0.4.44", features = ["serde"] }
 console_error_panic_hook = "0.1.7"
+hmac = "0.13.0"
+icons = { version = "0.18.3", features = ["leptos"] }
+ipnet = "2.12.0"
 leptos = "0.8.19"
 leptos_axum = "0.8.9"
 leptos_meta = "0.8.6"
 leptos_router = "0.8.13"
+redis = { version = "1.2.3", features = ["tokio-comp"] }
+rand_core = { version = "0.6.4", features = ["getrandom"] }
+reqwest = { version = "0.12.28", default-features = false, features = ["json", "rustls-tls"] }
 serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
+sha2 = "0.11.0"
 sqlx = { version = "0.8.6", features = ["runtime-tokio-rustls", "migrate", "chrono", "uuid"] }
 tokio = { version = "1.52.3", features = ["rt-multi-thread", "macros", "signal"] }
 tower-http = { version = "0.7.0", features = ["compression-br", "compression-gzip", "cors", "limit", "timeout"] }
 tracing = "0.1.44"
 url = "2.5.7"
+uuid = { version = "1.23.2", features = ["v4", "serde", "js"] }
 wasm-bindgen = "0.2.114"

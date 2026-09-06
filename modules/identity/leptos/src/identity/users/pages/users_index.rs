@@ -2,26 +2,24 @@ use leptos::prelude::*;
 use leptos::task::spawn_local;
 
 use crate::{
-    domain_shared::identity::is_protected_admin_username,
-    web::{
-        app::{layout::WorkspaceRouteLayout, page::PageSection},
-        identity::{
-            roles::server_fns::list_all_roles_admin,
-            users::{
-                components::{
-                    user_form::UserFormPanel, users_filters::UsersFilters,
-                    users_page_header::UsersPageHeader, users_table::UsersTable,
-                },
-                model::users_page_state::{UserSaveInput, UsersPageState},
-                server_fns::{
-                    create_user_admin, delete_user_admin, get_user, list_users, update_user_admin,
-                },
+    app::{layout::WorkspaceRouteLayout, page::PageSection},
+    identity::{
+        roles::server_fns::list_all_roles_admin,
+        users::{
+            components::{
+                user_form::UserFormPanel, users_filters::UsersFilters,
+                users_page_header::UsersPageHeader, users_table::UsersTable,
+            },
+            model::users_page_state::{UserSaveInput, UsersPageState},
+            server_fns::{
+                create_user_admin, delete_user_admin, get_user, list_users, update_user_admin,
             },
         },
-        shared::{
-            feedback::toast::use_toast,
-            i18n::{T, use_i18n},
-        },
+    },
+    identity_domain_shared::identity::is_protected_admin_username,
+    shared::{
+        feedback::toast::use_toast,
+        i18n::{T, use_i18n},
     },
 };
 use leptos_support::mutation::MutationStatus;
@@ -65,7 +63,7 @@ pub fn UsersIndexRoute() -> impl IntoView {
 
     let edit_user = Callback::new({
         let toast = toast.clone();
-        move |user: application_contracts::identity::users::UserDto| {
+        move |user: identity_application_contracts::identity::users::UserDto| {
             state.form_error.set(None);
             let toast = toast.clone();
 

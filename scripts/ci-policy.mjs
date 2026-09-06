@@ -10,11 +10,13 @@ const REQUIRED_CONTRACTS = [
   ["hydration capability context", "name: wasm-hydrate"],
   ["observability capability context", "name: observability"],
   ["distributed-provider capability context", "name: distributed-providers"],
+  ["generated feature consumer", "sh scripts/generated-feature-check.sh"],
   ["stable quality context", "  quality:"],
   ["stable supply-chain context", "  supply-chain:"],
   ["framework validation", "sh scripts/framework-check.sh"],
   ["official module validation", "sh scripts/official-modules-check.sh"],
-  ["template validation", "sh scripts/layered-template-check.sh"],
+  ["tooling validation", "sh scripts/layered-template-check.sh"],
+  ["CLI validation", "sh scripts/cli-check.sh"],
   ["generated application validation", "sh scripts/generated-application-check.sh"],
   ["explicit disposable PostgreSQL authentication", "POSTGRES_HOST_AUTH_METHOD: trust"],
   ["dependency policy", "EmbarkStudios/cargo-deny-action@v2"],
@@ -24,8 +26,15 @@ const REQUIRED_CONTRACTS = [
 const QUALITY_DEPENDENCIES = [
   "framework",
   "official-modules",
-  "templates",
+  "tooling",
   "generated-application",
+];
+
+const COMPATIBILITY_HOST_CONTRACTS = [
+  "--package hegira",
+  "-p hegira",
+  "compatibility host",
+  "host composition",
 ];
 
 export function validateRepositoryValidationWorkflow(workflow) {
@@ -50,6 +59,26 @@ export function validateRepositoryValidationWorkflow(workflow) {
   }
   if (!/pull_request:\s*\n    branches:\s*\n      - develop\s*\n      - main/m.test(workflow)) {
     errors.push("repository validation must run for pull requests to develop and main");
+  }
+  if (!/push:\s*\n    branches:\s*\n      - develop\s*\n      - main/m.test(workflow)) {
+    errors.push(
+      "repository validation pushes must be restricted to develop and main",
+    );
+  }
+  if (
+    !/concurrency:\s*\n  group: repository-validation-.*\n  cancel-in-progress: true/m.test(
+      workflow,
+    )
+  ) {
+    errors.push("repository validation must cancel superseded branch and pull-request runs");
+  }
+
+  for (const contract of COMPATIBILITY_HOST_CONTRACTS) {
+    if (workflow.includes(contract)) {
+      errors.push(
+        `required repository validation references the compatibility host: ${contract}`,
+      );
+    }
   }
 
   for (const [description, contract] of REQUIRED_CONTRACTS) {

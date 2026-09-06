@@ -4,17 +4,15 @@ use leptos_router::{Lazy, LazyRoute, lazy_route};
 use leptos_router::{MatchNestedRoutes, NestedRoute, ParamSegment, StaticSegment};
 
 use crate::{
-    application_contracts::identity::permissions,
-    web::{
-        app::protected::RequirePermission,
-        identity::{
-            auth::pages::{
-                login::LoginRoute, oauth_callback::OAuthCallbackRoute, register::RegisterRoute,
-            },
-            roles::pages::roles_index::RolesIndexRoute,
-            users::pages::{profile::ProfileRoute, users_index::UsersIndexRoute},
+    app::protected::RequirePermission,
+    identity::{
+        auth::pages::{
+            login::LoginRoute, oauth_callback::OAuthCallbackRoute, register::RegisterRoute,
         },
+        roles::pages::roles_index::RolesIndexRoute,
+        users::pages::{profile::ProfileRoute, users_index::UsersIndexRoute},
     },
+    identity_application_contracts::identity::permissions,
 };
 
 pub const ROUTE_PATHS: &[&str] = &[

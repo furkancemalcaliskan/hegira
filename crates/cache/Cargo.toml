@@ -1,0 +1,13 @@
+[package]
+name = "cache"
+version = "0.4.0"
+edition = "2024"
+license = "Apache-2.0"
+publish = false
+
+[dependencies]
+redis = { version = "1.2.3", features = ["tokio-comp"], optional = true }
+
+[features]
+default = []
+redis = ["dep:redis"]

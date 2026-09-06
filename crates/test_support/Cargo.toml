@@ -1,16 +1,21 @@
 [package]
 name = "test_support"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2024"
 license = "Apache-2.0"
 publish = false
 
 [dependencies]
-application = { path = "../application" }
+audit = { path = "../audit" }
 axum = "0.8.9"
+background_jobs = { path = "../background_jobs" }
+cache = { path = "../cache" }
 http-body-util = "0.1.3"
+mail = { path = "../mail" }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
+settings = { path = "../settings" }
+storage = { path = "../storage" }
 tower = "0.5.3"
 
 [dev-dependencies]

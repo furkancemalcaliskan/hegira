@@ -1,7 +1,9 @@
+use async_trait::async_trait;
 use chrono::Utc;
 
 use crate::{
     identity::authorization::{AuthorizationService, CurrentUserProvider, require_permission},
+    identity::http_contracts::UserServiceContract,
     identity::permissions::cache as permission_cache,
     identity::users::mapper::user_dto,
     identity::users::writer::{CreateManagedUser, ManagedUserWriter, UpdateManagedUser},
@@ -15,12 +17,12 @@ use crate::{
         security::PasswordHasher,
     },
 };
-use domain_shared::localization::T;
 use identity_application_contracts::{
     identity::permissions,
     identity::users::{
         CreateUserInput, ListUsersInput, PagedUserResultDto, UpdateUserInput, UserDto,
     },
+    localization::IdentityMessage,
 };
 use identity_domain::identity::users::UserRepository;
 
@@ -46,11 +48,11 @@ impl<Users, Hasher, CurrentUsers, Authorization, CacheAdapter, Audit, Search>
     UserAppService<Users, Hasher, CurrentUsers, Authorization, CacheAdapter, Audit, Search>
 where
     Users: UserRepository + ManagedUserWriter,
-    Hasher: PasswordHasher,
+    Hasher: PasswordHasher<Error = ApplicationError>,
     CurrentUsers: CurrentUserProvider,
     Authorization: AuthorizationService,
     CacheAdapter: Cache,
-    Audit: AuditLogger,
+    Audit: AuditLogger<Error = ApplicationError>,
     Search: SearchIndex,
 {
     pub fn new(
@@ -134,7 +136,7 @@ where
             .users
             .find_by_username(&username)
             .await?
-            .ok_or_else(|| ApplicationError::localized_not_found(T::UserNotFound))?;
+            .ok_or_else(|| ApplicationError::localized_not_found(IdentityMessage::UserNotFound))?;
 
         let roles = self.users.user_roles(&user.username).await?;
         Ok(user_dto(user, roles))
@@ -156,7 +158,9 @@ where
         validation::required_username_password(&input.username, &input.password)?;
 
         if self.users.exists(&input.username).await? {
-            return Err(ApplicationError::localized_conflict(T::UserAlreadyExists));
+            return Err(ApplicationError::localized_conflict(
+                IdentityMessage::UserAlreadyExists,
+            ));
         }
 
         let roles = normalized_roles(&input.username, input.roles);
@@ -201,7 +205,9 @@ where
         validation::required_username(&input.username)?;
 
         if !self.users.exists(&input.username).await? {
-            return Err(ApplicationError::localized_not_found(T::UserNotFound));
+            return Err(ApplicationError::localized_not_found(
+                IdentityMessage::UserNotFound,
+            ));
         }
 
         let password_changed = input
@@ -227,7 +233,9 @@ where
             .await?
             .is_none()
         {
-            return Err(ApplicationError::localized_not_found(T::UserNotFound));
+            return Err(ApplicationError::localized_not_found(
+                IdentityMessage::UserNotFound,
+            ));
         }
         self.invalidate_authorization_cache().await;
         self.record_audit(
@@ -256,7 +264,7 @@ where
 
         if identity::is_protected_admin_username(&username) {
             return Err(ApplicationError::localized_forbidden(
-                T::ProtectedAdminCannotBeDeleted,
+                IdentityMessage::ProtectedAdminCannotBeDeleted,
             ));
         }
 
@@ -265,7 +273,9 @@ where
             .delete_managed_user(&username, self.search.publish_mutations)
             .await?
         {
-            return Err(ApplicationError::localized_not_found(T::UserNotFound));
+            return Err(ApplicationError::localized_not_found(
+                IdentityMessage::UserNotFound,
+            ));
         }
 
         self.invalidate_authorization_cache().await;
@@ -310,7 +320,8 @@ where
                     limit: page_size as usize,
                 },
             )
-            .await?;
+            .await
+            .map_err(provider_error)?;
         let pids = result
             .hits
             .iter()
@@ -354,6 +365,51 @@ where
     }
 }
 
+#[async_trait]
+impl<Users, Hasher, CurrentUsers, Authorization, CacheAdapter, Audit, Search> UserServiceContract
+    for UserAppService<Users, Hasher, CurrentUsers, Authorization, CacheAdapter, Audit, Search>
+where
+    Users: UserRepository + ManagedUserWriter,
+    Hasher: PasswordHasher<Error = ApplicationError>,
+    CurrentUsers: CurrentUserProvider,
+    Authorization: AuthorizationService,
+    CacheAdapter: Cache,
+    Audit: AuditLogger<Error = ApplicationError>,
+    Search: SearchIndex,
+{
+    async fn list(
+        &self,
+        actor_token: String,
+        input: ListUsersInput,
+    ) -> ApplicationResult<PagedUserResultDto> {
+        UserAppService::list(self, actor_token, input).await
+    }
+
+    async fn get(&self, actor_token: String, username: String) -> ApplicationResult<UserDto> {
+        UserAppService::get(self, actor_token, username).await
+    }
+
+    async fn create(
+        &self,
+        actor_token: String,
+        input: CreateUserInput,
+    ) -> ApplicationResult<UserDto> {
+        UserAppService::create(self, actor_token, input).await
+    }
+
+    async fn update(
+        &self,
+        actor_token: String,
+        input: UpdateUserInput,
+    ) -> ApplicationResult<UserDto> {
+        UserAppService::update(self, actor_token, input).await
+    }
+
+    async fn delete(&self, actor_token: String, username: String) -> ApplicationResult<()> {
+        UserAppService::delete(self, actor_token, username).await
+    }
+}
+
 fn normalized_roles(username: &str, roles: Vec<String>) -> Vec<String> {
     let mut roles = roles
         .into_iter()
@@ -379,8 +435,12 @@ fn normalized_roles(username: &str, roles: Vec<String>) -> Vec<String> {
 
 fn localize_user_conflict(error: ApplicationError) -> ApplicationError {
     if matches!(error, ApplicationError::Conflict(_)) {
-        ApplicationError::localized_conflict(T::UserAlreadyExists)
+        ApplicationError::localized_conflict(IdentityMessage::UserAlreadyExists)
     } else {
         error
     }
+}
+
+fn provider_error(error: impl std::fmt::Display) -> ApplicationError {
+    ApplicationError::Infrastructure(error.to_string())
 }

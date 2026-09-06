@@ -1,0 +1,11 @@
+schema = 1
+application = "{{application_name}}"
+
+[framework]
+repository = "{{framework_repository}}"
+version = "{{framework_version}}"
+
+[selection]
+components = ["layered-base", "{{component_id}}"]
+databases = ["{{database_adapter}}"]
+clients = ["{{client_adapter}}"]

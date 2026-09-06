@@ -7,6 +7,45 @@ struct ActiveWorkers {
     durable_jobs: bool,
 }
 
+#[derive(Clone)]
+pub struct ServerState {
+    config: std::sync::Arc<app_infrastructure::config::AppConfig>,
+    db: persistence::DatabasePool,
+    cache: std::sync::Arc<cache::CacheAdapter>,
+    storage: std::sync::Arc<storage::StorageAdapter>,
+    search: std::sync::Arc<search::SearchAdapter>,
+    services: std::sync::Arc<app_infrastructure::identity::services::AppServices>,
+}
+
+impl ServerState {
+    fn new(
+        config: app_infrastructure::config::AppConfig,
+        db: persistence::DatabasePool,
+        cache: cache::CacheAdapter,
+        storage: storage::StorageAdapter,
+        search: search::SearchAdapter,
+        mailer: mail::MailerAdapter,
+    ) -> Self {
+        let services =
+            std::sync::Arc::new(app_infrastructure::identity::services::AppServices::new(
+                db.clone(),
+                &config,
+                cache.clone(),
+                search.clone(),
+                mailer,
+            ));
+
+        Self {
+            config: std::sync::Arc::new(config),
+            db,
+            cache: std::sync::Arc::new(cache),
+            storage: std::sync::Arc::new(storage),
+            search: std::sync::Arc::new(search),
+            services,
+        }
+    }
+}
+
 impl ActiveWorkers {
     fn any(&self) -> bool {
         self.scheduler || self.durable_jobs
@@ -18,7 +57,7 @@ pub fn run() -> std::process::ExitCode {
 }
 
 async fn serve() -> Result<(), String> {
-    let app_config = infrastructure::config::AppConfig::load()
+    let app_config = app_infrastructure::config::AppConfig::load()
         .map_err(|err| format!("failed to load application configuration: {err}"))?;
     configuration::validate(&app_config, compiled_capabilities()).map_err(|err| err.to_string())?;
 
@@ -34,14 +73,14 @@ async fn serve() -> Result<(), String> {
 }
 
 fn telemetry_settings(
-    config: &infrastructure::config::AppConfig,
+    config: &app_infrastructure::config::AppConfig,
 ) -> observability::telemetry::TelemetrySettings {
     let exporter = config.telemetry.enabled.then(|| {
         let protocol = match config.telemetry.protocol {
-            infrastructure::config::OtlpProtocol::Grpc => {
+            app_infrastructure::config::OtlpProtocol::Grpc => {
                 observability::telemetry::OtlpProtocol::Grpc
             }
-            infrastructure::config::OtlpProtocol::HttpProtobuf => {
+            app_infrastructure::config::OtlpProtocol::HttpProtobuf => {
                 observability::telemetry::OtlpProtocol::HttpProtobuf
             }
         };
@@ -57,7 +96,7 @@ fn telemetry_settings(
         service_name: config.application.name.clone(),
         service_version: env!("CARGO_PKG_VERSION"),
         environment: config.environment.clone(),
-        role: format!("{:?}", config.runtime.role).to_lowercase(),
+        role: config.runtime.role.as_str().to_string(),
         logging_filter: config.logging.filter.clone(),
         exporter,
     }
@@ -77,63 +116,87 @@ fn compiled_capabilities() -> platform_core::CompiledCapabilities {
     }
 }
 
-async fn serve_configured(app_config: infrastructure::config::AppConfig) -> Result<(), String> {
+fn cache_settings(config: &app_infrastructure::config::AppConfig) -> cache::CacheSettings {
+    cache::CacheSettings {
+        enabled: config.cache.enabled,
+        backend: match config.cache.backend {
+            app_infrastructure::config::CacheBackend::Null => cache::CacheBackend::Null,
+            app_infrastructure::config::CacheBackend::Memory => cache::CacheBackend::Memory,
+            app_infrastructure::config::CacheBackend::Redis => cache::CacheBackend::Redis,
+        },
+        redis_url: config.cache.redis.url.clone(),
+    }
+}
+
+fn mailer_settings(config: &app_infrastructure::config::AppConfig) -> mail::MailerSettings {
+    mail::MailerSettings {
+        enabled: config.mailer.enabled,
+        backend: match config.mailer.backend {
+            app_infrastructure::config::MailerBackend::Null => mail::MailerBackend::Null,
+            app_infrastructure::config::MailerBackend::Log => mail::MailerBackend::Log,
+            app_infrastructure::config::MailerBackend::Smtp => mail::MailerBackend::Smtp,
+        },
+        from: config.mailer.from.clone(),
+        smtp: mail::SmtpSettings {
+            host: config.mailer.smtp.host.clone(),
+            port: config.mailer.smtp.port,
+            username: config.mailer.smtp.username.clone(),
+            password: config.mailer.smtp.password.clone(),
+            starttls: config.mailer.smtp.starttls,
+        },
+    }
+}
+
+fn search_settings(config: &app_infrastructure::config::AppConfig) -> search::SearchSettings {
+    search::SearchSettings {
+        enabled: config.search.enabled,
+        backend: match config.search.backend {
+            app_infrastructure::config::SearchBackend::Null => search::SearchBackend::Null,
+            app_infrastructure::config::SearchBackend::Meilisearch => {
+                search::SearchBackend::Meilisearch
+            }
+        },
+        index_prefix: config.search.index_prefix.clone(),
+        task_timeout_milliseconds: config.search.task_timeout_milliseconds,
+        meilisearch: search::MeilisearchSettings {
+            url: config.search.meilisearch.url.clone(),
+            api_key: config.search.meilisearch.api_key.clone(),
+        },
+    }
+}
+
+fn storage_settings(config: &app_infrastructure::config::AppConfig) -> storage::StorageSettings {
+    storage::StorageSettings {
+        enabled: config.storage.enabled,
+        backend: match config.storage.backend {
+            app_infrastructure::config::StorageBackend::Null => storage::StorageBackend::Null,
+            app_infrastructure::config::StorageBackend::Local => storage::StorageBackend::Local,
+            app_infrastructure::config::StorageBackend::S3 => storage::StorageBackend::S3,
+        },
+        local_root: config.storage.local.root.clone(),
+        s3: storage::S3Settings {
+            bucket: config.storage.s3.bucket.clone(),
+            region: config.storage.s3.region.clone(),
+            endpoint_url: config.storage.s3.endpoint_url.clone(),
+            force_path_style: config.storage.s3.force_path_style,
+        },
+    }
+}
+
+async fn serve_configured(app_config: app_infrastructure::config::AppConfig) -> Result<(), String> {
     tracing::info!(
         environment = %app_config.environment,
         role = ?app_config.runtime.role,
         "runtime starting"
     );
 
-    #[cfg(feature = "db-postgres")]
-    {
-        if app_config.startup.ensure_database
-            && !app_config.is_production()
-            && app_config.database.backend == infrastructure::config::DatabaseBackend::Postgres
-        {
-            tracing::info!("ensuring development database exists");
-            infrastructure::db::ensure_database(&app_config.database)
-                .await
-                .map_err(|err| {
-                    format!(
-                        "failed to ensure development database at {}: {err}",
-                        app_config.database.safe_url()
-                    )
-                })?;
-        }
-    }
-
-    let migration_plan = app_config
-        .database
-        .auto_migrate
-        .then(|| {
-            let migration_sources =
-                infrastructure::db::application_migration_sources(&app_config.database.backend)
-                    .map_err(|error| format!("failed to select application migrations: {error}"))?;
-            persistence::migrations::MigrationPlan::new(migration_sources)
-                .map_err(|error| format!("invalid application migration plan: {error}"))
-        })
-        .transpose()?;
-
-    let db = persistence::connect_database(&app_config.database)
-        .await
-        .map_err(|err| {
-            format!(
-                "failed to initialize database at {}: {err}",
-                app_config.database.safe_url()
-            )
-        })?;
-    if let Some(migration_plan) = migration_plan {
-        migration_plan
-            .run(&db)
-            .await
-            .map_err(|error| format!("failed to run application migrations: {error}"))?;
-    }
-    infrastructure::identity::sessions::SessionRepositoryAdapter::from_database(
+    let db = app_infrastructure::operations::initialize_database(&app_config).await?;
+    app_infrastructure::identity::sessions::SessionRepositoryAdapter::from_database(
         &app_config,
         db.clone(),
     )
     .map_err(|err| format!("invalid session store configuration: {err}"))?;
-    let search = infrastructure::search::SearchAdapter::from_config(&app_config)
+    let search = search::SearchAdapter::from_settings(&search_settings(&app_config))
         .map_err(|err| format!("invalid search configuration: {err}"))?;
     if app_config.search.enabled {
         search
@@ -141,26 +204,17 @@ async fn serve_configured(app_config: infrastructure::config::AppConfig) -> Resu
             .await
             .map_err(|err| format!("search startup probe failed: {err}"))?;
         search
-            .initialize_indexes()
+            .initialize_index(
+                "identity_users",
+                &identity_sqlx::identity::search::identity_user_index_settings(),
+            )
             .await
             .map_err(|err| format!("search index initialization failed: {err}"))?;
     }
     let search = std::sync::Arc::new(search);
 
-    if app_config.startup.seed_identity {
-        tracing::info!("running identity seed at startup");
-        let seed_repository = infrastructure::identity::IdentityRepositoryAdapter::new(db.clone());
-        infrastructure::identity::seed::seed_identity(
-            &seed_repository,
-            &infrastructure::security::password_hasher::Argon2PasswordHasher,
-            &app_config.seed,
-        )
-        .await
-        .map_err(|err| format!("failed to seed identity data: {err}"))?;
-    }
-
-    let worker_health = std::sync::Arc::new(worker_operations::WorkerHealth::default());
-    let job_observer = std::sync::Arc::new(worker_operations::RuntimeJobObserver::new(
+    let worker_health = std::sync::Arc::new(observability::worker_health::WorkerHealth::default());
+    let job_observer = std::sync::Arc::new(observability::worker_health::RuntimeJobObserver::new(
         worker_health.clone(),
         metrics_job_observer(&app_config),
     ));
@@ -204,11 +258,11 @@ async fn serve_configured(app_config: infrastructure::config::AppConfig) -> Resu
 }
 
 fn start_workers(
-    db: infrastructure::db::DatabasePool,
-    app_config: &infrastructure::config::AppConfig,
+    db: persistence::DatabasePool,
+    app_config: &app_infrastructure::config::AppConfig,
     observer: std::sync::Arc<dyn background_jobs::JobObserver>,
-    health: std::sync::Arc<worker_operations::WorkerHealth>,
-    search: std::sync::Arc<infrastructure::search::SearchAdapter>,
+    health: std::sync::Arc<observability::worker_health::WorkerHealth>,
+    search: std::sync::Arc<search::SearchAdapter>,
 ) -> Result<ActiveWorkers, String> {
     let mut active = ActiveWorkers::default();
     let heartbeat_grace =
@@ -226,20 +280,29 @@ fn start_workers(
                 heartbeat_grace,
             );
         }
+        let cleanup_schedule = identity_sqlx::identity::jobs::IdentityCleanupSchedule {
+            enabled: app_config.scheduler.enabled,
+            run_on_startup: app_config.scheduler.run_on_startup,
+            interval: std::time::Duration::from_secs(
+                app_config
+                    .scheduler
+                    .cleanup_expired_sessions_interval_seconds,
+            ),
+        };
         match &db {
             #[cfg(feature = "db-postgres")]
-            infrastructure::db::DatabasePool::Postgres(pool) => {
-                infrastructure::jobs::cleanup::start_recurring_jobs_with_observer(
+            persistence::DatabasePool::Postgres(pool) => {
+                identity_sqlx::identity::jobs::start_recurring_jobs_with_observer(
                     pool.clone(),
-                    &app_config.scheduler,
+                    cleanup_schedule,
                     observer.clone(),
                 )
             }
             #[cfg(feature = "db-sqlite")]
-            infrastructure::db::DatabasePool::Sqlite(pool) => {
-                infrastructure::jobs::cleanup::start_sqlite_recurring_jobs_with_observer(
+            persistence::DatabasePool::Sqlite(pool) => {
+                identity_sqlx::identity::jobs::start_sqlite_recurring_jobs_with_observer(
                     pool.clone(),
-                    &app_config.scheduler,
+                    cleanup_schedule,
                     observer.clone(),
                 )
             }
@@ -256,23 +319,24 @@ fn start_workers(
         );
         let mut registry = background_jobs::DurableJobRegistry::default();
         if app_config.mailer.enabled {
-            registry.register(infrastructure::mail::jobs::SendMailJobHandler::new(
-                infrastructure::mail::MailerAdapter::from_config(app_config)?,
+            registry.register(mail::SendMailJobHandler::<
+                _,
+                identity_application::shared::mail::SendMailJob,
+            >::new(
+                mail::MailerAdapter::from_settings(&mailer_settings(app_config))
+                    .map_err(|error| error.to_string())?,
             ))?;
         }
         match &db {
             #[cfg(feature = "db-postgres")]
-            infrastructure::db::DatabasePool::Postgres(pool) => {
+            persistence::DatabasePool::Postgres(pool) => {
                 if app_config.search.enabled {
                     registry.register(
-                        infrastructure::search::jobs::SearchIndexJobHandler::new(
-                            search,
-                            pool.clone(),
-                        )
-                        .with_observer(observer.clone()),
+                        search::jobs::SearchIndexJobHandler::new(search, pool.clone())
+                            .with_observer(observer.clone()),
                     )?;
                 }
-                infrastructure::jobs::durable::DurableJobWorker::new(
+                background_jobs::sqlx::postgres::DurableJobWorker::new(
                     pool.clone(),
                     registry,
                     app_config.jobs.durable.clone(),
@@ -281,16 +345,16 @@ fn start_workers(
                 .start();
             }
             #[cfg(feature = "db-sqlite")]
-            infrastructure::db::DatabasePool::Sqlite(pool) => {
+            persistence::DatabasePool::Sqlite(pool) => {
                 if app_config.search.enabled {
                     registry.register(
-                        infrastructure::search::projection_sqlite::SqliteSearchIndexJobHandler::new(
+                        search::projection_sqlite::SqliteSearchIndexJobHandler::new(
                             search,
                             pool.clone(),
                         ),
                     )?;
                 }
-                infrastructure::jobs::durable_sqlite::SqliteDurableJobWorker::new(
+                background_jobs::sqlx::sqlite::SqliteDurableJobWorker::new(
                     pool.clone(),
                     registry,
                     app_config.jobs.durable.clone(),
@@ -310,7 +374,7 @@ fn start_workers(
 }
 
 fn metrics_job_observer(
-    app_config: &infrastructure::config::AppConfig,
+    app_config: &app_infrastructure::config::AppConfig,
 ) -> std::sync::Arc<dyn background_jobs::JobObserver> {
     #[cfg(feature = "metrics-prometheus")]
     if app_config.metrics.enabled {
@@ -322,9 +386,9 @@ fn metrics_job_observer(
 }
 
 async fn serve_worker_operations(
-    app_config: infrastructure::config::AppConfig,
-    db: infrastructure::db::DatabasePool,
-    health: std::sync::Arc<worker_operations::WorkerHealth>,
+    app_config: app_infrastructure::config::AppConfig,
+    db: persistence::DatabasePool,
+    health: std::sync::Arc<observability::worker_health::WorkerHealth>,
 ) -> Result<(), String> {
     let addr = app_config.worker_operations.addr;
     let state = worker_operations::OperationsState::new(app_config, db, health);
@@ -341,9 +405,9 @@ async fn serve_worker_operations(
 }
 
 async fn serve_http(
-    app_config: infrastructure::config::AppConfig,
-    db: infrastructure::db::DatabasePool,
-    search: infrastructure::search::SearchAdapter,
+    app_config: app_infrastructure::config::AppConfig,
+    db: persistence::DatabasePool,
+    search: search::SearchAdapter,
 ) -> Result<(), String> {
     use app_web::root::{App, shell};
     use axum::{Router, middleware};
@@ -353,21 +417,22 @@ async fn serve_http(
     use tower_http::compression::CompressionLayer;
     use tower_http::{limit::RequestBodyLimitLayer, timeout::TimeoutLayer};
 
-    infrastructure::mail::MailerAdapter::from_config(&app_config)
+    let mailer = mail::MailerAdapter::from_settings(&mailer_settings(&app_config))
         .map_err(|err| format!("invalid mailer configuration: {err}"))?;
-    infrastructure::cache::validate_config(&app_config)
+    let cache = cache::CacheAdapter::from_settings(&cache_settings(&app_config))
+        .map_err(|err| format!("invalid cache configuration: {err}"))?;
+    cache
+        .health_check()
         .await
         .map_err(|err| format!("invalid cache configuration: {err}"))?;
-    let cache = infrastructure::cache::CacheAdapter::from_config(&app_config)
-        .map_err(|err| format!("invalid cache configuration: {err}"))?;
-    let storage = infrastructure::storage::StorageAdapter::from_config(&app_config)
+    let storage = storage::StorageAdapter::from_settings(&storage_settings(&app_config))
         .await
         .map_err(|err| format!("invalid storage configuration: {err}"))?;
     let rate_limit_backend = match app_config.security.rate_limit.backend {
-        infrastructure::config::RateLimitBackend::Memory => {
+        app_infrastructure::config::RateLimitBackend::Memory => {
             app_middleware::rate_limit::RateLimitBackend::Memory
         }
-        infrastructure::config::RateLimitBackend::Redis => {
+        app_infrastructure::config::RateLimitBackend::Redis => {
             app_middleware::rate_limit::RateLimitBackend::Redis {
                 url: app_config.security.rate_limit.redis.url.clone(),
             }
@@ -384,20 +449,15 @@ async fn serve_http(
     )
     .map_err(|err| format!("invalid rate limiter configuration: {err}"))?;
 
-    let settings = infrastructure::settings::SettingsAdapter::from_database(
-        &app_config,
-        db.clone(),
-        std::sync::Arc::new(cache.clone()),
-    );
-    let app_state = presentation::http::state::AppState::new(
-        app_config.clone(),
-        db,
-        cache,
-        storage,
-        search,
-        settings,
-    );
+    let app_state = ServerState::new(app_config.clone(), db, cache, storage, search, mailer);
     let web_services = app_state.services.clone();
+    let identity_leptos_services = identity_leptos::identity::server::IdentityLeptosServices::new(
+        web_services.auth.clone(),
+        web_services.oauth.clone(),
+        web_services.users.clone(),
+        web_services.permissions.clone(),
+        identity_http::cookie::SESSION_COOKIE,
+    );
     let web_config = app_state.config.clone();
     let identity_cookie_settings = identity_http::cookie::IdentityCookieSettings {
         secure: app_config.is_production(),
@@ -417,8 +477,18 @@ async fn serve_http(
     let leptos_options = conf.leptos_options;
     let routes = generate_route_list(App);
 
-    let operational_routes =
-        presentation::http::routes::operational_routes(app_state.clone()).with_state(());
+    let application_routes = Router::new().nest(
+        "/api/application",
+        app_presentation::http::routes(
+            app_presentation::http::ApplicationState::new(app_config.application.name.clone()),
+            app_config.is_production(),
+            app_config.server.body_limit_bytes,
+            std::time::Duration::from_secs(app_config.server.request_timeout_seconds),
+        ),
+    );
+    let operational_routes = operational_routes(app_state.clone())
+        .merge(application_routes)
+        .with_state(());
     let bearer_api_routes = identity_api_routes(app_state);
     let cookie_bff_routes = Router::<LeptosOptions>::new()
         .leptos_routes_with_context(
@@ -426,9 +496,11 @@ async fn serve_http(
             routes,
             {
                 let services = web_services.clone();
+                let identity_services = identity_leptos_services.clone();
                 let config = web_config.clone();
                 move || {
                     provide_context(services.clone());
+                    provide_context(identity_services.clone());
                     provide_context(config.clone());
                     provide_context(identity_cookie_settings);
                 }
@@ -493,17 +565,108 @@ async fn serve_http(
     Ok(())
 }
 
+/// Builds the operational endpoints selected by this application host.
+///
+/// Kept public so integration tests exercise the same concrete dependency
+/// probes used by the production server.
+#[doc(hidden)]
+pub fn operational_routes(state: ServerState) -> axum::Router {
+    use axum::routing::get;
+
+    let router = axum::Router::new()
+        .route("/healthz", get(healthz))
+        .route("/readyz", get(readyz));
+
+    #[cfg(feature = "metrics-prometheus")]
+    let router = if state.config.metrics.enabled {
+        router.merge(observability::metrics::routes(&state.config.metrics.path))
+    } else {
+        router
+    };
+
+    router.layer(axum::Extension(state))
+}
+
+async fn healthz(
+    axum::Extension(state): axum::Extension<ServerState>,
+) -> axum::Json<observability::health::LivenessResponse> {
+    axum::Json(observability::health::LivenessResponse::new(
+        state.config.application.name.clone(),
+        env!("CARGO_PKG_VERSION"),
+    ))
+}
+
+async fn readyz(
+    axum::Extension(state): axum::Extension<ServerState>,
+) -> (
+    axum::http::StatusCode,
+    axum::Json<observability::health::ReadinessResponse>,
+) {
+    let probe_timeout =
+        std::time::Duration::from_millis(state.config.health.readiness_timeout_milliseconds);
+    let database =
+        observability::health::check("database", true, probe_timeout, state.db.health_check());
+    let cache =
+        observability::health::check("cache", state.config.cache.enabled, probe_timeout, async {
+            state
+                .cache
+                .health_check()
+                .await
+                .map_err(|error| error.to_string())
+        });
+    let storage = observability::health::check(
+        "storage",
+        state.config.storage.enabled,
+        probe_timeout,
+        async {
+            state
+                .storage
+                .health_check()
+                .await
+                .map_err(|error| error.to_string())
+        },
+    );
+    let search = observability::health::check(
+        "search",
+        state.config.search.enabled,
+        probe_timeout,
+        async {
+            state
+                .search
+                .health_check()
+                .await
+                .map_err(|error| error.to_string())
+        },
+    );
+    let (database, cache, storage, search) = tokio::join!(database, cache, storage, search);
+    let response = observability::health::ReadinessResponse::new(
+        state.config.application.name.clone(),
+        env!("CARGO_PKG_VERSION"),
+        vec![database, cache, storage, search],
+    );
+    let status = if response.is_ready() {
+        axum::http::StatusCode::OK
+    } else {
+        axum::http::StatusCode::SERVICE_UNAVAILABLE
+    };
+
+    (status, axum::Json(response))
+}
+
 /// Builds the Identity Bearer API selected by this application host.
 ///
 /// Kept public so integration tests exercise the same explicit composition
 /// used by the production server rather than reconstructing module routes.
 #[doc(hidden)]
-pub fn identity_api_routes<S>(state: presentation::http::state::AppState) -> axum::Router<S>
+pub fn identity_api_routes<S>(state: ServerState) -> axum::Router<S>
 where
     S: Clone + Send + Sync + 'static,
 {
     let router = identity_http::bearer_api_routes(identity_http::state::IdentityHttpState::new(
-        state.services.clone(),
+        state.services.auth.clone(),
+        state.services.oauth.clone(),
+        state.services.users.clone(),
+        state.services.permissions.clone(),
     ))
     .with_state(());
 
@@ -539,7 +702,7 @@ where
 }
 
 fn cors_layer(
-    config: &infrastructure::config::CorsConfig,
+    config: &app_infrastructure::config::CorsConfig,
 ) -> Result<tower_http::cors::CorsLayer, String> {
     use axum::http::{HeaderValue, Method, header};
     use std::time::Duration;

@@ -2,28 +2,26 @@ use icons::{ChevronLeft, ChevronRight, Users};
 use leptos::prelude::*;
 
 use crate::{
-    application_contracts::identity::users::UserDto,
-    web::{
-        identity::users::components::user_row_actions::{DeleteUserDialog, UserRowActions},
-        identity::users::model::users_page_state::{USERS_PAGE_SIZE, UsersPageState},
-        shared::{
-            i18n::{T, use_i18n},
-            rust_ui::ui::{
-                alert::{Alert, AlertDescription},
-                avatar::{Avatar, AvatarFallback},
-                badge::{Badge, BadgeVariant},
-                empty::{
-                    Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyMediaVariant, EmptyTitle,
-                },
-                pagination::{
-                    Pagination, PaginationItem, PaginationLink, PaginationList, PaginationNavButton,
-                },
-                skeleton::Skeleton,
-                spinner::Spinner,
-                table::{
-                    Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableWrapper,
-                },
+    identity::{
+        users::components::user_row_actions::{DeleteUserDialog, UserRowActions},
+        users::model::users_page_state::{USERS_PAGE_SIZE, UsersPageState},
+    },
+    identity_application_contracts::identity::users::UserDto,
+    shared::{
+        i18n::{T, use_i18n},
+        rust_ui::ui::{
+            alert::{Alert, AlertDescription},
+            avatar::{Avatar, AvatarFallback},
+            badge::{Badge, BadgeVariant},
+            empty::{
+                Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyMediaVariant, EmptyTitle,
             },
+            pagination::{
+                Pagination, PaginationItem, PaginationLink, PaginationList, PaginationNavButton,
+            },
+            skeleton::Skeleton,
+            spinner::Spinner,
+            table::{Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableWrapper},
         },
     },
 };

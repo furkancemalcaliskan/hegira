@@ -2,8 +2,8 @@ use icons::Plus;
 use leptos::prelude::*;
 
 use crate::{
-    application_contracts::identity::permissions,
-    web::shared::{
+    identity_application_contracts::identity::permissions,
+    shared::{
         authorization::PermissionGate,
         i18n::{T, use_i18n},
         rust_ui::ui::button::{Button, ButtonVariant},

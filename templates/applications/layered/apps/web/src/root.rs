@@ -61,9 +61,9 @@ pub fn App() -> impl IntoView {
         <Title text="Application"/>
         <BootLoader/>
         <BootLoaderDismiss/>
-        <web::app::providers::AppProviders>
+        <crate::app::providers::AppProviders>
             <crate::routes::WebRoutes/>
-        </web::app::providers::AppProviders>
+        </crate::app::providers::AppProviders>
     }
 }
 

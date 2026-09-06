@@ -1,9 +1,11 @@
+use async_trait::async_trait;
 use chrono::{Duration, Utc};
 use uuid::Uuid;
 
 use crate::{
     identity::{
         authorization::CurrentUserProvider,
+        http_contracts::OAuthServiceContract,
         oauth::signup_writer::{CompleteOAuthSignup, OAuthSignupWriter},
         validation,
     },
@@ -15,7 +17,7 @@ use crate::{
 };
 use identity_application_contracts::identity::auth::{
     CompleteOAuthSignupInput, LoginResultDto, OAuthAuthorizeDto, OAuthCallbackDto,
-    OAuthConnectionDto,
+    OAuthCallbackInput, OAuthConnectionDto,
 };
 use identity_domain::identity::{
     oauth::{OAuthFlow, OAuthRepository, OAuthState, OAuthUnlinkResult, PendingOAuthSignup},
@@ -101,9 +103,9 @@ where
     CurrentUsers: CurrentUserProvider,
     Sessions: SessionRepository,
     TwoFactor: TwoFactorRepository,
-    Tokens: TokenService,
-    Hasher: PasswordHasher,
-    Audit: AuditLogger,
+    Tokens: TokenService<Error = ApplicationError>,
+    Hasher: PasswordHasher<Error = ApplicationError>,
+    Audit: AuditLogger<Error = ApplicationError>,
     ProviderClient: OAuthProviderClient,
 {
     pub fn enabled_providers(&self) -> Vec<String> {
@@ -535,6 +537,76 @@ where
         if let Err(error) = self.audit.record(entry).await {
             tracing::debug!(%error, action, "OAuth audit log write skipped");
         }
+    }
+}
+
+#[async_trait]
+impl<Repository, CurrentUsers, Sessions, TwoFactor, Tokens, Hasher, Audit, ProviderClient>
+    OAuthServiceContract
+    for OAuthAppService<
+        Repository,
+        CurrentUsers,
+        Sessions,
+        TwoFactor,
+        Tokens,
+        Hasher,
+        Audit,
+        ProviderClient,
+    >
+where
+    Repository: OAuthRepository + OAuthSignupWriter,
+    CurrentUsers: CurrentUserProvider,
+    Sessions: SessionRepository,
+    TwoFactor: TwoFactorRepository,
+    Tokens: TokenService<Error = ApplicationError>,
+    Hasher: PasswordHasher<Error = ApplicationError>,
+    Audit: AuditLogger<Error = ApplicationError>,
+    ProviderClient: OAuthProviderClient,
+{
+    fn enabled_providers(&self) -> Vec<String> {
+        OAuthAppService::enabled_providers(self)
+    }
+
+    async fn authorize_url(&self, provider: String) -> ApplicationResult<OAuthAuthorizeDto> {
+        OAuthAppService::authorize_url(self, provider).await
+    }
+
+    async fn link_authorize_url(
+        &self,
+        actor_token: String,
+        provider: String,
+    ) -> ApplicationResult<OAuthAuthorizeDto> {
+        OAuthAppService::link_authorize_url(self, actor_token, provider).await
+    }
+
+    async fn callback(
+        &self,
+        provider: String,
+        input: OAuthCallbackInput,
+    ) -> ApplicationResult<OAuthCallbackDto> {
+        OAuthAppService::callback(self, provider, input.code, input.state).await
+    }
+
+    async fn complete_signup(
+        &self,
+        input: CompleteOAuthSignupInput,
+    ) -> ApplicationResult<LoginResultDto> {
+        OAuthAppService::complete_signup(self, input).await
+    }
+
+    async fn list_connections(
+        &self,
+        actor_token: String,
+    ) -> ApplicationResult<Vec<OAuthConnectionDto>> {
+        OAuthAppService::list_connections(self, actor_token).await
+    }
+
+    async fn unlink_connection(
+        &self,
+        actor_token: String,
+        provider: String,
+    ) -> ApplicationResult<()> {
+        OAuthAppService::unlink_connection(self, actor_token, provider).await
     }
 }
 

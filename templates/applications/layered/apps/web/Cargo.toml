@@ -8,23 +8,23 @@ publish.workspace = true
 
 [dependencies]
 identity_leptos.workspace = true
-web.workspace = true
+leptos_support.workspace = true
+icons.workspace = true
 leptos.workspace = true
 leptos_meta.workspace = true
 leptos_router.workspace = true
-web-sys = { version = "0.3.91", features = ["Document", "DomTokenList", "Element", "Window"] }
+web-sys = { version = "0.3.91", features = ["Document", "DomTokenList", "Element", "Storage", "Window"] }
 
 [features]
-default = ["db-sqlite"]
-db-postgres = ["identity_leptos/db-postgres", "web/db-postgres"]
-db-sqlite = ["identity_leptos/db-sqlite", "web/db-sqlite"]
-hydrate = ["identity_leptos/hydrate", "web/hydrate", "leptos/hydrate"]
+default = ["{{database_feature}}"]
+db-postgres = ["identity_leptos/db-postgres"]
+db-sqlite = ["identity_leptos/db-sqlite"]
+hydrate = ["identity_leptos/hydrate", "leptos_support/hydrate", "leptos/hydrate"]
 ssr = [
     "identity_leptos/ssr",
-    "web/ssr",
+    "leptos_support/ssr",
     "leptos/ssr",
     "leptos_meta/ssr",
     "leptos_router/ssr",
 ]
-wasm-split = ["identity_leptos/wasm-split", "web/wasm-split"]
-
+wasm-split = ["identity_leptos/wasm-split"]

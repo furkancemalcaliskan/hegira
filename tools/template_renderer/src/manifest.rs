@@ -4,7 +4,9 @@ use std::{
     path::{Component, Path, PathBuf},
 };
 
+use application_manifest::FrameworkContract;
 use serde::Deserialize;
+use sha2::{Digest, Sha256};
 
 use crate::{RendererError, Result};
 
@@ -18,6 +20,18 @@ pub struct TemplateManifest {
     pub components: Vec<String>,
     #[serde(default)]
     pub variables: BTreeMap<String, String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ComponentPackageManifest {
+    pub schema: u32,
+    pub id: String,
+    pub version: String,
+    pub framework: FrameworkContract,
+    pub templates: Vec<String>,
+    pub components: Vec<String>,
+    pub content_digest: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -53,15 +67,52 @@ pub struct ManifestCatalog {
     templates_root: PathBuf,
     template: TemplateManifest,
     components: BTreeMap<String, ComponentManifest>,
+    package: Option<ComponentPackageManifest>,
 }
 
 impl ManifestCatalog {
     pub fn load(repository_root: impl AsRef<Path>, template_id: &str) -> Result<Self> {
+        Self::load_internal(repository_root.as_ref(), template_id, true)
+    }
+
+    pub fn calculate_package_digest(
+        repository_root: impl AsRef<Path>,
+        template_id: &str,
+    ) -> Result<String> {
+        let catalog = Self::load_internal(repository_root.as_ref(), template_id, false)?;
+        catalog.calculate_package_content_digest()?.ok_or_else(|| {
+            RendererError::new("templates root does not contain a component package manifest")
+        })
+    }
+
+    fn load_internal(
+        repository_root: &Path,
+        template_id: &str,
+        validate_content_digest: bool,
+    ) -> Result<Self> {
         validate_identifier(template_id, "template")?;
 
-        let repository_root = canonical_directory(repository_root.as_ref(), "repository root")?;
+        let repository_root = canonical_directory(repository_root, "repository root")?;
         let templates_root =
             canonical_directory(&repository_root.join("templates"), "templates root")?;
+        let package_path = templates_root.join("package.toml");
+        let package = if package_path.is_file() {
+            let package: ComponentPackageManifest =
+                read_manifest(&package_path, "component package")?;
+            validate_package(&package, &package_path)?;
+            if !package
+                .templates
+                .iter()
+                .any(|template| template == template_id)
+            {
+                return Err(RendererError::new(format!(
+                    "component package does not contain template {template_id}"
+                )));
+            }
+            Some(package)
+        } else {
+            None
+        };
         let template_path = templates_root
             .join("applications")
             .join(template_id)
@@ -140,13 +191,26 @@ impl ManifestCatalog {
             }
         }
 
+        if let Some(package) = &package {
+            let packaged = package.components.iter().cloned().collect::<BTreeSet<_>>();
+            let discovered = components.keys().cloned().collect::<BTreeSet<_>>();
+            if packaged != discovered {
+                return Err(RendererError::new(format!(
+                    "component package declares {packaged:?}, but contains {discovered:?}"
+                )));
+            }
+        }
+
         let catalog = Self {
             repository_root,
             templates_root,
             template,
             components,
+            package,
         };
-        catalog.resolve_components()?;
+        if validate_content_digest {
+            catalog.validate_package_content()?;
+        }
         Ok(catalog)
     }
 
@@ -160,6 +224,72 @@ impl ManifestCatalog {
 
     pub fn template(&self) -> &TemplateManifest {
         &self.template
+    }
+
+    pub fn package(&self) -> Option<&ComponentPackageManifest> {
+        self.package.as_ref()
+    }
+
+    fn validate_package_content(&self) -> Result<()> {
+        let Some(package) = &self.package else {
+            return Ok(());
+        };
+        let actual = self
+            .calculate_package_content_digest()?
+            .expect("package presence was checked");
+        if actual != package.content_digest {
+            return Err(RendererError::new(format!(
+                "component package content digest mismatch: expected {}, calculated {actual}",
+                package.content_digest
+            )));
+        }
+        Ok(())
+    }
+
+    fn calculate_package_content_digest(&self) -> Result<Option<String>> {
+        if self.package.is_none() {
+            return Ok(None);
+        }
+        let mut entries = BTreeMap::new();
+        let template_path = self
+            .templates_root
+            .join("applications")
+            .join(&self.template.id)
+            .join("template.toml");
+        insert_package_entry(
+            &mut entries,
+            format!("applications/{}/template.toml", self.template.id),
+            fs::read(&template_path).map_err(|error| {
+                RendererError::new(format!(
+                    "failed to read packaged template manifest: {error}"
+                ))
+            })?,
+        )?;
+
+        for component in self.components.values() {
+            insert_package_entry(
+                &mut entries,
+                format!("components/{}.toml", component.id),
+                fs::read(&component.manifest_path).map_err(|error| {
+                    RendererError::new(format!(
+                        "failed to read packaged component manifest: {error}"
+                    ))
+                })?,
+            )?;
+            let source_root = component.source_root(&self.templates_root)?;
+            let mut includes = component.include.clone();
+            includes.sort();
+            for include in includes {
+                collect_package_entries(
+                    component,
+                    &source_root,
+                    &source_root.join(include),
+                    &mut entries,
+                )?;
+            }
+        }
+
+        Ok(Some(content_digest(&entries)))
     }
 
     pub fn resolve_components(&self) -> Result<Vec<&ComponentManifest>> {
@@ -219,6 +349,138 @@ impl ManifestCatalog {
         resolved.push(component);
         Ok(())
     }
+}
+
+fn collect_package_entries(
+    component: &ComponentManifest,
+    source_root: &Path,
+    candidate: &Path,
+    entries: &mut BTreeMap<String, Vec<u8>>,
+) -> Result<()> {
+    let metadata = fs::symlink_metadata(candidate).map_err(|error| {
+        RendererError::new(format!(
+            "failed to inspect packaged component input: {error}"
+        ))
+    })?;
+    if metadata.file_type().is_symlink() {
+        return Err(RendererError::new(
+            "packaged component input may not be a symbolic link",
+        ));
+    }
+    if metadata.is_dir() {
+        let mut children = fs::read_dir(candidate)
+            .map_err(|error| {
+                RendererError::new(format!(
+                    "failed to read packaged component directory: {error}"
+                ))
+            })?
+            .map(|entry| {
+                entry.map(|entry| entry.path()).map_err(|error| {
+                    RendererError::new(format!("failed to read packaged component entry: {error}"))
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        children.sort();
+        for child in children {
+            collect_package_entries(component, source_root, &child, entries)?;
+        }
+        return Ok(());
+    }
+    if !metadata.is_file() {
+        return Err(RendererError::new(
+            "packaged component input is not a regular file or directory",
+        ));
+    }
+    let relative = candidate
+        .strip_prefix(source_root)
+        .map_err(|_| RendererError::new("packaged component input escapes its source root"))?;
+    let relative = relative
+        .components()
+        .map(|component| match component {
+            Component::Normal(value) => Ok(value.to_string_lossy()),
+            _ => Err(RendererError::new(
+                "packaged component input contains an invalid path component",
+            )),
+        })
+        .collect::<Result<Vec<_>>>()?
+        .join("/");
+    let package_path = format!("sources/{}/{relative}", component.id);
+    let bytes = fs::read(candidate).map_err(|error| {
+        RendererError::new(format!("failed to read packaged component input: {error}"))
+    })?;
+    insert_package_entry(entries, package_path, bytes)
+}
+
+fn insert_package_entry(
+    entries: &mut BTreeMap<String, Vec<u8>>,
+    path: String,
+    bytes: Vec<u8>,
+) -> Result<()> {
+    if entries.insert(path.clone(), bytes).is_some() {
+        return Err(RendererError::new(format!(
+            "duplicate component package entry: {}",
+            path
+        )));
+    }
+    Ok(())
+}
+
+fn content_digest(entries: &BTreeMap<String, Vec<u8>>) -> String {
+    let mut hasher = Sha256::new();
+    for (path, bytes) in entries {
+        hasher.update((path.len() as u64).to_be_bytes());
+        hasher.update(path.as_bytes());
+        hasher.update((bytes.len() as u64).to_be_bytes());
+        hasher.update(bytes);
+    }
+    format!("sha256:{:x}", hasher.finalize())
+}
+
+fn validate_package(package: &ComponentPackageManifest, path: &Path) -> Result<()> {
+    validate_schema(package.schema, path)?;
+    validate_identifier(&package.id, "component package")?;
+    package.framework.validate().map_err(|error| {
+        RendererError::new(format!("invalid component package framework: {error}"))
+    })?;
+    if package.version != package.framework.version {
+        return Err(RendererError::new(format!(
+            "component package version {} does not match framework version {}",
+            package.version, package.framework.version
+        )));
+    }
+    validate_sorted_identifiers(&package.templates, "package template")?;
+    validate_sorted_identifiers(&package.components, "package component")?;
+    let digest = package
+        .content_digest
+        .strip_prefix("sha256:")
+        .unwrap_or_default();
+    if digest.len() != 64
+        || !digest
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+    {
+        return Err(RendererError::new(
+            "component package content digest must be lowercase sha256",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_sorted_identifiers(values: &[String], kind: &str) -> Result<()> {
+    if values.is_empty() {
+        return Err(RendererError::new(format!(
+            "component package declares no {kind}s"
+        )));
+    }
+    for value in values {
+        validate_identifier(value, kind)?;
+    }
+    if values.windows(2).any(|pair| pair[0] >= pair[1]) {
+        return Err(RendererError::new(format!(
+            "component package {kind}s must be sorted and unique"
+        )));
+    }
+    Ok(())
 }
 
 impl ComponentManifest {

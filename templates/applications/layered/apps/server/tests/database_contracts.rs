@@ -1,6 +1,5 @@
 use std::borrow::Cow;
 
-use persistence::migrations::MigrationPlan;
 use sqlx::migrate::Migrator;
 
 #[cfg(feature = "db-sqlite")]
@@ -23,18 +22,10 @@ fn migrations_through(migrator: &Migrator, version: i64) -> Migrator {
     }
 }
 
-fn migration_plan(backend: &infrastructure::config::DatabaseBackend) -> MigrationPlan {
-    MigrationPlan::new(
-        infrastructure::db::application_migration_sources(backend)
-            .expect("the selected provider must contribute application migrations"),
-    )
-    .expect("the generated application migration plan must remain valid")
-}
-
 #[cfg(feature = "db-sqlite")]
 async fn sqlite_pool() -> sqlx::SqlitePool {
-    infrastructure::db::connect_sqlite(&infrastructure::config::DatabaseConfig {
-        backend: infrastructure::config::DatabaseBackend::Sqlite,
+    persistence::connect_sqlite(&app_infrastructure::config::DatabaseConfig {
+        backend: app_infrastructure::config::DatabaseBackend::Sqlite,
         url: "sqlite::memory:".to_string(),
         max_connections: 1,
         auto_migrate: false,
@@ -47,10 +38,13 @@ async fn sqlite_pool() -> sqlx::SqlitePool {
 #[tokio::test]
 async fn sqlite_fresh_install_applies_the_generated_application_plan() {
     let pool = sqlite_pool().await;
-    migration_plan(&infrastructure::config::DatabaseBackend::Sqlite)
-        .run(&infrastructure::db::DatabasePool::Sqlite(pool.clone()))
-        .await
-        .expect("fresh SQLite migrations should succeed");
+    app_infrastructure::operations::migration_plan(
+        &app_infrastructure::config::DatabaseBackend::Sqlite,
+    )
+    .expect("the generated application migration plan must remain valid")
+    .run(&persistence::DatabasePool::Sqlite(pool.clone()))
+    .await
+    .expect("fresh SQLite migrations should succeed");
 
     let tables: Vec<String> = sqlx::query_scalar(
         "SELECT name FROM sqlite_master
@@ -67,7 +61,10 @@ async fn sqlite_fresh_install_applies_the_generated_application_plan() {
 #[tokio::test]
 async fn sqlite_v020_upgrade_retires_catalog_state_and_preserves_history() {
     let pool = sqlite_pool().await;
-    let plan = migration_plan(&infrastructure::config::DatabaseBackend::Sqlite);
+    let plan = app_infrastructure::operations::migration_plan(
+        &app_infrastructure::config::DatabaseBackend::Sqlite,
+    )
+    .expect("the generated application migration plan must remain valid");
     let migrator = plan.migrator();
     migrations_through(migrator, SQLITE_V020_LAST_MIGRATION)
         .run(&pool)
@@ -173,38 +170,40 @@ async fn assert_v020_sqlite_upgrade(pool: &sqlx::SqlitePool) {
 }
 
 #[cfg(feature = "db-postgres")]
-fn disposable_postgres_url() -> String {
-    assert_eq!(
-        std::env::var("ALLOW_GENERATED_APP_DB_RESET").as_deref(),
-        Ok("true"),
-        "PostgreSQL generated-application tests require ALLOW_GENERATED_APP_DB_RESET=true",
-    );
-    std::env::var("GENERATED_APP_DATABASE_URL").expect(
-        "GENERATED_APP_DATABASE_URL must identify the disposable generated-application database",
+fn disposable_postgres() -> (
+    String,
+    app_infrastructure::operations::DisposableDatabaseReset,
+) {
+    let authorization = app_infrastructure::operations::DisposableDatabaseReset::from_environment(
+        "ALLOW_GENERATED_APP_DB_RESET",
     )
-}
-
-#[cfg(feature = "db-postgres")]
-async fn reset_postgres(pool: &sqlx::PgPool) {
-    sqlx::raw_sql("DROP SCHEMA public CASCADE; CREATE SCHEMA public;")
-        .execute(pool)
-        .await
-        .expect("the explicitly disposable PostgreSQL schema should reset");
+    .expect("PostgreSQL generated-application tests require explicit reset authorization");
+    let database_url = std::env::var("GENERATED_APP_DATABASE_URL").expect(
+        "GENERATED_APP_DATABASE_URL must identify the disposable generated-application database",
+    );
+    (database_url, authorization)
 }
 
 #[cfg(feature = "db-postgres")]
 #[tokio::test]
 #[ignore = "requires an explicitly disposable generated-application PostgreSQL database"]
 async fn postgres_fresh_install_and_v020_upgrade_pass() {
+    let (database_url, reset_authorization) = disposable_postgres();
     let pool = sqlx::postgres::PgPoolOptions::new()
         .max_connections(1)
-        .connect(&disposable_postgres_url())
+        .connect(&database_url)
         .await
         .expect("the disposable PostgreSQL database should connect");
-    let plan = migration_plan(&infrastructure::config::DatabaseBackend::Postgres);
+    let database = persistence::DatabasePool::Postgres(pool.clone());
+    let plan = app_infrastructure::operations::migration_plan(
+        &app_infrastructure::config::DatabaseBackend::Postgres,
+    )
+    .expect("the generated application migration plan must remain valid");
     let migrator = plan.migrator();
 
-    reset_postgres(&pool).await;
+    app_infrastructure::operations::reset_database(&database, &reset_authorization)
+        .await
+        .expect("the explicitly disposable PostgreSQL schema should reset");
     migrator
         .run(&pool)
         .await
@@ -220,7 +219,9 @@ async fn postgres_fresh_install_and_v020_upgrade_pass() {
     .expect("fresh PostgreSQL tables should be queryable");
     assert_eq!(tables, ["app_settings", "sessions", "users"]);
 
-    reset_postgres(&pool).await;
+    app_infrastructure::operations::reset_database(&database, &reset_authorization)
+        .await
+        .expect("the explicitly disposable PostgreSQL schema should reset");
     migrations_through(migrator, POSTGRES_V020_LAST_MIGRATION)
         .run(&pool)
         .await

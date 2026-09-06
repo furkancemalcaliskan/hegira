@@ -27,35 +27,55 @@ commands change. Never describe planned work as implemented.
 
 - The repository root is a virtual Cargo workspace and the documented command
   entry point.
-- `apps/hegira/` contains the deployable Axum/Leptos package, server
-  composition, binary and hydration entry points, package metadata, and
-  integration tests.
-- `crates/` contains application-independent platform core, configuration,
-  persistence, background-work, and runtime packages alongside the current
-  layered domain, application, infrastructure, presentation, web, and
-  database-migrator packages.
+- `crates/` contains the application-manifest contract and
+  application-independent platform core, audit, cache, mail,
+  search, security, settings, storage, configuration, persistence,
+  background-work, HTTP, Leptos, observability, test-support, and runtime
+  packages. These packages are application-independent framework source.
 - `modules/identity/` contains the canonical Identity Domain Shared, Domain,
   Application Contracts, Application, SQLx, Axum HTTP, and Leptos adapter
   packages.
   The HTTP adapter contributes Identity routes, OpenAPI, Bearer extraction,
   secure session-cookie handling, and explicit cookie/Bearer security policies
   to the host. The Leptos adapter owns Identity pages, server functions, and
-  explicit route and navigation contributions. Current compatibility packages
-  compile the applicable canonical sources without depending on a module
-  package.
+  explicit route and navigation contributions. Historical application-owned
+  retirement migrations retain their original identities and checksums in the
+  canonical application template outside the Identity SQLx migration source.
 - `templates/applications/layered/` contains the workspace-external,
   layered full-stack application base. Its brand-neutral server composition
-  explicitly selects the Identity HTTP adapter, while `apps/web` owns the
-  default Leptos shell and explicitly selects the Identity Leptos adapter. It
+  depends on application-owned layers, framework primitives, and official
+  Identity Application, SQLx, HTTP, and Leptos adapters without using legacy
+  framework-layer packages. `apps/web` owns the default Leptos shell,
+  application navigation and localization, and explicitly selects the Identity
+  Leptos adapter directly. It
   consumes framework packages through a pinned release source; repository
   validation rewrites those dependencies only in a disposable staging copy.
-- `templates/components/` contains typed component manifests for the canonical
-  application template.
-- `tools/template_renderer/` contains the internal deterministic and atomic
-  template renderer used by repository validation. It is not the public Hegira
-  CLI.
-- `config/` contains environment profiles.
-- `scripts/` contains local validation, smoke, operations, and release helpers.
+  Its Infrastructure operation surface owns startup migration and Identity
+  seed composition plus explicitly authorized disposable-database reset for
+  validation; it does not use compatibility migration helpers or `db_migrator`.
+  Each render owns a validated `hegira.toml` containing only application
+  identity, framework source/version, selected components, and database/client
+  adapters. Runtime configuration and secrets do not belong in that manifest.
+- `templates/package.toml` identifies the versioned canonical, data-only
+  component package, its compatible framework release source, contained
+  templates/components, and locked source digest. `templates/components/`
+  contains that package's typed component manifests. Package-controlled
+  framework source variables cannot be overridden by a normal render.
+- `tools/template_renderer/` contains the reusable deterministic and atomic
+  render core plus an explicitly separate repository-validation adapter. The
+  normal render contract preserves pinned release sources; only disposable
+  maintainer checks may select the adapter that rewrites them. It is not the
+  public Hegira CLI.
+- `tools/hegira_cli/` contains the source-runnable `hegira` command shell,
+  deterministic interactive and non-interactive layered application creation,
+  stable process outcomes, and user-facing diagnostic contract.
+  Generation validates project identity and destination before rendering and
+  requires a new destination under an existing parent without symlinks. Safe
+  atomic publication fails closed on unsupported platforms.
+- `scripts/` contains local validation and release helpers.
+  The generated-application gate uses public CLI output for both database
+  profiles, verifies it before staging local dependencies in a separate copy,
+  and exercises native, hydration, upgrade, and production-container contracts.
 - `.github/workflows/` contains validation and release automation.
 
 Do not create future-facing directories, manifests, modules, tools, clients, or
@@ -64,19 +84,23 @@ implementation.
 
 ## Setup And Run
 
-Install the current development prerequisites:
+Create the current canonical application with the source-runnable CLI, then
+install its development prerequisites:
 
 ```sh
+cargo run --locked -p hegira_cli -- new my-application \
+  --destination ../my-application
+cd ../my-application
 rustup target add wasm32-unknown-unknown
 cargo install cargo-leptos
-npm ci --prefix crates/web/src
+npm ci --prefix apps/web/src
 ```
 
 Start the current SQLite profile:
 
 ```sh
-APP_ENV=sqlite cargo run -p db_migrator --no-default-features --features ssr,db-sqlite -- migrate
-APP_ENV=sqlite cargo leptos watch -p hegira --bin-features ssr,db-sqlite --lib-features hydrate
+APP_ENV=sqlite cargo leptos watch -p app_server \
+  --bin-features ssr,db-sqlite --lib-features hydrate
 ```
 
 The application listens on `http://127.0.0.1:3000`. See
@@ -147,6 +171,12 @@ sh scripts/framework-check.sh
 sh scripts/official-modules-check.sh
 ```
 
+Focused source-runnable CLI validation:
+
+```sh
+sh scripts/cli-check.sh
+```
+
 Focused workspace dependency-boundary validation:
 
 ```sh
@@ -171,26 +201,14 @@ Focused release identity and source-first workflow validation:
 sh scripts/release-policy.sh
 ```
 
-Production container validation:
-
-```sh
-sh scripts/container-smoke.sh
-```
-
-Full-stack release-output validation:
-
-```sh
-sh scripts/full-stack-build-check.sh
-```
-
 Basic focused commands include:
 
 ```sh
 cargo fmt --all -- --check
-cargo check -p hegira --features ssr
-cargo check -p hegira --no-default-features --features hydrate --target wasm32-unknown-unknown
-cargo test -p hegira --features ssr --lib
-cargo leptos build -p hegira --release --bin-features ssr,db-postgres --lib-features hydrate
+cargo check --workspace --all-targets
+cargo test --workspace
+cargo run --locked -p template_renderer -- render \
+  --repository-root . --template layered --output /tmp/hegira-layered
 ```
 
 PostgreSQL tests marked `ignored` reset their target database. Run them only

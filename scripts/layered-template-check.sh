@@ -17,8 +17,11 @@ if cargo metadata --locked --no-deps --format-version 1 |
   exit 1
 fi
 
+cargo fmt --all -- --check
+sh "$repo_root/scripts/dx-audit.sh"
 cargo test --locked -p template_renderer
-cargo run --locked --quiet -p template_renderer -- render \
+cargo run --locked --quiet -p template_renderer \
+  --example repository_validation_renderer -- render \
   --repository-root "$repo_root" \
   --template layered \
   --output "$staging_root" \
@@ -37,6 +40,8 @@ fi
   export PATH
   CARGO_TARGET_DIR="$repo_root/target/layered-template-check" \
     cargo check --workspace --all-targets --all-features
+  node "$repo_root/scripts/architecture-boundaries.mjs" \
+    check-generated --root "$staging_root"
   CARGO_TARGET_DIR="$repo_root/target/layered-template-check" \
     cargo check -p app_server --no-default-features --features hydrate \
       --target wasm32-unknown-unknown

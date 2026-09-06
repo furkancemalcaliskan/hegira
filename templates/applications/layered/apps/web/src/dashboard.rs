@@ -1,6 +1,6 @@
 use leptos::prelude::*;
 
-use web::{
+use crate::{
     app::{
         layout::WorkspaceRouteLayout,
         page::{PageHeaderKey, PageSection},

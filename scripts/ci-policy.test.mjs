@@ -15,6 +15,10 @@ on:
       - develop
       - main
 
+concurrency:
+  group: repository-validation-\${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -29,19 +33,22 @@ jobs:
           - name: wasm-hydrate
           - name: observability
           - name: distributed-providers
+    steps:
+      - run: sh scripts/generated-feature-check.sh
   framework:
+    steps:
+      - run: sh scripts/framework-check.sh
+  official-modules:
     services:
       postgres:
         env:
           POSTGRES_HOST_AUTH_METHOD: trust
     steps:
-      - run: sh scripts/framework-check.sh
-  official-modules:
-    steps:
       - run: sh scripts/official-modules-check.sh
-  templates:
+  tooling:
     steps:
       - run: sh scripts/layered-template-check.sh
+      - run: sh scripts/cli-check.sh
   generated-application:
     steps:
       - run: sh scripts/generated-application-check.sh
@@ -50,7 +57,7 @@ jobs:
     needs:
       - framework
       - official-modules
-      - templates
+      - tooling
       - generated-application
   supply-chain:
     steps:
@@ -97,9 +104,49 @@ test("rejects pull_request_target execution", () => {
   assert.ok(errors.some((error) => error.includes("pull_request_target")));
 });
 
-test("rejects a missing template gate", () => {
+test("rejects a missing tooling gate", () => {
   const errors = validateRepositoryValidationWorkflow(
     validWorkflow.replace("sh scripts/layered-template-check.sh", "true"),
   );
-  assert.ok(errors.some((error) => error.includes("template validation")));
+  assert.ok(errors.some((error) => error.includes("tooling validation")));
+});
+
+test("rejects a missing CLI gate", () => {
+  const errors = validateRepositoryValidationWorkflow(
+    validWorkflow.replace("sh scripts/cli-check.sh", "true"),
+  );
+  assert.ok(errors.some((error) => error.includes("CLI validation")));
+});
+
+test("rejects compatibility-host feature validation", () => {
+  const errors = validateRepositoryValidationWorkflow(
+    validWorkflow.replace(
+      "sh scripts/generated-feature-check.sh",
+      "cargo check --package hegira",
+    ),
+  );
+  assert.ok(
+    errors.some((error) => error.includes("compatibility host")),
+  );
+});
+
+test("rejects unrestricted feature-branch pushes", () => {
+  const errors = validateRepositoryValidationWorkflow(
+    validWorkflow.replace(
+      "  push:\n    branches:\n      - develop\n      - main",
+      "  push:",
+    ),
+  );
+  assert.ok(
+    errors.some((error) => error.includes("restricted to develop and main")),
+  );
+});
+
+test("rejects disabled concurrency cancellation", () => {
+  const errors = validateRepositoryValidationWorkflow(
+    validWorkflow.replace("cancel-in-progress: true", "cancel-in-progress: false"),
+  );
+  assert.ok(
+    errors.some((error) => error.includes("cancel superseded")),
+  );
 });

@@ -4,6 +4,91 @@ All notable changes are documented here. Releases follow Semantic Versioning.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-06
+
+### Security
+
+- Updated `event-listener` to 5.4.2 and raised the S3 SDK minimum to 1.144.0
+  to resolve `lru` through its patched 0.18 series. Explicit dependency bans
+  reject the versions affected by RUSTSEC-2026-0221 and RUSTSEC-2026-0253
+  without adding advisory exceptions or disabling optional S3 support.
+
+### Added
+
+- Added release validation through public CLI-generated SQLite and PostgreSQL
+  applications, verified disposable dependency staging, native and hydration
+  builds, historical database upgrades, and production HTTP/asset contracts.
+  Scoped the SQLite worker-readiness test to its provider so PostgreSQL-only
+  generated test targets compile without enabling SQLite.
+- Added CLI regression coverage for both provider output snapshots, guided/flag
+  parity, prompt cancellation, isolated process state, invalid selections, and
+  renderer failure recovery with a real child-process write limit on Linux.
+- Added the source-runnable `hegira` CLI foundation with top-level and `new`
+  help, version reporting, separated output and diagnostics, and stable process
+  outcomes for usage, validation, conflict, and internal failures.
+- Added deterministic non-interactive `hegira new` application creation with
+  SQLite, Leptos, and Identity defaults, explicit supported selections,
+  release-source dependencies, and side-effect-free next-step guidance.
+- Added guided `hegira new` prompts for missing application inputs and
+  implemented selections, including a final summary, confirmation, safe
+  cancellation, deterministic prompt tests, and non-TTY safeguards.
+- Added a release-aligned canonical component-package contract with explicit
+  framework compatibility, a declared data-only component graph, and a
+  deterministic SHA-256 source digest.
+
+### Changed
+
+- Removed legacy-layer dependencies from the official Identity packages and
+  moved reusable ports, providers, persistence, background work, telemetry, and
+  runtime support to application-independent framework packages.
+- Made canonical application server/web composition and migration, seed, and
+  explicitly authorized disposable-reset operations application-owned, with
+  enforced framework/module/application dependency boundaries.
+- Aligned all 26 framework workspace packages and the canonical component
+  package with v0.4.0; generated framework dependencies now pin that release.
+- Identified Hegira consistently as a production-oriented, opinionated full-stack
+  application framework in current project documentation and tooling metadata.
+  Template terminology remains specific to generation sources and rendering
+  contracts; this is a terminology correction, not a runtime feature.
+- Clarified source-runnable CLI setup, guided and non-interactive creation,
+  supported selections, manifest semantics, and generated-application ownership
+  in the current documentation, including source-only distribution limitations.
+- Enforced shared project-identity validation, portable destination names,
+  existing real parents, and explicit no-overwrite behavior. Renderer publication
+  now uses private directory-relative staging and exclusive atomic rename with
+  race checks; unsupported platforms fail closed before writing.
+
+- Separated the reusable template rendering request, plan, publication, result,
+  and typed diagnostic contracts from the repository-only local dependency
+  rewrite adapter.
+- Added the versioned and validated `hegira.toml` generated-application
+  identity contract with deterministic serialization and explicit framework,
+  component, database-adapter, and client-adapter selections.
+- Retired the repository compatibility host and legacy layered compatibility
+  packages after generated-application validation became the authoritative
+  framework integration consumer.
+- Reduced the root Cargo workspace to application-independent framework
+  packages, official modules, and internal repository tooling.
+- Moved repository setup, architecture, deployment, and operations guidance to
+  the canonical rendered-application ownership model.
+
+### Removed
+
+- Removed compatibility-host configuration, container, smoke, packaging,
+  backup, restore, and frontend-size helpers that no longer had a runnable root
+  application target.
+
+### Upgrade And Maintainer Notes
+
+- Consumers of the retired compatibility host/layers must migrate their source
+  and composition explicitly; there are no compatibility aliases or automatic
+  application upgrades. Generated applications retain their own source ownership.
+- Fresh SQLite/PostgreSQL schemas and the supported v0.2.0 database history
+  remain validation contracts; historical migration identities are preserved.
+- Distribution remains source-only, with no crates.io publication, executable
+  bundles, container images, or previews. See the
+  [v0.4.0 release notes](docs/releases/v0.4.0.md) for limitations and guidance.
+
 ## [0.3.0] - 2026-08-01
 
 ### Added

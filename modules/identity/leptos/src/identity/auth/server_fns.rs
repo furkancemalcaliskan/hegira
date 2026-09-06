@@ -3,8 +3,8 @@ use leptos::prelude::*;
 #[server]
 pub async fn register(username: String, password: String) -> Result<(), ServerFnError> {
     use crate::{
-        application_contracts::identity::auth::inputs::RegisterInput,
-        presentation::composition::server_fns::{auth_service, server_fn_error},
+        identity::server::{auth_service, server_fn_error},
+        identity_application_contracts::identity::auth::inputs::RegisterInput,
     };
     auth_service()
         .register(RegisterInput { username, password })
@@ -16,10 +16,10 @@ pub async fn register(username: String, password: String) -> Result<(), ServerFn
 pub async fn login(
     username: String,
     password: String,
-) -> Result<application_contracts::identity::auth::CurrentUserDto, ServerFnError> {
+) -> Result<identity_application_contracts::identity::auth::CurrentUserDto, ServerFnError> {
     use crate::{
-        application_contracts::identity::auth::inputs::LoginInput,
-        presentation::composition::server_fns::{auth_service, server_fn_error},
+        identity::server::{auth_service, server_fn_error},
+        identity_application_contracts::identity::auth::inputs::LoginInput,
     };
     let service = auth_service();
     let token = service
@@ -27,23 +27,23 @@ pub async fn login(
         .await
         .and_then(|result| {
             result.token.ok_or_else(|| {
-                application::shared::errors::ApplicationError::coded(
-                    application::shared::errors::ApplicationErrorKind::Unauthorized,
+                identity_application::shared::errors::ApplicationError::coded(
+                    identity_application::shared::errors::ApplicationErrorKind::Unauthorized,
                     "totp:required",
                     "TOTP verification required",
                 )
             })
         })
         .map_err(server_fn_error)?;
-    presentation::composition::web_session::set(&token)?;
+    crate::identity::server::session::set(&token)?;
     service.current_user(token).await.map_err(server_fn_error)
 }
 
 #[server]
 pub async fn current_user()
--> Result<application_contracts::identity::auth::CurrentUserDto, ServerFnError> {
-    use presentation::composition::server_fns::{auth_service, server_fn_error};
-    let token = presentation::composition::web_session::require_token().await?;
+-> Result<identity_application_contracts::identity::auth::CurrentUserDto, ServerFnError> {
+    use crate::identity::server::{auth_service, server_fn_error};
+    let token = crate::identity::server::session::require_token().await?;
     auth_service()
         .current_user(token)
         .await
@@ -52,27 +52,27 @@ pub async fn current_user()
 
 #[server]
 pub async fn logout() -> Result<(), ServerFnError> {
-    use presentation::composition::server_fns::{auth_service, server_fn_error};
-    let token = presentation::composition::web_session::require_token().await?;
+    use crate::identity::server::{auth_service, server_fn_error};
+    let token = crate::identity::server::session::require_token().await?;
     let result = auth_service().logout(token).await.map_err(server_fn_error);
-    presentation::composition::web_session::clear()?;
+    crate::identity::server::session::clear()?;
     result
 }
 
 #[server]
 pub async fn renew_session() -> Result<(), ServerFnError> {
-    use presentation::composition::server_fns::{auth_service, server_fn_error};
-    let token = presentation::composition::web_session::require_token().await?;
+    use crate::identity::server::{auth_service, server_fn_error};
+    let token = crate::identity::server::session::require_token().await?;
     let token = auth_service()
         .renew_session(token)
         .await
         .map_err(server_fn_error)?;
-    presentation::composition::web_session::set(&token)
+    crate::identity::server::session::set(&token)
 }
 
 #[server]
 pub async fn verify_email(token: String) -> Result<(), ServerFnError> {
-    use presentation::composition::server_fns::{auth_service, server_fn_error};
+    use crate::identity::server::{auth_service, server_fn_error};
     auth_service()
         .verify_email(token)
         .await
@@ -82,8 +82,8 @@ pub async fn verify_email(token: String) -> Result<(), ServerFnError> {
 #[server]
 pub async fn forgot_password(username: String) -> Result<(), ServerFnError> {
     use crate::{
-        application_contracts::identity::auth::inputs::ForgotPasswordInput,
-        presentation::composition::server_fns::{auth_service, server_fn_error},
+        identity::server::{auth_service, server_fn_error},
+        identity_application_contracts::identity::auth::inputs::ForgotPasswordInput,
     };
     auth_service()
         .forgot_password(ForgotPasswordInput { username })
@@ -94,8 +94,8 @@ pub async fn forgot_password(username: String) -> Result<(), ServerFnError> {
 #[server]
 pub async fn reset_password(token: String, password: String) -> Result<(), ServerFnError> {
     use crate::{
-        application_contracts::identity::auth::inputs::ResetPasswordInput,
-        presentation::composition::server_fns::{auth_service, server_fn_error},
+        identity::server::{auth_service, server_fn_error},
+        identity_application_contracts::identity::auth::inputs::ResetPasswordInput,
     };
     auth_service()
         .reset_password(ResetPasswordInput { token, password })
@@ -109,10 +109,10 @@ pub async fn change_password(
     new_password: String,
 ) -> Result<(), ServerFnError> {
     use crate::{
-        application_contracts::identity::auth::ChangePasswordInput,
-        presentation::composition::server_fns::{auth_service, server_fn_error},
+        identity::server::{auth_service, server_fn_error},
+        identity_application_contracts::identity::auth::ChangePasswordInput,
     };
-    let token = presentation::composition::web_session::require_token().await?;
+    let token = crate::identity::server::session::require_token().await?;
     auth_service()
         .change_password(
             token,
@@ -131,10 +131,10 @@ pub async fn request_email_change(
     password: String,
 ) -> Result<(), ServerFnError> {
     use crate::{
-        application_contracts::identity::auth::ChangeEmailInput,
-        presentation::composition::server_fns::{auth_service, server_fn_error},
+        identity::server::{auth_service, server_fn_error},
+        identity_application_contracts::identity::auth::ChangeEmailInput,
     };
-    let token = presentation::composition::web_session::require_token().await?;
+    let token = crate::identity::server::session::require_token().await?;
     auth_service()
         .request_email_change(
             token,
@@ -149,7 +149,7 @@ pub async fn request_email_change(
 
 #[server]
 pub async fn confirm_email_change(token: String) -> Result<(), ServerFnError> {
-    use presentation::composition::server_fns::{auth_service, server_fn_error};
+    use crate::identity::server::{auth_service, server_fn_error};
     auth_service()
         .confirm_email_change(token)
         .await
@@ -158,8 +158,8 @@ pub async fn confirm_email_change(token: String) -> Result<(), ServerFnError> {
 
 #[server]
 pub async fn resend_verification() -> Result<(), ServerFnError> {
-    use presentation::composition::server_fns::{auth_service, server_fn_error};
-    let token = presentation::composition::web_session::require_token().await?;
+    use crate::identity::server::{auth_service, server_fn_error};
+    let token = crate::identity::server::session::require_token().await?;
     auth_service()
         .resend_verification(token)
         .await
@@ -169,22 +169,22 @@ pub async fn resend_verification() -> Result<(), ServerFnError> {
 #[server]
 pub async fn delete_account(password: String) -> Result<(), ServerFnError> {
     use crate::{
-        application_contracts::identity::auth::DeleteAccountInput,
-        presentation::composition::server_fns::{auth_service, server_fn_error},
+        identity::server::{auth_service, server_fn_error},
+        identity_application_contracts::identity::auth::DeleteAccountInput,
     };
-    let token = presentation::composition::web_session::require_token().await?;
+    let token = crate::identity::server::session::require_token().await?;
     auth_service()
         .delete_account(token, DeleteAccountInput { password })
         .await
         .map_err(server_fn_error)?;
-    presentation::composition::web_session::clear()
+    crate::identity::server::session::clear()
 }
 
 #[server]
 pub async fn sessions()
--> Result<Vec<application_contracts::identity::auth::SessionDto>, ServerFnError> {
-    use presentation::composition::server_fns::{auth_service, server_fn_error};
-    let token = presentation::composition::web_session::require_token().await?;
+-> Result<Vec<identity_application_contracts::identity::auth::SessionDto>, ServerFnError> {
+    use crate::identity::server::{auth_service, server_fn_error};
+    let token = crate::identity::server::session::require_token().await?;
     auth_service()
         .list_sessions(token)
         .await
@@ -193,8 +193,8 @@ pub async fn sessions()
 
 #[server]
 pub async fn revoke_session(session_id: uuid::Uuid) -> Result<(), ServerFnError> {
-    use presentation::composition::server_fns::{auth_service, server_fn_error};
-    let token = presentation::composition::web_session::require_token().await?;
+    use crate::identity::server::{auth_service, server_fn_error};
+    let token = crate::identity::server::session::require_token().await?;
     auth_service()
         .revoke_session(token, session_id)
         .await
@@ -204,12 +204,12 @@ pub async fn revoke_session(session_id: uuid::Uuid) -> Result<(), ServerFnError>
 #[server]
 pub async fn regenerate_totp_backup_codes(
     code: String,
-) -> Result<application_contracts::identity::auth::TotpEnableDto, ServerFnError> {
+) -> Result<identity_application_contracts::identity::auth::TotpEnableDto, ServerFnError> {
     use crate::{
-        application_contracts::identity::auth::TotpCodeInput,
-        presentation::composition::server_fns::{auth_service, server_fn_error},
+        identity::server::{auth_service, server_fn_error},
+        identity_application_contracts::identity::auth::TotpCodeInput,
     };
-    let token = presentation::composition::web_session::require_token().await?;
+    let token = crate::identity::server::session::require_token().await?;
     auth_service()
         .regenerate_totp_backup_codes(token, TotpCodeInput { code })
         .await
@@ -219,8 +219,8 @@ pub async fn regenerate_totp_backup_codes(
 #[server]
 pub async fn request_magic_link(username: String) -> Result<(), ServerFnError> {
     use crate::{
-        application_contracts::identity::auth::inputs::MagicLinkInput,
-        presentation::composition::server_fns::{auth_service, server_fn_error},
+        identity::server::{auth_service, server_fn_error},
+        identity_application_contracts::identity::auth::inputs::MagicLinkInput,
     };
     auth_service()
         .request_magic_link(MagicLinkInput { username })
@@ -230,43 +230,43 @@ pub async fn request_magic_link(username: String) -> Result<(), ServerFnError> {
 
 #[server]
 pub async fn verify_magic_link(token: String) -> Result<(), ServerFnError> {
-    use presentation::composition::server_fns::{auth_service, server_fn_error};
+    use crate::identity::server::{auth_service, server_fn_error};
     let session = auth_service()
         .verify_magic_link(token)
         .await
         .map_err(server_fn_error)?;
-    presentation::composition::web_session::set(&session)
+    crate::identity::server::session::set(&session)
 }
 
 #[server]
 pub async fn verify_totp_login(
     totp_token: String,
     code: String,
-) -> Result<application_contracts::identity::auth::CurrentUserDto, ServerFnError> {
+) -> Result<identity_application_contracts::identity::auth::CurrentUserDto, ServerFnError> {
     use crate::{
-        application_contracts::identity::auth::VerifyTotpLoginInput,
-        presentation::composition::server_fns::{auth_service, server_fn_error},
+        identity::server::{auth_service, server_fn_error},
+        identity_application_contracts::identity::auth::VerifyTotpLoginInput,
     };
     let service = auth_service();
     let token = service
         .verify_totp_login(VerifyTotpLoginInput { totp_token, code })
         .await
         .map_err(server_fn_error)?;
-    presentation::composition::web_session::set(&token)?;
+    crate::identity::server::session::set(&token)?;
     service.current_user(token).await.map_err(server_fn_error)
 }
 
 #[server]
 pub async fn oauth_providers() -> Result<Vec<String>, ServerFnError> {
-    use presentation::composition::server_fns::oauth_service;
+    use crate::identity::server::oauth_service;
     Ok(oauth_service().enabled_providers())
 }
 
 #[server]
 pub async fn oauth_authorize(provider: String, link: bool) -> Result<String, ServerFnError> {
-    use presentation::composition::server_fns::{oauth_service, server_fn_error};
+    use crate::identity::server::{oauth_service, server_fn_error};
     let result = if link {
-        let token = presentation::composition::web_session::require_token().await?;
+        let token = crate::identity::server::session::require_token().await?;
         oauth_service().link_authorize_url(token, provider).await
     } else {
         oauth_service().authorize_url(provider).await
@@ -281,16 +281,17 @@ pub async fn oauth_callback(
     provider: String,
     code: String,
     state: String,
-) -> Result<application_contracts::identity::auth::OAuthCallbackDto, ServerFnError> {
-    use presentation::composition::server_fns::{oauth_service, server_fn_error};
+) -> Result<identity_application_contracts::identity::auth::OAuthCallbackDto, ServerFnError> {
+    use crate::identity::server::{oauth_service, server_fn_error};
+    use crate::identity_application_contracts::identity::auth::OAuthCallbackInput;
     let mut result = oauth_service()
-        .callback(provider, code, state)
+        .callback(provider, OAuthCallbackInput { code, state })
         .await
         .map_err(server_fn_error)?;
     if let Some(login) = result.login.as_mut()
         && let Some(token) = login.token.take()
     {
-        presentation::composition::web_session::set(&token)?;
+        crate::identity::server::session::set(&token)?;
     }
     Ok(result)
 }
@@ -299,10 +300,10 @@ pub async fn oauth_callback(
 pub async fn complete_oauth_signup(
     signup_token: String,
     username: String,
-) -> Result<application_contracts::identity::auth::CurrentUserDto, ServerFnError> {
+) -> Result<identity_application_contracts::identity::auth::CurrentUserDto, ServerFnError> {
     use crate::{
-        application_contracts::identity::auth::CompleteOAuthSignupInput,
-        presentation::composition::server_fns::{auth_service, oauth_service, server_fn_error},
+        identity::server::{auth_service, oauth_service, server_fn_error},
+        identity_application_contracts::identity::auth::CompleteOAuthSignupInput,
     };
     let login = oauth_service()
         .complete_signup(CompleteOAuthSignupInput {
@@ -314,7 +315,7 @@ pub async fn complete_oauth_signup(
     let token = login
         .token
         .ok_or_else(|| ServerFnError::new("authentication challenge required"))?;
-    presentation::composition::web_session::set(&token)?;
+    crate::identity::server::session::set(&token)?;
     auth_service()
         .current_user(token)
         .await
@@ -323,9 +324,9 @@ pub async fn complete_oauth_signup(
 
 #[server]
 pub async fn oauth_connections()
--> Result<Vec<application_contracts::identity::auth::OAuthConnectionDto>, ServerFnError> {
-    use presentation::composition::server_fns::{oauth_service, server_fn_error};
-    let token = presentation::composition::web_session::require_token().await?;
+-> Result<Vec<identity_application_contracts::identity::auth::OAuthConnectionDto>, ServerFnError> {
+    use crate::identity::server::{oauth_service, server_fn_error};
+    let token = crate::identity::server::session::require_token().await?;
     oauth_service()
         .list_connections(token)
         .await
@@ -334,8 +335,8 @@ pub async fn oauth_connections()
 
 #[server]
 pub async fn unlink_oauth_connection(provider: String) -> Result<(), ServerFnError> {
-    use presentation::composition::server_fns::{oauth_service, server_fn_error};
-    let token = presentation::composition::web_session::require_token().await?;
+    use crate::identity::server::{oauth_service, server_fn_error};
+    let token = crate::identity::server::session::require_token().await?;
     oauth_service()
         .unlink_connection(token, provider)
         .await

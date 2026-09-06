@@ -71,7 +71,7 @@ mod tests {
 
     #[tokio::test]
     async fn sqlite_cleanup_removes_only_expired_identity_artifacts() {
-        let pool = db::connect_sqlite_with_application_migrations(&DatabaseConfig {
+        let pool = db::connect_sqlite_test_database(&DatabaseConfig {
             backend: DatabaseBackend::Sqlite,
             url: "sqlite::memory:".to_string(),
             max_connections: 1,

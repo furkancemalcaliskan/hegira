@@ -5,150 +5,220 @@ import process from "node:process";
 import { pathToFileURL } from "node:url";
 
 export const WORKSPACE_DEPENDENCY_POLICY = Object.freeze({
-  hegira: [
-    "application",
-    "application_contracts",
-    "background_jobs",
-    "configuration",
-    "domain",
-    "domain_shared",
-    "http_support",
-    "identity_http",
-    "identity_leptos",
-    "infrastructure",
-    "observability",
-    "persistence",
-    "platform_core",
-    "presentation",
-    "runtime",
-    "test_support",
-    "web",
-  ],
+  application_manifest: [],
   platform_core: [],
+  audit: [],
+  cache: [],
+  mail: ["background_jobs"],
+  search: ["background_jobs"],
+  security: [],
+  settings: [],
+  storage: [],
   configuration: [],
   persistence: [],
   background_jobs: [],
   http_support: [],
   leptos_support: [],
   observability: ["background_jobs"],
-  test_support: ["application"],
-  domain_shared: [],
-  domain: ["domain_shared"],
-  application_contracts: ["domain", "domain_shared"],
-  application: [
-    "application_contracts",
+  test_support: [
+    "audit",
     "background_jobs",
-    "domain",
-    "domain_shared",
-  ],
-  infrastructure: [
-    "application",
-    "application_contracts",
-    "background_jobs",
-    "configuration",
-    "domain",
-    "domain_shared",
-    "persistence",
-    "platform_core",
-    "runtime",
-  ],
-  presentation: [
-    "application",
-    "application_contracts",
-    "domain_shared",
-    "infrastructure",
-    "leptos_support",
-    "observability",
-  ],
-  web: [
-    "application",
-    "application_contracts",
-    "domain_shared",
-    "leptos_support",
-    "presentation",
+    "cache",
+    "mail",
+    "settings",
+    "storage",
   ],
   runtime: [],
-  db_migrator: ["infrastructure", "persistence"],
   identity_domain_shared: [],
   identity_domain: ["identity_domain_shared"],
   identity_application_contracts: [
-    "domain_shared",
     "identity_domain",
     "identity_domain_shared",
   ],
   identity_application: [
-    "domain_shared",
+    "audit",
+    "cache",
     "identity_application_contracts",
     "identity_domain",
     "identity_domain_shared",
+    "mail",
+    "search",
+    "security",
   ],
   identity_sqlx: [
+    "background_jobs",
     "identity_application",
     "identity_application_contracts",
     "identity_domain",
     "identity_domain_shared",
     "persistence",
+    "search",
   ],
   identity_http: [
-    "application",
-    "application_contracts",
-    "domain_shared",
     "http_support",
+    "identity_application",
+    "identity_application_contracts",
     "leptos_support",
-    "presentation",
   ],
   identity_leptos: [
-    "application",
-    "application_contracts",
-    "domain_shared",
+    "identity_application",
+    "identity_application_contracts",
+    "identity_domain_shared",
     "leptos_support",
-    "presentation",
-    "web",
   ],
-  template_renderer: [],
+  hegira_cli: ["template_renderer"],
+  template_renderer: ["application_manifest"],
+});
+
+const packageContract = (role, disposition, issues = []) =>
+  Object.freeze({ role, disposition, issues: Object.freeze(issues) });
+
+export const WORKSPACE_PACKAGE_POLICY = Object.freeze({
+  application_manifest: packageContract("framework", "retain"),
+  platform_core: packageContract("framework", "retain"),
+  audit: packageContract("framework", "retain"),
+  cache: packageContract("framework", "retain"),
+  mail: packageContract("framework", "retain"),
+  search: packageContract("framework", "retain"),
+  security: packageContract("framework", "retain"),
+  settings: packageContract("framework", "retain"),
+  storage: packageContract("framework", "retain"),
+  configuration: packageContract("framework", "retain"),
+  persistence: packageContract("framework", "retain"),
+  background_jobs: packageContract("framework", "retain"),
+  http_support: packageContract("framework", "retain"),
+  leptos_support: packageContract("framework", "retain"),
+  observability: packageContract("framework", "retain"),
+  test_support: packageContract("framework", "retain"),
+  runtime: packageContract("framework", "retain"),
+  identity_domain_shared: packageContract("module", "retain"),
+  identity_domain: packageContract("module", "retain"),
+  identity_application_contracts: packageContract("module", "retain"),
+  identity_application: packageContract("module", "retain"),
+  identity_sqlx: packageContract("module", "retain"),
+  identity_http: packageContract("module", "retain"),
+  identity_leptos: packageContract("module", "retain"),
+  hegira_cli: packageContract("tool", "retain"),
+  template_renderer: packageContract("tool", "refactor-and-retain", [148]),
 });
 
 export const REPOSITORY_OWNERSHIP_POLICY = Object.freeze({
-  app: Object.freeze(["app", "framework", "module"]),
   framework: Object.freeze(["framework"]),
   module: Object.freeze(["framework", "module"]),
-  template: Object.freeze(["framework", "module", "template"]),
-  tool: Object.freeze(["framework", "module", "template", "tool"]),
+  application: Object.freeze(["framework", "module", "application"]),
+  compatibility: Object.freeze(["framework", "module", "compatibility"]),
+  tool: Object.freeze(["framework", "module", "tool"]),
 });
 
-const IDENTITY_SQL_PATTERN =
-  /\b(?:select|from|join|insert\s+into|update|delete\s+from|create\s+table|alter\s+table|drop\s+table)\b[^\n]*\b(?:users|sessions|roles|permissions|user_roles|role_permissions|oauth_states|user_oauth_connections|oauth_pending_signups)\b/i;
+export const TRANSITIONAL_COMPATIBILITY_EDGES = Object.freeze({});
 
-export function validateIdentitySqlOwnership(files) {
-  return files
-    .filter(
-      ({ location, content }) =>
-        location.startsWith("crates/") && IDENTITY_SQL_PATTERN.test(content),
-    )
-    .map(
-      ({ location }) =>
-        `Identity SQL must be module-owned under modules/identity/sqlx: ${location}`,
-    );
-}
+export const RETIRED_COMPATIBILITY_PACKAGES = Object.freeze([
+  "hegira",
+  "domain_shared",
+  "domain",
+  "application_contracts",
+  "application",
+  "infrastructure",
+  "presentation",
+  "web",
+  "db_migrator",
+]);
 
-function repositorySourceFiles(root) {
-  const files = [];
-  const visit = (directory) => {
-    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
-      const location = path.join(directory, entry.name);
-      if (entry.isDirectory()) {
-        visit(location);
-      } else if (entry.isFile() && /\.(?:rs|sql)$/.test(entry.name)) {
-        files.push({
-          location: path.relative(root, location).split(path.sep).join("/"),
-          content: fs.readFileSync(location, "utf8"),
-        });
-      }
-    }
-  };
+export const GENERATED_APPLICATION_DEPENDENCY_POLICY = Object.freeze({
+  app_domain_shared: [],
+  app_domain: ["app_domain_shared"],
+  app_application_contracts: ["app_domain", "app_domain_shared"],
+  app_application: [
+    "app_application_contracts",
+    "app_domain",
+    "app_domain_shared",
+  ],
+  app_infrastructure: [
+    "app_application",
+    "app_application_contracts",
+    "app_domain",
+    "app_domain_shared",
+    "audit",
+    "background_jobs",
+    "cache",
+    "configuration",
+    "identity_application",
+    "identity_application_contracts",
+    "identity_domain",
+    "identity_domain_shared",
+    "identity_sqlx",
+    "mail",
+    "observability",
+    "persistence",
+    "platform_core",
+    "runtime",
+    "search",
+    "security",
+    "settings",
+  ],
+  app_presentation: [
+    "app_application",
+    "app_application_contracts",
+    "app_domain_shared",
+    "http_support",
+  ],
+  app_web: ["identity_leptos", "leptos_support"],
+  app_server: [
+    "app_infrastructure",
+    "app_presentation",
+    "app_web",
+    "background_jobs",
+    "cache",
+    "configuration",
+    "http_support",
+    "identity_application",
+    "identity_application_contracts",
+    "identity_http",
+    "identity_leptos",
+    "identity_sqlx",
+    "mail",
+    "observability",
+    "persistence",
+    "platform_core",
+    "runtime",
+    "search",
+    "storage",
+  ],
+});
 
-  visit(path.join(root, "crates"));
-  return files;
+const PACKAGE_ROLE_LOCATION_POLICY = Object.freeze({
+  framework: Object.freeze(["framework"]),
+  module: Object.freeze(["module"]),
+  application: Object.freeze(["app"]),
+  compatibility: Object.freeze(["app", "framework"]),
+  tool: Object.freeze(["tool"]),
+});
+
+const PACKAGE_DISPOSITIONS = new Set([
+  "retain",
+  "decouple-and-retain",
+  "canonicalize-and-retain",
+  "refactor-and-retain",
+  "extract-and-retire",
+  "replace-and-retire",
+]);
+
+export const RETIRED_COMPATIBILITY_PATHS = Object.freeze([
+  "apps/hegira",
+  "crates/domain_shared",
+  "crates/domain",
+  "crates/application_contracts",
+  "crates/application",
+  "crates/infrastructure",
+  "crates/presentation",
+  "crates/web",
+  "crates/db_migrator",
+]);
+
+export function validateRetiredCompatibilityPaths(root) {
+  return RETIRED_COMPATIBILITY_PATHS.filter((location) =>
+    fs.existsSync(path.join(root, location, "Cargo.toml")),
+  ).map((location) => `retired compatibility path was reintroduced: ${location}`);
 }
 
 const REPOSITORY_PACKAGE_ROOTS = Object.freeze([
@@ -173,7 +243,7 @@ function packageDirectory(packageMetadata) {
   return path.dirname(path.resolve(packageMetadata.manifest_path));
 }
 
-function packageOwnership(workspaceRoot, packageMetadata) {
+function packageLocationOwnership(workspaceRoot, packageMetadata) {
   const directory = packageDirectory(packageMetadata);
 
   for (const root of REPOSITORY_PACKAGE_ROOTS) {
@@ -221,6 +291,8 @@ function workspaceGraph(metadata) {
 export function validateWorkspaceMetadata(
   metadata,
   policy = WORKSPACE_DEPENDENCY_POLICY,
+  packagePolicy = WORKSPACE_PACKAGE_POLICY,
+  transitionalEdges = TRANSITIONAL_COMPATIBILITY_EDGES,
 ) {
   const errors = [];
   const workspaceRoot = path.resolve(metadata.workspace_root);
@@ -231,11 +303,63 @@ export function validateWorkspaceMetadata(
   const checkedEdges = new Set();
 
   for (const packageMetadata of packages) {
-    const ownership = packageOwnership(workspaceRoot, packageMetadata);
-    if (ownership === undefined) {
+    const locationOwnership = packageLocationOwnership(
+      workspaceRoot,
+      packageMetadata,
+    );
+    if (locationOwnership === undefined) {
       errors.push(
         `workspace package is outside an owned repository location: ${packageMetadata.name} (${packageDirectory(packageMetadata)})`,
       );
+    }
+
+    const contract = packagePolicy[packageMetadata.name];
+    if (contract === undefined) {
+      errors.push(
+        `workspace package has no ownership and disposition contract: ${packageMetadata.name}`,
+      );
+    } else {
+      const allowedLocations = PACKAGE_ROLE_LOCATION_POLICY[contract.role];
+      if (allowedLocations === undefined) {
+        errors.push(
+          `workspace package has an invalid ownership role: ${packageMetadata.name} (${contract.role})`,
+        );
+      } else if (
+        locationOwnership !== undefined &&
+        !allowedLocations.includes(locationOwnership)
+      ) {
+        errors.push(
+          `workspace package role does not match its repository location: ${packageMetadata.name} (${contract.role} packages may not live under ${locationOwnership})`,
+        );
+      }
+
+      if (!PACKAGE_DISPOSITIONS.has(contract.disposition)) {
+        errors.push(
+          `workspace package has an invalid disposition: ${packageMetadata.name} (${contract.disposition})`,
+        );
+      }
+      if (!Array.isArray(contract.issues)) {
+        errors.push(
+          `workspace package has an invalid follow-up issue list: ${packageMetadata.name}`,
+        );
+      } else if (
+        contract.disposition !== "retain" &&
+        (contract.issues.length === 0 ||
+          contract.issues.some(
+            (issue) => !Number.isInteger(issue) || issue <= 0,
+          ))
+      ) {
+        errors.push(
+          `workspace package transition has no accepted issue: ${packageMetadata.name}`,
+        );
+      } else if (
+        contract.disposition === "retain" &&
+        contract.issues.length !== 0
+      ) {
+        errors.push(
+          `retained workspace package must not have transition issues: ${packageMetadata.name}`,
+        );
+      }
     }
 
     if (!Object.hasOwn(policy, packageMetadata.name)) {
@@ -260,6 +384,14 @@ export function validateWorkspaceMetadata(
     if (!packageNames.has(packageName)) {
       errors.push(
         `architecture policy references missing workspace package: ${packageName}`,
+      );
+    }
+  }
+
+  for (const packageName of Object.keys(packagePolicy)) {
+    if (!packageNames.has(packageName)) {
+      errors.push(
+        `ownership and disposition contract references missing workspace package: ${packageName}`,
       );
     }
   }
@@ -290,13 +422,14 @@ export function validateWorkspaceMetadata(
     }
     checkedEdges.add(edgeName);
 
-    const fromOwnership = packageOwnership(workspaceRoot, edge.from);
-    const toOwnership = packageOwnership(workspaceRoot, edge.target);
+    const fromOwnership = packagePolicy[from]?.role;
+    const toOwnership = packagePolicy[to]?.role;
     const allowedOwnerships =
       REPOSITORY_OWNERSHIP_POLICY[fromOwnership] ?? [];
     if (
       toOwnership !== undefined &&
-      !allowedOwnerships.includes(toOwnership)
+      !allowedOwnerships.includes(toOwnership) &&
+      !Object.hasOwn(transitionalEdges, edgeName)
     ) {
       errors.push(
         `invalid repository ownership edge: ${edgeName} (${fromOwnership ?? "unknown"} packages may not depend on ${toOwnership} packages)`,
@@ -309,6 +442,171 @@ export function validateWorkspaceMetadata(
       errors.push(
         `invalid workspace dependency edge: ${edgeName} (not permitted by the documented workspace boundary policy)`,
       );
+    }
+  }
+  for (const [edgeName, issue] of Object.entries(transitionalEdges)) {
+    if (!Number.isInteger(issue) || issue <= 0) {
+      errors.push(
+        `transitional compatibility edge has no accepted issue: ${edgeName}`,
+      );
+    }
+    if (!checkedEdges.has(edgeName)) {
+      errors.push(
+        `transitional compatibility policy references missing workspace edge: ${edgeName}`,
+      );
+    }
+    const [from, to] = edgeName.split(" -> ");
+    const fromRole = packagePolicy[from]?.role;
+    const toRole = packagePolicy[to]?.role;
+    if (
+      !["framework", "module"].includes(fromRole) ||
+      toRole !== "compatibility"
+    ) {
+      errors.push(
+        `transitional compatibility policy may only allow framework or module packages to leave compatibility code: ${edgeName}`,
+      );
+    }
+  }
+
+  return errors;
+}
+
+function isGeneratedApplicationLocation(root, packageMetadata) {
+  const directory = packageDirectory(packageMetadata);
+  return ["apps", "crates"].some((ownedDirectory) =>
+    isInside(path.join(root, ownedDirectory), directory),
+  );
+}
+
+function isHegiraGitSource(source) {
+  return (
+    typeof source === "string" &&
+    /^git\+https:\/\/github\.com\/furkancemalcaliskan\/hegira\.git(?:\?|#|$)/.test(
+      source,
+    )
+  );
+}
+
+export function validateGeneratedApplicationMetadata(
+  metadata,
+  policy = GENERATED_APPLICATION_DEPENDENCY_POLICY,
+  retiredPackages = RETIRED_COMPATIBILITY_PACKAGES,
+) {
+  const errors = [];
+  const workspaceRoot = path.resolve(metadata.workspace_root);
+  const workspaceIds = new Set(metadata.workspace_members ?? []);
+  const validationFrameworkRoot = path.join(
+    workspaceRoot,
+    ".hegira-validation",
+    "framework",
+  );
+  const packages = (metadata.packages ?? []).filter(
+    (packageMetadata) =>
+      workspaceIds.has(packageMetadata.id) &&
+      !isInside(validationFrameworkRoot, packageDirectory(packageMetadata)),
+  );
+  const packageNames = new Set(
+    packages.map((packageMetadata) => packageMetadata.name),
+  );
+  const knownFrameworkAndModulePackages = new Set(
+    Object.entries(WORKSPACE_PACKAGE_POLICY)
+      .filter(([, contract]) => ["framework", "module"].includes(contract.role))
+      .map(([name]) => name),
+  );
+  const retired = new Set(retiredPackages);
+  const checkedEdges = new Set();
+
+  for (const packageMetadata of packages) {
+    const from = packageMetadata.name;
+    if (!isGeneratedApplicationLocation(workspaceRoot, packageMetadata)) {
+      errors.push(
+        `generated-application package is outside apps/ or crates/: ${from} (${packageDirectory(packageMetadata)})`,
+      );
+    }
+    if (!Object.hasOwn(policy, from)) {
+      errors.push(
+        `generated-application package has no dependency policy entry: ${from}`,
+      );
+    }
+
+    for (const dependency of packageMetadata.dependencies ?? []) {
+      const to = dependency.name;
+      const isWorkspacePackage = packageNames.has(to);
+      const isKnownHegiraPackage =
+        knownFrameworkAndModulePackages.has(to) || retired.has(to);
+      const isLocalDependency =
+        dependency.path !== null && dependency.path !== undefined;
+      const isHegiraDependency =
+        isWorkspacePackage ||
+        (isKnownHegiraPackage &&
+          (isLocalDependency || isHegiraGitSource(dependency.source)));
+
+      if (isLocalDependency) {
+        const dependencyDirectory = path.resolve(dependency.path);
+        const insideGeneratedRoot = isInside(workspaceRoot, dependencyDirectory);
+        const isValidationFramework = isInside(
+          validationFrameworkRoot,
+          dependencyDirectory,
+        );
+        if (
+          insideGeneratedRoot &&
+          !isWorkspacePackage &&
+          !isValidationFramework
+        ) {
+          errors.push(
+            `local dependency target is not a generated-application workspace member: ${from} -> ${to}`,
+          );
+        }
+      }
+
+      if (!isHegiraDependency) {
+        continue;
+      }
+
+      const edgeName = `${from} -> ${to}`;
+      if (checkedEdges.has(edgeName)) {
+        continue;
+      }
+      checkedEdges.add(edgeName);
+
+      if (retired.has(to)) {
+        errors.push(
+          `generated application must not depend on retired compatibility package: ${edgeName}`,
+        );
+        continue;
+      }
+
+      if (!(policy[from] ?? []).includes(to)) {
+        errors.push(
+          `invalid generated-application dependency edge: ${edgeName}`,
+        );
+      }
+    }
+  }
+
+  for (const packageName of Object.keys(policy)) {
+    if (!packageNames.has(packageName)) {
+      errors.push(
+        `generated-application policy references missing workspace package: ${packageName}`,
+      );
+    }
+  }
+
+  for (const [from, allowedTargets] of Object.entries(policy)) {
+    for (const target of allowedTargets) {
+      if (
+        !Object.hasOwn(policy, target) &&
+        !knownFrameworkAndModulePackages.has(target)
+      ) {
+        errors.push(
+          `generated-application policy edge references unknown package: ${from} -> ${target}`,
+        );
+      }
+      if (retired.has(target)) {
+        errors.push(
+          `generated-application policy permits retired compatibility package: ${from} -> ${target}`,
+        );
+      }
     }
   }
 
@@ -345,9 +643,13 @@ function readWorkspaceMetadata(root) {
 
 function runCli() {
   const args = process.argv.slice(2);
-  if (args.length !== 3 || args[0] !== "check" || args[1] !== "--root") {
+  if (
+    args.length !== 3 ||
+    !["check", "check-generated"].includes(args[0]) ||
+    args[1] !== "--root"
+  ) {
     console.error(
-      "usage: node scripts/architecture-boundaries.mjs check --root <repository-root>",
+      "usage: node scripts/architecture-boundaries.mjs <check|check-generated> --root <workspace-root>",
     );
     process.exitCode = 2;
     return;
@@ -363,9 +665,25 @@ function runCli() {
     return;
   }
 
+  if (args[0] === "check-generated") {
+    const errors = validateGeneratedApplicationMetadata(metadata);
+    if (errors.length > 0) {
+      for (const error of errors) {
+        console.error(`architecture boundary violation: ${error}`);
+      }
+      process.exitCode = 1;
+      return;
+    }
+
+    console.log(
+      `generated-application dependency boundaries: ok (${Object.keys(GENERATED_APPLICATION_DEPENDENCY_POLICY).length} packages)`,
+    );
+    return;
+  }
+
   const errors = [
     ...validateWorkspaceMetadata(metadata),
-    ...validateIdentitySqlOwnership(repositorySourceFiles(root)),
+    ...validateRetiredCompatibilityPaths(root),
   ];
   if (errors.length > 0) {
     for (const error of errors) {

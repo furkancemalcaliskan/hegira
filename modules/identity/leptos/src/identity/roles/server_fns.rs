@@ -1,11 +1,13 @@
 use leptos::prelude::*;
 
 #[server]
-pub async fn list_permissions_admin()
--> Result<Vec<application_contracts::identity::authorization::PermissionDto>, ServerFnError> {
-    use presentation::composition::server_fns::{permission_service, server_fn_error};
+pub async fn list_permissions_admin() -> Result<
+    Vec<identity_application_contracts::identity::authorization::PermissionDto>,
+    ServerFnError,
+> {
+    use crate::identity::server::{permission_service, server_fn_error};
 
-    let token = presentation::composition::web_session::require_token().await?;
+    let token = crate::identity::server::session::require_token().await?;
     permission_service()
         .list_permissions(token)
         .await
@@ -14,10 +16,10 @@ pub async fn list_permissions_admin()
 
 #[server]
 pub async fn list_all_roles_admin()
--> Result<Vec<application_contracts::identity::authorization::RoleDto>, ServerFnError> {
-    use presentation::composition::server_fns::{permission_service, server_fn_error};
+-> Result<Vec<identity_application_contracts::identity::authorization::RoleDto>, ServerFnError> {
+    use crate::identity::server::{permission_service, server_fn_error};
 
-    let token = presentation::composition::web_session::require_token().await?;
+    let token = crate::identity::server::session::require_token().await?;
     permission_service()
         .list_roles(token)
         .await
@@ -26,11 +28,14 @@ pub async fn list_all_roles_admin()
 
 #[server]
 pub async fn list_roles_admin(
-    input: application_contracts::identity::authorization::ListRolesInput,
-) -> Result<application_contracts::identity::authorization::PagedRoleResultDto, ServerFnError> {
-    use presentation::composition::server_fns::{permission_service, server_fn_error};
+    input: identity_application_contracts::identity::authorization::ListRolesInput,
+) -> Result<
+    identity_application_contracts::identity::authorization::PagedRoleResultDto,
+    ServerFnError,
+> {
+    use crate::identity::server::{permission_service, server_fn_error};
 
-    let token = presentation::composition::web_session::require_token().await?;
+    let token = crate::identity::server::session::require_token().await?;
     permission_service()
         .list_roles_page(token, input)
         .await
@@ -40,10 +45,10 @@ pub async fn list_roles_admin(
 #[server]
 pub async fn get_role_admin(
     role_name: String,
-) -> Result<application_contracts::identity::authorization::RoleDto, ServerFnError> {
-    use presentation::composition::server_fns::{permission_service, server_fn_error};
+) -> Result<identity_application_contracts::identity::authorization::RoleDto, ServerFnError> {
+    use crate::identity::server::{permission_service, server_fn_error};
 
-    let token = presentation::composition::web_session::require_token().await?;
+    let token = crate::identity::server::session::require_token().await?;
     permission_service()
         .get_role(token, role_name)
         .await
@@ -52,11 +57,11 @@ pub async fn get_role_admin(
 
 #[server]
 pub async fn create_role_admin(
-    input: application_contracts::identity::authorization::CreateRoleInput,
+    input: identity_application_contracts::identity::authorization::CreateRoleInput,
 ) -> Result<(), ServerFnError> {
-    use presentation::composition::server_fns::{permission_service, server_fn_error};
+    use crate::identity::server::{permission_service, server_fn_error};
 
-    let token = presentation::composition::web_session::require_token().await?;
+    let token = crate::identity::server::session::require_token().await?;
     permission_service()
         .create_role(token, input)
         .await
@@ -65,11 +70,11 @@ pub async fn create_role_admin(
 
 #[server]
 pub async fn update_role_admin(
-    input: application_contracts::identity::authorization::UpdateRoleInput,
+    input: identity_application_contracts::identity::authorization::UpdateRoleInput,
 ) -> Result<(), ServerFnError> {
-    use presentation::composition::server_fns::{permission_service, server_fn_error};
+    use crate::identity::server::{permission_service, server_fn_error};
 
-    let token = presentation::composition::web_session::require_token().await?;
+    let token = crate::identity::server::session::require_token().await?;
     permission_service()
         .update_role(token, input)
         .await
@@ -78,9 +83,9 @@ pub async fn update_role_admin(
 
 #[server]
 pub async fn delete_role_admin(role_name: String) -> Result<(), ServerFnError> {
-    use presentation::composition::server_fns::{permission_service, server_fn_error};
+    use crate::identity::server::{permission_service, server_fn_error};
 
-    let token = presentation::composition::web_session::require_token().await?;
+    let token = crate::identity::server::session::require_token().await?;
     permission_service()
         .delete_role(token, role_name)
         .await
@@ -89,11 +94,11 @@ pub async fn delete_role_admin(role_name: String) -> Result<(), ServerFnError> {
 
 #[server]
 pub async fn set_role_permissions_admin(
-    input: application_contracts::identity::authorization::SetRolePermissionsInput,
+    input: identity_application_contracts::identity::authorization::SetRolePermissionsInput,
 ) -> Result<(), ServerFnError> {
-    use presentation::composition::server_fns::{permission_service, server_fn_error};
+    use crate::identity::server::{permission_service, server_fn_error};
 
-    let token = presentation::composition::web_session::require_token().await?;
+    let token = crate::identity::server::session::require_token().await?;
     permission_service()
         .set_role_permissions(token, input)
         .await

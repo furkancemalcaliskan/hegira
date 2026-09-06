@@ -1,13 +1,12 @@
 [package]
 name = "identity_application_contracts"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2024"
 license = "Apache-2.0"
 publish = false
 
 [dependencies]
 chrono = { version = "0.4.44", features = ["serde"] }
-domain_shared = { path = "../../../crates/domain_shared" }
 identity_domain = { path = "../domain" }
 identity_domain_shared = { path = "../domain_shared" }
 serde = { version = "1.0.228", features = ["derive"] }

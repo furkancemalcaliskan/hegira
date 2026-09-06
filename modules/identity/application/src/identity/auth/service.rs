@@ -1,5 +1,6 @@
 use crate::{
     identity::{
+        http_contracts::AuthServiceContract,
         users::writer::{ManagedUserWriter, RegisterManagedUser},
         validation,
     },
@@ -10,14 +11,20 @@ use crate::{
         security::{PasswordHasher, TokenService},
     },
 };
+use async_trait::async_trait;
 use chrono::{Duration, Utc};
-use domain_shared::localization::T;
-use identity_application_contracts::identity::auth::{
-    dto::{CurrentUserDto, LoginResultDto, SessionDto, TotpEnableDto, TotpSetupDto, TotpStatusDto},
-    inputs::{
-        ChangeEmailInput, ChangePasswordInput, DeleteAccountInput, ForgotPasswordInput, LoginInput,
-        MagicLinkInput, RegisterInput, ResetPasswordInput, TotpCodeInput, VerifyTotpLoginInput,
+use identity_application_contracts::{
+    identity::auth::{
+        dto::{
+            CurrentUserDto, LoginResultDto, SessionDto, TotpEnableDto, TotpSetupDto, TotpStatusDto,
+        },
+        inputs::{
+            ChangeEmailInput, ChangePasswordInput, DeleteAccountInput, ForgotPasswordInput,
+            LoginInput, MagicLinkInput, RegisterInput, ResetPasswordInput, TotpCodeInput,
+            VerifyTotpLoginInput,
+        },
     },
+    localization::IdentityMessage,
 };
 use identity_domain::identity::{
     authorization::AuthorizationRepository, sessions::SessionRepository,
@@ -59,8 +66,8 @@ where
     Sessions: SessionRepository,
     Permissions: AuthorizationRepository,
     TwoFactor: TwoFactorRepository,
-    Hasher: PasswordHasher,
-    Tokens: TokenService,
+    Hasher: PasswordHasher<Error = ApplicationError>,
+    Tokens: TokenService<Error = ApplicationError>,
     MailerAdapter: Mailer,
 {
     #[allow(clippy::too_many_arguments)]
@@ -117,7 +124,7 @@ where
             .await
             .map_err(|error| match error {
                 ApplicationError::Conflict(_) => {
-                    ApplicationError::localized_conflict(T::UserAlreadyExists)
+                    ApplicationError::localized_conflict(IdentityMessage::UserAlreadyExists)
                 }
                 error => error,
             })?;
@@ -125,7 +132,10 @@ where
         if self.durable_mail {
             Ok(())
         } else {
-            self.mailer.send(mail.render()).await
+            self.mailer
+                .send(mail.render())
+                .await
+                .map_err(provider_error)
         }
     }
 
@@ -164,7 +174,10 @@ where
             self.users
                 .set_email_verification(&current.username, &token, sent_at)
                 .await?;
-            self.mailer.send(mail.render()).await?;
+            self.mailer
+                .send(mail.render())
+                .await
+                .map_err(provider_error)?;
         }
         Ok(())
     }
@@ -177,7 +190,7 @@ where
         let current = self.current_user(actor_token).await?;
         if identity::is_protected_admin_username(&current.username) {
             return Err(ApplicationError::localized_forbidden(
-                T::ProtectedAdminCannotBeDeleted,
+                IdentityMessage::ProtectedAdminCannotBeDeleted,
             ));
         }
         let user = self
@@ -197,7 +210,9 @@ where
             .delete_managed_user(&current.username, self.publish_search)
             .await?
         {
-            return Err(ApplicationError::localized_not_found(T::UserNotFound));
+            return Err(ApplicationError::localized_not_found(
+                IdentityMessage::UserNotFound,
+            ));
         }
         for session in sessions {
             self.sessions
@@ -228,7 +243,10 @@ where
             self.users
                 .set_reset_token(&user.username, &token, sent_at)
                 .await?;
-            self.mailer.send(mail.render()).await
+            self.mailer
+                .send(mail.render())
+                .await
+                .map_err(provider_error)
         }
     }
 
@@ -314,7 +332,10 @@ where
             ));
         }
         if !self.durable_mail {
-            self.mailer.send(mail.render()).await?;
+            self.mailer
+                .send(mail.render())
+                .await
+                .map_err(provider_error)?;
         }
         Ok(())
     }
@@ -354,7 +375,10 @@ where
             self.users
                 .set_magic_link(&user.username, &token, expires_at)
                 .await?;
-            self.mailer.send(mail.render()).await
+            self.mailer
+                .send(mail.render())
+                .await
+                .map_err(provider_error)
         }
     }
 
@@ -429,7 +453,9 @@ where
             .set_setup_secret(&current_user.username, &secret)
             .await?
         {
-            return Err(ApplicationError::localized_not_found(T::UserNotFound));
+            return Err(ApplicationError::localized_not_found(
+                IdentityMessage::UserNotFound,
+            ));
         }
 
         let totp = totp(&secret, &current_user.username, &self.app_name)?;
@@ -477,7 +503,9 @@ where
             .enable(&current_user.username, Utc::now(), backup_hashes)
             .await?
         {
-            return Err(ApplicationError::localized_not_found(T::UserNotFound));
+            return Err(ApplicationError::localized_not_found(
+                IdentityMessage::UserNotFound,
+            ));
         }
 
         Ok(TotpEnableDto { backup_codes })
@@ -503,7 +531,9 @@ where
         }
 
         if !self.two_factor.disable(&current_user.username).await? {
-            return Err(ApplicationError::localized_not_found(T::UserNotFound));
+            return Err(ApplicationError::localized_not_found(
+                IdentityMessage::UserNotFound,
+            ));
         }
 
         Ok(())
@@ -744,6 +774,135 @@ where
     }
 }
 
+#[async_trait]
+impl<Users, Sessions, Permissions, TwoFactor, Hasher, Tokens, MailerAdapter> AuthServiceContract
+    for AuthAppService<Users, Sessions, Permissions, TwoFactor, Hasher, Tokens, MailerAdapter>
+where
+    Users: UserRepository + ManagedUserWriter,
+    Sessions: SessionRepository,
+    Permissions: AuthorizationRepository,
+    TwoFactor: TwoFactorRepository,
+    Hasher: PasswordHasher<Error = ApplicationError>,
+    Tokens: TokenService<Error = ApplicationError>,
+    MailerAdapter: Mailer,
+{
+    async fn register(&self, input: RegisterInput) -> ApplicationResult<()> {
+        AuthAppService::register(self, input).await
+    }
+
+    async fn login(&self, input: LoginInput) -> ApplicationResult<LoginResultDto> {
+        AuthAppService::login(self, input).await
+    }
+
+    async fn current_user(&self, token: String) -> ApplicationResult<CurrentUserDto> {
+        AuthAppService::current_user(self, token).await
+    }
+
+    async fn logout(&self, token: String) -> ApplicationResult<()> {
+        AuthAppService::logout(self, token).await
+    }
+
+    async fn renew_session(&self, token: String) -> ApplicationResult<String> {
+        AuthAppService::renew_session(self, token).await
+    }
+
+    async fn verify_email(&self, token: String) -> ApplicationResult<()> {
+        AuthAppService::verify_email(self, token).await
+    }
+
+    async fn resend_verification(&self, actor_token: String) -> ApplicationResult<()> {
+        AuthAppService::resend_verification(self, actor_token).await
+    }
+
+    async fn delete_account(
+        &self,
+        actor_token: String,
+        input: DeleteAccountInput,
+    ) -> ApplicationResult<()> {
+        AuthAppService::delete_account(self, actor_token, input).await
+    }
+
+    async fn forgot_password(&self, input: ForgotPasswordInput) -> ApplicationResult<()> {
+        AuthAppService::forgot_password(self, input).await
+    }
+
+    async fn reset_password(&self, input: ResetPasswordInput) -> ApplicationResult<()> {
+        AuthAppService::reset_password(self, input).await
+    }
+
+    async fn change_password(
+        &self,
+        actor_token: String,
+        input: ChangePasswordInput,
+    ) -> ApplicationResult<()> {
+        AuthAppService::change_password(self, actor_token, input).await
+    }
+
+    async fn request_email_change(
+        &self,
+        actor_token: String,
+        input: ChangeEmailInput,
+    ) -> ApplicationResult<()> {
+        AuthAppService::request_email_change(self, actor_token, input).await
+    }
+
+    async fn confirm_email_change(&self, token: String) -> ApplicationResult<()> {
+        AuthAppService::confirm_email_change(self, token).await
+    }
+
+    async fn list_sessions(&self, actor_token: String) -> ApplicationResult<Vec<SessionDto>> {
+        AuthAppService::list_sessions(self, actor_token).await
+    }
+
+    async fn revoke_session(&self, actor_token: String, session_id: Uuid) -> ApplicationResult<()> {
+        AuthAppService::revoke_session(self, actor_token, session_id).await
+    }
+
+    async fn request_magic_link(&self, input: MagicLinkInput) -> ApplicationResult<()> {
+        AuthAppService::request_magic_link(self, input).await
+    }
+
+    async fn verify_magic_link(&self, token: String) -> ApplicationResult<String> {
+        AuthAppService::verify_magic_link(self, token).await
+    }
+
+    async fn setup_totp(&self, actor_token: String) -> ApplicationResult<TotpSetupDto> {
+        AuthAppService::setup_totp(self, actor_token).await
+    }
+
+    async fn enable_totp(
+        &self,
+        actor_token: String,
+        input: TotpCodeInput,
+    ) -> ApplicationResult<TotpEnableDto> {
+        AuthAppService::enable_totp(self, actor_token, input).await
+    }
+
+    async fn disable_totp(
+        &self,
+        actor_token: String,
+        input: TotpCodeInput,
+    ) -> ApplicationResult<()> {
+        AuthAppService::disable_totp(self, actor_token, input).await
+    }
+
+    async fn regenerate_totp_backup_codes(
+        &self,
+        actor_token: String,
+        input: TotpCodeInput,
+    ) -> ApplicationResult<TotpEnableDto> {
+        AuthAppService::regenerate_totp_backup_codes(self, actor_token, input).await
+    }
+
+    async fn totp_status(&self, actor_token: String) -> ApplicationResult<TotpStatusDto> {
+        AuthAppService::totp_status(self, actor_token).await
+    }
+
+    async fn verify_totp_login(&self, input: VerifyTotpLoginInput) -> ApplicationResult<String> {
+        AuthAppService::verify_totp_login(self, input).await
+    }
+}
+
 fn welcome_mail(
     username: &str,
     app_name: &str,
@@ -844,6 +1003,10 @@ fn invalid_totp_token() -> ApplicationError {
         "totp:temp_token_invalid",
         "Invalid TOTP token",
     )
+}
+
+fn provider_error(error: impl std::fmt::Display) -> ApplicationError {
+    ApplicationError::Infrastructure(error.to_string())
 }
 
 #[cfg(test)]

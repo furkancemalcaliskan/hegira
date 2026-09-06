@@ -84,7 +84,7 @@ Keep these exact status checks required for both `develop` and `main`:
 - `feature-matrix (distributed-providers)`
 
 The stable `quality` context is an aggregate gate. It reports failure unless
-the `framework`, `official-modules`, `templates`, and `generated-application`
+the `framework`, `official-modules`, `tooling`, and `generated-application`
 jobs all succeed. Generated-application database, release-build, production
 container, and HTTP/security validation is therefore release-blocking without
 requiring a new protected-branch context.
@@ -96,35 +96,47 @@ integration ref.
 
 The repository validation workflow separates these responsibilities:
 
-- `feature-matrix` compiles SQLite, PostgreSQL, WASM hydration, observability,
-  and distributed-provider capability sets;
-- `framework` validates framework crates, host composition, provider contracts,
-  and ignored PostgreSQL integration tests against a disposable service;
-- `official-modules` validates the canonical Identity layers and their host
-  integration against a separate disposable PostgreSQL service;
-- `templates` validates manifests, deterministic rendering, the workspace-
-  external layered application, hydration, and release output;
+- `feature-matrix` independently renders the canonical application and compiles
+  its SQLite, PostgreSQL, WASM hydration, observability, and distributed-provider
+  capability sets as an external framework consumer;
+- `framework` validates only application-independent framework packages under
+  minimal and all-capability contracts;
+- `official-modules` validates the canonical Identity packages directly,
+  including ignored SQLx contracts against a disposable PostgreSQL service;
+- `tooling` validates the DX baseline, source-runnable CLI, rendering tool,
+  component manifests, workspace-external layered application, locked
+  dependency boundaries, hydration, and release output;
 - `generated-application` validates fresh SQLite and PostgreSQL applications,
-  the supported v0.2.0 upgrade, and the rendered production container;
+  the supported v0.2.0 upgrade, locked application dependency boundaries, and
+  the rendered production container;
 - `quality` aggregates the four repository ownership gates under the existing
   required status context;
 - `supply-chain` runs dependency policy and vulnerability checks.
 
-The two PostgreSQL service containers use trust authentication only inside
-their isolated GitHub-hosted runners. They contain disposable test data, expose
-no repository secret, and are destroyed with the runner after validation.
+Disposable PostgreSQL containers use trust authentication only inside isolated
+GitHub-hosted runners. They contain disposable test data, expose no repository
+secret, and are destroyed after validation.
 
-The former standalone full-stack and production-container pull-request
-workflows are removed because the template and generated-application jobs own
-those contracts. Their scripts remain available for focused validation of the
-repository's current compatibility host but are not framework release gates.
+The former compatibility-host full-stack and production-container workflows and
+scripts are retired. The generated-application job is the single integration
+owner for those contracts.
+
+`deny.toml` explicitly rejects the `event-listener` and `lru` version ranges
+affected by RUSTSEC-2026-0221 and RUSTSEC-2026-0253. These informational
+unsoundness advisories must not silently regress to non-failing audit warnings.
+Generated workspaces resolve their own dependency graphs rather than inheriting
+the framework lockfile. When reviewing dependency fixes, check both generated
+database profiles with all features, including optional S3, against the same
+policy using `cargo deny --manifest-path <application>/Cargo.toml --all-features
+check --config <framework>/deny.toml bans advisories` and audit their lockfiles.
+Use disposable repository-validation copies for unreleased framework source.
 
 ## Local Validation
 
-Run the commands in this section from the repository root. The root virtual workspace
-coordinates the compatibility host under `apps/hegira`, framework and compatibility packages
-under `crates/`, official module packages under `modules/`, the workspace-external application
-base under `templates/`, and internal repository tooling under `tools/`.
+Run the commands in this section from the repository root. The virtual workspace coordinates
+framework packages under `crates/`, official module packages under `modules/`, and internal
+repository tooling under `tools/`. The canonical application under `templates/` remains an
+independent workspace and is rendered into disposable directories for integration validation.
 
 Validate repository documentation, agent adapters, and policy fixtures:
 
@@ -141,6 +153,32 @@ sh scripts/architecture-boundaries.sh
 sh scripts/release-policy.sh
 ```
 
+Validate the source-runnable CLI command, diagnostic, and process-outcome
+contracts:
+
+```sh
+sh scripts/cli-check.sh
+```
+
+The CLI process tests use disposable working and home directories and an empty
+command search path rather than the maintainer's global configuration. They
+verify default and explicit application
+selections, independent release-source dependencies, deterministic output,
+destination conflicts, interactive default equivalence, supported-choice
+mapping, cancellation, non-TTY behavior, and the absence of global
+configuration requirements. Prompt tests inject deterministic input and capture
+output without relying on a host terminal.
+
+SQLite and PostgreSQL requests have committed whole-tree fingerprints covering
+file paths and bytes, including binary assets, and are compared with equivalent
+interactive requests. Review generated content before updating these regression
+snapshots in `tools/hegira_cli/tests/command_contract.rs`; they are not security
+digests. Tests also cover unsupported selections and EOF at every prompt.
+On Linux, a child-only file-size limit exercises actual renderer write failure,
+staging cleanup, sentinel preservation, and a successful retry. Catalog failure
+is tested through the CLI dispatcher with a disposable missing source. These
+tests neither build generated applications nor require network access.
+
 Validate the workspace-external canonical layered application base against the
 current framework checkout:
 
@@ -148,11 +186,26 @@ current framework checkout:
 sh scripts/layered-template-check.sh
 ```
 
-The check works on a disposable copy. It preserves pinned release-style
-dependencies in a normal render and does not write maintainer paths into
-template source files. For repository validation, the internal renderer patches
-declared framework dependencies only in the disposable output. The check runs
+The check works on a disposable copy. The reusable render core preserves pinned
+release-style dependencies and does not write maintainer paths into template
+source files. Repository checks explicitly select the separate validation
+adapter, which patches declared framework dependencies only in the disposable
+output. These local-source options are absent from the normal renderer command.
+Before either path plans output, it verifies the canonical package identity,
+framework compatibility, declared component set, and locked source digest.
+After an intentional package-source change, calculate the replacement digest
+with the same library contract used by rendering:
+
+```sh
+cargo run --locked -p template_renderer --example package_digest -- \
+  --repository-root . --template layered
+```
+
+Review the complete package diff before replacing `content_digest` in
+`templates/package.toml`.
+The check runs
 the renderer snapshot and failure-path tests, installs the client package lock,
+validates the rendered workspace's direct application and Hegira dependencies,
 validates native workspace targets and tests, compiles the hydration target,
 and produces the full-stack Cargo Leptos release output.
 
@@ -170,6 +223,11 @@ The destination must not already exist. Component manifests declare their
 requirements, conflicts, source inputs, and repository-validation dependency
 patches. They cannot execute shell commands.
 
+Destination parents must already exist and must not contain symlinks. Publication
+uses the same no-overwrite policy for normal rendering and repository validation.
+Renderer tests inject target creation after the final absence check, parent
+replacement, and partial-write failures to verify conflict handling and cleanup.
+
 Validate a rendered application against both database providers, the supported
 v0.2.0 database upgrade, and the production container contract:
 
@@ -177,16 +235,29 @@ v0.2.0 database upgrade, and the production container contract:
 sh scripts/generated-application-check.sh
 ```
 
-The check renders into a disposable directory, runs SQLite fresh-install and
-upgrade tests in memory, and starts an ephemeral PostgreSQL container for the
+The check invokes the public `hegira new` command for default SQLite and explicit
+PostgreSQL applications. The normal CLI output retains pinned release sources.
+The repository-only adapter verifies every generated file against the requested
+canonical output before publishing a separate validation copy with local framework
+dependencies and an explicit workspace exclusion for that staged framework.
+The CLI outputs are never rewritten. Each provider copy runs native
+workspace checks and tests, WASM hydration checks, and a Cargo-Leptos release build.
+This requires Node/npm, `cargo-leptos`, and the `wasm32-unknown-unknown` target;
+the generated-application CI jobs install these prerequisites explicitly.
+
+The check runs SQLite fresh-install and upgrade tests in memory, and starts an
+ephemeral PostgreSQL container for the
 equivalent PostgreSQL contracts. It then builds the rendered application image,
 boots it against the disposable database, and verifies readiness, hydration
 assets, security headers, and unauthenticated Bearer API behavior. The check
-stages a credential-free framework source view under the disposable render so
+also validates the rendered workspace's locked direct dependency graph and
+rejects retired compatibility packages. It stages a credential-free framework
+source view under the disposable render so
 the same relative Cargo paths work on the host and inside the Docker build. It
 generates runtime-only database and JWT values and removes its containers,
-network, database state, and rendered output on exit. It never targets the
-maintainer's configured database.
+network, database state, validation image, and rendered output on exit. Compose
+project and image names are assigned by the check rather than inherited from
+the caller. It never targets the maintainer's configured database.
 
 To reproduce pull request metadata validation with a saved GitHub
 `pull_request` event:
@@ -201,20 +272,15 @@ Run the backend gate without ignored PostgreSQL tests:
 sh scripts/backend-check.sh
 ```
 
-This aggregate runs the framework/host, official-module, and canonical layered-template
-checks. Run an ownership gate directly while iterating when the change is confined to that
-surface:
+This aggregate runs the framework, official-module, canonical layered
+application, and source-runnable CLI tooling checks. Run an ownership gate
+directly while iterating when the change is confined to that surface:
 
 ```sh
 sh scripts/framework-check.sh
 sh scripts/official-modules-check.sh
 sh scripts/layered-template-check.sh
-```
-
-Verify the full-stack release outputs without creating a release archive:
-
-```sh
-sh scripts/full-stack-build-check.sh
+sh scripts/cli-check.sh
 ```
 
 To include the framework and official-module gates' ignored PostgreSQL tests locally, provide
@@ -227,18 +293,13 @@ WITH_IGNORED_DB_TESTS=true \
 sh scripts/backend-check.sh
 ```
 
-Validate the production container contract with Docker:
-
-```sh
-sh scripts/container-smoke.sh
-```
-
 Never point the ignored database tests at persistent or production data.
 
 ## Release Contract
 
-Hegira is distributed as source. A release consists of an immutable signed
-stable SemVer tag, a GitHub Release, versioned release notes, GitHub-provided
+Hegira is an application framework distributed as source, including its official
+modules, application templates, and source-runnable tooling. A release consists
+of an immutable signed stable SemVer tag, a GitHub Release, versioned release notes, GitHub-provided
 source archives, and a source-scoped SPDX JSON SBOM. It does not contain a
 platform executable, application bundle, published crate or CLI package,
 official container image, or deployment.
@@ -252,11 +313,10 @@ The `release` workflow supports manual release-candidate validation from
   package;
 - generate and verify an SPDX JSON SBOM from a clean checkout before build
   outputs exist;
-- validate framework packages and the compatibility host, including their
-  database-backed contracts against disposable PostgreSQL;
-- validate official Identity module packages and integration against a
-  separate disposable PostgreSQL database;
-- validate typed template rendering, the independent layered workspace,
+- validate application-independent framework packages directly;
+- validate official Identity module packages, including SQLx contracts against
+  a disposable PostgreSQL database;
+- validate typed rendering tooling, the independent layered workspace,
   hydration, and release output;
 - validate fresh SQLite and PostgreSQL generated applications, supported
   v0.2.0 upgrades, and the rendered production container and HTTP contract.
@@ -304,6 +364,21 @@ and never updates an existing one.
 Versioned release notes are historical records. The v0.1.x notes continue to
 describe the platform bundle artifacts actually published for those versions;
 the source-first contract applies beginning with v0.2.0.
+
+## Public Project Description
+
+Use this description for the GitHub About field:
+
+```text
+A production-oriented, opinionated full-stack application framework built with Axum, Leptos, SQLx, and an ABP-inspired layered architecture.
+```
+
+Current release language identifies Hegira as the framework and reserves
+application/component template terminology for generation sources and rendering
+contracts. Published release notes retain the terminology of their release.
+This terminology does not imply crates.io publication, standalone CLI bundles,
+or additional clients. GitHub About is an external repository setting and must
+be updated by an authorized maintainer; editing this document does not change it.
 
 ## No Preview Deployment
 

@@ -6,14 +6,8 @@ requires = ["layered-base"]
 
 [[framework_dependencies]]
 manifest = "Cargo.toml"
-name = "application"
-path = "crates/application"
-default_features = false
-
-[[framework_dependencies]]
-manifest = "Cargo.toml"
-name = "application_contracts"
-path = "crates/application_contracts"
+name = "audit"
+path = "crates/audit"
 
 [[framework_dependencies]]
 manifest = "Cargo.toml"
@@ -22,23 +16,39 @@ path = "crates/background_jobs"
 
 [[framework_dependencies]]
 manifest = "Cargo.toml"
+name = "cache"
+path = "crates/cache"
+
+[[framework_dependencies]]
+manifest = "Cargo.toml"
 name = "configuration"
 path = "crates/configuration"
 
 [[framework_dependencies]]
 manifest = "Cargo.toml"
-name = "domain"
-path = "crates/domain"
-
-[[framework_dependencies]]
-manifest = "Cargo.toml"
-name = "domain_shared"
-path = "crates/domain_shared"
-
-[[framework_dependencies]]
-manifest = "Cargo.toml"
 name = "http_support"
 path = "crates/http_support"
+
+[[framework_dependencies]]
+manifest = "Cargo.toml"
+name = "identity_application"
+path = "modules/identity/application"
+default_features = false
+
+[[framework_dependencies]]
+manifest = "Cargo.toml"
+name = "identity_application_contracts"
+path = "modules/identity/application_contracts"
+
+[[framework_dependencies]]
+manifest = "Cargo.toml"
+name = "identity_domain"
+path = "modules/identity/domain"
+
+[[framework_dependencies]]
+manifest = "Cargo.toml"
+name = "identity_domain_shared"
+path = "modules/identity/domain_shared"
 
 [[framework_dependencies]]
 manifest = "Cargo.toml"
@@ -54,8 +64,8 @@ default_features = false
 
 [[framework_dependencies]]
 manifest = "Cargo.toml"
-name = "infrastructure"
-path = "crates/infrastructure"
+name = "identity_sqlx"
+path = "modules/identity/sqlx"
 default_features = false
 
 [[framework_dependencies]]
@@ -63,6 +73,11 @@ manifest = "Cargo.toml"
 name = "leptos_support"
 path = "crates/leptos_support"
 default_features = false
+
+[[framework_dependencies]]
+manifest = "Cargo.toml"
+name = "mail"
+path = "crates/mail"
 
 [[framework_dependencies]]
 manifest = "Cargo.toml"
@@ -82,17 +97,27 @@ path = "crates/platform_core"
 
 [[framework_dependencies]]
 manifest = "Cargo.toml"
-name = "presentation"
-path = "crates/presentation"
-default_features = false
-
-[[framework_dependencies]]
-manifest = "Cargo.toml"
 name = "runtime"
 path = "crates/runtime"
 
 [[framework_dependencies]]
 manifest = "Cargo.toml"
-name = "web"
-path = "crates/web"
+name = "search"
+path = "crates/search"
+default_features = false
+
+[[framework_dependencies]]
+manifest = "Cargo.toml"
+name = "security"
+path = "crates/security"
+
+[[framework_dependencies]]
+manifest = "Cargo.toml"
+name = "settings"
+path = "crates/settings"
+
+[[framework_dependencies]]
+manifest = "Cargo.toml"
+name = "storage"
+path = "crates/storage"
 default_features = false

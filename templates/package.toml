@@ -1,0 +1,10 @@
+schema = 1
+id = "hegira-canonical"
+version = "v0.4.0"
+templates = ["layered"]
+components = ["layered-base", "layered-leptos-identity"]
+content_digest = "sha256:5ae6247a4aa169b74af14ed87400545180067fa635c25d8c69c7937f037eef1f"
+
+[framework]
+repository = "https://github.com/furkancemalcaliskan/hegira.git"
+version = "v0.4.0"

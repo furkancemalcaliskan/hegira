@@ -78,32 +78,14 @@ jobs:
     needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    services:
-      postgres:
-        image: postgres:17-alpine
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_DB: hegira_test
-          POSTGRES_HOST_AUTH_METHOD: trust
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres -d hegira_test"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-    env:
-      DATABASE_URL: postgres://postgres@localhost:5432/hegira_test
-      APP_ENV: test
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.96.1
         with:
-          targets: wasm32-unknown-unknown
-          components: rustfmt, clippy
+          components: clippy
       - uses: Swatinem/rust-cache@v2
-      - name: Validate framework crates and compatibility host
-        run: WITH_IGNORED_DB_TESTS=true sh scripts/framework-check.sh
+      - name: Validate application-independent framework packages
+        run: sh scripts/framework-check.sh
 
   official-modules:
     needs: validate
@@ -132,10 +114,10 @@ jobs:
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
-      - name: Validate official modules and compatibility integration
+      - name: Validate official module contracts
         run: WITH_IGNORED_DB_TESTS=true sh scripts/official-modules-check.sh
 
-  templates:
+  tooling:
     needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -154,8 +136,10 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: templates/applications/layered/apps/web/src/package-lock.json
-      - name: Validate template manifests and rendering
+      - name: Validate rendering tooling and canonical application source
         run: sh scripts/layered-template-check.sh
+      - name: Validate Hegira CLI command contracts
+        run: sh scripts/cli-check.sh
 
   generated-application:
     needs: validate
@@ -164,7 +148,17 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.96.1
+        with:
+          targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-leptos@0.3.7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: templates/applications/layered/apps/web/src/package-lock.json
       - name: Validate generated applications and production container
         run: sh scripts/generated-application-check.sh
 
@@ -174,7 +168,7 @@ jobs:
       - validate
       - framework
       - official-modules
-      - templates
+      - tooling
       - generated-application
     runs-on: ubuntu-latest
     permissions:

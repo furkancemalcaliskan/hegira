@@ -1,6 +1,7 @@
 use crate::{
     identity::{
         authorization::{AuthorizationService, CurrentUser, CurrentUserProvider},
+        http_contracts::PermissionServiceContract,
         permissions::cache as permission_cache,
         validation,
     },
@@ -12,7 +13,7 @@ use crate::{
         errors::{ApplicationError, ApplicationResult},
     },
 };
-use domain_shared::localization::{Locale, T, translate};
+use async_trait::async_trait;
 use identity_application_contracts::{
     identity::{
         authorization::{
@@ -21,6 +22,7 @@ use identity_application_contracts::{
         },
         permissions as identity_permissions,
     },
+    localization::IdentityMessage,
     permissions::{self, PermissionName},
 };
 use identity_domain::identity::authorization::AuthorizationRepository;
@@ -49,7 +51,7 @@ where
     CurrentUsers: CurrentUserProvider,
     Authorization: AuthorizationService,
     CacheAdapter: Cache,
-    Audit: AuditLogger,
+    Audit: AuditLogger<Error = ApplicationError>,
 {
     pub fn new(
         repository: Repository,
@@ -76,7 +78,7 @@ where
         Ok(permissions::all()
             .map(|definition| PermissionDto {
                 name: definition.name.0.to_string(),
-                display_name: translate(Locale::En, definition.display_name).to_string(),
+                display_name: definition.display_name.default_text().to_string(),
             })
             .collect())
     }
@@ -125,7 +127,7 @@ where
             .repository
             .find_role(&role_name)
             .await?
-            .ok_or_else(|| ApplicationError::localized_not_found(T::RoleNotFound))?;
+            .ok_or_else(|| ApplicationError::localized_not_found(IdentityMessage::RoleNotFound))?;
 
         self.role_dto(role).await
     }
@@ -164,7 +166,7 @@ where
 
         if is_protected_admin_role(&input.name) {
             return Err(ApplicationError::localized_forbidden(
-                T::ProtectedAdminRoleCannotBeDeleted,
+                IdentityMessage::ProtectedAdminRoleCannotBeDeleted,
             ));
         }
 
@@ -173,7 +175,9 @@ where
             .update_role(&input.name, &input.new_name)
             .await?
         {
-            return Err(ApplicationError::localized_not_found(T::RoleNotFound));
+            return Err(ApplicationError::localized_not_found(
+                IdentityMessage::RoleNotFound,
+            ));
         }
 
         self.invalidate_authorization_cache().await;
@@ -198,12 +202,14 @@ where
 
         if is_protected_admin_role(&role_name) {
             return Err(ApplicationError::localized_forbidden(
-                T::ProtectedAdminRoleCannotBeDeleted,
+                IdentityMessage::ProtectedAdminRoleCannotBeDeleted,
             ));
         }
 
         if !self.repository.delete_role(&role_name).await? {
-            return Err(ApplicationError::localized_not_found(T::RoleNotFound));
+            return Err(ApplicationError::localized_not_found(
+                IdentityMessage::RoleNotFound,
+            ));
         }
 
         self.invalidate_authorization_cache().await;
@@ -350,11 +356,80 @@ where
     }
 }
 
+#[async_trait]
+impl<Repository, CurrentUsers, Authorization, CacheAdapter, Audit> PermissionServiceContract
+    for PermissionAppService<Repository, CurrentUsers, Authorization, CacheAdapter, Audit>
+where
+    Repository: AuthorizationRepository + AuditedRoleWriter,
+    CurrentUsers: CurrentUserProvider,
+    Authorization: AuthorizationService,
+    CacheAdapter: Cache,
+    Audit: AuditLogger<Error = ApplicationError>,
+{
+    async fn list_permissions(&self, actor_token: String) -> ApplicationResult<Vec<PermissionDto>> {
+        PermissionAppService::list_permissions(self, actor_token).await
+    }
+
+    async fn list_roles(&self, actor_token: String) -> ApplicationResult<Vec<RoleDto>> {
+        PermissionAppService::list_roles(self, actor_token).await
+    }
+
+    async fn list_roles_page(
+        &self,
+        actor_token: String,
+        input: ListRolesInput,
+    ) -> ApplicationResult<PagedRoleResultDto> {
+        PermissionAppService::list_roles_page(self, actor_token, input).await
+    }
+
+    async fn get_role(&self, actor_token: String, role_name: String) -> ApplicationResult<RoleDto> {
+        PermissionAppService::get_role(self, actor_token, role_name).await
+    }
+
+    async fn create_role(
+        &self,
+        actor_token: String,
+        input: CreateRoleInput,
+    ) -> ApplicationResult<()> {
+        PermissionAppService::create_role(self, actor_token, input).await
+    }
+
+    async fn update_role(
+        &self,
+        actor_token: String,
+        input: UpdateRoleInput,
+    ) -> ApplicationResult<()> {
+        PermissionAppService::update_role(self, actor_token, input).await
+    }
+
+    async fn delete_role(&self, actor_token: String, role_name: String) -> ApplicationResult<()> {
+        PermissionAppService::delete_role(self, actor_token, role_name).await
+    }
+
+    async fn set_role_permissions(
+        &self,
+        actor_token: String,
+        input: SetRolePermissionsInput,
+    ) -> ApplicationResult<()> {
+        PermissionAppService::set_role_permissions(self, actor_token, input).await
+    }
+
+    async fn assign_user_role(
+        &self,
+        actor_token: String,
+        input: AssignUserRoleInput,
+    ) -> ApplicationResult<()> {
+        PermissionAppService::assign_user_role(self, actor_token, input).await
+    }
+}
+
 fn validate_role_name(role_name: &str) -> ApplicationResult<()> {
     let role_name = role_name.trim();
 
     if role_name.is_empty() {
-        return Err(ApplicationError::localized_validation(T::RoleNameRequired));
+        return Err(ApplicationError::localized_validation(
+            IdentityMessage::RoleNameRequired,
+        ));
     }
 
     Ok(())

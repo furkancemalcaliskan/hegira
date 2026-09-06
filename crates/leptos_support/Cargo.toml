@@ -1,18 +1,33 @@
 [package]
 name = "leptos_support"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2024"
 license = "Apache-2.0"
 publish = false
 
 [dependencies]
+axum = { version = "0.8.9", optional = true }
+cookie = { version = "0.18.1", optional = true }
+icons = { version = "0.18.3", features = ["leptos"] }
 leptos = { version = "0.8.19" }
+leptos_axum = { version = "0.8.9", optional = true }
+leptos_router = { version = "0.8.13" }
+leptos_ui = "0.3.22"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
+strum = { version = "0.28.0", features = ["derive"] }
 tracing = "0.1.44"
+tw_merge = { version = "0.1.21", features = ["variant"] }
 validator = "0.20.0"
+web-sys = { version = "0.3.91", features = ["Event", "HtmlElement", "Storage", "Window"] }
 
 [features]
 default = []
 hydrate = ["leptos/hydrate"]
-ssr = ["leptos/ssr"]
+ssr = [
+    "dep:axum",
+    "dep:cookie",
+    "dep:leptos_axum",
+    "leptos/ssr",
+    "leptos_router/ssr",
+]

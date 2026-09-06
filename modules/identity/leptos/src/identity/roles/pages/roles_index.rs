@@ -2,25 +2,23 @@ use leptos::prelude::*;
 use leptos::task::spawn_local;
 
 use crate::{
-    application_contracts::identity::authorization::SetRolePermissionsInput,
-    web::{
-        app::{layout::WorkspaceRouteLayout, page::PageSection},
-        identity::roles::{
-            components::{
-                role_form::RoleFormPanel, role_permissions_dialog::RolePermissionsDialog,
-                roles_filters::RolesFilters, roles_page_header::RolesPageHeader,
-                roles_table::RolesTable,
-            },
-            model::roles_page_state::{RoleSaveInput, RolesPageState},
-            server_fns::{
-                create_role_admin, delete_role_admin, get_role_admin, list_permissions_admin,
-                list_roles_admin, set_role_permissions_admin, update_role_admin,
-            },
+    app::{layout::WorkspaceRouteLayout, page::PageSection},
+    identity::roles::{
+        components::{
+            role_form::RoleFormPanel, role_permissions_dialog::RolePermissionsDialog,
+            roles_filters::RolesFilters, roles_page_header::RolesPageHeader,
+            roles_table::RolesTable,
         },
-        shared::{
-            feedback::toast::use_toast,
-            i18n::{T, use_i18n},
+        model::roles_page_state::{RoleSaveInput, RolesPageState},
+        server_fns::{
+            create_role_admin, delete_role_admin, get_role_admin, list_permissions_admin,
+            list_roles_admin, set_role_permissions_admin, update_role_admin,
         },
+    },
+    identity_application_contracts::identity::authorization::SetRolePermissionsInput,
+    shared::{
+        feedback::toast::use_toast,
+        i18n::{T, use_i18n},
     },
 };
 use leptos_support::mutation::MutationStatus;
@@ -62,7 +60,7 @@ pub fn RolesIndexRoute() -> impl IntoView {
     let cancel_form = Callback::new(move |()| state.close_form());
     let edit_role = Callback::new({
         let toast = toast.clone();
-        move |role: application_contracts::identity::authorization::RoleDto| {
+        move |role: identity_application_contracts::identity::authorization::RoleDto| {
             state.form_error.set(None);
             let toast = toast.clone();
 
