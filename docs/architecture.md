@@ -158,8 +158,8 @@ operations against one path are typed conflicts.
 
 Plan summaries expose only relative paths, operation identities, preconditions,
 and digests. They never expose source or resulting file content. The crate does
-not read or write the filesystem, publish a plan, execute hooks, or provide the
-repository-validation dependency rewriting available to maintainer tooling.
+not execute generated code or provide the repository-validation dependency
+rewriting available to maintainer tooling.
 
 Structured editors operate only on declared integration points. Canonical Rust
 layer roots contain an explicit generated-module block; registrations inside
@@ -169,8 +169,27 @@ editors target declared tables, arrays, and string keys through a lossless
 document model so unrelated keys, ordering, and comments remain owned by the
 application. Repeated edits return an explicit already-present result. Missing,
 duplicated, reordered, or type-incompatible integration points fail with typed
-diagnostics before a plan is produced. Failure-safe filesystem publication
-remains a separate responsibility.
+diagnostics before a plan is produced.
+
+Failure-safe publication is a separate stage over the validated plan. The
+publisher opens the real application root and every change parent without
+following symlinks, creates an exclusive `.hegira-mutation.lock` recovery
+marker, and stages private files on each target filesystem. Required exclusive
+rename and atomic-exchange behavior is probed before application files change.
+All target identities and absent or digest preconditions are then rechecked
+immediately before publication. Edits exchange the staged result with the
+original so the original remains available for rollback; creates use an
+exclusive no-replace rename. A recoverable failure rolls published changes back
+in reverse order after verifying that neither the generated result nor its
+rollback source changed concurrently.
+
+Successful publication durably removes transaction files and then the marker.
+A crash, changed published file, failed rollback, or uncertain cleanup leaves
+the marker in place and blocks subsequent mutations for explicit manual
+recovery. Cleanup and rollback remain anchored to the opened application-owned
+directories, including when a path ancestor is replaced. Platforms or
+filesystems without the required safety semantics fail before application files
+are modified; the contract does not claim universal filesystem transactions.
 
 ## Source-runnable CLI
 

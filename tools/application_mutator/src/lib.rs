@@ -1,8 +1,8 @@
 //! Typed, deterministic plans for changing an existing Hegira application.
 //!
-//! This crate owns no filesystem publication and performs no repository-only
-//! dependency rewriting. Callers observe source, construct every change, and
-//! validate the complete plan before a separate publisher is invoked.
+//! Callers observe source, construct every change, and validate the complete
+//! plan before invoking the failure-safe publisher. This crate performs no
+//! repository-only dependency rewriting.
 
 use std::{
     collections::BTreeMap,
@@ -14,11 +14,15 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 
 mod editor;
+mod publisher;
 
 pub use editor::{
     RUST_MODULES_END, RUST_MODULES_START, StructuredEditError, StructuredEditErrorKind,
     StructuredEditKind, StructuredEditOutcome, plan_rust_module, plan_toml_array_string,
     plan_toml_table_string,
+};
+pub use publisher::{
+    MUTATION_MARKER, MutationError, MutationErrorKind, MutationReceipt, publish_change_plan,
 };
 
 pub const CHANGE_PLAN_SUMMARY_SCHEMA: u32 = 1;

@@ -186,7 +186,11 @@ module registration, and lossless TOML integration edits. Fixtures cover
 customized surrounding source, already-present results, and missing, duplicate,
 reordered, or incompatible integration points. The canonical layered
 application's declared integration points are exercised without publishing a
-change plan or writing application fixtures.
+change plan. Publisher fixtures cover exclusive mutation locking, digest and
+identity rechecks, symlink and ancestor replacement, destination races,
+filesystem-semantic preflight, successful edit/create publication, reverse
+rollback after injected failures, and explicit incomplete-recovery reporting.
+These tests operate only on disposable temporary application fixtures.
 
 Validate the workspace-external canonical layered application base against the
 current framework checkout:
