@@ -122,7 +122,7 @@ framework compatibility surfaces or consumed by generated applications.
 
 | Package | Responsibility |
 |---|---|
-| `application_manifest` | Versioned, validated, deterministic `hegira.toml` generation-state contract |
+| `application_manifest` | Versioned, validated, deterministic `hegira.toml` generation-state and mutation-compatibility contract |
 | `platform_core` | Compiled capability identities and application-independent primitives |
 | `audit` | Provider-neutral audit records and logging port |
 | `cache` | Cache port plus null, memory, and optional Redis adapters |
@@ -302,6 +302,17 @@ validated generation contract; it is not a runtime configuration or secret
 store. Editing it does not trigger regeneration or upgrades. The field-level
 contract is documented in
 [Getting started](getting-started.md#generated-ownership-and-hegiratoml).
+
+The application-manifest package also exposes a pure, fail-closed mutation
+compatibility assessment. A manifest is compatible only when its schema,
+framework repository and exact release, component set, and single selected
+database/client adapters match the caller's supported policy. A valid manifest
+from another release or with an unknown supported-shape capability is reported
+as unsupported; a current-shape manifest that conflicts with canonical
+selection or framework identity is reported as incompatible with the exact
+field identified. Normal parsing remains separate, so older valid manifests
+can still be read without becoming writable. This assessment performs no file
+write, network access, source mutation, dependency change, or upgrade.
 
 Use these focused gates:
 
