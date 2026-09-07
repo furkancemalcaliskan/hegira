@@ -1,6 +1,6 @@
 [package]
 name = "hegira_cli"
-description = "Source-runnable application creation CLI for the Hegira full-stack application framework"
+description = "Source-runnable application lifecycle CLI for the Hegira full-stack application framework"
 version = "0.4.0"
 edition = "2024"
 license = "Apache-2.0"
@@ -21,6 +21,8 @@ clap = { version = "4.5", default-features = false, features = [
   "suggestions",
   "usage",
 ] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 template_renderer = { path = "../template_renderer" }
 
 [target.'cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))'.dependencies]

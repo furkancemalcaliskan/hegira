@@ -29,6 +29,19 @@ fn hegira(arguments: &[&str]) -> Output {
     result
 }
 
+fn hegira_at(working_directory: &Path, arguments: &[&str]) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_hegira"))
+        .args(arguments)
+        .env_clear()
+        .env("HOME", working_directory)
+        .env("USERPROFILE", working_directory)
+        .env("XDG_CONFIG_HOME", working_directory)
+        .env("PATH", "")
+        .current_dir(working_directory)
+        .output()
+        .expect("hegira command should run")
+}
+
 #[test]
 fn top_level_help_is_human_readable_output() {
     let result = hegira(&["--help"]);
@@ -39,6 +52,7 @@ fn top_level_help_is_human_readable_output() {
     assert!(output.starts_with("Create and maintain Hegira applications"));
     assert!(output.contains("Usage: hegira <COMMAND>"));
     assert!(output.contains("new"));
+    assert!(output.contains("inspect"));
 }
 
 #[test]
@@ -272,6 +286,121 @@ fn existing_destination_is_a_conflict_and_is_not_modified() {
         fs::read_to_string(destination.join("preserved.txt")).expect("sentinel should remain"),
         "preserved"
     );
+}
+
+#[test]
+fn inspect_reports_the_discovered_application_without_writing() {
+    let root = TestDirectory::new("inspect-human");
+    let application = root.path().join("application");
+    let created = hegira(&[
+        "new",
+        "inspection-app",
+        "--destination",
+        path_argument(&application),
+    ]);
+    assert!(created.status.success(), "{:?}", created.stderr);
+    let before = output_tree(&application);
+
+    let result = hegira_at(&application.join("apps/web/src"), &["inspect"]);
+
+    assert!(result.status.success(), "{:?}", result.stderr);
+    assert!(result.stderr.is_empty());
+    let output = String::from_utf8(result.stdout).expect("inspection should be UTF-8");
+    assert!(output.contains("Application: inspection-app\n"));
+    assert!(output.contains(&format!(
+        "Root: {}\n",
+        fs::canonicalize(&application).unwrap().display()
+    )));
+    assert!(output.contains("Manifest schema: 1\n"));
+    assert!(output.contains("Framework: https://github.com/furkancemalcaliskan/hegira.git"));
+    assert!(output.contains("Components: layered-base, layered-leptos-identity\n"));
+    assert!(output.contains("Databases: sqlite\n"));
+    assert!(output.contains("Clients: leptos\n"));
+    assert!(output.ends_with("Mutation compatibility: compatible\n"));
+    assert_eq!(output_tree(&application), before);
+}
+
+#[test]
+fn inspect_json_is_versioned_deterministic_and_matches_explicit_resolution() {
+    let root = TestDirectory::new("inspect-json");
+    let application = root.path().join("application");
+    assert!(
+        hegira(&[
+            "new",
+            "json-app",
+            "--destination",
+            path_argument(&application),
+        ])
+        .status
+        .success()
+    );
+    let before = output_tree(&application);
+
+    let discovered = hegira_at(&application.join("crates/domain"), &["inspect", "--json"]);
+    let explicit = hegira_at(
+        root.path(),
+        &[
+            "inspect",
+            "--application-root",
+            path_argument(&application),
+            "--json",
+        ],
+    );
+
+    assert!(discovered.status.success(), "{:?}", discovered.stderr);
+    assert!(explicit.status.success(), "{:?}", explicit.stderr);
+    assert_eq!(discovered.stdout, explicit.stdout);
+    let document: serde_json::Value =
+        serde_json::from_slice(&discovered.stdout).expect("inspection JSON should parse");
+    assert_eq!(document["output_schema"], 1);
+    assert_eq!(document["manifest"]["application"], "json-app");
+    assert_eq!(document["manifest"]["schema"], 1);
+    assert_eq!(document["manifest"]["selection"]["databases"][0], "sqlite");
+    assert_eq!(document["manifest"]["selection"]["clients"][0], "leptos");
+    assert_eq!(document["mutation_compatibility"]["status"], "compatible");
+    assert_eq!(output_tree(&application), before);
+}
+
+#[test]
+fn inspect_reports_unsupported_releases_without_mutating_or_failing() {
+    let root = TestDirectory::new("inspect-unsupported");
+    let application = root.path().join("application");
+    assert!(
+        hegira(&[
+            "new",
+            "old-app",
+            "--destination",
+            path_argument(&application),
+        ])
+        .status
+        .success()
+    );
+    let manifest_path = application.join("hegira.toml");
+    let current = format!("v{}", env!("CARGO_PKG_VERSION"));
+    let manifest = fs::read_to_string(&manifest_path).unwrap();
+    fs::write(&manifest_path, manifest.replace(&current, "v0.1.0")).unwrap();
+    let before = output_tree(&application);
+
+    let result = hegira_at(&application, &["inspect"]);
+
+    assert!(result.status.success(), "{:?}", result.stderr);
+    assert!(result.stderr.is_empty());
+    assert!(
+        String::from_utf8_lossy(&result.stdout)
+            .contains("Mutation compatibility: unsupported (framework.version is v0.1.0")
+    );
+    assert_eq!(output_tree(&application), before);
+}
+
+#[test]
+fn inspect_missing_root_is_a_validation_failure_without_global_state() {
+    let root = TestDirectory::new("inspect-missing");
+    let result = hegira_at(root.path(), &["inspect"]);
+
+    assert_eq!(result.status.code(), Some(3));
+    assert!(result.stdout.is_empty());
+    assert!(String::from_utf8_lossy(&result.stderr).contains("no hegira.toml"));
+    assert_eq!(fs::read_dir(root.path()).unwrap().count(), 0);
 }
 
 fn path_argument(path: &Path) -> &str {
