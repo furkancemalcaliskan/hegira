@@ -12,6 +12,7 @@ name = "hegira"
 path = "src/main.rs"
 
 [dependencies]
+application_manifest = { path = "../../crates/application_manifest" }
 clap = { version = "4.5", default-features = false, features = [
   "derive",
   "error-context",
@@ -21,3 +22,6 @@ clap = { version = "4.5", default-features = false, features = [
   "usage",
 ] }
 template_renderer = { path = "../template_renderer" }
+
+[target.'cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))'.dependencies]
+rustix = { version = "1.1.4", features = ["fs"] }

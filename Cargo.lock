@@ -1754,7 +1754,9 @@ checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 name = "hegira_cli"
 version = "0.4.0"
 dependencies = [
+ "application_manifest",
  "clap",
+ "rustix",
  "template_renderer",
 ]
 
