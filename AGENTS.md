@@ -68,7 +68,8 @@ commands change. Never describe planned work as implemented.
   public Hegira CLI.
 - `tools/application_mutator/` contains the deterministic, content-redacted
   existing-application change-plan contract. It validates ordered relative
-  creates and digest-preconditioned edits but does not publish changes.
+  creates, digest-preconditioned edits, and conflict-aware managed Rust and
+  TOML integration points but does not read, write, or publish changes.
 - `tools/hegira_cli/` contains the source-runnable `hegira` command shell,
   deterministic interactive and non-interactive layered application creation,
   read-only existing-application inspection with human and versioned JSON

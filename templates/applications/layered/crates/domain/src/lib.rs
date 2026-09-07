@@ -4,3 +4,6 @@
 //! framework.
 
 pub use app_domain_shared as shared;
+
+// hegira:generated-modules:start
+// hegira:generated-modules:end

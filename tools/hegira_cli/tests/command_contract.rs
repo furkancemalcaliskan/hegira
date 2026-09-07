@@ -524,8 +524,8 @@ fn explicit_sibling_destination_still_works() {
 #[test]
 fn provider_snapshots_and_interactive_requests_match() {
     for (database, expected) in [
-        ("sqlite", 15487919659099468535_u64),
-        ("postgres", 6188907983057865708_u64),
+        ("sqlite", 7184853664259718236_u64),
+        ("postgres", 14844116639782160295_u64),
     ] {
         let root = TestDirectory::new(database);
         let explicit = root.path().join("explicit");

@@ -4,3 +4,6 @@
 //! services.
 
 pub mod http;
+
+// hegira:generated-modules:start
+// hegira:generated-modules:end
