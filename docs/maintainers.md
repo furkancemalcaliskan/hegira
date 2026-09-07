@@ -154,7 +154,7 @@ sh scripts/release-policy.sh
 ```
 
 Validate the source-runnable CLI command, diagnostic, and process-outcome
-contracts:
+contracts together with deterministic existing-application change planning:
 
 ```sh
 sh scripts/cli-check.sh
@@ -178,6 +178,11 @@ On Linux, a child-only file-size limit exercises actual renderer write failure,
 staging cleanup, sentinel preservation, and a successful retry. Catalog failure
 is tested through the CLI dispatcher with a disposable missing source. These
 tests neither build generated applications nor require network access.
+
+The same gate validates `application_mutator` plan ordering, explicit absent and
+content-digest preconditions, duplicate and conflicting path diagnostics,
+canonical relative-path enforcement, and content-redacted summaries. It does
+not publish a change plan or write application fixtures.
 
 Validate the workspace-external canonical layered application base against the
 current framework checkout:
