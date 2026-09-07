@@ -1757,6 +1757,8 @@ dependencies = [
  "application_manifest",
  "clap",
  "rustix",
+ "serde",
+ "serde_json",
  "template_renderer",
 ]
 

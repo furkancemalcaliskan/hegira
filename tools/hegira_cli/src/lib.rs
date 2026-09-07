@@ -1,11 +1,16 @@
 use std::{
     collections::BTreeMap,
     ffi::OsString,
+    fmt::Write as _,
     io::{BufRead, ErrorKind as IoErrorKind, Write},
     path::{Path, PathBuf},
 };
 
+use application_manifest::{
+    ClientAdapter, DatabaseAdapter, MutationCompatibility, MutationCompatibilityPolicy,
+};
 use clap::{Args, Parser, Subcommand, ValueEnum, error::ErrorKind};
+use serde::Serialize;
 use template_renderer::{RenderRequest, RendererError, RendererErrorKind, render};
 
 mod application_context;
@@ -48,6 +53,8 @@ struct Cli {
 enum CliCommand {
     /// Create a new Hegira application.
     New(NewCommand),
+    /// Inspect an existing Hegira application without modifying it.
+    Inspect(InspectCommand),
 }
 
 #[derive(Debug, Args)]
@@ -71,6 +78,17 @@ struct NewCommand {
     /// Official application component.
     #[arg(long, value_enum)]
     component: Option<ComponentChoice>,
+}
+
+#[derive(Debug, Args)]
+struct InspectCommand {
+    /// Application root; defaults to discovery from the working directory.
+    #[arg(long, value_name = "PATH")]
+    application_root: Option<PathBuf>,
+
+    /// Emit the versioned machine-readable representation.
+    #[arg(long)]
+    json: bool,
 }
 
 #[derive(Debug)]
@@ -242,10 +260,20 @@ where
         Ok(cli) => cli,
         Err(error) => return write_parser_result(error, output, diagnostics),
     };
+    let working_directory = match std::env::current_dir() {
+        Ok(path) => path,
+        Err(_) => {
+            return write_diagnostic(
+                CliDiagnostic::validation("cannot resolve the current working directory"),
+                diagnostics,
+            );
+        }
+    };
 
     run_command(
         cli.command,
         source_repository_root(),
+        working_directory,
         input,
         output,
         diagnostics,
@@ -255,6 +283,7 @@ where
 fn run_command(
     command: CliCommand,
     repository_root: PathBuf,
+    working_directory: PathBuf,
     input: Option<&mut dyn BufRead>,
     output: &mut impl Write,
     diagnostics: &mut impl Write,
@@ -265,7 +294,138 @@ fn run_command(
             Ok(None) => CliExit::Success,
             Err(diagnostic) => write_diagnostic(diagnostic, diagnostics),
         },
+        CliCommand::Inspect(command) => {
+            inspect_application(command, working_directory, output, diagnostics)
+        }
     }
+}
+
+#[derive(Serialize)]
+struct InspectionOutput<'a> {
+    output_schema: u32,
+    application_root: &'a str,
+    manifest: Option<&'a application_manifest::ApplicationManifest>,
+    mutation_compatibility: &'a MutationCompatibility,
+}
+
+fn inspect_application(
+    command: InspectCommand,
+    working_directory: PathBuf,
+    output: &mut impl Write,
+    diagnostics: &mut impl Write,
+) -> CliExit {
+    let policy = match MutationCompatibilityPolicy::for_current_release() {
+        Ok(policy) => policy,
+        Err(error) => {
+            return write_diagnostic(
+                CliDiagnostic::internal(format!(
+                    "cannot establish the CLI compatibility policy: {error}"
+                )),
+                diagnostics,
+            );
+        }
+    };
+    let request = match command.application_root {
+        Some(root) => ApplicationContextRequest::explicit(working_directory, root),
+        None => ApplicationContextRequest::discover_from(working_directory),
+    };
+    let context = match resolve_application_context(&request, &policy) {
+        Ok(context) => context,
+        Err(error) => {
+            let diagnostic = match error.kind() {
+                ApplicationContextErrorKind::Validation => {
+                    CliDiagnostic::validation(error.to_string())
+                }
+                ApplicationContextErrorKind::Conflict => CliDiagnostic::conflict(error.to_string()),
+            };
+            return write_diagnostic(diagnostic, diagnostics);
+        }
+    };
+
+    let rendered = if command.json {
+        let root = context
+            .root
+            .to_str()
+            .expect("application context paths are validated as UTF-8");
+        serde_json::to_string_pretty(&InspectionOutput {
+            output_schema: 1,
+            application_root: root,
+            manifest: context.manifest.as_ref(),
+            mutation_compatibility: &context.compatibility,
+        })
+        .map_err(|error| {
+            CliDiagnostic::internal(format!("cannot serialize application inspection: {error}"))
+        })
+    } else {
+        Ok(render_human_inspection(&context))
+    };
+    let rendered = match rendered {
+        Ok(rendered) => rendered,
+        Err(diagnostic) => return write_diagnostic(diagnostic, diagnostics),
+    };
+    if writeln!(output, "{rendered}").is_err() {
+        return CliExit::Internal;
+    }
+    CliExit::Success
+}
+
+fn render_human_inspection(context: &ApplicationContext) -> String {
+    let mut output = String::new();
+    if let Some(manifest) = &context.manifest {
+        let components = manifest
+            .selection
+            .components
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>()
+            .join(", ");
+        let databases = manifest
+            .selection
+            .databases
+            .iter()
+            .map(|database| match database {
+                DatabaseAdapter::Postgres => "postgres",
+                DatabaseAdapter::Sqlite => "sqlite",
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
+        let clients = manifest
+            .selection
+            .clients
+            .iter()
+            .map(|client| match client {
+                ClientAdapter::Leptos => "leptos",
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
+        writeln!(output, "Application: {}", manifest.application).unwrap();
+        writeln!(output, "Root: {}", context.root.display()).unwrap();
+        writeln!(output, "Manifest schema: {}", manifest.schema).unwrap();
+        writeln!(
+            output,
+            "Framework: {} @ {}",
+            manifest.framework.repository, manifest.framework.version
+        )
+        .unwrap();
+        writeln!(output, "Components: {components}").unwrap();
+        writeln!(output, "Databases: {databases}").unwrap();
+        writeln!(output, "Clients: {clients}").unwrap();
+    } else {
+        writeln!(output, "Root: {}", context.root.display()).unwrap();
+        writeln!(output, "Manifest: unsupported by the current parser").unwrap();
+    }
+    match &context.compatibility {
+        MutationCompatibility::Compatible => {
+            write!(output, "Mutation compatibility: compatible").unwrap();
+        }
+        MutationCompatibility::Incompatible(issue) => {
+            write!(output, "Mutation compatibility: incompatible ({issue})").unwrap();
+        }
+        MutationCompatibility::Unsupported(issue) => {
+            write!(output, "Mutation compatibility: unsupported ({issue})").unwrap();
+        }
+    }
+    output
 }
 
 fn resolve_new_command(
@@ -620,6 +780,7 @@ mod tests {
         let exit = run_command(
             cli.command,
             root.join("missing-source"),
+            root.clone(),
             None,
             &mut stdout,
             &mut stderr,

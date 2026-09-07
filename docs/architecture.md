@@ -147,13 +147,14 @@ composition, or product UI code.
 ## Source-runnable CLI
 
 `tools/hegira_cli` owns the `hegira` binary command shell. It defines top-level
-help, version reporting, guided and deterministic non-interactive application creation,
-concise diagnostics, and stable process outcomes without reading a user home
-directory or global configuration. It delegates canonical component planning
-and atomic publication to `template_renderer`; repository-local dependency
-rewrites remain unavailable to the public command. Help, version information,
-and successful creation instructions are written to standard output; usage and
-failure diagnostics are written to standard error.
+help, version reporting, guided and deterministic non-interactive application
+creation, read-only application inspection, concise diagnostics, and stable
+process outcomes without reading a user home directory or global configuration.
+It delegates canonical component planning and atomic publication to
+`template_renderer`; repository-local dependency rewrites remain unavailable to
+the public command. Help, version information, successful creation instructions,
+and inspection results are written to standard output; usage and failure
+diagnostics are written to standard error.
 
 The process outcomes are `0` for success, `1` for an internal error, `2` for
 invalid usage, `3` for validation failure, and `4` for a destination or state
@@ -163,17 +164,20 @@ client, and component selections can also be stated explicitly. Generation
 writes the destination atomically and never executes generated or external
 commands.
 
-The CLI library also owns a read-only existing-application context resolver for
-future inspection and mutation commands. It can accept an explicit application
-root or discover `hegira.toml` from a real working directory and its real
+The CLI library also owns a read-only existing-application context resolver.
+`hegira inspect` uses it to provide concise human-readable application identity,
+framework, selection, and mutation-compatibility information. `--json` exposes
+the same state through an explicitly versioned deterministic output contract,
+and `--application-root <path>` selects a root for automation. Otherwise the
+resolver discovers `hegira.toml` from a real working directory and its real
 ancestors. Discovery rejects multiple candidate manifests as ambiguous rather
 than selecting one implicitly. Directory-relative, no-follow reads anchor the
 manifest and the required application-owned `apps/`, `crates/`, and `config/`
 roots to the opened application root. The resolver returns the typed manifest
 when the current parser supports it and always returns the mutation
-compatibility assessment when one can be determined. It reads no runtime
-configuration, environment value, user-home state, or secret, and it performs
-no writes.
+compatibility assessment when one can be determined. Inspection reads no
+runtime configuration, environment value, user-home state, or secret, and it
+performs no writes.
 
 When an application name or destination is omitted in an interactive terminal,
 the same command gathers missing values through a guided workflow, displays the
