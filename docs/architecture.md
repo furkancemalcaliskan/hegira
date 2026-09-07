@@ -109,7 +109,7 @@ The direct local dependency allowlist is enforced from locked Cargo metadata by
 | `identity_sqlx` | `background_jobs`, `identity_application`, `identity_application_contracts`, `identity_domain`, `identity_domain_shared`, `persistence`, `search` |
 | `identity_http` | `http_support`, `identity_application`, `identity_application_contracts`, `leptos_support` |
 | `identity_leptos` | `identity_application`, `identity_application_contracts`, `identity_domain_shared`, `leptos_support` |
-| `hegira_cli` | `template_renderer` |
+| `hegira_cli` | `application_manifest`, `template_renderer` |
 | `template_renderer` | `application_manifest` |
 
 Normal, optional, development, and build dependencies use the same ownership
@@ -162,6 +162,18 @@ layered application with SQLite, Leptos, and Identity defaults. The database,
 client, and component selections can also be stated explicitly. Generation
 writes the destination atomically and never executes generated or external
 commands.
+
+The CLI library also owns a read-only existing-application context resolver for
+future inspection and mutation commands. It can accept an explicit application
+root or discover `hegira.toml` from a real working directory and its real
+ancestors. Discovery rejects multiple candidate manifests as ambiguous rather
+than selecting one implicitly. Directory-relative, no-follow reads anchor the
+manifest and the required application-owned `apps/`, `crates/`, and `config/`
+roots to the opened application root. The resolver returns the typed manifest
+when the current parser supports it and always returns the mutation
+compatibility assessment when one can be determined. It reads no runtime
+configuration, environment value, user-home state, or secret, and it performs
+no writes.
 
 When an application name or destination is omitted in an interactive terminal,
 the same command gathers missing values through a guided workflow, displays the

@@ -8,6 +8,13 @@ use std::{
 use clap::{Args, Parser, Subcommand, ValueEnum, error::ErrorKind};
 use template_renderer::{RenderRequest, RendererError, RendererErrorKind, render};
 
+mod application_context;
+
+pub use application_context::{
+    ApplicationContext, ApplicationContextError, ApplicationContextErrorKind,
+    ApplicationContextRequest, ApplicationPaths, resolve_application_context,
+};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum CliExit {
