@@ -4,6 +4,9 @@
 
 use app_application_contracts::ApplicationSummary;
 
+// hegira:generated-modules:start
+// hegira:generated-modules:end
+
 #[derive(Debug, Clone)]
 pub struct ApplicationInformation {
     name: String,

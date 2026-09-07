@@ -160,8 +160,17 @@ Plan summaries expose only relative paths, operation identities, preconditions,
 and digests. They never expose source or resulting file content. The crate does
 not read or write the filesystem, publish a plan, execute hooks, or provide the
 repository-validation dependency rewriting available to maintainer tooling.
-Structured source editors and failure-safe publication remain separate
-responsibilities.
+
+Structured editors operate only on declared integration points. Canonical Rust
+layer roots contain an explicit generated-module block; registrations inside
+that block must be unique and deterministically ordered, while matching
+registrations outside it are treated as conflicts rather than adopted. TOML
+editors target declared tables, arrays, and string keys through a lossless
+document model so unrelated keys, ordering, and comments remain owned by the
+application. Repeated edits return an explicit already-present result. Missing,
+duplicated, reordered, or type-incompatible integration points fail with typed
+diagnostics before a plan is produced. Failure-safe filesystem publication
+remains a separate responsibility.
 
 ## Source-runnable CLI
 

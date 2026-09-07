@@ -7,3 +7,6 @@ pub mod identity;
 pub mod operations;
 pub mod security;
 pub mod settings;
+
+// hegira:generated-modules:start
+// hegira:generated-modules:end

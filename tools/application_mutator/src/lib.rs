@@ -13,6 +13,14 @@ use std::{
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
+mod editor;
+
+pub use editor::{
+    RUST_MODULES_END, RUST_MODULES_START, StructuredEditError, StructuredEditErrorKind,
+    StructuredEditKind, StructuredEditOutcome, plan_rust_module, plan_toml_array_string,
+    plan_toml_table_string,
+};
+
 pub const CHANGE_PLAN_SUMMARY_SCHEMA: u32 = 1;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -167,6 +175,10 @@ impl StructuredFileEdit {
             content,
             result_digest,
         })
+    }
+
+    pub fn resulting_content(&self) -> &[u8] {
+        &self.content
     }
 }
 
