@@ -36,6 +36,7 @@ automatic module discovery, application upgrades, or registry distribution.
 │   │   └── layered/         independent full-stack application source
 │   └── components/          typed application-component manifests
 ├── tools/
+│   ├── application_mutator/ existing-application change-plan core
 │   ├── hegira_cli/          source-runnable CLI command shell
 │   └── template_renderer/   render core and repository-validation adapter
 ├── docs/                    current technical and maintainer documentation
@@ -109,6 +110,7 @@ The direct local dependency allowlist is enforced from locked Cargo metadata by
 | `identity_sqlx` | `background_jobs`, `identity_application`, `identity_application_contracts`, `identity_domain`, `identity_domain_shared`, `persistence`, `search` |
 | `identity_http` | `http_support`, `identity_application`, `identity_application_contracts`, `leptos_support` |
 | `identity_leptos` | `identity_application`, `identity_application_contracts`, `identity_domain_shared`, `leptos_support` |
+| `application_mutator` | None |
 | `hegira_cli` | `application_manifest`, `template_renderer` |
 | `template_renderer` | `application_manifest` |
 
@@ -143,6 +145,23 @@ framework compatibility surfaces or consumed by generated applications.
 These packages expose reusable primitives and provider adapters. They do not
 contain application domain, application service, presentation, host
 composition, or product UI code.
+
+## Existing-application change planning
+
+`tools/application_mutator` owns the internal typed contract for coordinated
+changes to an existing validated application. New-file operations require the
+target path to be absent. Structured edits carry the SHA-256 digest of the
+observed content as an explicit publication precondition. Every result also
+carries its digest. Application-relative canonical paths and a sorted complete
+plan make validation and summaries deterministic; duplicate paths and mixed
+operations against one path are typed conflicts.
+
+Plan summaries expose only relative paths, operation identities, preconditions,
+and digests. They never expose source or resulting file content. The crate does
+not read or write the filesystem, publish a plan, execute hooks, or provide the
+repository-validation dependency rewriting available to maintainer tooling.
+Structured source editors and failure-safe publication remain separate
+responsibilities.
 
 ## Source-runnable CLI
 
@@ -337,7 +356,7 @@ sh scripts/architecture-boundaries.sh
 sh scripts/framework-check.sh
 sh scripts/official-modules-check.sh
 sh scripts/layered-template-check.sh
-sh scripts/cli-check.sh
+sh scripts/cli-check.sh # CLI and existing-application mutation tooling
 sh scripts/generated-application-check.sh
 ```
 

@@ -66,6 +66,9 @@ commands change. Never describe planned work as implemented.
   normal render contract preserves pinned release sources; only disposable
   maintainer checks may select the adapter that rewrites them. It is not the
   public Hegira CLI.
+- `tools/application_mutator/` contains the deterministic, content-redacted
+  existing-application change-plan contract. It validates ordered relative
+  creates and digest-preconditioned edits but does not publish changes.
 - `tools/hegira_cli/` contains the source-runnable `hegira` command shell,
   deterministic interactive and non-interactive layered application creation,
   read-only existing-application inspection with human and versioned JSON
@@ -172,7 +175,7 @@ sh scripts/framework-check.sh
 sh scripts/official-modules-check.sh
 ```
 
-Focused source-runnable CLI validation:
+Focused source-runnable CLI and application-mutation tooling validation:
 
 ```sh
 sh scripts/cli-check.sh
