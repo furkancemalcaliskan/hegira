@@ -155,6 +155,16 @@ pub fn plan_application_migration(
     database: SelectedDatabase,
     identity: MigrationIdentity,
 ) -> Result<PlannedMigration, MigrationError> {
+    let source = migration_source(database, &identity);
+    plan_application_migration_with_source(application_root, database, identity, source)
+}
+
+pub(crate) fn plan_application_migration_with_source(
+    application_root: &Path,
+    database: SelectedDatabase,
+    identity: MigrationIdentity,
+    source: Vec<u8>,
+) -> Result<PlannedMigration, MigrationError> {
     let history = observe_history(application_root, database)?;
     if let Some(version) = history.identities.get(identity.as_str()) {
         return Err(MigrationError::new(
@@ -202,7 +212,7 @@ pub fn plan_application_migration(
     let provider = database_directory(database);
     let filename = format!("{version:03}_{}.sql", identity.as_str());
     let path = format!("{MIGRATION_ROOT}/{provider}/{filename}");
-    let migration = FileCreation::new(&path, migration_source(database, &identity))
+    let migration = FileCreation::new(&path, source)
         .map_err(|error| MigrationError::new(MigrationErrorKind::Planning, error.to_string()))?;
     let state = MigrationState {
         schema: MIGRATION_STATE_SCHEMA,

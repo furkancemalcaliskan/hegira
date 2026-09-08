@@ -95,9 +95,11 @@ commands change. Never describe planned work as implemented.
   Application Contracts, and Application source through absent-file creations
   and controlled module-root edits. Generated application services depend on
   repository, authorization, and identifier ports and authorize every use case
-  before accessing a repository. The same tool plans provider-specific,
-  append-only application migration scaffolds without connecting to a database
-  or changing historical migrations.
+  before accessing a repository. It also emits selected-provider SQLx
+  repositories, bound queries, explicit typed Infrastructure composition, and
+  provider-correct table migrations. The same tool independently plans
+  provider-specific, append-only application migration scaffolds without
+  connecting to a database or changing historical migrations.
 - `scripts/` contains local validation and release helpers.
   The generated-application gate uses public CLI output for both database
   profiles, verifies it before staging local dependencies in a separate copy,
