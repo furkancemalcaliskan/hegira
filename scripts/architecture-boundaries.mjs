@@ -70,6 +70,7 @@ export const WORKSPACE_DEPENDENCY_POLICY = Object.freeze({
   hegira_cli: [
     "application_manifest",
     "application_mutator",
+    "resource_generator",
     "template_renderer",
   ],
   resource_generator: ["application_manifest", "application_mutator"],

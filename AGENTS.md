@@ -75,7 +75,8 @@ commands change. Never describe planned work as implemented.
 - `tools/hegira_cli/` contains the source-runnable `hegira` command shell,
   deterministic interactive and non-interactive layered application creation,
   read-only existing-application inspection with human and versioned JSON
-  output, and a shared dry-run/apply contract for future mutation commands.
+  output, application-owned migration generation, and a shared dry-run/apply
+  mutation contract.
   Mutation output is deterministic, versioned, content-redacted, and derived
   from the same typed plan used for publication. The CLI also owns stable
   process outcomes and its user-facing diagnostic contract.
@@ -90,7 +91,9 @@ commands change. Never describe planned work as implemented.
   specification accepts only lowercase ASCII field names, nullability, and the
   closed `string`, `bool`, `i64`, `uuid`, and `datetime` scalar set; supplies a
   required non-null UUID identifier; and resolves the database and client from
-  the validated application manifest. It does not yet emit source.
+  the validated application manifest. It also plans provider-specific,
+  append-only application migration scaffolds without connecting to a database
+  or changing historical migrations.
 - `scripts/` contains local validation and release helpers.
   The generated-application gate uses public CLI output for both database
   profiles, verifies it before staging local dependencies in a separate copy,

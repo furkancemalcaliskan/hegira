@@ -212,6 +212,14 @@ and versioned serialization, selected SQLite/PostgreSQL and Leptos context,
 duplicate and reserved names, and code-, SQL-, and path-shaped input rejection.
 Specification validation reads no database and constructs no change plan.
 
+Migration-generator fixtures cover manifest-selected SQLite and PostgreSQL
+paths, append-only numeric identities, deterministic scaffolds and plans,
+identity and history conflicts, unchanged historical bytes, coordination-state
+preconditions, and symlink rejection. CLI fixtures verify that migration
+dry-run and apply report the identical content-redacted plan while dry-run
+performs no writes. All application roots are disposable fixtures; the command
+never connects to or mutates a database.
+
 Validate the workspace-external canonical layered application base against the
 current framework checkout:
 

@@ -112,7 +112,7 @@ The direct local dependency allowlist is enforced from locked Cargo metadata by
 | `identity_http` | `http_support`, `identity_application`, `identity_application_contracts`, `leptos_support` |
 | `identity_leptos` | `identity_application`, `identity_application_contracts`, `identity_domain_shared`, `leptos_support` |
 | `application_mutator` | None |
-| `hegira_cli` | `application_manifest`, `application_mutator`, `template_renderer` |
+| `hegira_cli` | `application_manifest`, `application_mutator`, `resource_generator`, `template_renderer` |
 | `resource_generator` | `application_manifest`, `application_mutator` |
 | `template_renderer` | `application_manifest` |
 
@@ -169,8 +169,8 @@ constructed. Inputs cannot supply source fragments, routes, SQL, or filesystem
 paths; every derived artifact path is validated by the application-mutation
 contract. This contract does not yet emit resource source code.
 
-The same package owns the immutable typed resource specification consumed by
-future emitters. Raw field input is restricted to lowercase ASCII snake_case,
+The same package owns the immutable typed resource specification. Raw field
+input is restricted to lowercase ASCII snake_case,
 an explicit nullable flag, and the closed scalar set `string`, `bool`, `i64`,
 `uuid`, and `datetime`; arbitrary Rust and SQL types are not accepted. Every
 resource receives a required, non-null UUID `id`, so user fields cannot redefine
@@ -181,6 +181,22 @@ client are resolved from the validated application manifest rather than caller
 defaults. A versioned, deterministic summary exposes only the validated model.
 This contract performs no schema introspection, database access, source
 generation, or application mutation.
+
+The package also plans application-owned migration scaffolds independently of
+the general resource specification. It resolves the selected SQLite or
+PostgreSQL adapter from the validated application manifest, observes only that
+provider's canonical migration filenames, and derives the next append-only
+numeric identity. Existing migration contents are neither read into plan output
+nor edited. Duplicate identities, malformed or symlinked histories, and stale
+publication preconditions are explicit conflicts.
+
+Each plan creates one provider-labelled SQL scaffold and creates or advances
+`crates/infrastructure/migrations/.hegira-generator.toml`. This private,
+application-owned coordination record contains the selected adapter and next
+version only. Publishing both files through `application_mutator` serializes
+Hegira generator operations and prevents concurrent plans from silently
+claiming the same version. Planning does not connect to a database, execute or
+revert migrations, accept arbitrary SQL input, or infer runtime configuration.
 
 ## Existing-application change planning
 
@@ -235,7 +251,8 @@ creation, read-only application inspection, concise diagnostics, and stable
 process outcomes without reading a user home directory or global configuration.
 It delegates new-application component planning and atomic publication to
 `template_renderer`, and existing-application publication to
-`application_mutator`; repository-local dependency rewrites remain unavailable
+`application_mutator`. Application migration planning is delegated to
+`resource_generator`; repository-local dependency rewrites remain unavailable
 to the public command. Help, version information, successful creation
 instructions, inspection results, and mutation plans are written to standard
 output; usage and failure diagnostics are written to standard error.
@@ -257,8 +274,9 @@ explicitly versioned, and includes the content-redacted plan summary rather
 than file bodies, runtime configuration, credentials, environment values, or
 machine-local framework paths. Empty plans are successful no-ops, planning and
 state conflicts retain the conflict process outcome, and invalid plans retain a
-validation outcome. No concrete resource generator is implied by this shared
-execution contract.
+validation outcome. `hegira generate migration <identity>` uses this contract
+to preview or publish the provider-specific migration plan selected by the
+application manifest. It creates source only and does not execute a migration.
 
 The CLI library also owns a read-only existing-application context resolver.
 `hegira inspect` uses it to provide concise human-readable application identity,

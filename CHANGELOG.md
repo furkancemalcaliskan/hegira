@@ -16,6 +16,9 @@ All notable changes are documented here. Releases follow Semantic Versioning.
   ordered human-readable operations, deterministic versioned JSON summaries,
   stable no-op and conflict outcomes, and publication from the same validated
   content-redacted plan used for preview.
+- Added manifest-selected SQLite and PostgreSQL migration scaffold generation
+  with append-only application-owned histories, deterministic dry-run/apply
+  plans, collision-safe version coordination, and no database access.
 
 ## [0.4.0] - 2026-09-06
 

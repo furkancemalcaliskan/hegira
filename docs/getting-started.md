@@ -17,6 +17,7 @@ From the framework repository root:
 cargo build --locked -p hegira_cli
 cargo run --locked -p hegira_cli -- --help
 cargo run --locked -p hegira_cli -- new --help
+cargo run --locked -p hegira_cli -- generate migration --help
 ```
 
 `cargo run` builds and invokes the `hegira` binary. Its canonical package is
@@ -148,15 +149,48 @@ Runtime settings belong in `config/{APP_ENV}.yaml` and environment overrides;
 credentials never belong in `hegira.toml`. See
 [Configuration](configuration.md) for the separate runtime contract.
 
-The CLI currently exposes `new`, help, and version output only. It does not
-provide module management, CRUD/service/controller generators, migration
-commands, automatic upgrades, remote component installation, or additional
+The CLI currently exposes application creation, read-only inspection, and
+application-owned migration scaffold generation. It does not provide module
+management, CRUD/service/controller generators, migration execution or
+rollback, automatic upgrades, remote component installation, or additional
 client templates. Optional runtime providers are configured explicitly in the
 application; they are not extra `new` selections.
 
 Successful creation and help use stdout; diagnostics use stderr. Exit codes
 are `0` (success, including guided cancellation), `1` (internal error),
 `2` (usage error), `3` (validation failure), and `4` (destination conflict).
+
+## Generate An Application Migration
+
+Run the source-built CLI from a generated application to create a migration
+for the database adapter selected in its `hegira.toml`:
+
+```sh
+cargo run --locked --manifest-path /path/to/hegira/Cargo.toml \
+  -p hegira_cli -- generate migration add_orders
+```
+
+Alternatively, pass `--application-root <path>` when the working directory is
+outside the application. Migration identities use 1–64 bytes of lowercase
+ASCII snake_case. The command rejects reserved identities, an identity already
+present in the selected provider history, malformed histories, and unsafe or
+incompatible application roots before publication.
+
+The generated SQL file is an intentionally empty, provider-labelled scaffold
+under `crates/infrastructure/migrations/sqlite/` or
+`crates/infrastructure/migrations/postgres/`. Add the forward-only SQL required
+by the application after generation. The command never connects to a database,
+executes or reverts migrations, translates SQL, or changes an existing
+migration.
+
+`--dry-run` reports the exact typed plan used by apply without writing the
+application. `--json` emits its deterministic, versioned, content-redacted
+machine representation. Alongside the SQL file, the command maintains
+`crates/infrastructure/migrations/.hegira-generator.toml`. This application-
+owned coordination record reserves the next migration version through the
+same failure-safe mutation transaction; it contains no runtime configuration,
+credentials, or SQL content. Concurrent or repeated stale plans fail as
+conflicts instead of silently replacing migration history.
 
 ## Run With SQLite
 

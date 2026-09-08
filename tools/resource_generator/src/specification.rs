@@ -189,7 +189,7 @@ impl ResourceSelection {
         self.client
     }
 
-    fn from_manifest(manifest: &ApplicationManifest) -> Result<Self, SpecificationError> {
+    pub fn resolve(manifest: &ApplicationManifest) -> Result<Self, SpecificationError> {
         manifest
             .validate()
             .map_err(SpecificationError::invalid_manifest)?;
@@ -271,7 +271,7 @@ impl ResourceSpecification {
         namespace: &ArtifactNamespace,
         manifest: &ApplicationManifest,
     ) -> Result<Self, SpecificationError> {
-        let selection = ResourceSelection::from_manifest(manifest)?;
+        let selection = ResourceSelection::resolve(manifest)?;
         let names = LayeredArtifactNames::resolve(input.naming, namespace)
             .map_err(SpecificationError::naming)?;
         if input.fields.is_empty() {

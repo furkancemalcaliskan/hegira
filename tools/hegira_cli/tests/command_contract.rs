@@ -53,6 +53,145 @@ fn top_level_help_is_human_readable_output() {
     assert!(output.contains("Usage: hegira <COMMAND>"));
     assert!(output.contains("new"));
     assert!(output.contains("inspect"));
+    assert!(output.contains("generate"));
+}
+
+#[test]
+fn migration_help_exposes_reviewable_mutation_options() {
+    let result = hegira(&["generate", "migration", "--help"]);
+
+    assert!(result.status.success());
+    assert!(result.stderr.is_empty());
+    let output = String::from_utf8(result.stdout).expect("help should be UTF-8");
+    assert!(output.contains("Usage: hegira generate migration"));
+    assert!(output.contains("--application-root"));
+    assert!(output.contains("--dry-run"));
+    assert!(output.contains("--json"));
+}
+
+#[test]
+fn sqlite_migration_dry_run_and_apply_share_one_append_only_plan() {
+    let output = TestDirectory::new("sqlite-migration");
+    let application = output.path().join("application");
+    let created = hegira(&[
+        "new",
+        "migration-app",
+        "--destination",
+        path_argument(&application),
+    ]);
+    assert!(created.status.success(), "{:?}", created.stderr);
+    let historical = fs::read(
+        application
+            .join("crates/infrastructure/migrations/sqlite/009_retire_catalog_persistence.sql"),
+    )
+    .unwrap();
+
+    let dry_run = hegira_at(
+        &application,
+        &["generate", "migration", "add_orders", "--dry-run", "--json"],
+    );
+    assert!(dry_run.status.success(), "{:?}", dry_run.stderr);
+    assert!(dry_run.stderr.is_empty());
+    let dry_run: serde_json::Value = serde_json::from_slice(&dry_run.stdout).unwrap();
+    assert_eq!(dry_run["mode"], "dry-run");
+    assert_eq!(dry_run["outcome"], "planned");
+    assert_eq!(dry_run["changed_files"], 2);
+    let migration = application.join("crates/infrastructure/migrations/sqlite/010_add_orders.sql");
+    let state = application.join("crates/infrastructure/migrations/.hegira-generator.toml");
+    assert!(!migration.exists());
+    assert!(!state.exists());
+
+    let applied = hegira_at(
+        &application,
+        &["generate", "migration", "add_orders", "--json"],
+    );
+    assert!(applied.status.success(), "{:?}", applied.stderr);
+    let applied: serde_json::Value = serde_json::from_slice(&applied.stdout).unwrap();
+    assert_eq!(dry_run["plan"], applied["plan"]);
+    assert_eq!(applied["outcome"], "applied");
+    assert!(migration.is_file());
+    assert!(state.is_file());
+    assert_eq!(
+        fs::read(
+            application
+                .join("crates/infrastructure/migrations/sqlite/009_retire_catalog_persistence.sql")
+        )
+        .unwrap(),
+        historical
+    );
+
+    let repeated = hegira_at(&application, &["generate", "migration", "add_orders"]);
+    assert_eq!(repeated.status.code(), Some(4));
+    assert!(repeated.stdout.is_empty());
+    assert!(
+        String::from_utf8(repeated.stderr)
+            .unwrap()
+            .contains("already exists at version 10")
+    );
+}
+
+#[test]
+fn postgres_manifest_selects_only_the_postgres_migration_history() {
+    let output = TestDirectory::new("postgres-migration");
+    let application = output.path().join("application");
+    let created = hegira(&[
+        "new",
+        "postgres-migration-app",
+        "--destination",
+        path_argument(&application),
+        "--database",
+        "postgres",
+    ]);
+    assert!(created.status.success(), "{:?}", created.stderr);
+
+    let result = hegira_at(
+        output.path(),
+        &[
+            "generate",
+            "migration",
+            "add_orders",
+            "--application-root",
+            path_argument(&application),
+        ],
+    );
+
+    assert!(result.status.success(), "{:?}", result.stderr);
+    assert!(
+        application
+            .join("crates/infrastructure/migrations/postgres/023_add_orders.sql")
+            .is_file()
+    );
+    assert!(
+        !application
+            .join("crates/infrastructure/migrations/sqlite/010_add_orders.sql")
+            .exists()
+    );
+    let source = fs::read_to_string(
+        application.join("crates/infrastructure/migrations/postgres/023_add_orders.sql"),
+    )
+    .unwrap();
+    assert!(source.contains("Application-owned PostgreSQL migration"));
+    assert!(!source.contains("DATABASE_URL"));
+}
+
+#[test]
+fn invalid_migration_identity_fails_before_application_writes() {
+    let output = TestDirectory::new("invalid-migration");
+    let application = output.path().join("application");
+    let created = hegira(&[
+        "new",
+        "migration-app",
+        "--destination",
+        path_argument(&application),
+    ]);
+    assert!(created.status.success(), "{:?}", created.stderr);
+    let before = output_tree(&application);
+
+    let result = hegira_at(&application, &["generate", "migration", "../drop_table"]);
+
+    assert_eq!(result.status.code(), Some(3));
+    assert!(result.stdout.is_empty());
+    assert_eq!(output_tree(&application), before);
 }
 
 #[test]

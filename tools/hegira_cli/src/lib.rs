@@ -10,6 +10,10 @@ use application_manifest::{
     ClientAdapter, DatabaseAdapter, MutationCompatibility, MutationCompatibilityPolicy,
 };
 use clap::{Args, Parser, Subcommand, ValueEnum, error::ErrorKind};
+use resource_generator::{
+    MigrationError, MigrationErrorKind, MigrationIdentity, ResourceSelection,
+    plan_application_migration,
+};
 use serde::Serialize;
 use template_renderer::{RenderRequest, RendererError, RendererErrorKind, render};
 
@@ -59,6 +63,34 @@ enum CliCommand {
     New(NewCommand),
     /// Inspect an existing Hegira application without modifying it.
     Inspect(InspectCommand),
+    /// Generate application-owned source through validated change plans.
+    Generate(GenerateCommand),
+}
+
+#[derive(Debug, Args)]
+struct GenerateCommand {
+    #[command(subcommand)]
+    command: GeneratorCommand,
+}
+
+#[derive(Debug, Subcommand)]
+enum GeneratorCommand {
+    /// Create an append-only migration for the selected database adapter.
+    Migration(MigrationCommand),
+}
+
+#[derive(Debug, Args)]
+struct MigrationCommand {
+    /// Stable lowercase snake_case migration identity.
+    #[arg(value_name = "IDENTITY")]
+    identity: String,
+
+    /// Application root; defaults to discovery from the working directory.
+    #[arg(long, value_name = "PATH")]
+    application_root: Option<PathBuf>,
+
+    #[command(flatten)]
+    mutation: MutationOptions,
 }
 
 #[derive(Debug, Args)]
@@ -300,6 +332,96 @@ fn run_command(
         },
         CliCommand::Inspect(command) => {
             inspect_application(command, working_directory, output, diagnostics)
+        }
+        CliCommand::Generate(command) => match command.command {
+            GeneratorCommand::Migration(command) => {
+                generate_migration(command, working_directory, output, diagnostics)
+            }
+        },
+    }
+}
+
+fn generate_migration(
+    command: MigrationCommand,
+    working_directory: PathBuf,
+    output: &mut impl Write,
+    diagnostics: &mut impl Write,
+) -> CliExit {
+    let context = match resolve_mutation_context(command.application_root, working_directory) {
+        Ok(context) => context,
+        Err(diagnostic) => return write_diagnostic(diagnostic, diagnostics),
+    };
+    let manifest = context
+        .manifest
+        .as_ref()
+        .expect("a compatible mutation context must contain a typed manifest");
+    let selection = match ResourceSelection::resolve(manifest) {
+        Ok(selection) => selection,
+        Err(error) => {
+            return write_diagnostic(CliDiagnostic::validation(error.to_string()), diagnostics);
+        }
+    };
+    let identity = match MigrationIdentity::new(command.identity) {
+        Ok(identity) => identity,
+        Err(error) => return write_diagnostic(migration_diagnostic(error), diagnostics),
+    };
+    let migration = match plan_application_migration(&context.root, selection.database(), identity)
+    {
+        Ok(migration) => migration,
+        Err(error) => return write_diagnostic(migration_diagnostic(error), diagnostics),
+    };
+
+    execute_mutation_plan(
+        &context.root,
+        migration.plan(),
+        command.mutation,
+        output,
+        diagnostics,
+    )
+}
+
+fn resolve_mutation_context(
+    application_root: Option<PathBuf>,
+    working_directory: PathBuf,
+) -> Result<ApplicationContext, CliDiagnostic> {
+    let policy = MutationCompatibilityPolicy::for_current_release().map_err(|error| {
+        CliDiagnostic::internal(format!(
+            "cannot establish the CLI compatibility policy: {error}"
+        ))
+    })?;
+    let request = match application_root {
+        Some(root) => ApplicationContextRequest::explicit(working_directory, root),
+        None => ApplicationContextRequest::discover_from(working_directory),
+    };
+    let context =
+        resolve_application_context(&request, &policy).map_err(|error| match error.kind() {
+            ApplicationContextErrorKind::Validation => CliDiagnostic::validation(error.to_string()),
+            ApplicationContextErrorKind::Conflict => CliDiagnostic::conflict(error.to_string()),
+        })?;
+    match &context.compatibility {
+        MutationCompatibility::Compatible if context.manifest.is_some() => Ok(context),
+        MutationCompatibility::Compatible => Err(CliDiagnostic::internal(
+            "compatible application context has no typed manifest",
+        )),
+        MutationCompatibility::Incompatible(issue) | MutationCompatibility::Unsupported(issue) => {
+            Err(CliDiagnostic::conflict(format!(
+                "application cannot be mutated: {issue}"
+            )))
+        }
+    }
+}
+
+fn migration_diagnostic(error: MigrationError) -> CliDiagnostic {
+    match error.kind() {
+        MigrationErrorKind::InvalidIdentity | MigrationErrorKind::UnsafeApplication => {
+            CliDiagnostic::validation(error.to_string())
+        }
+        MigrationErrorKind::InvalidHistory
+        | MigrationErrorKind::IdentityCollision
+        | MigrationErrorKind::VersionExhausted
+        | MigrationErrorKind::InvalidState => CliDiagnostic::conflict(error.to_string()),
+        MigrationErrorKind::Planning => {
+            CliDiagnostic::internal(format!("cannot construct migration change plan: {error}"))
         }
     }
 }

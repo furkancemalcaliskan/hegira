@@ -72,8 +72,8 @@ ownership:
 | `templates/package.toml` | Versioned canonical component-package identity, framework compatibility, component graph, and source digest |
 | `templates/components/` | Typed data-only component manifests that define the canonical application composition |
 | `tools/application_mutator/` | Typed change plans, conflict-aware Rust and TOML editors, and failure-safe publication for coordinated existing-application changes |
-| `tools/hegira_cli/` | Source-runnable `hegira new`, read-only `hegira inspect`, and shared reviewable mutation execution with stable diagnostics and exit outcomes |
-| `tools/resource_generator/` | Typed layered resource naming, field specifications, application selection, collision validation, and artifact ownership |
+| `tools/hegira_cli/` | Source-runnable application creation and inspection plus reviewable application-owned migration generation with stable diagnostics and exit outcomes |
+| `tools/resource_generator/` | Typed layered resource naming and field specifications plus provider-aware, append-only application migration planning |
 | `tools/template_renderer/` | Reusable deterministic render core with a separate disposable repository-validation adapter; it is not a public CLI |
 
 The canonical rendered application is an independent Cargo workspace, consumes framework
@@ -101,8 +101,9 @@ The prompts show the implemented choices and defaults, summarize the resulting a
 ask for confirmation before any files are written. Non-interactive terminals never wait for
 prompt input and require the application name and destination explicitly.
 Supplying both inputs skips prompts and confirmation. Only SQLite/PostgreSQL,
-Leptos, and Identity selections are supported; generation does not provide
-module management, code generators, or automatic upgrades.
+Leptos, and Identity selections are supported for application creation. The
+CLI also generates application-owned migration scaffolds; it does not provide
+module management, general resource generation, or automatic upgrades.
 
 Its stable process outcomes are success (`0`), internal error (`1`), usage
 error (`2`), validation error (`3`), and conflict (`4`). Human-readable help
@@ -147,6 +148,23 @@ APP_ENV=sqlite cargo leptos watch -p app_server \
 Open `http://127.0.0.1:3000`. The SQLite profile seeds the development admin
 configured in the generated application's `config/sqlite.yaml`. Development startup owns its
 SQLite database creation, migrations, and configured seed behavior.
+
+From a generated application, create an append-only migration scaffold for
+the database adapter selected in `hegira.toml`:
+
+```sh
+cargo run --locked --manifest-path /path/to/hegira/Cargo.toml \
+  -p hegira_cli -- generate migration add_orders
+```
+
+Use `--dry-run` to review the same content-redacted change plan that apply
+publishes, or `--json` for deterministic machine-readable output. The command
+writes a provider-specific SQL scaffold under
+`crates/infrastructure/migrations/` and advances its private generator state;
+it never connects to a database, runs a migration, or edits historical files.
+Replace `/path/to/hegira` with the framework source checkout or release archive
+used to run the source-only CLI. See [Getting started](docs/getting-started.md#generate-an-application-migration)
+for identity, conflict, and publication details.
 
 ## Documentation
 
