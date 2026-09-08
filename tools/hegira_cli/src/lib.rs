@@ -14,10 +14,14 @@ use serde::Serialize;
 use template_renderer::{RenderRequest, RendererError, RendererErrorKind, render};
 
 mod application_context;
+mod mutation;
 
 pub use application_context::{
     ApplicationContext, ApplicationContextError, ApplicationContextErrorKind,
     ApplicationContextRequest, ApplicationPaths, resolve_application_context,
+};
+pub use mutation::{
+    MUTATION_OUTPUT_SCHEMA, MutationOptions, change_plan_diagnostic, execute_mutation_plan,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

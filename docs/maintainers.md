@@ -186,7 +186,11 @@ module registration, and lossless TOML integration edits. Fixtures cover
 customized surrounding source, already-present results, and missing, duplicate,
 reordered, or incompatible integration points. The canonical layered
 application's declared integration points are exercised without publishing a
-change plan. Publisher fixtures cover exclusive mutation locking, digest and
+change plan. CLI fixtures verify that dry-run performs no application-root I/O,
+human output lists every ordered operation, machine output is deterministic and
+versioned, empty plans are stable no-ops, planning conflicts preserve the
+conflict outcome, and dry-run and apply report the identical content-redacted
+plan. Publisher fixtures cover exclusive mutation locking, digest and
 identity rechecks, symlink and ancestor replacement, destination races,
 filesystem-semantic preflight, successful edit/create publication, reverse
 rollback after injected failures, and explicit incomplete-recovery reporting.

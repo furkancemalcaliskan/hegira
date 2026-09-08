@@ -111,7 +111,7 @@ The direct local dependency allowlist is enforced from locked Cargo metadata by
 | `identity_http` | `http_support`, `identity_application`, `identity_application_contracts`, `leptos_support` |
 | `identity_leptos` | `identity_application`, `identity_application_contracts`, `identity_domain_shared`, `leptos_support` |
 | `application_mutator` | None |
-| `hegira_cli` | `application_manifest`, `template_renderer` |
+| `hegira_cli` | `application_manifest`, `application_mutator`, `template_renderer` |
 | `template_renderer` | `application_manifest` |
 
 Normal, optional, development, and build dependencies use the same ownership
@@ -197,11 +197,12 @@ are modified; the contract does not claim universal filesystem transactions.
 help, version reporting, guided and deterministic non-interactive application
 creation, read-only application inspection, concise diagnostics, and stable
 process outcomes without reading a user home directory or global configuration.
-It delegates canonical component planning and atomic publication to
-`template_renderer`; repository-local dependency rewrites remain unavailable to
-the public command. Help, version information, successful creation instructions,
-and inspection results are written to standard output; usage and failure
-diagnostics are written to standard error.
+It delegates new-application component planning and atomic publication to
+`template_renderer`, and existing-application publication to
+`application_mutator`; repository-local dependency rewrites remain unavailable
+to the public command. Help, version information, successful creation
+instructions, inspection results, and mutation plans are written to standard
+output; usage and failure diagnostics are written to standard error.
 
 The process outcomes are `0` for success, `1` for an internal error, `2` for
 invalid usage, `3` for validation failure, and `4` for a destination or state
@@ -210,6 +211,18 @@ layered application with SQLite, Leptos, and Identity defaults. The database,
 client, and component selections can also be stated explicitly. Generation
 writes the destination atomically and never executes generated or external
 commands.
+
+The CLI library provides common `--dry-run` and `--json` options for mutation
+commands. A command constructs and validates one typed `ChangePlan`, then hands
+that same value to the shared execution path for either preview or publication;
+dry-run does not open or write the application root. Human output lists every
+ordered relative path and operation. Machine output is deterministic,
+explicitly versioned, and includes the content-redacted plan summary rather
+than file bodies, runtime configuration, credentials, environment values, or
+machine-local framework paths. Empty plans are successful no-ops, planning and
+state conflicts retain the conflict process outcome, and invalid plans retain a
+validation outcome. No concrete resource generator is implied by this shared
+execution contract.
 
 The CLI library also owns a read-only existing-application context resolver.
 `hegira inspect` uses it to provide concise human-readable application identity,
