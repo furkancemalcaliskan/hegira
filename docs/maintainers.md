@@ -328,6 +328,41 @@ network, database state, validation image, and rendered output on exit. Compose
 project and image names are assigned by the check rather than inherited from
 the caller. It never targets the maintainer's configured database.
 
+### Validation build-cache lifecycle
+
+The layered-template, generated-feature, and generated-application checks use
+repository-owned state below `target/validation/`:
+
+- `workspaces/<check>` is a stable staging path. Its contents are recreated for
+  each invocation and removed on success, failure, interruption, and supported
+  termination signals. Keeping the path stable prevents each disposable render
+  from becoming a new Cargo package source identity.
+- `build/<check>` is that check's persistent Cargo target directory. It is
+  intentionally separate from normal `target/debug` developer output and may
+  be reused by later equivalent validations.
+- `locks/<check>` prevents two local invocations from sharing the same staging
+  workspace. A remaining lock after an uncatchable process termination must be
+  removed only after confirming that no matching validation process is active.
+
+Inspect the cleanup operation, then remove all repository-owned validation
+build caches and the three legacy pre-v0.5.0 validation target directories:
+
+```sh
+sh scripts/clean-validation-cache.sh --dry-run
+sh scripts/clean-validation-cache.sh
+```
+
+Cleanup refuses to run while a validation lock exists and rejects symlinked or
+non-directory cache roots. It does not remove normal Cargo output such as
+`target/debug`, Cargo registry downloads, or Git dependency checkouts. Use
+`cargo clean` separately only when normal developer build output should also be
+discarded. Provider, feature, native, WebAssembly, release, and Cargo Leptos
+profiles legitimately occupy separate artifact sets; this lifecycle bounds
+growth caused by changing disposable source paths rather than weakening that
+matrix. Checks that compile only packages from the framework repository continue
+to use Cargo's normal target selection and are not owned by this cleanup
+contract.
+
 To reproduce pull request metadata validation with a saved GitHub
 `pull_request` event:
 

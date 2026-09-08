@@ -3,9 +3,12 @@ set -eu
 
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 compose_file="$repo_root/scripts/generated-application-smoke.yml"
-staging_parent=$(mktemp -d "/tmp/hegira-generated-application.XXXXXX")
+. "$repo_root/scripts/validation-cache.sh"
+validation_cache_prepare "$repo_root" generated-application-check
+staging_parent="$HEGIRA_VALIDATION_WORKSPACE"
 generated_root="$staging_parent/postgres-validation"
 artifacts_dir="$staging_parent/artifacts"
+export CARGO_TARGET_DIR="$HEGIRA_VALIDATION_TARGET"
 
 export COMPOSE_PROJECT_NAME="hegira-generated-${GITHUB_RUN_ID:-local}-$$"
 export GENERATED_APP_IMAGE="hegira-generated:${GITHUB_RUN_ID:-local}-$$"
@@ -51,7 +54,7 @@ cleanup() {
   if [ "$image_built" = true ]; then
     docker image rm "$GENERATED_APP_IMAGE"
   fi
-  rm -rf "$staging_parent"
+  validation_cache_release || status=1
   exit "$status"
 }
 trap cleanup EXIT INT TERM
@@ -156,7 +159,6 @@ for database in sqlite postgres; do
 
   (
     cd "$validation_root"
-    export CARGO_TARGET_DIR="$repo_root/target/generated-application-check"
     cargo check --workspace --all-targets --features app_server/ssr
     HEGIRA_TEST_GENERATED_MIGRATION_VERSION="$generated_migration_version" \
     HEGIRA_TEST_GENERATED_MIGRATION_DESCRIPTION="generated validation" \
@@ -181,7 +183,6 @@ compose up --detach postgres
   GENERATED_APP_DATABASE_URL="postgres://generated_app:$GENERATED_APP_DB_PASSWORD@127.0.0.1:$GENERATED_APP_POSTGRES_PORT/generated_app" \
   HEGIRA_TEST_GENERATED_MIGRATION_VERSION=23 \
   HEGIRA_TEST_GENERATED_MIGRATION_DESCRIPTION="generated validation" \
-  CARGO_TARGET_DIR="$repo_root/target/generated-application-check" \
     cargo test -p app_server --no-default-features --features ssr,db-postgres \
       --test database_contracts postgres_fresh_install_and_v020_upgrade_pass -- \
       --ignored --test-threads=1

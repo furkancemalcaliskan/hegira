@@ -200,6 +200,15 @@ production image, and HTTP contract, with disposable Docker state:
 sh scripts/generated-application-check.sh
 ```
 
+Repository-owned validation builds use stable workspaces and isolated caches
+under `target/validation/`. Inspect or remove only those caches without touching
+normal `target/debug` development output:
+
+```sh
+sh scripts/clean-validation-cache.sh --dry-run
+sh scripts/clean-validation-cache.sh
+```
+
 The CI official-module job sets `WITH_IGNORED_DB_TESTS=true` and supplies a
 disposable PostgreSQL database. The generated-application job is the sole owner of application
 database, provider, upgrade, container, hydration, and HTTP integration coverage.

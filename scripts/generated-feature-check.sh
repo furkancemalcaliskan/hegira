@@ -25,11 +25,17 @@ case "$target" in
 esac
 
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-staging_parent=$(mktemp -d "/tmp/hegira-generated-feature.XXXXXX")
+. "$repo_root/scripts/validation-cache.sh"
+validation_cache_prepare "$repo_root" generated-feature-check
+staging_parent="$HEGIRA_VALIDATION_WORKSPACE"
 generated_root="$staging_parent/application"
+export CARGO_TARGET_DIR="$HEGIRA_VALIDATION_TARGET"
 
 cleanup() {
-  rm -rf "$staging_parent"
+  status=$?
+  trap - EXIT INT TERM
+  validation_cache_release || status=1
+  exit "$status"
 }
 trap cleanup EXIT INT TERM
 
@@ -44,13 +50,11 @@ cargo run --locked --quiet -p template_renderer \
   cd "$generated_root"
   cargo generate-lockfile
   if [ -n "$target" ]; then
-    CARGO_TARGET_DIR="$repo_root/target/generated-feature-check" \
-      cargo check --locked --no-default-features \
-        --package app_server --features "$features" --target "$target"
+    cargo check --locked --no-default-features \
+      --package app_server --features "$features" --target "$target"
   else
-    CARGO_TARGET_DIR="$repo_root/target/generated-feature-check" \
-      cargo check --locked --no-default-features \
-        --package app_server --features "$features"
+    cargo check --locked --no-default-features \
+      --package app_server --features "$features"
   fi
   node "$repo_root/scripts/architecture-boundaries.mjs" \
     check-generated --root "$generated_root"
