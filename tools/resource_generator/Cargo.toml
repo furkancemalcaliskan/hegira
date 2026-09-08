@@ -11,6 +11,7 @@ rust-version = "1.96"
 application_manifest = { path = "../../crates/application_manifest" }
 application_mutator = { path = "../application_mutator" }
 serde = { version = "1.0", features = ["derive"] }
+toml = "1.0"
 
 [dev-dependencies]
 serde_json = "1.0"

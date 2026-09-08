@@ -1768,6 +1768,7 @@ dependencies = [
  "application_manifest",
  "application_mutator",
  "clap",
+ "resource_generator",
  "rustix",
  "serde",
  "serde_json",
@@ -3829,6 +3830,7 @@ dependencies = [
  "application_mutator",
  "serde",
  "serde_json",
+ "toml",
 ]
 
 [[package]]

@@ -11,8 +11,13 @@ use std::{
 
 use application_mutator::ChangePath;
 
+mod migration;
 mod specification;
 
+pub use migration::{
+    MIGRATION_STATE_SCHEMA, MigrationError, MigrationErrorKind, MigrationIdentity,
+    PlannedMigration, plan_application_migration,
+};
 pub use specification::{
     RESOURCE_SPECIFICATION_SCHEMA, ResourceField, ResourceFieldInput, ResourceIdentifier,
     ResourceSelection, ResourceSpecification, ResourceSpecificationInput,
