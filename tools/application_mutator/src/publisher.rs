@@ -193,6 +193,7 @@ mod platform {
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     enum HookPoint {
+        BeforeFilesystemPreflight,
         BeforePublication,
         BeforeChange(usize),
         AfterChange(usize),
@@ -230,6 +231,7 @@ mod platform {
         }
 
         let result = (|| {
+            hook(HookPoint::BeforeFilesystemPreflight)?;
             preflight_filesystem_semantics(&prepared, &transaction)?;
             root.verify_namespace()?;
             verify_marker(&root, &marker)?;
@@ -1116,8 +1118,11 @@ mod platform {
     #[cfg(test)]
     mod tests {
         use std::{
+            collections::BTreeMap,
+            ffi::OsString,
             fs as stdfs,
             os::unix::fs::symlink,
+            process::Command,
             sync::atomic::{AtomicU64, Ordering},
         };
 
@@ -1174,6 +1179,41 @@ mod platform {
             MutationError::new(MutationErrorKind::PublicationFailed, "injected failure")
         }
 
+        fn snapshot(root: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
+            fn visit(root: &Path, current: &Path, files: &mut BTreeMap<PathBuf, Vec<u8>>) {
+                let mut entries = stdfs::read_dir(current)
+                    .unwrap()
+                    .map(|entry| entry.unwrap())
+                    .collect::<Vec<_>>();
+                entries.sort_by_key(|entry| entry.file_name());
+                for entry in entries {
+                    let path = entry.path();
+                    let metadata = stdfs::symlink_metadata(&path).unwrap();
+                    assert!(!metadata.file_type().is_symlink());
+                    if metadata.is_dir() {
+                        visit(root, &path, files);
+                    } else {
+                        files.insert(
+                            path.strip_prefix(root).unwrap().to_path_buf(),
+                            stdfs::read(path).unwrap(),
+                        );
+                    }
+                }
+            }
+
+            let mut files = BTreeMap::new();
+            visit(root, root, &mut files);
+            files
+        }
+
+        fn child_test(name: &str, environment: (&str, OsString)) -> std::process::Output {
+            Command::new(std::env::current_exe().unwrap())
+                .args(["--ignored", "--exact", name, "--test-threads=1"])
+                .env(environment.0, environment.1)
+                .output()
+                .unwrap()
+        }
+
         #[test]
         fn publishes_edit_and_create_and_removes_transaction_state() {
             let fixture = Fixture::new("success");
@@ -1199,6 +1239,19 @@ mod platform {
         }
 
         #[test]
+        fn identical_inputs_publish_byte_identical_results() {
+            let first = Fixture::new("deterministic-first");
+            let second = Fixture::new("deterministic-second");
+            let first_plan = first.plan();
+            let second_plan = second.plan();
+
+            assert_eq!(first_plan.summary(), second_plan.summary());
+            publish_change_plan(&first.root, &first_plan).unwrap();
+            publish_change_plan(&second.root, &second_plan).unwrap();
+            assert_eq!(snapshot(&first.root), snapshot(&second.root));
+        }
+
+        #[test]
         fn concurrent_change_invalidates_the_plan_before_publication() {
             let fixture = Fixture::new("concurrent");
             let plan = fixture.plan();
@@ -1215,6 +1268,21 @@ mod platform {
             assert_eq!(stdfs::read_to_string(target).unwrap(), "user change\n");
             assert!(!fixture.root.join(MUTATION_MARKER).exists());
             assert!(!fixture.root.join("crates/domain/src/order.rs").exists());
+        }
+
+        #[test]
+        fn preexisting_generated_artifact_is_a_non_destructive_conflict() {
+            let fixture = Fixture::new("duplicate-artifact");
+            let plan = fixture.plan();
+            let artifact = fixture.root.join("crates/domain/src/order.rs");
+            stdfs::write(&artifact, "user-owned artifact\n").unwrap();
+            let original = snapshot(&fixture.root);
+
+            let error = publish_change_plan(&fixture.root, &plan).unwrap_err();
+
+            assert_eq!(error.kind(), MutationErrorKind::PreconditionFailed);
+            assert_eq!(snapshot(&fixture.root), original);
+            assert!(!fixture.root.join(MUTATION_MARKER).exists());
         }
 
         #[test]
@@ -1242,6 +1310,7 @@ mod platform {
         fn failure_after_all_changes_restores_edits_and_removes_created_files() {
             let fixture = Fixture::new("complete-rollback");
             let plan = fixture.plan();
+            let original = snapshot(&fixture.root);
             let error = publish_with(&fixture.root, &plan, |point| {
                 if point == HookPoint::AfterChange(1) {
                     return Err(injected());
@@ -1257,6 +1326,27 @@ mod platform {
             );
             assert!(!fixture.root.join("crates/domain/src/order.rs").exists());
             assert!(!fixture.root.join(MUTATION_MARKER).exists());
+            assert_eq!(snapshot(&fixture.root), original);
+        }
+
+        #[test]
+        fn unsupported_filesystem_semantics_fail_before_application_changes() {
+            let fixture = Fixture::new("unsupported-semantics");
+            let plan = fixture.plan();
+            let original = snapshot(&fixture.root);
+            let error = publish_with(&fixture.root, &plan, |point| {
+                if point == HookPoint::BeforeFilesystemPreflight {
+                    return Err(MutationError::new(
+                        MutationErrorKind::UnsupportedPlatform,
+                        "injected unsupported filesystem semantics",
+                    ));
+                }
+                Ok(())
+            })
+            .unwrap_err();
+
+            assert_eq!(error.kind(), MutationErrorKind::UnsupportedPlatform);
+            assert_eq!(snapshot(&fixture.root), original);
         }
 
         #[test]
@@ -1366,6 +1456,83 @@ mod platform {
                 stdfs::read_to_string(fixture.root.join("crates/domain/src/lib.rs")).unwrap(),
                 "pub mod existing;\n"
             );
+        }
+
+        #[test]
+        fn interrupted_process_leaves_redacted_recovery_state_and_blocks_retry() {
+            let fixture = Fixture::new("process-interruption");
+            let plan = fixture.plan();
+            let output = child_test(
+                "publisher::platform::tests::interrupted_publication_helper",
+                (
+                    "HEGIRA_MUTATION_INTERRUPTION_ROOT",
+                    fixture.root.as_os_str().to_os_string(),
+                ),
+            );
+            assert_eq!(
+                output.status.code(),
+                Some(86),
+                "child stderr: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+
+            let marker = stdfs::read_to_string(fixture.root.join(MUTATION_MARKER)).unwrap();
+            assert!(marker.contains("state=publishing"));
+            assert!(marker.contains("crates/domain/src/lib.rs"));
+            assert!(marker.contains("crates/domain/src/order.rs"));
+            assert!(!marker.contains("pub mod existing"));
+            assert!(!marker.contains("pub struct Order"));
+            assert_eq!(
+                publish_change_plan(&fixture.root, &plan)
+                    .unwrap_err()
+                    .kind(),
+                MutationErrorKind::RecoveryRequired
+            );
+            assert_eq!(
+                stdfs::read_to_string(fixture.root.join("crates/domain/src/lib.rs")).unwrap(),
+                "pub mod existing;\npub mod order;\n"
+            );
+            assert!(!fixture.root.join("crates/domain/src/order.rs").exists());
+        }
+
+        #[test]
+        #[ignore = "subprocess interruption helper"]
+        fn interrupted_publication_helper() {
+            let Some(root) = std::env::var_os("HEGIRA_MUTATION_INTERRUPTION_ROOT") else {
+                return;
+            };
+            let root = PathBuf::from(root);
+            assert_eq!(root.parent(), Some(std::env::temp_dir().as_path()));
+            assert!(
+                root.file_name()
+                    .and_then(OsStr::to_str)
+                    .is_some_and(|name| name.starts_with("hegira-mutation-test-")),
+                "interruption helpers may operate only on disposable test fixtures"
+            );
+            let original = b"pub mod existing;\n";
+            let plan = ChangePlan::new([
+                StructuredFileEdit::new(
+                    "crates/domain/src/lib.rs",
+                    original,
+                    b"pub mod existing;\npub mod order;\n".to_vec(),
+                )
+                .unwrap()
+                .into(),
+                FileCreation::new(
+                    "crates/domain/src/order.rs",
+                    b"pub struct Order;\n".to_vec(),
+                )
+                .unwrap()
+                .into(),
+            ])
+            .unwrap();
+            let _ = publish_with(&root, &plan, |point| {
+                if point == HookPoint::AfterChange(0) {
+                    std::process::exit(86);
+                }
+                Ok(())
+            });
+            panic!("interruption helper returned without terminating");
         }
 
         #[test]

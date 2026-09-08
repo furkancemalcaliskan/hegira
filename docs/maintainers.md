@@ -190,7 +190,10 @@ change plan. Publisher fixtures cover exclusive mutation locking, digest and
 identity rechecks, symlink and ancestor replacement, destination races,
 filesystem-semantic preflight, successful edit/create publication, reverse
 rollback after injected failures, and explicit incomplete-recovery reporting.
-These tests operate only on disposable temporary application fixtures.
+These tests operate only on disposable temporary application fixtures. A
+guarded child-process fixture exits during multi-file publication to verify that
+the durable, content-redacted recovery marker survives process termination and
+blocks a subsequent mutation attempt.
 
 Validate the workspace-external canonical layered application base against the
 current framework checkout:
