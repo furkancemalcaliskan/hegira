@@ -3,11 +3,17 @@ set -eu
 
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 template_root="$repo_root/templates/applications/layered"
-staging_parent=$(mktemp -d "/tmp/hegira-layered-template.XXXXXX")
+. "$repo_root/scripts/validation-cache.sh"
+validation_cache_prepare "$repo_root" layered-template-check
+staging_parent="$HEGIRA_VALIDATION_WORKSPACE"
 staging_root="$staging_parent/application"
+export CARGO_TARGET_DIR="$HEGIRA_VALIDATION_TARGET"
 
 cleanup() {
-  rm -rf "$staging_parent"
+  status=$?
+  trap - EXIT INT TERM
+  validation_cache_release || status=1
+  exit "$status"
 }
 trap cleanup EXIT INT TERM
 
@@ -38,20 +44,15 @@ fi
   npm ci --prefix apps/web/src
   PATH="$staging_root/apps/web/src/node_modules/.bin:$PATH"
   export PATH
-  CARGO_TARGET_DIR="$repo_root/target/layered-template-check" \
-    cargo check --workspace --all-targets --all-features
+  cargo check --workspace --all-targets --all-features
   node "$repo_root/scripts/architecture-boundaries.mjs" \
     check-generated --root "$staging_root"
-  CARGO_TARGET_DIR="$repo_root/target/layered-template-check" \
-    cargo check -p app_server --no-default-features --features hydrate \
-      --target wasm32-unknown-unknown
-  CARGO_TARGET_DIR="$repo_root/target/layered-template-check" \
-    cargo clippy --workspace --all-targets --all-features -- -D warnings
-  CARGO_TARGET_DIR="$repo_root/target/layered-template-check" \
-    cargo test --workspace --all-features
-  CARGO_TARGET_DIR="$repo_root/target/layered-template-check" \
-    cargo leptos build -p app_server --release \
-      --bin-features ssr,db-postgres --lib-features hydrate
+  cargo check -p app_server --no-default-features --features hydrate \
+    --target wasm32-unknown-unknown
+  cargo clippy --workspace --all-targets --all-features -- -D warnings
+  cargo test --workspace --all-features
+  cargo leptos build -p app_server --release \
+    --bin-features ssr,db-postgres --lib-features hydrate
 )
 
 echo "canonical layered application template: ok"

@@ -105,7 +105,10 @@ commands change. Never describe planned work as implemented.
   profiles, verifies it before staging local dependencies in a separate copy,
   generates an application-owned migration through the public mutation command,
   and exercises native, hydration, disposable-database upgrade, and
-  production-container contracts.
+  production-container contracts. Rendered-application validations use stable,
+  locked workspaces and isolated repository-owned build caches under
+  `target/validation/`; their cleanup command does not own normal developer
+  Cargo output.
 - `.github/workflows/` contains validation and release automation.
 
 Do not create future-facing directories, manifests, modules, tools, clients, or
