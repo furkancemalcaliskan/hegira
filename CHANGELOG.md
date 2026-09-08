@@ -23,6 +23,10 @@ All notable changes are documented here. Releases follow Semantic Versioning.
   PostgreSQL applications, including deterministic plans, immutable historical
   checksums, failure recovery, disposable database application, supported
   upgrades, and the production container.
+- Added deterministic Domain, Application Contracts, and Application resource
+  source planning with controlled module registration, UUID identifiers,
+  transport-neutral contracts, repository and identifier ports, and explicit
+  application-layer authorization before every generated use case.
 
 ## [0.4.0] - 2026-09-06
 

@@ -12,11 +12,16 @@ use std::{
 use application_mutator::ChangePath;
 
 mod migration;
+mod source;
 mod specification;
 
 pub use migration::{
     MIGRATION_STATE_SCHEMA, MigrationError, MigrationErrorKind, MigrationIdentity,
     PlannedMigration, plan_application_migration,
+};
+pub use source::{
+    InwardLayerError, InwardLayerErrorKind, InwardLayerSources, PlannedInwardLayers,
+    plan_inward_resource_layers,
 };
 pub use specification::{
     RESOURCE_SPECIFICATION_SCHEMA, ResourceField, ResourceFieldInput, ResourceIdentifier,

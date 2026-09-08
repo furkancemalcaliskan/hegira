@@ -167,7 +167,7 @@ Reserved canonical application identities and collisions with the application,
 official modules, or observed application source fail before a change plan is
 constructed. Inputs cannot supply source fragments, routes, SQL, or filesystem
 paths; every derived artifact path is validated by the application-mutation
-contract. This contract does not yet emit resource source code.
+contract.
 
 The same package owns the immutable typed resource specification. Raw field
 input is restricted to lowercase ASCII snake_case,
@@ -179,8 +179,26 @@ sorted canonically, and duplicates plus Rust, SQL, and generator-reserved names
 fail before planning. The selected SQLite or PostgreSQL adapter and the Leptos
 client are resolved from the validated application manifest rather than caller
 defaults. A versioned, deterministic summary exposes only the validated model.
-This contract performs no schema introspection, database access, source
-generation, or application mutation.
+This contract performs no schema introspection or database access.
+
+The inward-layer emitter turns that specification into one deterministic
+change plan for Domain, Application Contracts, and Application source. Domain
+owns the UUID identifier value and entity skeleton. Application Contracts owns
+serializable commands, queries, responses, permission identifiers, and the
+service boundary. Application owns the repository, authorization, and
+identifier-generation ports plus the service implementation. Every generated
+use case requires authorization before repository access, including create,
+update, and delete. The generated source deliberately contains no Axum,
+Leptos, SQLx, or vendor types and makes no business-invariant or aggregate
+assumptions. Developers extend the generated application-owned domain source
+when product rules require them.
+
+The same plan registers each module only through the controlled integration
+block in its layer root. New source uses absent-file preconditions and root
+edits use observed-content digests, so an existing registration, file,
+concurrent change, or unsupported root fails instead of being overwritten.
+Infrastructure, HTTP presentation, and web source remain outside this inward
+plan.
 
 The package also plans application-owned migration scaffolds independently of
 the general resource specification. It resolves the selected SQLite or

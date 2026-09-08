@@ -203,14 +203,22 @@ The CLI gate also validates `resource_generator` naming and ownership. Its
 fixtures cover deterministic singular/plural derivation, explicit irregular
 plurals, acronym boundaries, reserved and occupied namespaces, brand-neutral
 canonical package ownership, safe application-relative paths, and distinct
-permission identifiers. These tests validate the contract only; no resource
-source is emitted or published at this stage.
+permission identifiers.
 
 The same fixtures validate the immutable resource specification: its required
 UUID identifier, closed scalar set, nullable fields, deterministic field order
 and versioned serialization, selected SQLite/PostgreSQL and Leptos context,
 duplicate and reserved names, and code-, SQL-, and path-shaped input rejection.
 Specification validation reads no database and constructs no change plan.
+
+Inward-layer generator fixtures build one deterministic six-operation plan:
+three absent-file creations and three digest-preconditioned module-root edits.
+They parse every generated Rust source, reject existing or conflicting module
+registrations, verify transport and provider types stay out of inward layers,
+and require explicit authorization before repository access. The canonical
+application carries the UUID, datetime, and serialization dependencies needed
+by those generated inward layers. Persistence, HTTP, and UI source is not
+emitted by this plan.
 
 Migration-generator fixtures cover manifest-selected SQLite and PostgreSQL
 paths, append-only numeric identities, deterministic scaffolds and plans,
