@@ -663,8 +663,8 @@ fn explicit_sibling_destination_still_works() {
 #[test]
 fn provider_snapshots_and_interactive_requests_match() {
     for (database, expected) in [
-        ("sqlite", 7184853664259718236_u64),
-        ("postgres", 14844116639782160295_u64),
+        ("sqlite", 4330629061115534144_u64),
+        ("postgres", 3328403649833379669_u64),
     ] {
         let root = TestDirectory::new(database);
         let explicit = root.path().join("explicit");
@@ -838,6 +838,45 @@ fn real_write_failure_cleans_staging_and_allows_retry() {
         ])
         .status
         .success()
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn migration_write_failure_is_reported_without_partial_application_changes() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let root = TestDirectory::new("migration-write-failure");
+    let application = root.path().join("application");
+    assert!(
+        hegira(&[
+            "new",
+            "migration-write-test",
+            "--destination",
+            path_argument(&application),
+        ])
+        .status
+        .success()
+    );
+    let migration_directory = application.join("crates/infrastructure/migrations/sqlite");
+    let original_permissions = fs::metadata(&migration_directory).unwrap().permissions();
+    let mut read_only = original_permissions.clone();
+    read_only.set_mode(0o500);
+    fs::set_permissions(&migration_directory, read_only).unwrap();
+    let before = output_tree(&application);
+
+    let failed = hegira_at(&application, &["generate", "migration", "write_failure"]);
+
+    fs::set_permissions(&migration_directory, original_permissions).unwrap();
+    assert_eq!(failed.status.code(), Some(1), "{:?}", failed.stderr);
+    assert!(failed.stdout.is_empty());
+    assert!(String::from_utf8_lossy(&failed.stderr).contains("cannot create a private staged"));
+    assert_eq!(output_tree(&application), before);
+    assert!(!application.join(".hegira-mutation.lock").exists());
+    assert!(
+        hegira_at(&application, &["generate", "migration", "write_failure"])
+            .status
+            .success()
     );
 }
 

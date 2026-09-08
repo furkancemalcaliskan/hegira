@@ -217,8 +217,10 @@ paths, append-only numeric identities, deterministic scaffolds and plans,
 identity and history conflicts, unchanged historical bytes, coordination-state
 preconditions, and symlink rejection. CLI fixtures verify that migration
 dry-run and apply report the identical content-redacted plan while dry-run
-performs no writes. All application roots are disposable fixtures; the command
-never connects to or mutates a database.
+performs no writes. A real permission failure verifies that staging cleanup
+leaves no partial migration and permits a successful retry. All application
+roots are disposable fixtures; the command never connects to or mutates a
+database.
 
 Validate the workspace-external canonical layered application base against the
 current framework checkout:
@@ -249,6 +251,16 @@ the renderer snapshot and failure-path tests, installs the client package lock,
 validates the rendered workspace's direct application and Hegira dependencies,
 validates native workspace targets and tests, compiles the hydration target,
 and produces the full-stack Cargo Leptos release output.
+
+The generated-application gate first verifies untouched public `hegira new`
+output against the canonical package, then runs the public migration command on
+the disposable staged application for each database selection. It compares
+repeat dry-run output, requires dry-run and apply to expose the same plan,
+checks invalid and duplicate process outcomes, and verifies every historical
+migration checksum remains unchanged. The generated application tests require
+SQLx to record the expected generated migration during fresh installation and
+the supported v0.2.0 upgrade. SQLite uses an in-memory database; PostgreSQL uses
+only the Compose database created and explicitly authorized by the gate.
 
 The renderer is an internal maintainer tool rather than the public Hegira CLI.
 To inspect an independently copyable release-style render:

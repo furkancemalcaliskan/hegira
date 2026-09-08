@@ -97,7 +97,9 @@ commands change. Never describe planned work as implemented.
 - `scripts/` contains local validation and release helpers.
   The generated-application gate uses public CLI output for both database
   profiles, verifies it before staging local dependencies in a separate copy,
-  and exercises native, hydration, upgrade, and production-container contracts.
+  generates an application-owned migration through the public mutation command,
+  and exercises native, hydration, disposable-database upgrade, and
+  production-container contracts.
 - `.github/workflows/` contains validation and release automation.
 
 Do not create future-facing directories, manifests, modules, tools, clients, or

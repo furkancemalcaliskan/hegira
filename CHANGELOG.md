@@ -19,6 +19,10 @@ All notable changes are documented here. Releases follow Semantic Versioning.
 - Added manifest-selected SQLite and PostgreSQL migration scaffold generation
   with append-only application-owned histories, deterministic dry-run/apply
   plans, collision-safe version coordination, and no database access.
+- Added end-to-end migration generator validation across CLI-created SQLite and
+  PostgreSQL applications, including deterministic plans, immutable historical
+  checksums, failure recovery, disposable database application, supported
+  upgrades, and the production container.
 
 ## [0.4.0] - 2026-09-06
 
