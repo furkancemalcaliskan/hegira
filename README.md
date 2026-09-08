@@ -73,7 +73,7 @@ ownership:
 | `templates/components/` | Typed data-only component manifests that define the canonical application composition |
 | `tools/application_mutator/` | Typed change plans, conflict-aware Rust and TOML editors, and failure-safe publication for coordinated existing-application changes |
 | `tools/hegira_cli/` | Source-runnable application creation and inspection plus reviewable application-owned migration generation with stable diagnostics and exit outcomes |
-| `tools/resource_generator/` | Typed layered resource specifications, inward-layer source planning, and provider-aware append-only migration planning |
+| `tools/resource_generator/` | Typed layered resource specifications plus inward-layer, provider-specific SQLx persistence, explicit composition, and append-only migration planning |
 | `tools/template_renderer/` | Reusable deterministic render core with a separate disposable repository-validation adapter; it is not a public CLI |
 
 The canonical rendered application is an independent Cargo workspace, consumes framework

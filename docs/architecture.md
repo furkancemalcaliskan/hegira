@@ -200,6 +200,23 @@ concurrent change, or unsupported root fails instead of being overwritten.
 Infrastructure, HTTP presentation, and web source remain outside this inward
 plan.
 
+A separate persistence emitter consumes the same validated specification and
+produces only the selected database adapter. It creates an application-owned
+SQLx repository that implements the Application port, a UUID identifier
+adapter, and an explicit typed factory that composes those adapters with an
+application-selected authorization implementation. The provider-specific
+module is registered through the controlled Infrastructure root; no service
+locator, reflection, database inspection, or inward SQLx dependency is used.
+Runtime query values are bound parameters, while table and column identifiers
+come only from validated generator identities. List consistency is scoped to
+the repository operation, and no transaction is extended to an HTTP request.
+
+The persistence plan also creates the selected provider's forward-only table
+migration in the application-owned migration history. SQLite and PostgreSQL
+types and placeholder syntax are emitted independently; generating one does
+not claim or create support for the other. Historical migrations remain
+immutable.
+
 The package also plans application-owned migration scaffolds independently of
 the general resource specification. It resolves the selected SQLite or
 PostgreSQL adapter from the validated application manifest, observes only that

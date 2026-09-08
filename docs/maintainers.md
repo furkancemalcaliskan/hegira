@@ -220,6 +220,14 @@ application carries the UUID, datetime, and serialization dependencies needed
 by those generated inward layers. Persistence, HTTP, and UI source is not
 emitted by this plan.
 
+Persistence-generator fixtures validate separate SQLite and PostgreSQL output,
+provider-specific schema types and placeholders, bound runtime values,
+application-owned SQLx repository-port implementations, explicit typed service
+composition, controlled Infrastructure registration, and append-only migration
+history. Generated Rust is parsed before publication, and an existing module
+registration fails before migration planning. HTTP and UI source remains
+outside this persistence plan.
+
 Migration-generator fixtures cover manifest-selected SQLite and PostgreSQL
 paths, append-only numeric identities, deterministic scaffolds and plans,
 identity and history conflicts, unchanged historical bytes, coordination-state

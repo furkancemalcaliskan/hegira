@@ -12,12 +12,17 @@ use std::{
 use application_mutator::ChangePath;
 
 mod migration;
+mod persistence;
 mod source;
 mod specification;
 
 pub use migration::{
     MIGRATION_STATE_SCHEMA, MigrationError, MigrationErrorKind, MigrationIdentity,
     PlannedMigration, plan_application_migration,
+};
+pub use persistence::{
+    PersistenceLayerError, PersistenceLayerErrorKind, PersistenceLayerSources,
+    PlannedResourcePersistence, plan_resource_persistence,
 };
 pub use source::{
     InwardLayerError, InwardLayerErrorKind, InwardLayerSources, PlannedInwardLayers,
