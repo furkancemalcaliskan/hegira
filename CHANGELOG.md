@@ -4,6 +4,13 @@ All notable changes are documented here. Releases follow Semantic Versioning.
 
 ## [Unreleased]
 
+### Added
+
+- Added a shared CLI mutation execution contract with no-write dry runs,
+  ordered human-readable operations, deterministic versioned JSON summaries,
+  stable no-op and conflict outcomes, and publication from the same validated
+  content-redacted plan used for preview.
+
 ## [0.4.0] - 2026-09-06
 
 ### Security

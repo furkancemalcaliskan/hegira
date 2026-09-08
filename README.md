@@ -72,7 +72,7 @@ ownership:
 | `templates/package.toml` | Versioned canonical component-package identity, framework compatibility, component graph, and source digest |
 | `templates/components/` | Typed data-only component manifests that define the canonical application composition |
 | `tools/application_mutator/` | Typed change plans, conflict-aware Rust and TOML editors, and failure-safe publication for coordinated existing-application changes |
-| `tools/hegira_cli/` | Source-runnable `hegira new` and read-only `hegira inspect` with stable diagnostics and exit outcomes |
+| `tools/hegira_cli/` | Source-runnable `hegira new`, read-only `hegira inspect`, and shared reviewable mutation execution with stable diagnostics and exit outcomes |
 | `tools/template_renderer/` | Reusable deterministic render core with a separate disposable repository-validation adapter; it is not a public CLI |
 
 The canonical rendered application is an independent Cargo workspace, consumes framework

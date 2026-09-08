@@ -67,7 +67,11 @@ export const WORKSPACE_DEPENDENCY_POLICY = Object.freeze({
     "leptos_support",
   ],
   application_mutator: [],
-  hegira_cli: ["application_manifest", "template_renderer"],
+  hegira_cli: [
+    "application_manifest",
+    "application_mutator",
+    "template_renderer",
+  ],
   template_renderer: ["application_manifest"],
 });
 
