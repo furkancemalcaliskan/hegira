@@ -91,7 +91,11 @@ commands change. Never describe planned work as implemented.
   specification accepts only lowercase ASCII field names, nullability, and the
   closed `string`, `bool`, `i64`, `uuid`, and `datetime` scalar set; supplies a
   required non-null UUID identifier; and resolves the database and client from
-  the validated application manifest. It also plans provider-specific,
+  the validated application manifest. It emits deterministic Domain,
+  Application Contracts, and Application source through absent-file creations
+  and controlled module-root edits. Generated application services depend on
+  repository, authorization, and identifier ports and authorize every use case
+  before accessing a repository. The same tool plans provider-specific,
   append-only application migration scaffolds without connecting to a database
   or changing historical migrations.
 - `scripts/` contains local validation and release helpers.

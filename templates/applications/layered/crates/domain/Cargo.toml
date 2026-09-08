@@ -8,4 +8,5 @@ publish.workspace = true
 
 [dependencies]
 app_domain_shared.workspace = true
-
+chrono.workspace = true
+uuid.workspace = true

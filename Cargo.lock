@@ -3830,6 +3830,7 @@ dependencies = [
  "application_mutator",
  "serde",
  "serde_json",
+ "syn 2.0.118",
  "toml",
 ]
 
