@@ -86,7 +86,11 @@ commands change. Never describe planned work as implemented.
   ownership contract. It derives validated Rust module, route, permission,
   database, and application-relative artifact identities from one resource
   input, supports an explicit irregular plural, and rejects reserved or
-  occupied application namespaces before planning. It does not yet emit source.
+  occupied application namespaces before planning. Its immutable resource
+  specification accepts only lowercase ASCII field names, nullability, and the
+  closed `string`, `bool`, `i64`, `uuid`, and `datetime` scalar set; supplies a
+  required non-null UUID identifier; and resolves the database and client from
+  the validated application manifest. It does not yet emit source.
 - `scripts/` contains local validation and release helpers.
   The generated-application gate uses public CLI output for both database
   profiles, verifies it before staging local dependencies in a separate copy,

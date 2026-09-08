@@ -11,6 +11,15 @@ use std::{
 
 use application_mutator::ChangePath;
 
+mod specification;
+
+pub use specification::{
+    RESOURCE_SPECIFICATION_SCHEMA, ResourceField, ResourceFieldInput, ResourceIdentifier,
+    ResourceSelection, ResourceSpecification, ResourceSpecificationInput,
+    ResourceSpecificationSummary, ScalarType, SelectedClient, SelectedDatabase, SpecificationError,
+    SpecificationErrorKind,
+};
+
 const MAX_IDENTITY_BYTES: usize = 64;
 
 const RESERVED_IDENTITIES: &[&str] = &[

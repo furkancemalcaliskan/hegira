@@ -113,7 +113,7 @@ The direct local dependency allowlist is enforced from locked Cargo metadata by
 | `identity_leptos` | `identity_application`, `identity_application_contracts`, `identity_domain_shared`, `leptos_support` |
 | `application_mutator` | None |
 | `hegira_cli` | `application_manifest`, `application_mutator`, `template_renderer` |
-| `resource_generator` | `application_mutator` |
+| `resource_generator` | `application_manifest`, `application_mutator` |
 | `template_renderer` | `application_manifest` |
 
 Normal, optional, development, and build dependencies use the same ownership
@@ -168,6 +168,19 @@ official modules, or observed application source fail before a change plan is
 constructed. Inputs cannot supply source fragments, routes, SQL, or filesystem
 paths; every derived artifact path is validated by the application-mutation
 contract. This contract does not yet emit resource source code.
+
+The same package owns the immutable typed resource specification consumed by
+future emitters. Raw field input is restricted to lowercase ASCII snake_case,
+an explicit nullable flag, and the closed scalar set `string`, `bool`, `i64`,
+`uuid`, and `datetime`; arbitrary Rust and SQL types are not accepted. Every
+resource receives a required, non-null UUID `id`, so user fields cannot redefine
+the identifier. At least one non-identifier field is required, field names are
+sorted canonically, and duplicates plus Rust, SQL, and generator-reserved names
+fail before planning. The selected SQLite or PostgreSQL adapter and the Leptos
+client are resolved from the validated application manifest rather than caller
+defaults. A versioned, deterministic summary exposes only the validated model.
+This contract performs no schema introspection, database access, source
+generation, or application mutation.
 
 ## Existing-application change planning
 
