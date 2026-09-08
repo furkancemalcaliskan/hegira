@@ -38,6 +38,7 @@ automatic module discovery, application upgrades, or registry distribution.
 ├── tools/
 │   ├── application_mutator/ existing-application change-plan core
 │   ├── hegira_cli/          source-runnable CLI command shell
+│   ├── resource_generator/  layered resource naming and ownership core
 │   └── template_renderer/   render core and repository-validation adapter
 ├── docs/                    current technical and maintainer documentation
 ├── scripts/                 validation and release helpers
@@ -112,6 +113,7 @@ The direct local dependency allowlist is enforced from locked Cargo metadata by
 | `identity_leptos` | `identity_application`, `identity_application_contracts`, `identity_domain_shared`, `leptos_support` |
 | `application_mutator` | None |
 | `hegira_cli` | `application_manifest`, `application_mutator`, `template_renderer` |
+| `resource_generator` | `application_mutator` |
 | `template_renderer` | `application_manifest` |
 
 Normal, optional, development, and build dependencies use the same ownership
@@ -145,6 +147,27 @@ framework compatibility surfaces or consumed by generated applications.
 These packages expose reusable primitives and provider adapters. They do not
 contain application domain, application service, presentation, host
 composition, or product UI code.
+
+## Layered resource naming and ownership
+
+`tools/resource_generator` owns the typed naming boundary shared by layered
+resource emitters. A resource is supplied as an ASCII Rust type identity. Its
+plural type defaults to the explicit and deterministic suffix `s`; irregular
+forms require an explicit plural identity rather than language inference. The
+validated result provides the Rust module, plural route segment, SQL table,
+permission prefix, and application-relative source path for each supported
+layer. Acronym boundaries have deterministic snake-case and kebab-case forms.
+
+Resource artifacts are assigned once to Domain (`app_domain`), Application
+Contracts (`app_application_contracts`), Application (`app_application`),
+Infrastructure (`app_infrastructure`), Presentation (`app_presentation`), or
+Web (`app_web`). Those application-owned package names and roots match the
+enforced canonical generated-application graph and contain no Hegira branding.
+Reserved canonical application identities and collisions with the application,
+official modules, or observed application source fail before a change plan is
+constructed. Inputs cannot supply source fragments, routes, SQL, or filesystem
+paths; every derived artifact path is validated by the application-mutation
+contract. This contract does not yet emit resource source code.
 
 ## Existing-application change planning
 

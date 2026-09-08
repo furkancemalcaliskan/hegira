@@ -72,6 +72,7 @@ export const WORKSPACE_DEPENDENCY_POLICY = Object.freeze({
     "application_mutator",
     "template_renderer",
   ],
+  resource_generator: ["application_mutator"],
   template_renderer: ["application_manifest"],
 });
 
@@ -105,6 +106,7 @@ export const WORKSPACE_PACKAGE_POLICY = Object.freeze({
   identity_leptos: packageContract("module", "retain"),
   application_mutator: packageContract("tool", "retain"),
   hegira_cli: packageContract("tool", "retain"),
+  resource_generator: packageContract("tool", "retain"),
   template_renderer: packageContract("tool", "refactor-and-retain", [148]),
 });
 

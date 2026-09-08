@@ -199,6 +199,13 @@ guarded child-process fixture exits during multi-file publication to verify that
 the durable, content-redacted recovery marker survives process termination and
 blocks a subsequent mutation attempt.
 
+The CLI gate also validates `resource_generator` naming and ownership. Its
+fixtures cover deterministic singular/plural derivation, explicit irregular
+plurals, acronym boundaries, reserved and occupied namespaces, brand-neutral
+canonical package ownership, safe application-relative paths, and distinct
+permission identifiers. These tests validate the contract only; no resource
+source is emitted or published at this stage.
+
 Validate the workspace-external canonical layered application base against the
 current framework checkout:
 
