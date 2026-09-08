@@ -3825,7 +3825,10 @@ dependencies = [
 name = "resource_generator"
 version = "0.4.0"
 dependencies = [
+ "application_manifest",
  "application_mutator",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

@@ -206,6 +206,12 @@ canonical package ownership, safe application-relative paths, and distinct
 permission identifiers. These tests validate the contract only; no resource
 source is emitted or published at this stage.
 
+The same fixtures validate the immutable resource specification: its required
+UUID identifier, closed scalar set, nullable fields, deterministic field order
+and versioned serialization, selected SQLite/PostgreSQL and Leptos context,
+duplicate and reserved names, and code-, SQL-, and path-shaped input rejection.
+Specification validation reads no database and constructs no change plan.
+
 Validate the workspace-external canonical layered application base against the
 current framework checkout:
 

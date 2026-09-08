@@ -9,6 +9,9 @@ All notable changes are documented here. Releases follow Semantic Versioning.
 - Added typed layered resource naming and ownership with deterministic Rust,
   route, permission, database, and application-relative artifact identities,
   explicit irregular plurals, and pre-plan reserved-name and collision checks.
+- Added an immutable resource specification with a required UUID identifier,
+  deterministic nullable fields, a closed scalar set, manifest-selected
+  database and client adapters, and injection-resistant input validation.
 - Added a shared CLI mutation execution contract with no-write dry runs,
   ordered human-readable operations, deterministic versioned JSON summaries,
   stable no-op and conflict outcomes, and publication from the same validated
