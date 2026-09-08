@@ -82,6 +82,11 @@ commands change. Never describe planned work as implemented.
   Generation validates project identity and destination before rendering and
   requires a new destination under an existing parent without symlinks. Safe
   atomic publication fails closed on unsupported platforms.
+- `tools/resource_generator/` contains the typed layered resource naming and
+  ownership contract. It derives validated Rust module, route, permission,
+  database, and application-relative artifact identities from one resource
+  input, supports an explicit irregular plural, and rejects reserved or
+  occupied application namespaces before planning. It does not yet emit source.
 - `scripts/` contains local validation and release helpers.
   The generated-application gate uses public CLI output for both database
   profiles, verifies it before staging local dependencies in a separate copy,

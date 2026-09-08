@@ -3822,6 +3822,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "resource_generator"
+version = "0.4.0"
+dependencies = [
+ "application_mutator",
+]
+
+[[package]]
 name = "ring"
 version = "0.17.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"

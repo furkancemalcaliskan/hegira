@@ -27,6 +27,7 @@ const PACKAGE_LOCATIONS = Object.freeze({
   identity_leptos: "modules/identity/leptos",
   application_mutator: "tools/application_mutator",
   hegira_cli: "tools/hegira_cli",
+  resource_generator: "tools/resource_generator",
   template_renderer: "tools/template_renderer",
 });
 
