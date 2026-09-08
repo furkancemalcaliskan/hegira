@@ -19,6 +19,26 @@ compose() {
   docker compose --file "$compose_file" "$@"
 }
 
+application_fingerprint() {
+  (
+    cd "$1"
+    find . -type f -print | LC_ALL=C sort | xargs sha256sum
+  )
+}
+
+expect_exit() {
+  expected="$1"
+  shift
+  set +e
+  "$@"
+  actual=$?
+  set -e
+  if [ "$actual" -ne "$expected" ]; then
+    echo "expected exit $expected but command returned $actual" >&2
+    exit 1
+  fi
+}
+
 cleanup() {
   status=$?
   trap - EXIT INT TERM
@@ -53,6 +73,8 @@ fi
 for database in sqlite postgres; do
   validation_root="$staging_parent/$database-validation"
   framework_root="$validation_root/.hegira-validation/framework"
+  migration_artifacts="$staging_parent/$database-migration-artifacts"
+  mkdir -p "$migration_artifacts"
   cargo run --locked --quiet -p template_renderer \
     --example repository_validation_renderer -- render \
     --repository-root "$repo_root" --template layered \
@@ -62,6 +84,62 @@ for database in sqlite postgres; do
     --set "application_name=$database-application" \
     --set "database_adapter=$database" --set "database_feature=db-$database" \
     --set client_adapter=leptos --set component_id=layered-leptos-identity
+
+  case "$database" in
+    sqlite)
+      generated_migration_version=10
+      generated_migration_path="crates/infrastructure/migrations/sqlite/010_generated_validation.sql"
+      other_migration_path="crates/infrastructure/migrations/postgres/023_generated_validation.sql"
+      ;;
+    postgres)
+      generated_migration_version=23
+      generated_migration_path="crates/infrastructure/migrations/postgres/023_generated_validation.sql"
+      other_migration_path="crates/infrastructure/migrations/sqlite/010_generated_validation.sql"
+      ;;
+  esac
+
+  (
+    cd "$validation_root"
+    find crates/infrastructure/migrations -type f -name '*.sql' -print \
+      | LC_ALL=C sort | xargs sha256sum
+  ) >"$migration_artifacts/historical.sha256"
+  application_fingerprint "$validation_root" >"$migration_artifacts/before-dry-run.sha256"
+
+  expect_exit 3 cargo run --locked --quiet -p hegira_cli -- generate migration \
+    ../invalid --application-root "$validation_root" \
+    >"$migration_artifacts/invalid.stdout" 2>"$migration_artifacts/invalid.stderr"
+  cargo run --locked --quiet -p hegira_cli -- generate migration \
+    generated_validation --application-root "$validation_root" --dry-run --json \
+    >"$migration_artifacts/dry-run-one.json"
+  cargo run --locked --quiet -p hegira_cli -- generate migration \
+    generated_validation --application-root "$validation_root" --dry-run --json \
+    >"$migration_artifacts/dry-run-two.json"
+  cmp "$migration_artifacts/dry-run-one.json" "$migration_artifacts/dry-run-two.json"
+  application_fingerprint "$validation_root" >"$migration_artifacts/after-dry-run.sha256"
+  cmp "$migration_artifacts/before-dry-run.sha256" "$migration_artifacts/after-dry-run.sha256"
+
+  cargo run --locked --quiet -p hegira_cli -- generate migration \
+    generated_validation --application-root "$validation_root" --json \
+    >"$migration_artifacts/apply.json"
+  node -e \
+    'const fs = require("fs"); const dry = JSON.parse(fs.readFileSync(process.argv[1])); const applied = JSON.parse(fs.readFileSync(process.argv[2])); if (JSON.stringify(dry.plan) !== JSON.stringify(applied.plan)) process.exit(1);' \
+    "$migration_artifacts/dry-run-one.json" "$migration_artifacts/apply.json"
+  test -f "$validation_root/$generated_migration_path"
+  test ! -e "$validation_root/$other_migration_path"
+  grep -Fq "migration: generated_validation" "$validation_root/$generated_migration_path"
+  grep -Fq "schema = 1" "$validation_root/crates/infrastructure/migrations/.hegira-generator.toml"
+  grep -Fq "database = \"$database\"" "$validation_root/crates/infrastructure/migrations/.hegira-generator.toml"
+
+  (
+    cd "$validation_root"
+    sha256sum -c "$migration_artifacts/historical.sha256"
+  )
+  application_fingerprint "$validation_root" >"$migration_artifacts/before-duplicate.sha256"
+  expect_exit 4 cargo run --locked --quiet -p hegira_cli -- generate migration \
+    generated_validation --application-root "$validation_root" \
+    >"$migration_artifacts/duplicate.stdout" 2>"$migration_artifacts/duplicate.stderr"
+  application_fingerprint "$validation_root" >"$migration_artifacts/after-duplicate.sha256"
+  cmp "$migration_artifacts/before-duplicate.sha256" "$migration_artifacts/after-duplicate.sha256"
 
   mkdir -p "$framework_root"
   tar -C "$repo_root" \
@@ -80,7 +158,9 @@ for database in sqlite postgres; do
     cd "$validation_root"
     export CARGO_TARGET_DIR="$repo_root/target/generated-application-check"
     cargo check --workspace --all-targets --features app_server/ssr
-    cargo test --workspace --features app_server/ssr
+    HEGIRA_TEST_GENERATED_MIGRATION_VERSION="$generated_migration_version" \
+    HEGIRA_TEST_GENERATED_MIGRATION_DESCRIPTION="generated validation" \
+      cargo test --workspace --features app_server/ssr
     node "$repo_root/scripts/architecture-boundaries.mjs" \
       check-generated --root "$validation_root"
     cargo check -p app_server --no-default-features --features hydrate \
@@ -99,6 +179,8 @@ compose up --detach postgres
   cd "$generated_root"
   ALLOW_GENERATED_APP_DB_RESET=true \
   GENERATED_APP_DATABASE_URL="postgres://generated_app:$GENERATED_APP_DB_PASSWORD@127.0.0.1:$GENERATED_APP_POSTGRES_PORT/generated_app" \
+  HEGIRA_TEST_GENERATED_MIGRATION_VERSION=23 \
+  HEGIRA_TEST_GENERATED_MIGRATION_DESCRIPTION="generated validation" \
   CARGO_TARGET_DIR="$repo_root/target/generated-application-check" \
     cargo test -p app_server --no-default-features --features ssr,db-postgres \
       --test database_contracts postgres_fresh_install_and_v020_upgrade_pass -- \
@@ -156,4 +238,4 @@ bearer_mutation_status=$(curl --silent --show-error --output /dev/null \
   "$base_url/api/identity/auth/register")
 test "$bearer_mutation_status" = "422"
 
-echo "CLI-generated application validation passed for SQLite, PostgreSQL, v0.2.0 upgrades, and the production container"
+echo "CLI-generated application validation passed for generated migrations, SQLite, PostgreSQL, v0.2.0 upgrades, and the production container"

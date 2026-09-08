@@ -34,6 +34,53 @@ async fn sqlite_pool() -> sqlx::SqlitePool {
     .expect("the disposable SQLite database should connect")
 }
 
+fn expected_generated_migration() -> Option<(i64, String)> {
+    let version = std::env::var("HEGIRA_TEST_GENERATED_MIGRATION_VERSION");
+    let description = std::env::var("HEGIRA_TEST_GENERATED_MIGRATION_DESCRIPTION");
+    match (version, description) {
+        (Err(std::env::VarError::NotPresent), Err(std::env::VarError::NotPresent)) => None,
+        (Ok(version), Ok(description)) => Some((
+            version
+                .parse()
+                .expect("the expected generated migration version must be an integer"),
+            description,
+        )),
+        _ => panic!(
+            "generated migration validation requires both the version and description variables"
+        ),
+    }
+}
+
+#[cfg(feature = "db-sqlite")]
+async fn assert_expected_generated_sqlite_migration(pool: &sqlx::SqlitePool) {
+    let Some((version, description)) = expected_generated_migration() else {
+        return;
+    };
+    let recorded: (String, bool) = sqlx::query_as(
+        "SELECT description, success FROM _sqlx_migrations WHERE version = ?1",
+    )
+    .bind(version)
+    .fetch_one(pool)
+    .await
+    .expect("the generated SQLite migration should be recorded");
+    assert_eq!(recorded, (description, true));
+}
+
+#[cfg(feature = "db-postgres")]
+async fn assert_expected_generated_postgres_migration(pool: &sqlx::PgPool) {
+    let Some((version, description)) = expected_generated_migration() else {
+        return;
+    };
+    let recorded: (String, bool) = sqlx::query_as(
+        "SELECT description, success FROM _sqlx_migrations WHERE version = $1",
+    )
+    .bind(version)
+    .fetch_one(pool)
+    .await
+    .expect("the generated PostgreSQL migration should be recorded");
+    assert_eq!(recorded, (description, true));
+}
+
 #[cfg(feature = "db-sqlite")]
 #[tokio::test]
 async fn sqlite_fresh_install_applies_the_generated_application_plan() {
@@ -55,6 +102,7 @@ async fn sqlite_fresh_install_applies_the_generated_application_plan() {
     .await
     .expect("fresh SQLite tables should be queryable");
     assert_eq!(tables, ["app_settings", "sessions", "users"]);
+    assert_expected_generated_sqlite_migration(&pool).await;
 }
 
 #[cfg(feature = "db-sqlite")]
@@ -77,6 +125,7 @@ async fn sqlite_v020_upgrade_retires_catalog_state_and_preserves_history() {
         .await
         .expect("the current SQLite schema should upgrade from v0.2.0");
     assert_v020_sqlite_upgrade(&pool).await;
+    assert_expected_generated_sqlite_migration(&pool).await;
 }
 
 #[cfg(feature = "db-sqlite")]
@@ -218,6 +267,7 @@ async fn postgres_fresh_install_and_v020_upgrade_pass() {
     .await
     .expect("fresh PostgreSQL tables should be queryable");
     assert_eq!(tables, ["app_settings", "sessions", "users"]);
+    assert_expected_generated_postgres_migration(&pool).await;
 
     app_infrastructure::operations::reset_database(&database, &reset_authorization)
         .await
@@ -232,6 +282,7 @@ async fn postgres_fresh_install_and_v020_upgrade_pass() {
         .await
         .expect("the current PostgreSQL schema should upgrade from v0.2.0");
     assert_v020_postgres_upgrade(&pool).await;
+    assert_expected_generated_postgres_migration(&pool).await;
 }
 
 #[cfg(feature = "db-postgres")]

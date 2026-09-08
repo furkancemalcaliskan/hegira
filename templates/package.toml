@@ -3,7 +3,7 @@ id = "hegira-canonical"
 version = "v0.4.0"
 templates = ["layered"]
 components = ["layered-base", "layered-leptos-identity"]
-content_digest = "sha256:2d4b12e39b40b1f67ce18f41e8cbf52332f8488e464b07af7d3c98d5a5572a2e"
+content_digest = "sha256:827f2fd30fbf01f67375773457fb915cb024d87649c7bd7b71ba0b7c4b59adbb"
 
 [framework]
 repository = "https://github.com/furkancemalcaliskan/hegira.git"
