@@ -38,7 +38,7 @@ automatic module discovery, application upgrades, or registry distribution.
 ├── tools/
 │   ├── application_mutator/ existing-application change-plan core
 │   ├── hegira_cli/          source-runnable CLI command shell
-│   ├── resource_generator/  layered resource naming and ownership core
+│   ├── resource_generator/  layered resource generation and composition core
 │   └── template_renderer/   render core and repository-validation adapter
 ├── docs/                    current technical and maintainer documentation
 ├── scripts/                 validation and release helpers
@@ -216,6 +216,25 @@ migration in the application-owned migration history. SQLite and PostgreSQL
 types and placeholder syntax are emitted independently; generating one does
 not claim or create support for the other. Historical migrations remain
 immutable.
+
+The HTTP emitter adds a transport-focused Axum adapter for the same resource.
+Its handlers perform only Bearer extraction, request and path mapping,
+application-service delegation, response serialization, and stable HTTP error
+mapping. The concrete resource service is composed in application-owned
+Infrastructure and registered through explicit keyed service and server
+integration blocks; there is no route discovery, reflection, or service
+locator. Generated Bearer routes are merged separately from
+cookie-authenticated Leptos BFF routes, so they do not inherit browser CSRF
+policy. Authorization still runs inside every generated application use case
+before repository access.
+
+When OpenAPI is compiled, resource paths and schemas contribute a typed
+document which the application server explicitly merges with the Identity API
+document. The same managed-entry contract rejects missing, duplicate,
+reordered, or malformed service, route, and document registrations before a
+change plan is produced. Provider migrations seed generated permission
+identifiers for the canonical administrator role so the composed authorization
+boundary is usable after migration.
 
 The package also plans application-owned migration scaffolds independently of
 the general resource specification. It resolves the selected SQLite or

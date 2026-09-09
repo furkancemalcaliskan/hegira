@@ -179,7 +179,35 @@ fn schema_migration(specification: &ResourceSpecification) -> String {
             }
         }
     }
-    source.push_str("\n);\n");
+    source.push_str("\n);\n\n");
+    source.push_str("INSERT INTO permissions (name) VALUES\n");
+    for (index, permission) in crate::PermissionAction::ALL
+        .iter()
+        .map(|action| specification.names().permission(*action))
+        .enumerate()
+    {
+        let separator = if index + 1 == crate::PermissionAction::ALL.len() {
+            "\n"
+        } else {
+            ",\n"
+        };
+        write!(source, "    ('{permission}'){separator}").unwrap();
+    }
+    source.push_str("ON CONFLICT (name) DO NOTHING;\n\n");
+    source.push_str("INSERT INTO role_permissions (role_name, permission_name) VALUES\n");
+    for (index, permission) in crate::PermissionAction::ALL
+        .iter()
+        .map(|action| specification.names().permission(*action))
+        .enumerate()
+    {
+        let separator = if index + 1 == crate::PermissionAction::ALL.len() {
+            "\n"
+        } else {
+            ",\n"
+        };
+        write!(source, "    ('admin', '{permission}'){separator}").unwrap();
+    }
+    source.push_str("ON CONFLICT (role_name, permission_name) DO NOTHING;\n");
     source
 }
 
@@ -374,6 +402,11 @@ fn infrastructure_source(specification: &ResourceSpecification) -> String {
     writeln!(source, "    Ok({entity}AppService::new(Sqlx{entity}Repository::from_database(pool)?, authorization, Uuid{entity}IdGenerator))\n}}\n").unwrap();
     writeln!(source, "fn persistence_error(_: sqlx::Error) -> {entity}ServiceError {{ {entity}ServiceError::Persistence }}").unwrap();
     writeln!(source, "fn write_error(error: sqlx::Error) -> {entity}ServiceError {{\n    if error.as_database_error().is_some_and(|database| database.is_unique_violation()) {{\n        {entity}ServiceError::Conflict\n    }} else {{\n        {entity}ServiceError::Persistence\n    }}\n}}").unwrap();
+    writeln!(
+        source,
+        "\n// hegira:resource-http-authorization\n// hegira:resource-http-authorization:end"
+    )
+    .unwrap();
     source
 }
 
@@ -512,6 +545,8 @@ clients = ["leptos"]
         let migration = content(planned.plan(), "001_order_item.sql");
         assert!(migration.contains("id BLOB PRIMARY KEY"));
         assert!(migration.contains("active INTEGER NOT NULL CHECK (active IN (0, 1))"));
+        assert!(migration.contains("('order-items.create')"));
+        assert!(migration.contains("('admin', 'order-items.delete')"));
         let source = content(planned.plan(), "src/order_item.rs");
         assert!(source.contains("#![cfg(feature = \"db-sqlite\")]"));
         assert!(source.contains("WHERE id = ?1"));

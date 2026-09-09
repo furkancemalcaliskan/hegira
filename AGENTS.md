@@ -97,7 +97,11 @@ commands change. Never describe planned work as implemented.
   repository, authorization, and identifier ports and authorize every use case
   before accessing a repository. It also emits selected-provider SQLx
   repositories, bound queries, explicit typed Infrastructure composition, and
-  provider-correct table migrations. The same tool independently plans
+  provider-correct table migrations. It emits transport-focused Axum handlers,
+  composes their concrete services and Bearer routes explicitly into the
+  application host, and contributes resource OpenAPI documents without moving
+  validation, authorization, transactions, or persistence into Presentation.
+  The same tool independently plans
   provider-specific, append-only application migration scaffolds without
   connecting to a database or changing historical migrations.
 - `scripts/` contains local validation and release helpers.

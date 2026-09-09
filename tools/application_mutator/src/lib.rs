@@ -18,8 +18,8 @@ mod publisher;
 
 pub use editor::{
     RUST_MODULES_END, RUST_MODULES_START, StructuredEditError, StructuredEditErrorKind,
-    StructuredEditKind, StructuredEditOutcome, plan_rust_module, plan_toml_array_string,
-    plan_toml_table_string,
+    StructuredEditKind, StructuredEditOutcome, plan_rust_managed_entry, plan_rust_module,
+    plan_toml_array_string, plan_toml_table_string,
 };
 pub use publisher::{
     MUTATION_MARKER, MutationError, MutationErrorKind, MutationReceipt, publish_change_plan,
