@@ -339,9 +339,15 @@ explicitly versioned, and includes the content-redacted plan summary rather
 than file bodies, runtime configuration, credentials, environment values, or
 machine-local framework paths. Empty plans are successful no-ops, planning and
 state conflicts retain the conflict process outcome, and invalid plans retain a
-validation outcome. `hegira generate migration <identity>` uses this contract
-to preview or publish the provider-specific migration plan selected by the
-application manifest. It creates source only and does not execute a migration.
+validation outcome. `hegira generate resource <name> --field <name:type>` uses
+this contract to compose the Domain, Application Contracts, Application,
+selected SQLx, Axum/OpenAPI, and selected Leptos emitter plans into one atomic
+change. Chained edits preserve the first observed precondition and final
+content without publishing an intermediate state. `hegira generate migration
+<identity>` uses the same contract to preview or publish the provider-specific
+migration plan selected by the application manifest. Both commands create
+source only and do not execute migrations, generated code, formatters, or
+builds.
 
 The CLI library also owns a read-only existing-application context resolver.
 `hegira inspect` uses it to provide concise human-readable application identity,

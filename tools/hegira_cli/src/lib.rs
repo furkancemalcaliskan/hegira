@@ -2,17 +2,25 @@ use std::{
     collections::BTreeMap,
     ffi::OsString,
     fmt::Write as _,
+    fs,
     io::{BufRead, ErrorKind as IoErrorKind, Write},
     path::{Path, PathBuf},
+    str::FromStr,
 };
 
 use application_manifest::{
     ClientAdapter, DatabaseAdapter, MutationCompatibility, MutationCompatibilityPolicy,
 };
+use application_mutator::{ChangePlan, PlannedFileChange};
 use clap::{Args, Parser, Subcommand, ValueEnum, error::ErrorKind};
 use resource_generator::{
-    MigrationError, MigrationErrorKind, MigrationIdentity, ResourceSelection,
-    plan_application_migration,
+    ArtifactNamespace, HttpLayerError, HttpLayerErrorKind, HttpLayerSources, InwardLayerError,
+    InwardLayerErrorKind, InwardLayerSources, LayeredArtifactNames, LayeredNamingInput,
+    MigrationError, MigrationErrorKind, MigrationIdentity, NamingErrorKind, PersistenceLayerError,
+    PersistenceLayerErrorKind, PersistenceLayerSources, ResourceFieldInput, ResourceSelection,
+    ResourceSpecification, ResourceSpecificationInput, WebLayerError, WebLayerErrorKind,
+    WebLayerSources, plan_application_migration, plan_inward_resource_layers, plan_resource_http,
+    plan_resource_persistence, plan_resource_web,
 };
 use serde::Serialize;
 use template_renderer::{RenderRequest, RendererError, RendererErrorKind, render};
@@ -75,8 +83,61 @@ struct GenerateCommand {
 
 #[derive(Debug, Subcommand)]
 enum GeneratorCommand {
+    /// Generate a complete layered resource for the selected application adapters.
+    Resource(ResourceCommand),
     /// Create an append-only migration for the selected database adapter.
     Migration(MigrationCommand),
+}
+
+#[derive(Debug, Args)]
+struct ResourceCommand {
+    /// Singular UpperCamelCase resource type, for example `OrderItem`.
+    #[arg(value_name = "NAME")]
+    name: String,
+
+    /// Irregular plural UpperCamelCase resource type.
+    #[arg(long, value_name = "NAME")]
+    plural: Option<String>,
+
+    /// Resource field as `name:type` or nullable `name:type?`; repeat for each field.
+    #[arg(long, value_name = "NAME:TYPE", required = true)]
+    field: Vec<ResourceFieldArgument>,
+
+    /// Application root; defaults to discovery from the working directory.
+    #[arg(long, value_name = "PATH")]
+    application_root: Option<PathBuf>,
+
+    #[command(flatten)]
+    mutation: MutationOptions,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ResourceFieldArgument {
+    name: String,
+    scalar: String,
+    nullable: bool,
+}
+
+impl FromStr for ResourceFieldArgument {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        let (name, scalar) = value.split_once(':').ok_or_else(|| {
+            "field must use `name:type` or nullable `name:type?` syntax".to_owned()
+        })?;
+        let (scalar, nullable) = match scalar.strip_suffix('?') {
+            Some(scalar) => (scalar, true),
+            None => (scalar, false),
+        };
+        if name.is_empty() || scalar.is_empty() || scalar.contains(':') || scalar.contains('?') {
+            return Err("field must use `name:type` or nullable `name:type?` syntax".to_owned());
+        }
+        Ok(Self {
+            name: name.to_owned(),
+            scalar: scalar.to_owned(),
+            nullable,
+        })
+    }
 }
 
 #[derive(Debug, Args)]
@@ -334,10 +395,354 @@ fn run_command(
             inspect_application(command, working_directory, output, diagnostics)
         }
         CliCommand::Generate(command) => match command.command {
+            GeneratorCommand::Resource(command) => {
+                generate_resource(command, working_directory, output, diagnostics)
+            }
             GeneratorCommand::Migration(command) => {
                 generate_migration(command, working_directory, output, diagnostics)
             }
         },
+    }
+}
+
+const RESOURCE_SOURCE_PATHS: [&str; 11] = [
+    "crates/domain/src/lib.rs",
+    "crates/application_contracts/src/lib.rs",
+    "crates/application/src/lib.rs",
+    "crates/infrastructure/src/lib.rs",
+    "crates/infrastructure/src/identity/services.rs",
+    "crates/presentation/src/lib.rs",
+    "apps/server/src/server.rs",
+    "apps/web/src/lib.rs",
+    "apps/web/src/routes.rs",
+    "apps/web/src/app/navigation.rs",
+    "apps/web/src/shared/i18n/mod.rs",
+];
+const WEB_SIDEBAR_PATH: &str = "apps/web/src/app/sidebar.rs";
+const MAX_GENERATION_SOURCE_BYTES: u64 = 4 * 1024 * 1024;
+
+fn generate_resource(
+    command: ResourceCommand,
+    working_directory: PathBuf,
+    output: &mut impl Write,
+    diagnostics: &mut impl Write,
+) -> CliExit {
+    let context = match resolve_mutation_context(command.application_root, working_directory) {
+        Ok(context) => context,
+        Err(diagnostic) => return write_diagnostic(diagnostic, diagnostics),
+    };
+    let manifest = context
+        .manifest
+        .as_ref()
+        .expect("a compatible mutation context must contain a typed manifest");
+    let sources = match read_resource_sources(&context.root) {
+        Ok(sources) => sources,
+        Err(diagnostic) => return write_diagnostic(diagnostic, diagnostics),
+    };
+    let source_names = match application_source_names(&context.root) {
+        Ok(names) => names,
+        Err(diagnostic) => return write_diagnostic(diagnostic, diagnostics),
+    };
+    let namespace = match ArtifactNamespace::new(
+        &manifest.application,
+        manifest.selection.components.iter(),
+        source_names.iter(),
+    ) {
+        Ok(namespace) => namespace,
+        Err(error) => {
+            return write_diagnostic(CliDiagnostic::validation(error.to_string()), diagnostics);
+        }
+    };
+    let mut naming = LayeredNamingInput::new(command.name);
+    if let Some(plural) = command.plural {
+        naming = naming.with_plural_type(plural);
+    }
+    if let Err(error) = LayeredArtifactNames::resolve(naming.clone(), &namespace) {
+        let diagnostic = match error.kind() {
+            NamingErrorKind::Collision => CliDiagnostic::conflict(error.to_string()),
+            NamingErrorKind::InvalidIdentity
+            | NamingErrorKind::ReservedIdentity
+            | NamingErrorKind::InvalidPath => CliDiagnostic::validation(error.to_string()),
+        };
+        return write_diagnostic(diagnostic, diagnostics);
+    }
+    let input = ResourceSpecificationInput::new(
+        naming,
+        command
+            .field
+            .into_iter()
+            .map(|field| ResourceFieldInput::new(field.name, field.scalar, field.nullable)),
+    );
+    let specification = match ResourceSpecification::resolve(input, &namespace, manifest) {
+        Ok(specification) => specification,
+        Err(error) => {
+            return write_diagnostic(CliDiagnostic::validation(error.to_string()), diagnostics);
+        }
+    };
+    let plan = match plan_complete_resource(&context.root, &specification, &sources) {
+        Ok(plan) => plan,
+        Err(diagnostic) => return write_diagnostic(diagnostic, diagnostics),
+    };
+    let exit = execute_mutation_plan(&context.root, &plan, command.mutation, output, diagnostics);
+    if exit == CliExit::Success && !command.mutation.json() {
+        let prefix = if command.mutation.dry_run() {
+            "After applying the plan"
+        } else {
+            "Next"
+        };
+        if let Err(error) = writeln!(
+            output,
+            "{prefix}: review generated authorization and validation rules, apply the new migration, then run `cargo fmt --all` and the application checks."
+        ) {
+            return write_diagnostic(output_diagnostic(error), diagnostics);
+        }
+    }
+    exit
+}
+
+struct ResourceSources {
+    files: BTreeMap<&'static str, Vec<u8>>,
+}
+
+impl ResourceSources {
+    fn get(&self, path: &'static str) -> &[u8] {
+        self.files
+            .get(path)
+            .expect("all resource composition sources are loaded")
+    }
+}
+
+fn read_resource_sources(root: &Path) -> Result<ResourceSources, CliDiagnostic> {
+    let mut files = BTreeMap::new();
+    for path in RESOURCE_SOURCE_PATHS.into_iter().chain([WEB_SIDEBAR_PATH]) {
+        files.insert(path, read_application_source(root, path)?);
+    }
+    Ok(ResourceSources { files })
+}
+
+fn read_application_source(root: &Path, relative: &str) -> Result<Vec<u8>, CliDiagnostic> {
+    let path = validate_application_path(root, relative, false)?;
+    let metadata = fs::symlink_metadata(&path).expect("validated application source must exist");
+    if metadata.len() > MAX_GENERATION_SOURCE_BYTES {
+        return Err(CliDiagnostic::conflict(format!(
+            "required application source `{relative}` exceeds the supported size limit"
+        )));
+    }
+    fs::read(path).map_err(|_| {
+        CliDiagnostic::conflict(format!(
+            "required application source `{relative}` changed or became unreadable"
+        ))
+    })
+}
+
+fn validate_application_path(
+    root: &Path,
+    relative: &str,
+    directory: bool,
+) -> Result<PathBuf, CliDiagnostic> {
+    let relative_path = Path::new(relative);
+    let components = relative_path.components().collect::<Vec<_>>();
+    let mut path = root.to_path_buf();
+    for (index, component) in components.iter().enumerate() {
+        let std::path::Component::Normal(component) = component else {
+            return Err(CliDiagnostic::validation(format!(
+                "application source path `{relative}` is not canonical"
+            )));
+        };
+        path.push(component);
+        let metadata = fs::symlink_metadata(&path).map_err(|_| {
+            CliDiagnostic::conflict(format!(
+                "required application source `{relative}` is missing or unreadable"
+            ))
+        })?;
+        if metadata.file_type().is_symlink() {
+            return Err(CliDiagnostic::conflict(format!(
+                "application source path `{relative}` contains a symlink"
+            )));
+        }
+        let last = index + 1 == components.len();
+        if (!last || directory) && !metadata.is_dir() {
+            return Err(CliDiagnostic::conflict(format!(
+                "application source path `{relative}` must be a directory"
+            )));
+        }
+        if last && !directory && !metadata.is_file() {
+            return Err(CliDiagnostic::conflict(format!(
+                "required application source `{relative}` must be a regular file"
+            )));
+        }
+    }
+    Ok(path)
+}
+
+fn application_source_names(root: &Path) -> Result<Vec<String>, CliDiagnostic> {
+    let mut names = Vec::new();
+    for source_root in [
+        "crates/domain/src",
+        "crates/application_contracts/src",
+        "crates/application/src",
+        "crates/infrastructure/src",
+        "crates/presentation/src",
+        "apps/web/src",
+    ] {
+        let directory = validate_application_path(root, source_root, true)?;
+        for entry in fs::read_dir(&directory).map_err(|_| {
+            CliDiagnostic::conflict(format!(
+                "application source directory `{source_root}` is unreadable"
+            ))
+        })? {
+            let entry = entry.map_err(|_| {
+                CliDiagnostic::conflict(format!(
+                    "application source directory `{source_root}` changed while being inspected"
+                ))
+            })?;
+            let file_type = entry.file_type().map_err(|_| {
+                CliDiagnostic::conflict(format!(
+                    "application source entry in `{source_root}` cannot be inspected"
+                ))
+            })?;
+            if file_type.is_symlink() {
+                return Err(CliDiagnostic::conflict(format!(
+                    "application source directory `{source_root}` contains a symlink"
+                )));
+            }
+            if !file_type.is_file()
+                || entry.path().extension().and_then(|value| value.to_str()) != Some("rs")
+            {
+                continue;
+            }
+            let entry_path = entry.path();
+            let Some(stem) = entry_path.file_stem().and_then(|value| value.to_str()) else {
+                return Err(CliDiagnostic::validation(format!(
+                    "application source directory `{source_root}` contains a non-UTF-8 Rust filename"
+                )));
+            };
+            if stem != "lib" && stem != "main" {
+                names.push(stem.to_owned());
+            }
+        }
+    }
+    names.sort();
+    names.dedup();
+    Ok(names)
+}
+
+fn plan_complete_resource(
+    root: &Path,
+    specification: &ResourceSpecification,
+    sources: &ResourceSources,
+) -> Result<ChangePlan, CliDiagnostic> {
+    let inward = plan_inward_resource_layers(
+        specification,
+        InwardLayerSources {
+            domain_root: sources.get("crates/domain/src/lib.rs"),
+            application_contracts_root: sources.get("crates/application_contracts/src/lib.rs"),
+            application_root: sources.get("crates/application/src/lib.rs"),
+        },
+    )
+    .map_err(inward_layer_diagnostic)?;
+    let persistence = plan_resource_persistence(
+        root,
+        specification,
+        PersistenceLayerSources {
+            infrastructure_root: sources.get("crates/infrastructure/src/lib.rs"),
+        },
+    )
+    .map_err(persistence_layer_diagnostic)?;
+    let infrastructure_path = format!(
+        "crates/infrastructure/src/{}.rs",
+        specification.names().rust_module()
+    );
+    let infrastructure_resource = planned_content(persistence.plan(), &infrastructure_path)?;
+    let http = plan_resource_http(
+        specification,
+        HttpLayerSources {
+            presentation_root: sources.get("crates/presentation/src/lib.rs"),
+            infrastructure_resource,
+            infrastructure_services: sources.get("crates/infrastructure/src/identity/services.rs"),
+            server_source: sources.get("apps/server/src/server.rs"),
+        },
+    )
+    .map_err(http_layer_diagnostic)?;
+    let server_source = planned_content(http.plan(), "apps/server/src/server.rs")?;
+    let web = plan_resource_web(
+        specification,
+        WebLayerSources {
+            web_root: sources.get("apps/web/src/lib.rs"),
+            routes: sources.get("apps/web/src/routes.rs"),
+            navigation: sources.get("apps/web/src/app/navigation.rs"),
+            i18n: sources.get("apps/web/src/shared/i18n/mod.rs"),
+            sidebar: sources.get(WEB_SIDEBAR_PATH),
+            server_source,
+        },
+    )
+    .map_err(web_layer_diagnostic)?;
+    ChangePlan::compose([
+        inward.into_plan(),
+        persistence.into_plan(),
+        http.into_plan(),
+        web.into_plan(),
+    ])
+    .map_err(change_plan_diagnostic)
+}
+
+fn planned_content<'a>(plan: &'a ChangePlan, path: &str) -> Result<&'a [u8], CliDiagnostic> {
+    plan.changes()
+        .iter()
+        .find(|change| change.path().as_str() == path)
+        .map(PlannedFileChange::resulting_content)
+        .ok_or_else(|| {
+            CliDiagnostic::internal(format!(
+                "resource emitter omitted required intermediate source `{path}`"
+            ))
+        })
+}
+
+fn inward_layer_diagnostic(error: InwardLayerError) -> CliDiagnostic {
+    match error.kind() {
+        InwardLayerErrorKind::Planning => {
+            CliDiagnostic::internal(format!("cannot construct inward resource layers: {error}"))
+        }
+        InwardLayerErrorKind::StructuredEdit | InwardLayerErrorKind::ExistingRegistration => {
+            CliDiagnostic::conflict(error.to_string())
+        }
+    }
+}
+
+fn persistence_layer_diagnostic(error: PersistenceLayerError) -> CliDiagnostic {
+    match error.kind() {
+        PersistenceLayerErrorKind::Planning => {
+            CliDiagnostic::internal(format!("cannot construct resource persistence: {error}"))
+        }
+        PersistenceLayerErrorKind::Migration
+        | PersistenceLayerErrorKind::StructuredEdit
+        | PersistenceLayerErrorKind::ExistingRegistration => {
+            CliDiagnostic::conflict(error.to_string())
+        }
+    }
+}
+
+fn http_layer_diagnostic(error: HttpLayerError) -> CliDiagnostic {
+    match error.kind() {
+        HttpLayerErrorKind::Planning => {
+            CliDiagnostic::internal(format!("cannot construct resource HTTP adapter: {error}"))
+        }
+        HttpLayerErrorKind::StructuredEdit | HttpLayerErrorKind::ExistingRegistration => {
+            CliDiagnostic::conflict(error.to_string())
+        }
+    }
+}
+
+fn web_layer_diagnostic(error: WebLayerError) -> CliDiagnostic {
+    match error.kind() {
+        WebLayerErrorKind::UnsupportedClient => CliDiagnostic::validation(error.to_string()),
+        WebLayerErrorKind::Planning => {
+            CliDiagnostic::internal(format!("cannot construct resource web adapter: {error}"))
+        }
+        WebLayerErrorKind::StructuredEdit
+        | WebLayerErrorKind::ExistingRegistration
+        | WebLayerErrorKind::RouteConflict
+        | WebLayerErrorKind::LocalizationConflict => CliDiagnostic::conflict(error.to_string()),
     }
 }
 

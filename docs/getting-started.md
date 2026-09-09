@@ -17,6 +17,7 @@ From the framework repository root:
 cargo build --locked -p hegira_cli
 cargo run --locked -p hegira_cli -- --help
 cargo run --locked -p hegira_cli -- new --help
+cargo run --locked -p hegira_cli -- generate resource --help
 cargo run --locked -p hegira_cli -- generate migration --help
 ```
 
@@ -149,9 +150,9 @@ Runtime settings belong in `config/{APP_ENV}.yaml` and environment overrides;
 credentials never belong in `hegira.toml`. See
 [Configuration](configuration.md) for the separate runtime contract.
 
-The CLI currently exposes application creation, read-only inspection, and
-application-owned migration scaffold generation. It does not provide module
-management, CRUD/service/controller generators, migration execution or
+The CLI currently exposes application creation, read-only inspection, complete
+layered resource generation, and application-owned migration scaffold
+generation. It does not provide module management, migration execution or
 rollback, automatic upgrades, remote component installation, or additional
 client templates. Optional runtime providers are configured explicitly in the
 application; they are not extra `new` selections.
@@ -159,6 +160,30 @@ application; they are not extra `new` selections.
 Successful creation and help use stdout; diagnostics use stderr. Exit codes
 are `0` (success, including guided cancellation), `1` (internal error),
 `2` (usage error), `3` (validation failure), and `4` (destination conflict).
+
+## Generate A Layered Resource
+
+Run the source-built CLI from a generated application and provide each field
+as `name:type`; append `?` to the type for a nullable field:
+
+```sh
+cargo run --locked --manifest-path /path/to/hegira/Cargo.toml \
+  -p hegira_cli -- generate resource Order \
+  --field name:string --field fulfilled_at:datetime?
+```
+
+The supported scalar set is `string`, `bool`, `i64`, `uuid`, and `datetime`.
+Use `--plural <NAME>` for an irregular UpperCamelCase plural. The command reads
+the database, client, and components from `hegira.toml`, validates all names
+and integration points, and publishes one atomic plan covering Domain,
+Application Contracts, Application, SQLx persistence and migration, Axum and
+OpenAPI, and the selected Leptos client. `--dry-run` previews the identical
+content-redacted plan; `--json` emits its deterministic machine form.
+
+Generation does not infer business invariants or relationships and does not
+run formatters, builds, application processes, or migrations. Review the
+generated authorization and validation rules, complete and apply the forward
+migration, then run the application checks reported by the command.
 
 ## Generate An Application Migration
 

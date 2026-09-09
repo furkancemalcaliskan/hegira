@@ -72,7 +72,7 @@ ownership:
 | `templates/package.toml` | Versioned canonical component-package identity, framework compatibility, component graph, and source digest |
 | `templates/components/` | Typed data-only component manifests that define the canonical application composition |
 | `tools/application_mutator/` | Typed change plans, conflict-aware Rust and TOML editors, and failure-safe publication for coordinated existing-application changes |
-| `tools/hegira_cli/` | Source-runnable application creation and inspection plus reviewable application-owned migration generation with stable diagnostics and exit outcomes |
+| `tools/hegira_cli/` | Source-runnable application creation and inspection plus reviewable layered resource and application-owned migration generation with stable diagnostics and exit outcomes |
 | `tools/resource_generator/` | Typed layered resource specifications plus inward-layer, provider-specific SQLx persistence, explicit Axum/OpenAPI and Leptos UI composition, and append-only migration planning |
 | `tools/template_renderer/` | Reusable deterministic render core with a separate disposable repository-validation adapter; it is not a public CLI |
 
@@ -102,8 +102,8 @@ ask for confirmation before any files are written. Non-interactive terminals nev
 prompt input and require the application name and destination explicitly.
 Supplying both inputs skips prompts and confirmation. Only SQLite/PostgreSQL,
 Leptos, and Identity selections are supported for application creation. The
-CLI also generates application-owned migration scaffolds; it does not provide
-module management, general resource generation, or automatic upgrades.
+CLI also generates complete layered resources and application-owned migration
+scaffolds; it does not provide module management or automatic upgrades.
 
 Its stable process outcomes are success (`0`), internal error (`1`), usage
 error (`2`), validation error (`3`), and conflict (`4`). Human-readable help
@@ -165,6 +165,19 @@ it never connects to a database, runs a migration, or edits historical files.
 Replace `/path/to/hegira` with the framework source checkout or release archive
 used to run the source-only CLI. See [Getting started](docs/getting-started.md#generate-an-application-migration)
 for identity, conflict, and publication details.
+
+Generate one explicitly typed resource across the Domain, Application
+Contracts, Application, selected SQLx, Axum/OpenAPI, and selected Leptos
+surfaces with one atomic plan:
+
+```sh
+cargo run --locked --manifest-path /path/to/hegira/Cargo.toml \
+  -p hegira_cli -- generate resource Order \
+  --field name:string --field fulfilled_at:datetime?
+```
+
+Use `--plural <NAME>` for an irregular plural. The command reports the manual
+migration and validation steps after publication; it does not execute them.
 
 ## Documentation
 

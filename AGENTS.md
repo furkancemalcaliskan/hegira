@@ -75,8 +75,8 @@ commands change. Never describe planned work as implemented.
 - `tools/hegira_cli/` contains the source-runnable `hegira` command shell,
   deterministic interactive and non-interactive layered application creation,
   read-only existing-application inspection with human and versioned JSON
-  output, application-owned migration generation, and a shared dry-run/apply
-  mutation contract.
+  output, complete layered resource generation, application-owned migration
+  generation, and a shared dry-run/apply mutation contract.
   Mutation output is deterministic, versioned, content-redacted, and derived
   from the same typed plan used for publication. The CLI also owns stable
   process outcomes and its user-facing diagnostic contract.
