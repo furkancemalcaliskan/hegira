@@ -12,3 +12,8 @@ app_domain_shared.workspace = true
 chrono.workspace = true
 serde.workspace = true
 uuid.workspace = true
+utoipa = { workspace = true, optional = true }
+
+[features]
+default = []
+openapi = ["dep:utoipa"]

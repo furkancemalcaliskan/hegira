@@ -489,7 +489,11 @@ async fn serve_http(
     let operational_routes = operational_routes(app_state.clone())
         .merge(application_routes)
         .with_state(());
-    let bearer_api_routes = identity_api_routes(app_state);
+    let bearer_api_routes = identity_api_routes(app_state.clone());
+    let bearer_api_routes = bearer_api_routes
+        // hegira:resource-bearer-routes
+        // hegira:resource-bearer-routes:end
+        ;
     let cookie_bff_routes = Router::<LeptosOptions>::new()
         .leptos_routes_with_context(
             &leptos_options,
@@ -672,7 +676,10 @@ where
 
     #[cfg(feature = "openapi")]
     let router = if state.config.openapi.enabled && !state.config.is_production() {
-        router.merge(identity_http::openapi::routes())
+        let document = identity_http::openapi::document();
+        // hegira:resource-openapi-documents
+        // hegira:resource-openapi-documents:end
+        router.merge(identity_http::openapi::routes_with_document(document))
     } else {
         router
     };

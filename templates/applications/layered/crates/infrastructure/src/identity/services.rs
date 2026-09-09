@@ -85,7 +85,7 @@ impl AppServices {
             auth: auth_service(pool.clone(), config, mailer),
             oauth: oauth_service(pool.clone(), config),
             users: user_service(pool.clone(), config, cache.clone(), search),
-            permissions: permission_service(pool, config, cache),
+            permissions: permission_service(pool.clone(), config, cache.clone()),
             // hegira:service-init
             // hegira:service-init:end
         }

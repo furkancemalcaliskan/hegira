@@ -11,11 +11,15 @@ use std::{
 
 use application_mutator::ChangePath;
 
+mod http;
 mod migration;
 mod persistence;
 mod source;
 mod specification;
 
+pub use http::{
+    HttpLayerError, HttpLayerErrorKind, HttpLayerSources, PlannedResourceHttp, plan_resource_http,
+};
 pub use migration::{
     MIGRATION_STATE_SCHEMA, MigrationError, MigrationErrorKind, MigrationIdentity,
     PlannedMigration, plan_application_migration,

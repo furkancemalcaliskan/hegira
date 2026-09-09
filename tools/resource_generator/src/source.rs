@@ -199,6 +199,11 @@ fn contracts_source(specification: &ResourceSpecification) -> String {
         "#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]"
     )
     .unwrap();
+    writeln!(
+        source,
+        "#[cfg_attr(feature = \"openapi\", derive(utoipa::ToSchema))]"
+    )
+    .unwrap();
     writeln!(source, "pub struct {entity}Dto {{").unwrap();
     writeln!(source, "    pub id: Uuid,").unwrap();
     write_field_declarations(&mut source, fields, 4);
@@ -208,12 +213,22 @@ fn contracts_source(specification: &ResourceSpecification) -> String {
         "#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]"
     )
     .unwrap();
+    writeln!(
+        source,
+        "#[cfg_attr(feature = \"openapi\", derive(utoipa::ToSchema))]"
+    )
+    .unwrap();
     writeln!(source, "pub struct Create{entity}Input {{").unwrap();
     write_field_declarations(&mut source, fields, 4);
     writeln!(source, "}}\n").unwrap();
     writeln!(
         source,
         "#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]"
+    )
+    .unwrap();
+    writeln!(
+        source,
+        "#[cfg_attr(feature = \"openapi\", derive(utoipa::ToSchema))]"
     )
     .unwrap();
     writeln!(source, "pub struct Update{entity}Input {{").unwrap();
@@ -225,6 +240,11 @@ fn contracts_source(specification: &ResourceSpecification) -> String {
         "#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]"
     )
     .unwrap();
+    writeln!(
+        source,
+        "#[cfg_attr(feature = \"openapi\", derive(utoipa::ToSchema))]"
+    )
+    .unwrap();
     writeln!(source, "pub struct Get{entity}Query {{").unwrap();
     writeln!(source, "    pub id: Uuid,").unwrap();
     writeln!(source, "}}\n").unwrap();
@@ -233,12 +253,22 @@ fn contracts_source(specification: &ResourceSpecification) -> String {
         "#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]"
     )
     .unwrap();
+    writeln!(
+        source,
+        "#[cfg_attr(feature = \"openapi\", derive(utoipa::ToSchema))]"
+    )
+    .unwrap();
     writeln!(source, "pub struct Delete{entity}Input {{").unwrap();
     writeln!(source, "    pub id: Uuid,").unwrap();
     writeln!(source, "}}\n").unwrap();
     writeln!(
         source,
         "#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]"
+    )
+    .unwrap();
+    writeln!(
+        source,
+        "#[cfg_attr(feature = \"openapi\", derive(utoipa::ToSchema))]"
     )
     .unwrap();
     writeln!(source, "pub struct List{plural}Query {{").unwrap();
@@ -250,6 +280,11 @@ fn contracts_source(specification: &ResourceSpecification) -> String {
         "#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]"
     )
     .unwrap();
+    writeln!(
+        source,
+        "#[cfg_attr(feature = \"openapi\", derive(utoipa::ToSchema))]"
+    )
+    .unwrap();
     writeln!(source, "pub struct {plural}Response {{").unwrap();
     writeln!(source, "    pub items: Vec<{entity}Dto>,").unwrap();
     writeln!(source, "    pub total: u64,").unwrap();
@@ -258,6 +293,7 @@ fn contracts_source(specification: &ResourceSpecification) -> String {
     writeln!(source, "pub enum {entity}ServiceError {{").unwrap();
     for variant in [
         "Unauthorized",
+        "Forbidden",
         "NotFound",
         "Conflict",
         "InvalidInput",
@@ -736,6 +772,8 @@ clients = ["leptos"]
         assert!(contracts.contains("pub struct ListOrderItemsQuery"));
         assert!(contracts.contains("pub trait OrderItemService"));
         assert!(contracts.contains("order-items.create"));
+        assert!(contracts.contains("derive(utoipa::ToSchema)"));
+        assert!(contracts.contains("Forbidden"));
 
         let application = planned
             .plan()
