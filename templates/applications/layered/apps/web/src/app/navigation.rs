@@ -38,9 +38,10 @@ pub const WORKSPACE_NAV: &[NavSection] = &[NavSection {
         href: "/dashboard",
         icon: NavIcon::Home,
         permission: None,
-        // hegira:nav-items
-        // hegira:nav-items:end
-    }],
+    },
+    // hegira:nav-items
+    // hegira:nav-items:end
+    ],
 }];
 
 const IDENTITY_NAV_ITEMS: &[NavItem] = &[

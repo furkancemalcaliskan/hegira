@@ -505,6 +505,8 @@ async fn serve_http(
                 move || {
                     provide_context(services.clone());
                     provide_context(identity_services.clone());
+                    // hegira:resource-leptos-contexts
+                    // hegira:resource-leptos-contexts:end
                     provide_context(config.clone());
                     provide_context(identity_cookie_settings);
                 }
