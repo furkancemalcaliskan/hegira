@@ -7,12 +7,15 @@ rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]
+app_application_contracts.workspace = true
 identity_leptos.workspace = true
 leptos_support.workspace = true
+chrono.workspace = true
 icons.workspace = true
 leptos.workspace = true
 leptos_meta.workspace = true
 leptos_router.workspace = true
+uuid.workspace = true
 web-sys = { version = "0.3.91", features = ["Document", "DomTokenList", "Element", "Storage", "Window"] }
 
 [features]

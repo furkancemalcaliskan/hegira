@@ -1,6 +1,6 @@
 package=hegira-canonical@v0.4.0
 framework=https://github.com/furkancemalcaliskan/hegira.git#v0.4.0
-digest=sha256:66cd9cb80628e90e9b8b3e23de9c2933316b6667307124f1a5d221444ca7924e
+digest=sha256:95a5a36c4f1b530609d192e711834028234df6ea33edaa0541d95249ec0dcc1a
 components=layered-base,layered-leptos-identity
 6986e1a96f1eaa98 .dockerignore
 4845a8e7ed4a8aa1 .env.example
@@ -10,17 +10,17 @@ b2104651366efb09 Cargo.toml
 acb1f40708fef3bc apps/server/Cargo.toml
 3bde3764afe35806 apps/server/src/lib.rs
 9ea27e2845c55bb5 apps/server/src/main.rs
-649c8754e81b90f3 apps/server/src/server.rs
+bcead05dce4336dc apps/server/src/server.rs
 5f7ffc9d0f5ba7bb apps/server/src/worker_operations.rs
 ddb28f7b19ba587d apps/server/tests/database_contracts.rs
-1d7e452201e88e35 apps/web/Cargo.toml
+b249b1f80f690d85 apps/web/Cargo.toml
 5cdf33ea1fc44058 apps/web/src/app/layout.rs
 2e684ad1c47b141c apps/web/src/app/mod.rs
-caa4fa353eb97e24 apps/web/src/app/navigation.rs
+647b104724518790 apps/web/src/app/navigation.rs
 ae53ebf34e59bbaa apps/web/src/app/page.rs
 bccc6ef21e0cc054 apps/web/src/app/providers.rs
 748861d94f80770a apps/web/src/app/shell.rs
-a240f92a910a798b apps/web/src/app/sidebar.rs
+90d197c5691f8e1e apps/web/src/app/sidebar.rs
 e76d30fbdb62c2d7 apps/web/src/app/topbar.rs
 b58033514afd0df2 apps/web/src/dashboard.rs
 4be5e3e4a4cb60f7 apps/web/src/lib.rs
@@ -28,10 +28,10 @@ b58033514afd0df2 apps/web/src/dashboard.rs
 5d88780fe6e79270 apps/web/src/package.json
 370740627a45bc7c apps/web/src/public/assets/branding/hegira-logo.png
 2c5dbabcccc716da apps/web/src/root.rs
-c2106c9fa997d707 apps/web/src/routes.rs
+b3d6c8b2db83731d apps/web/src/routes.rs
 b0584f92d58a6d69 apps/web/src/shared/feedback/mod.rs
 eef895562df1a042 apps/web/src/shared/feedback/not_found.rs
-679df054549a3f25 apps/web/src/shared/i18n/mod.rs
+41f56b0fbbd12644 apps/web/src/shared/i18n/mod.rs
 8eea085adef9145f apps/web/src/shared/mod.rs
 ca96fd4830f687ae apps/web/src/style/main.css
 81e59ae188c3ec03 apps/web/src/style/tailwind.css

@@ -21,6 +21,8 @@ pub fn WebRoutes() -> impl IntoView {
                 <Routes fallback=|| view! { <NotFound/> }.into_view()>
                     <IdentityRoutes/>
                     <Route path=StaticSegment("dashboard") view=DashboardRoute/>
+                    // hegira:resource-routes-native
+                    // hegira:resource-routes-native:end
                 </Routes>
             </AppShell>
         </Router>
@@ -36,6 +38,8 @@ pub fn WebRoutes() -> impl IntoView {
                 <Routes fallback=|| view! { <NotFound/> }.into_view()>
                     <IdentityRoutes/>
                     <Route path=StaticSegment("dashboard") view={Lazy::<DashboardLazyRoute>::new()}/>
+                    // hegira:resource-routes-split
+                    // hegira:resource-routes-split:end
                 </Routes>
             </AppShell>
         </Router>

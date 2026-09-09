@@ -236,6 +236,17 @@ change plan is produced. Provider migrations seed generated permission
 identifiers for the canonical administrator role so the composed authorization
 boundary is usable after migration.
 
+The Leptos emitter creates an application-owned list and create/edit surface
+for the resource, with typed field conversion, mutation feedback, and an
+explicit delete confirmation. Its server functions are transport adapters:
+they recover the secure browser session and delegate to the generated
+application service through a typed context composed by the application host.
+Application-owned localization keys, native and split routes, navigation, and
+icons are registered through keyed managed blocks. Route, localization, and
+registration conflicts fail before publication. Permission gates improve the
+presentation experience but do not replace authorization in the generated
+application service.
+
 The package also plans application-owned migration scaffolds independently of
 the general resource specification. It resolves the selected SQLite or
 PostgreSQL adapter from the validated application manifest, observes only that
@@ -424,7 +435,7 @@ The generated dependency contract is:
 | `app_application` | `app_application_contracts`, `app_domain`, `app_domain_shared` |
 | `app_infrastructure` | application layers; selected framework providers; Identity Domain, Application, and SQLx packages |
 | `app_presentation` | application contracts, application service, shared domain values, and `http_support` |
-| `app_web` | `identity_leptos`, `leptos_support` |
+| `app_web` | application contracts, `identity_leptos`, and `leptos_support` |
 | `app_server` | application adapters, selected framework runtime packages, and selected Identity adapters |
 
 Application domain and application packages remain independent from Axum,

@@ -16,6 +16,7 @@ mod migration;
 mod persistence;
 mod source;
 mod specification;
+mod web;
 
 pub use http::{
     HttpLayerError, HttpLayerErrorKind, HttpLayerSources, PlannedResourceHttp, plan_resource_http,
@@ -37,6 +38,9 @@ pub use specification::{
     ResourceSelection, ResourceSpecification, ResourceSpecificationInput,
     ResourceSpecificationSummary, ScalarType, SelectedClient, SelectedDatabase, SpecificationError,
     SpecificationErrorKind,
+};
+pub use web::{
+    PlannedResourceWeb, WebLayerError, WebLayerErrorKind, WebLayerSources, plan_resource_web,
 };
 
 const MAX_IDENTITY_BYTES: usize = 64;

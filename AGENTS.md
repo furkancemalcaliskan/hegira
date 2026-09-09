@@ -101,6 +101,10 @@ commands change. Never describe planned work as implemented.
   composes their concrete services and Bearer routes explicitly into the
   application host, and contributes resource OpenAPI documents without moving
   validation, authorization, transactions, or persistence into Presentation.
+  It also emits application-owned Leptos list and create/edit surfaces,
+  transport-focused server functions, typed service context, localized labels,
+  and explicit route and navigation contributions. UI permission checks remain
+  presentation concerns; generated application services retain authorization.
   The same tool independently plans
   provider-specific, append-only application migration scaffolds without
   connecting to a database or changing historical migrations.

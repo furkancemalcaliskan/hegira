@@ -982,7 +982,32 @@ mod tests {
             (
                 "apps/server/src/server.rs",
                 "resource-openapi-documents",
-                "document.merge(generated_probe_document());",
+                "let document = document.merge(generated_probe_document());",
+            ),
+            (
+                "apps/server/src/server.rs",
+                "resource-leptos-contexts",
+                "provide_context(generated_probe_context());",
+            ),
+            (
+                "apps/web/src/routes.rs",
+                "resource-routes-native",
+                "generated_probe_route(),",
+            ),
+            (
+                "apps/web/src/app/navigation.rs",
+                "nav-items",
+                "generated_probe_nav_item(),",
+            ),
+            (
+                "apps/web/src/shared/i18n/mod.rs",
+                "resource-i18n-keys",
+                "GeneratedProbe,",
+            ),
+            (
+                "apps/web/src/app/sidebar.rs",
+                "nav-icon-views",
+                "NavIcon::GeneratedProbe => generated_probe_icon(),",
             ),
         ] {
             let source = std::fs::read(application.join(relative)).unwrap();

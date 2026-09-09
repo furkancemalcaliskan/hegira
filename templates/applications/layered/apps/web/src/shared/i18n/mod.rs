@@ -41,6 +41,8 @@ pub enum T {
     ToggleLanguage,
     ToggleTheme,
     Users,
+    // hegira:resource-i18n-keys
+    // hegira:resource-i18n-keys:end
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -129,6 +131,8 @@ fn translate(locale: Locale, key: T) -> &'static str {
         (Locale::En, T::ToggleLanguage) => "Change language",
         (Locale::En, T::ToggleTheme) => "Toggle theme",
         (Locale::En, T::Users) => "Users",
+        // hegira:resource-i18n-en
+        // hegira:resource-i18n-en:end
         (Locale::Tr, T::Account) => "Hesap",
         (Locale::Tr, T::AllRightsReserved) => "Tüm hakları saklıdır",
         (Locale::Tr, T::Architecture) => "Mimari",
@@ -173,6 +177,8 @@ fn translate(locale: Locale, key: T) -> &'static str {
         (Locale::Tr, T::ToggleLanguage) => "Dili değiştir",
         (Locale::Tr, T::ToggleTheme) => "Temayı değiştir",
         (Locale::Tr, T::Users) => "Kullanıcılar",
+        // hegira:resource-i18n-tr
+        // hegira:resource-i18n-tr:end
     }
 }
 

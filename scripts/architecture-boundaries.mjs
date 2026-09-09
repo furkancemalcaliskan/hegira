@@ -171,7 +171,11 @@ export const GENERATED_APPLICATION_DEPENDENCY_POLICY = Object.freeze({
     "app_domain_shared",
     "http_support",
   ],
-  app_web: ["identity_leptos", "leptos_support"],
+  app_web: [
+    "app_application_contracts",
+    "identity_leptos",
+    "leptos_support",
+  ],
   app_server: [
     "app_infrastructure",
     "app_presentation",
