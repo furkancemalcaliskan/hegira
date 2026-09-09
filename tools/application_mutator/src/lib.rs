@@ -274,6 +274,48 @@ impl ChangePlan {
         &self.changes
     }
 
+    /// Compose ordered plans into one atomic plan while preserving the first
+    /// observed precondition and the final resulting content for each path.
+    pub fn compose(plans: impl IntoIterator<Item = ChangePlan>) -> Result<Self, ChangePlanError> {
+        let mut composed: BTreeMap<ChangePath, PlannedFileChange> = BTreeMap::new();
+        for plan in plans {
+            plan.validate()?;
+            for change in plan.changes {
+                let path = change.path().clone();
+                let Some(previous) = composed.remove(&path) else {
+                    composed.insert(path, change);
+                    continue;
+                };
+                if change.precondition()
+                    != FilePrecondition::MatchesDigest(previous.result_digest())
+                {
+                    return Err(ChangePlanError::at_path(
+                        ChangePlanErrorKind::ConflictingOperations,
+                        path,
+                    ));
+                }
+                let chained = match previous {
+                    PlannedFileChange::Create(mut creation) => {
+                        creation.content = change.resulting_content().to_vec();
+                        creation.result_digest = change.result_digest();
+                        PlannedFileChange::Create(creation)
+                    }
+                    PlannedFileChange::Edit(mut edit) => {
+                        edit.content = change.resulting_content().to_vec();
+                        edit.result_digest = change.result_digest();
+                        PlannedFileChange::Edit(edit)
+                    }
+                };
+                composed.insert(path, chained);
+            }
+        }
+        let plan = Self {
+            changes: composed.into_values().collect(),
+        };
+        plan.validate()?;
+        Ok(plan)
+    }
+
     pub fn is_empty(&self) -> bool {
         self.changes.is_empty()
     }
@@ -504,6 +546,62 @@ mod tests {
         ])
         .unwrap_err();
         assert_eq!(conflict.kind(), ChangePlanErrorKind::ConflictingOperations);
+    }
+
+    #[test]
+    fn ordered_plans_compose_created_and_edited_content_atomically() {
+        let created = ChangePlan::new([create("crates/domain/src/order.rs", "domain")]).unwrap();
+        let extended = ChangePlan::new([edit(
+            "crates/domain/src/order.rs",
+            "domain",
+            "domain with adapter",
+        )])
+        .unwrap();
+
+        let composed = ChangePlan::compose([created, extended]).unwrap();
+
+        assert_eq!(composed.changes().len(), 1);
+        assert_eq!(composed.changes()[0].operation(), ChangeOperation::Create);
+        assert_eq!(
+            composed.changes()[0].precondition(),
+            FilePrecondition::Absent
+        );
+        assert_eq!(
+            composed.changes()[0].resulting_content(),
+            b"domain with adapter"
+        );
+    }
+
+    #[test]
+    fn ordered_plans_preserve_the_first_edit_precondition() {
+        let first = ChangePlan::new([edit("apps/server/src/server.rs", "base", "http")]).unwrap();
+        let second =
+            ChangePlan::new([edit("apps/server/src/server.rs", "http", "http and web")]).unwrap();
+
+        let composed = ChangePlan::compose([first, second]).unwrap();
+
+        assert_eq!(composed.changes().len(), 1);
+        assert_eq!(composed.changes()[0].operation(), ChangeOperation::Edit);
+        assert_eq!(
+            composed.changes()[0].precondition(),
+            FilePrecondition::MatchesDigest(ContentDigest::calculate(b"base"))
+        );
+        assert_eq!(composed.changes()[0].resulting_content(), b"http and web");
+    }
+
+    #[test]
+    fn incompatible_plan_chains_fail_instead_of_guessing() {
+        let first = ChangePlan::new([create("crates/domain/src/order.rs", "one")]).unwrap();
+        let second =
+            ChangePlan::new([edit("crates/domain/src/order.rs", "different", "two")]).unwrap();
+
+        let error = ChangePlan::compose([first, second]).unwrap_err();
+
+        assert_eq!(error.kind(), ChangePlanErrorKind::ConflictingOperations);
+        assert_eq!(
+            error.path().map(ChangePath::as_str),
+            Some("crates/domain/src/order.rs")
+        );
     }
 
     #[test]
