@@ -476,7 +476,7 @@ mod tests {
             application: "my-application".to_owned(),
             framework: FrameworkContract {
                 repository: HEGIRA_FRAMEWORK_REPOSITORY.to_owned(),
-                version: "v0.4.0".to_owned(),
+                version: "v0.5.0".to_owned(),
             },
             selection: ApplicationSelection {
                 components: [

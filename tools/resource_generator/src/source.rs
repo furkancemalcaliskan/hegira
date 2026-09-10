@@ -630,7 +630,7 @@ application = "sample-app"
 
 [framework]
 repository = "https://example.invalid/hegira.git"
-version = "v0.4.0"
+version = "v0.5.0"
 
 [selection]
 components = ["layered-base", "layered-leptos-identity"]

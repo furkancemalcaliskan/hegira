@@ -482,7 +482,7 @@ test("accepts a permitted Hegira release-source dependency", () => {
   );
   runtime.path = null;
   runtime.source =
-    "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.4.0";
+    "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.5.0";
 
   assert.deepEqual(validateGeneratedApplicationMetadata(metadata), []);
 });
@@ -535,7 +535,7 @@ test("rejects a retired compatibility package from the Hegira release source", (
         to: "web",
         path: null,
         source:
-          "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.4.0",
+          "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.5.0",
       },
     ]),
   );
