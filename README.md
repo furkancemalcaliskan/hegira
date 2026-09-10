@@ -149,6 +149,19 @@ Open `http://127.0.0.1:3000`. The SQLite profile seeds the development admin
 configured in the generated application's `config/sqlite.yaml`. Development startup owns its
 SQLite database creation, migrations, and configured seed behavior.
 
+Inspect the application identity, selected adapters, framework release, and
+mutation compatibility without changing any files:
+
+```sh
+cargo run --locked --manifest-path /path/to/hegira/Cargo.toml \
+  -p hegira_cli -- inspect
+```
+
+Run the command from anywhere below the application root, or pass
+`--application-root <path>` explicitly. Add `--json` for the deterministic,
+versioned machine-readable contract. See [Inspecting an existing application](docs/getting-started.md#inspect-an-existing-application)
+for discovery, compatibility, and safety behavior.
+
 From a generated application, create an append-only migration scaffold for
 the database adapter selected in `hegira.toml`:
 
@@ -206,8 +219,9 @@ source-runnable CLI ownership:
 sh scripts/backend-check.sh
 ```
 
-Validate CLI-generated SQLite and PostgreSQL applications, including their fresh and upgrade migration paths,
-production image, and HTTP contract, with disposable Docker state:
+Validate CLI-generated and resource-mutated SQLite and PostgreSQL
+applications, including their fresh and upgrade migration paths, production
+image, and HTTP contract, with disposable Docker state:
 
 ```sh
 sh scripts/generated-application-check.sh

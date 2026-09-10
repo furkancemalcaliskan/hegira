@@ -167,8 +167,10 @@ verify default and explicit application
 selections, independent release-source dependencies, deterministic output,
 destination conflicts, interactive default equivalence, supported-choice
 mapping, cancellation, non-TTY behavior, and the absence of global
-configuration requirements. Prompt tests inject deterministic input and capture
-output without relying on a host terminal.
+configuration requirements. They also verify read-only application discovery,
+explicit-root inspection, versioned inspection output, mutation compatibility,
+and incompatible or unsupported application outcomes. Prompt tests inject
+deterministic input and capture output without relying on a host terminal.
 
 SQLite and PostgreSQL requests have committed whole-tree fingerprints covering
 file paths and bytes, including binary assets, and are compared with equivalent
@@ -269,7 +271,7 @@ validates the rendered workspace's direct application and Hegira dependencies,
 validates native workspace targets and tests, compiles the hydration target,
 and produces the full-stack Cargo Leptos release output.
 
-The generated-application gate first creates untouched SQLite and PostgreSQL
+The generated-application gate first creates pristine SQLite and PostgreSQL
 applications through public `hegira new` commands and verifies that output
 against the canonical package before producing separate repository-validation
 copies with local framework dependencies. It runs the public resource command
