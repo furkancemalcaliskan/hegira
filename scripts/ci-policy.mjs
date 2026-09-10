@@ -24,10 +24,26 @@ const REQUIRED_CONTRACTS = [
 ];
 
 const QUALITY_DEPENDENCIES = [
-  "framework",
-  "official-modules",
-  "tooling",
-  "generated-application",
+  ["framework", "FRAMEWORK_RESULT"],
+  ["official-modules", "MODULES_RESULT"],
+  ["tooling", "TOOLING_RESULT"],
+  ["generated-application", "GENERATED_APPLICATION_RESULT"],
+];
+
+const GENERATED_APPLICATION_CONTRACTS = [
+  ["public SQLite application creation", "-- new sqlite-application"],
+  ["public PostgreSQL application creation", "-- new postgres-application"],
+  ["both selected database profiles", "for database in sqlite postgres; do"],
+  ["verified public CLI source", '--generated-source "$staging_parent/$database-source"'],
+  ["public resource mutation", "-- generate resource"],
+  ["resource dry-run", '--application-root "$validation_root" --dry-run --json'],
+  ["resource apply", '--application-root "$validation_root" --json'],
+  ["pristine public output check", 'test ! -e "$staging_parent/$database-source/$generated_resource_path"'],
+  ["locked generated workspace tests", "cargo test --locked --workspace"],
+  ["generated hydration build", "--features hydrate"],
+  ["production container build", 'docker build --tag "$GENERATED_APP_IMAGE" "$generated_root"'],
+  ["production readiness probe", '"$base_url/readyz"'],
+  ["generated resource HTTP contract", '"$base_url/api/validation-records"'],
 ];
 
 const COMPATIBILITY_HOST_CONTRACTS = [
@@ -93,24 +109,70 @@ export function validateRepositoryValidationWorkflow(workflow) {
   if (!qualityJob.includes("if: always()")) {
     errors.push("quality must report even when an ownership gate fails");
   }
-  for (const dependency of QUALITY_DEPENDENCIES) {
+  for (const [dependency, resultVariable] of QUALITY_DEPENDENCIES) {
     if (!qualityJob.includes(`- ${dependency}`)) {
       errors.push(`quality is missing ownership dependency: ${dependency}`);
+    }
+    const resultExpression = "${{ needs." + dependency + ".result }}";
+    if (!qualityJob.includes(`${resultVariable}: ${resultExpression}`)) {
+      errors.push(`quality does not capture ownership result: ${dependency}`);
+    }
+    if (!qualityJob.includes(`test "$${resultVariable}" = success`)) {
+      errors.push(`quality does not require ownership success: ${dependency}`);
     }
   }
 
   return errors;
 }
 
+export function validateGeneratedApplicationScript(script) {
+  const errors = [];
+  if (!script.startsWith("#!/usr/bin/env sh\nset -eu\n")) {
+    errors.push("generated application validation must fail closed");
+  }
+  for (const [description, contract] of GENERATED_APPLICATION_CONTRACTS) {
+    if (!script.includes(contract)) {
+      errors.push(
+        `generated application validation is missing ${description}: ${contract}`,
+      );
+    }
+  }
+  for (const secretReference of ["${{ secrets.", "GH_TOKEN", "GITHUB_TOKEN"]) {
+    if (script.includes(secretReference)) {
+      errors.push(
+        `generated application validation may not consume repository secrets: ${secretReference}`,
+      );
+    }
+  }
+  return errors;
+}
+
 export function validateCIRepository(root) {
   const errors = [];
   const workflowPath = path.join(root, ".github", "workflows", "backend.yml");
+  const generatedApplicationPath = path.join(
+    root,
+    "scripts",
+    "generated-application-check.sh",
+  );
   if (!fs.existsSync(workflowPath)) {
     errors.push("repository validation workflow is missing: .github/workflows/backend.yml");
   } else {
     errors.push(
       ...validateRepositoryValidationWorkflow(
         fs.readFileSync(workflowPath, "utf8"),
+      ),
+    );
+  }
+
+  if (!fs.existsSync(generatedApplicationPath)) {
+    errors.push(
+      "generated application validation is missing: scripts/generated-application-check.sh",
+    );
+  } else {
+    errors.push(
+      ...validateGeneratedApplicationScript(
+        fs.readFileSync(generatedApplicationPath, "utf8"),
       ),
     );
   }

@@ -106,9 +106,10 @@ The repository validation workflow separates these responsibilities:
 - `tooling` validates the DX baseline, source-runnable CLI, rendering tool,
   component manifests, workspace-external layered application, locked
   dependency boundaries, hydration, and release output;
-- `generated-application` validates fresh SQLite and PostgreSQL applications,
-  the supported v0.2.0 upgrade, locked application dependency boundaries, and
-  the rendered production container;
+- `generated-application` validates untouched public CLI output, then mutates
+  separate SQLite and PostgreSQL validation copies through the public resource
+  command and exercises their locked dependency boundaries, supported v0.2.0
+  upgrades, generated HTTP contract, and rendered production container;
 - `quality` aggregates the four repository ownership gates under the existing
   required status context;
 - `supply-chain` runs dependency policy and vulnerability checks.
@@ -268,15 +269,18 @@ validates the rendered workspace's direct application and Hegira dependencies,
 validates native workspace targets and tests, compiles the hydration target,
 and produces the full-stack Cargo Leptos release output.
 
-The generated-application gate first verifies untouched public `hegira new`
-output against the canonical package, then runs the public migration command on
-the disposable staged application for each database selection. It compares
-repeat dry-run output, requires dry-run and apply to expose the same plan,
-checks invalid and duplicate process outcomes, and verifies every historical
-migration checksum remains unchanged. The generated application tests require
-SQLx to record the expected generated migration during fresh installation and
-the supported v0.2.0 upgrade. SQLite uses an in-memory database; PostgreSQL uses
-only the Compose database created and explicitly authorized by the gate.
+The generated-application gate first creates untouched SQLite and PostgreSQL
+applications through public `hegira new` commands and verifies that output
+against the canonical package before producing separate repository-validation
+copies with local framework dependencies. It runs the public resource command
+only on those disposable copies. The gate compares repeated dry-run output,
+requires dry-run and apply to expose the same plan, checks invalid and duplicate
+process outcomes, proves the public output remains pristine, and verifies every
+historical migration checksum remains unchanged. The generated application
+tests require SQLx to record the generated resource migration, table, and
+permissions during fresh installation and the supported v0.2.0 upgrade. SQLite
+uses an in-memory database; PostgreSQL uses only the Compose database created
+and explicitly authorized by the gate.
 
 The renderer is an internal maintainer tool rather than the public Hegira CLI.
 To inspect an independently copyable release-style render:
@@ -315,18 +319,36 @@ This requires Node/npm, `cargo-leptos`, and the `wasm32-unknown-unknown` target;
 the generated-application CI jobs install these prerequisites explicitly.
 
 The check runs SQLite fresh-install and upgrade tests in memory, and starts an
-ephemeral PostgreSQL container for the
-equivalent PostgreSQL contracts. It then builds the rendered application image,
-boots it against the disposable database, and verifies readiness, hydration
-assets, security headers, and unauthenticated Bearer API behavior. The check
-also validates the rendered workspace's locked direct dependency graph and
-rejects retired compatibility packages. It stages a credential-free framework
-source view under the disposable render so
-the same relative Cargo paths work on the host and inside the Docker build. It
-generates runtime-only database and JWT values and removes its containers,
-network, database state, validation image, and rendered output on exit. Compose
-project and image names are assigned by the check rather than inherited from
-the caller. It never targets the maintainer's configured database.
+ephemeral PostgreSQL container for the equivalent PostgreSQL contracts. It then
+builds the rendered application image, boots it against the disposable
+database, and verifies readiness, hydration assets, security headers,
+unauthenticated Bearer rejection, and authorized generated-resource CRUD
+through the HTTP, application-service, and repository layers. The check also
+validates the rendered workspace's locked direct dependency graph and rejects
+retired compatibility packages. It stages a credential-free framework source
+view under the disposable render so the same relative Cargo paths work on the
+host and inside the Docker build. It generates runtime-only database and JWT
+values and removes its containers, network, database state, validation image,
+and rendered output on exit. Compose project and image names are assigned by
+the check rather than inherited from the caller. It never targets the
+maintainer's configured database.
+
+Failures in this job are owned by the contract boundary named in the output:
+
+- public creation or canonical verification failures belong to the CLI render
+  and template-package contract;
+- dry-run, apply, conflict, or pristine-output failures belong to the CLI,
+  application mutator, or resource generator;
+- native, hydration, or dependency-boundary failures belong to the generated
+  source or its selected provider composition;
+- fresh-install or upgrade failures belong to application migration and
+  provider persistence composition;
+- readiness, asset, security-header, authentication, authorization, or CRUD
+  failures belong to the production container and generated runtime contract.
+
+The `quality` job must propagate any such failure through the existing stable
+`quality` status context. Do not split this scenario into a second protected
+branch check merely to diagnose one of its internal stages.
 
 ### Validation build-cache lifecycle
 
