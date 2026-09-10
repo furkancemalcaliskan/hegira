@@ -2,6 +2,9 @@
 
 use serde::Serialize;
 
+// hegira:generated-modules:start
+// hegira:generated-modules:end
+
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct ApplicationSummary {
     pub name: String,

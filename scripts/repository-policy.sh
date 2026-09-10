@@ -6,6 +6,7 @@ repository_root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 node "$repository_root/scripts/repository-policy.mjs" \
   repository --root "$repository_root"
 node "$repository_root/scripts/repository-policy.test.mjs"
+sh "$repository_root/scripts/validation-cache.test.sh"
 sh "$repository_root/scripts/architecture-boundaries.sh"
 node "$repository_root/scripts/ci-policy.mjs" "$repository_root"
 node "$repository_root/scripts/ci-policy.test.mjs"

@@ -1,37 +1,37 @@
-package=hegira-canonical@v0.4.0
-framework=https://github.com/furkancemalcaliskan/hegira.git#v0.4.0
-digest=sha256:5ae6247a4aa169b74af14ed87400545180067fa635c25d8c69c7937f037eef1f
+package=hegira-canonical@v0.5.0
+framework=https://github.com/furkancemalcaliskan/hegira.git#v0.5.0
+digest=sha256:9450e008943a70d2b0ba1a22d89cb59e83509d492845b5f33115a6577e5c8914
 components=layered-base,layered-leptos-identity
 6986e1a96f1eaa98 .dockerignore
 4845a8e7ed4a8aa1 .env.example
 5993ab4d526be466 .gitignore
-9d0467f7835e8856 Cargo.toml
+1aff236c827c875b Cargo.toml
 2a1866fde05d96cd Dockerfile
-1b99a868ce64d655 apps/server/Cargo.toml
+acb1f40708fef3bc apps/server/Cargo.toml
 3bde3764afe35806 apps/server/src/lib.rs
 9ea27e2845c55bb5 apps/server/src/main.rs
-921fd4e2ba1b0ab7 apps/server/src/server.rs
+bcead05dce4336dc apps/server/src/server.rs
 5f7ffc9d0f5ba7bb apps/server/src/worker_operations.rs
-37e98c00b9a3551a apps/server/tests/database_contracts.rs
-1d7e452201e88e35 apps/web/Cargo.toml
+50ed8852150fc65a apps/server/tests/database_contracts.rs
+b249b1f80f690d85 apps/web/Cargo.toml
 5cdf33ea1fc44058 apps/web/src/app/layout.rs
 2e684ad1c47b141c apps/web/src/app/mod.rs
-caa4fa353eb97e24 apps/web/src/app/navigation.rs
+647b104724518790 apps/web/src/app/navigation.rs
 ae53ebf34e59bbaa apps/web/src/app/page.rs
 bccc6ef21e0cc054 apps/web/src/app/providers.rs
 748861d94f80770a apps/web/src/app/shell.rs
-a240f92a910a798b apps/web/src/app/sidebar.rs
+90d197c5691f8e1e apps/web/src/app/sidebar.rs
 e76d30fbdb62c2d7 apps/web/src/app/topbar.rs
 b58033514afd0df2 apps/web/src/dashboard.rs
-1b500ad8b0744668 apps/web/src/lib.rs
+4be5e3e4a4cb60f7 apps/web/src/lib.rs
 9c700024fa843d19 apps/web/src/package-lock.json
 5d88780fe6e79270 apps/web/src/package.json
 370740627a45bc7c apps/web/src/public/assets/branding/hegira-logo.png
 2c5dbabcccc716da apps/web/src/root.rs
-c2106c9fa997d707 apps/web/src/routes.rs
+b3d6c8b2db83731d apps/web/src/routes.rs
 b0584f92d58a6d69 apps/web/src/shared/feedback/mod.rs
 eef895562df1a042 apps/web/src/shared/feedback/not_found.rs
-679df054549a3f25 apps/web/src/shared/i18n/mod.rs
+41f56b0fbbd12644 apps/web/src/shared/i18n/mod.rs
 8eea085adef9145f apps/web/src/shared/mod.rs
 ca96fd4830f687ae apps/web/src/style/main.css
 81e59ae188c3ec03 apps/web/src/style/tailwind.css
@@ -40,13 +40,13 @@ bcb76d153706340d config/development.yaml
 3620445aaf34d3d5 config/sqlite.yaml
 e0d83d8851349dd1 config/test.yaml
 a0333bc404077ee1 crates/application/Cargo.toml
-f6ef95c4dfae620d crates/application/src/lib.rs
-0e5dcff75488da70 crates/application_contracts/Cargo.toml
-a302417cf34a12c5 crates/application_contracts/src/lib.rs
-0d94905dab8f8fdd crates/domain/Cargo.toml
-a9cd2face3441fe2 crates/domain/src/lib.rs
+3b3c6b8c40765630 crates/application/src/lib.rs
+2815e21a6684fad5 crates/application_contracts/Cargo.toml
+b26b58e06da4e890 crates/application_contracts/src/lib.rs
+3578b3fa36a795fd crates/domain/Cargo.toml
+495d7129a8314b1f crates/domain/src/lib.rs
 7c557a4065924b1b crates/domain_shared/Cargo.toml
-061f03de21e1e59a crates/domain_shared/src/lib.rs
+f9e798900d504f97 crates/domain_shared/src/lib.rs
 fb68062d4828e314 crates/infrastructure/Cargo.toml
 d6f2201ccf663154 crates/infrastructure/migrations/postgres/006_audit_logs.sql
 fba197e4c0ea8f58 crates/infrastructure/migrations/postgres/007_app_settings.sql
@@ -69,17 +69,17 @@ ed912714d31a65c0 crates/infrastructure/src/identity/authorization/service.rs
 f5dd22f136f9f656 crates/infrastructure/src/identity/mod.rs
 cf1381fa5f66e850 crates/infrastructure/src/identity/oauth/mod.rs
 6f27896457ec5278 crates/infrastructure/src/identity/oauth/provider_client.rs
-24d53fb27e644878 crates/infrastructure/src/identity/services.rs
+10be0f8fa396f120 crates/infrastructure/src/identity/services.rs
 2c4d87b9763b4f68 crates/infrastructure/src/identity/sessions/mod.rs
 4f0c462e9fee0d87 crates/infrastructure/src/identity/sessions/redis_session.rs
-061a0e94bd4b0e3b crates/infrastructure/src/lib.rs
+a9ff15cbbfb6a6a4 crates/infrastructure/src/lib.rs
 c4723abea8cac667 crates/infrastructure/src/operations.rs
 7cb7827bbd706f3b crates/infrastructure/src/security/mod.rs
 0ed16015226b6cba crates/infrastructure/src/security/password_hasher.rs
 102d00dfca4c5e89 crates/infrastructure/src/security/token_service.rs
 7aab3d334b0f4b0a crates/infrastructure/src/settings/mod.rs
-629e627fff227ae7 crates/presentation/Cargo.toml
+857f63ea42fb64c6 crates/presentation/Cargo.toml
 28acfa4312676a72 crates/presentation/src/http.rs
-66a33630de351b9c crates/presentation/src/lib.rs
+d9d3e75ec6021d05 crates/presentation/src/lib.rs
 1309f45751c079e0 docker-compose.yml
-a93c2f93f0b35044 hegira.toml
+2602710aeabd1a4f hegira.toml

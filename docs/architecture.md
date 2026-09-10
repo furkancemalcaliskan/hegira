@@ -36,7 +36,9 @@ automatic module discovery, application upgrades, or registry distribution.
 │   │   └── layered/         independent full-stack application source
 │   └── components/          typed application-component manifests
 ├── tools/
+│   ├── application_mutator/ existing-application change-plan core
 │   ├── hegira_cli/          source-runnable CLI command shell
+│   ├── resource_generator/  layered resource generation and composition core
 │   └── template_renderer/   render core and repository-validation adapter
 ├── docs/                    current technical and maintainer documentation
 ├── scripts/                 validation and release helpers
@@ -109,7 +111,9 @@ The direct local dependency allowlist is enforced from locked Cargo metadata by
 | `identity_sqlx` | `background_jobs`, `identity_application`, `identity_application_contracts`, `identity_domain`, `identity_domain_shared`, `persistence`, `search` |
 | `identity_http` | `http_support`, `identity_application`, `identity_application_contracts`, `leptos_support` |
 | `identity_leptos` | `identity_application`, `identity_application_contracts`, `identity_domain_shared`, `leptos_support` |
-| `hegira_cli` | `template_renderer` |
+| `application_mutator` | None |
+| `hegira_cli` | `application_manifest`, `application_mutator`, `resource_generator`, `template_renderer` |
+| `resource_generator` | `application_manifest`, `application_mutator` |
 | `template_renderer` | `application_manifest` |
 
 Normal, optional, development, and build dependencies use the same ownership
@@ -122,7 +126,7 @@ framework compatibility surfaces or consumed by generated applications.
 
 | Package | Responsibility |
 |---|---|
-| `application_manifest` | Versioned, validated, deterministic `hegira.toml` generation-state contract |
+| `application_manifest` | Versioned, validated, deterministic `hegira.toml` generation-state and mutation-compatibility contract |
 | `platform_core` | Compiled capability identities and application-independent primitives |
 | `audit` | Provider-neutral audit records and logging port |
 | `cache` | Cache port plus null, memory, and optional Redis adapters |
@@ -144,16 +148,179 @@ These packages expose reusable primitives and provider adapters. They do not
 contain application domain, application service, presentation, host
 composition, or product UI code.
 
+## Layered resource naming and ownership
+
+`tools/resource_generator` owns the typed naming boundary shared by layered
+resource emitters. A resource is supplied as an ASCII Rust type identity. Its
+plural type defaults to the explicit and deterministic suffix `s`; irregular
+forms require an explicit plural identity rather than language inference. The
+validated result provides the Rust module, plural route segment, SQL table,
+permission prefix, and application-relative source path for each supported
+layer. Acronym boundaries have deterministic snake-case and kebab-case forms.
+
+Resource artifacts are assigned once to Domain (`app_domain`), Application
+Contracts (`app_application_contracts`), Application (`app_application`),
+Infrastructure (`app_infrastructure`), Presentation (`app_presentation`), or
+Web (`app_web`). Those application-owned package names and roots match the
+enforced canonical generated-application graph and contain no Hegira branding.
+Reserved canonical application identities and collisions with the application,
+official modules, or observed application source fail before a change plan is
+constructed. Inputs cannot supply source fragments, routes, SQL, or filesystem
+paths; every derived artifact path is validated by the application-mutation
+contract.
+
+The same package owns the immutable typed resource specification. Raw field
+input is restricted to lowercase ASCII snake_case,
+an explicit nullable flag, and the closed scalar set `string`, `bool`, `i64`,
+`uuid`, and `datetime`; arbitrary Rust and SQL types are not accepted. Every
+resource receives a required, non-null UUID `id`, so user fields cannot redefine
+the identifier. At least one non-identifier field is required, field names are
+sorted canonically, and duplicates plus Rust, SQL, and generator-reserved names
+fail before planning. The selected SQLite or PostgreSQL adapter and the Leptos
+client are resolved from the validated application manifest rather than caller
+defaults. A versioned, deterministic summary exposes only the validated model.
+This contract performs no schema introspection or database access.
+
+The inward-layer emitter turns that specification into one deterministic
+change plan for Domain, Application Contracts, and Application source. Domain
+owns the UUID identifier value and entity skeleton. Application Contracts owns
+serializable commands, queries, responses, permission identifiers, and the
+service boundary. Application owns the repository, authorization, and
+identifier-generation ports plus the service implementation. Every generated
+use case requires authorization before repository access, including create,
+update, and delete. The generated source deliberately contains no Axum,
+Leptos, SQLx, or vendor types and makes no business-invariant or aggregate
+assumptions. Developers extend the generated application-owned domain source
+when product rules require them.
+
+The same plan registers each module only through the controlled integration
+block in its layer root. New source uses absent-file preconditions and root
+edits use observed-content digests, so an existing registration, file,
+concurrent change, or unsupported root fails instead of being overwritten.
+Infrastructure, HTTP presentation, and web source remain outside this inward
+plan.
+
+A separate persistence emitter consumes the same validated specification and
+produces only the selected database adapter. It creates an application-owned
+SQLx repository that implements the Application port, a UUID identifier
+adapter, and an explicit typed factory that composes those adapters with an
+application-selected authorization implementation. The provider-specific
+module is registered through the controlled Infrastructure root; no service
+locator, reflection, database inspection, or inward SQLx dependency is used.
+Runtime query values are bound parameters, while table and column identifiers
+come only from validated generator identities. List consistency is scoped to
+the repository operation, and no transaction is extended to an HTTP request.
+
+The persistence plan also creates the selected provider's forward-only table
+migration in the application-owned migration history. SQLite and PostgreSQL
+types and placeholder syntax are emitted independently; generating one does
+not claim or create support for the other. Historical migrations remain
+immutable.
+
+The HTTP emitter adds a transport-focused Axum adapter for the same resource.
+Its handlers perform only Bearer extraction, request and path mapping,
+application-service delegation, response serialization, and stable HTTP error
+mapping. The concrete resource service is composed in application-owned
+Infrastructure and registered through explicit keyed service and server
+integration blocks; there is no route discovery, reflection, or service
+locator. Generated Bearer routes are merged separately from
+cookie-authenticated Leptos BFF routes, so they do not inherit browser CSRF
+policy. Authorization still runs inside every generated application use case
+before repository access.
+
+When OpenAPI is compiled, resource paths and schemas contribute a typed
+document which the application server explicitly merges with the Identity API
+document. The same managed-entry contract rejects missing, duplicate,
+reordered, or malformed service, route, and document registrations before a
+change plan is produced. Provider migrations seed generated permission
+identifiers for the canonical administrator role so the composed authorization
+boundary is usable after migration.
+
+The Leptos emitter creates an application-owned list and create/edit surface
+for the resource, with typed field conversion, mutation feedback, and an
+explicit delete confirmation. Its server functions are transport adapters:
+they recover the secure browser session and delegate to the generated
+application service through a typed context composed by the application host.
+Application-owned localization keys, native and split routes, navigation, and
+icons are registered through keyed managed blocks. Route, localization, and
+registration conflicts fail before publication. Permission gates improve the
+presentation experience but do not replace authorization in the generated
+application service.
+
+The package also plans application-owned migration scaffolds independently of
+the general resource specification. It resolves the selected SQLite or
+PostgreSQL adapter from the validated application manifest, observes only that
+provider's canonical migration filenames, and derives the next append-only
+numeric identity. Existing migration contents are neither read into plan output
+nor edited. Duplicate identities, malformed or symlinked histories, and stale
+publication preconditions are explicit conflicts.
+
+Each plan creates one provider-labelled SQL scaffold and creates or advances
+`crates/infrastructure/migrations/.hegira-generator.toml`. This private,
+application-owned coordination record contains the selected adapter and next
+version only. Publishing both files through `application_mutator` serializes
+Hegira generator operations and prevents concurrent plans from silently
+claiming the same version. Planning does not connect to a database, execute or
+revert migrations, accept arbitrary SQL input, or infer runtime configuration.
+
+## Existing-application change planning
+
+`tools/application_mutator` owns the internal typed contract for coordinated
+changes to an existing validated application. New-file operations require the
+target path to be absent. Structured edits carry the SHA-256 digest of the
+observed content as an explicit publication precondition. Every result also
+carries its digest. Application-relative canonical paths and a sorted complete
+plan make validation and summaries deterministic; duplicate paths and mixed
+operations against one path are typed conflicts.
+
+Plan summaries expose only relative paths, operation identities, preconditions,
+and digests. They never expose source or resulting file content. The crate does
+not execute generated code or provide the repository-validation dependency
+rewriting available to maintainer tooling.
+
+Structured editors operate only on declared integration points. Canonical Rust
+layer roots contain an explicit generated-module block; registrations inside
+that block must be unique and deterministically ordered, while matching
+registrations outside it are treated as conflicts rather than adopted. TOML
+editors target declared tables, arrays, and string keys through a lossless
+document model so unrelated keys, ordering, and comments remain owned by the
+application. Repeated edits return an explicit already-present result. Missing,
+duplicated, reordered, or type-incompatible integration points fail with typed
+diagnostics before a plan is produced.
+
+Failure-safe publication is a separate stage over the validated plan. The
+publisher opens the real application root and every change parent without
+following symlinks, creates an exclusive `.hegira-mutation.lock` recovery
+marker, and stages private files on each target filesystem. Required exclusive
+rename and atomic-exchange behavior is probed before application files change.
+All target identities and absent or digest preconditions are then rechecked
+immediately before publication. Edits exchange the staged result with the
+original so the original remains available for rollback; creates use an
+exclusive no-replace rename. A recoverable failure rolls published changes back
+in reverse order after verifying that neither the generated result nor its
+rollback source changed concurrently.
+
+Successful publication durably removes transaction files and then the marker.
+A crash, changed published file, failed rollback, or uncertain cleanup leaves
+the marker in place and blocks subsequent mutations for explicit manual
+recovery. Cleanup and rollback remain anchored to the opened application-owned
+directories, including when a path ancestor is replaced. Platforms or
+filesystems without the required safety semantics fail before application files
+are modified; the contract does not claim universal filesystem transactions.
+
 ## Source-runnable CLI
 
 `tools/hegira_cli` owns the `hegira` binary command shell. It defines top-level
-help, version reporting, guided and deterministic non-interactive application creation,
-concise diagnostics, and stable process outcomes without reading a user home
-directory or global configuration. It delegates canonical component planning
-and atomic publication to `template_renderer`; repository-local dependency
-rewrites remain unavailable to the public command. Help, version information,
-and successful creation instructions are written to standard output; usage and
-failure diagnostics are written to standard error.
+help, version reporting, guided and deterministic non-interactive application
+creation, read-only application inspection, concise diagnostics, and stable
+process outcomes without reading a user home directory or global configuration.
+It delegates new-application component planning and atomic publication to
+`template_renderer`, and existing-application publication to
+`application_mutator`. Application migration planning is delegated to
+`resource_generator`; repository-local dependency rewrites remain unavailable
+to the public command. Help, version information, successful creation
+instructions, inspection results, and mutation plans are written to standard
+output; usage and failure diagnostics are written to standard error.
 
 The process outcomes are `0` for success, `1` for an internal error, `2` for
 invalid usage, `3` for validation failure, and `4` for a destination or state
@@ -162,6 +329,40 @@ layered application with SQLite, Leptos, and Identity defaults. The database,
 client, and component selections can also be stated explicitly. Generation
 writes the destination atomically and never executes generated or external
 commands.
+
+The CLI library provides common `--dry-run` and `--json` options for mutation
+commands. A command constructs and validates one typed `ChangePlan`, then hands
+that same value to the shared execution path for either preview or publication;
+dry-run does not open or write the application root. Human output lists every
+ordered relative path and operation. Machine output is deterministic,
+explicitly versioned, and includes the content-redacted plan summary rather
+than file bodies, runtime configuration, credentials, environment values, or
+machine-local framework paths. Empty plans are successful no-ops, planning and
+state conflicts retain the conflict process outcome, and invalid plans retain a
+validation outcome. `hegira generate resource <name> --field <name:type>` uses
+this contract to compose the Domain, Application Contracts, Application,
+selected SQLx, Axum/OpenAPI, and selected Leptos emitter plans into one atomic
+change. Chained edits preserve the first observed precondition and final
+content without publishing an intermediate state. `hegira generate migration
+<identity>` uses the same contract to preview or publish the provider-specific
+migration plan selected by the application manifest. Both commands create
+source only and do not execute migrations, generated code, formatters, or
+builds.
+
+The CLI library also owns a read-only existing-application context resolver.
+`hegira inspect` uses it to provide concise human-readable application identity,
+framework, selection, and mutation-compatibility information. `--json` exposes
+the same state through an explicitly versioned deterministic output contract,
+and `--application-root <path>` selects a root for automation. Otherwise the
+resolver discovers `hegira.toml` from a real working directory and its real
+ancestors. Discovery rejects multiple candidate manifests as ambiguous rather
+than selecting one implicitly. Directory-relative, no-follow reads anchor the
+manifest and the required application-owned `apps/`, `crates/`, and `config/`
+roots to the opened application root. The resolver returns the typed manifest
+when the current parser supports it and always returns the mutation
+compatibility assessment when one can be determined. Inspection reads no
+runtime configuration, environment value, user-home state, or secret, and it
+performs no writes.
 
 When an application name or destination is omitted in an interactive terminal,
 the same command gathers missing values through a guided workflow, displays the
@@ -240,7 +441,7 @@ The generated dependency contract is:
 | `app_application` | `app_application_contracts`, `app_domain`, `app_domain_shared` |
 | `app_infrastructure` | application layers; selected framework providers; Identity Domain, Application, and SQLx packages |
 | `app_presentation` | application contracts, application service, shared domain values, and `http_support` |
-| `app_web` | `identity_leptos`, `leptos_support` |
+| `app_web` | application contracts, `identity_leptos`, and `leptos_support` |
 | `app_server` | application adapters, selected framework runtime packages, and selected Identity adapters |
 
 Application domain and application packages remain independent from Axum,
@@ -303,6 +504,17 @@ store. Editing it does not trigger regeneration or upgrades. The field-level
 contract is documented in
 [Getting started](getting-started.md#generated-ownership-and-hegiratoml).
 
+The application-manifest package also exposes a pure, fail-closed mutation
+compatibility assessment. A manifest is compatible only when its schema,
+framework repository and exact release, component set, and single selected
+database/client adapters match the caller's supported policy. A valid manifest
+from another release or with an unknown supported-shape capability is reported
+as unsupported; a current-shape manifest that conflicts with canonical
+selection or framework identity is reported as incompatible with the exact
+field identified. Normal parsing remains separate, so older valid manifests
+can still be read without becoming writable. This assessment performs no file
+write, network access, source mutation, dependency change, or upgrade.
+
 Use these focused gates:
 
 ```sh
@@ -310,7 +522,7 @@ sh scripts/architecture-boundaries.sh
 sh scripts/framework-check.sh
 sh scripts/official-modules-check.sh
 sh scripts/layered-template-check.sh
-sh scripts/cli-check.sh
+sh scripts/cli-check.sh # CLI and existing-application mutation tooling
 sh scripts/generated-application-check.sh
 ```
 

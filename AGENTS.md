@@ -66,16 +66,57 @@ commands change. Never describe planned work as implemented.
   normal render contract preserves pinned release sources; only disposable
   maintainer checks may select the adapter that rewrites them. It is not the
   public Hegira CLI.
+- `tools/application_mutator/` contains the deterministic, content-redacted
+  existing-application change-plan contract. It validates ordered relative
+  creates, digest-preconditioned edits, and conflict-aware managed Rust and
+  TOML integration points. Publication is serialized by an application-owned
+  recovery marker, anchored to opened directories, precondition-checked, and
+  rolled back on recoverable failures without following symlinks.
 - `tools/hegira_cli/` contains the source-runnable `hegira` command shell,
   deterministic interactive and non-interactive layered application creation,
-  stable process outcomes, and user-facing diagnostic contract.
+  read-only existing-application inspection with human and versioned JSON
+  output, complete layered resource generation, application-owned migration
+  generation, and a shared dry-run/apply mutation contract.
+  Mutation output is deterministic, versioned, content-redacted, and derived
+  from the same typed plan used for publication. The CLI also owns stable
+  process outcomes and its user-facing diagnostic contract.
   Generation validates project identity and destination before rendering and
   requires a new destination under an existing parent without symlinks. Safe
   atomic publication fails closed on unsupported platforms.
+- `tools/resource_generator/` contains the typed layered resource naming and
+  ownership contract. It derives validated Rust module, route, permission,
+  database, and application-relative artifact identities from one resource
+  input, supports an explicit irregular plural, and rejects reserved or
+  occupied application namespaces before planning. Its immutable resource
+  specification accepts only lowercase ASCII field names, nullability, and the
+  closed `string`, `bool`, `i64`, `uuid`, and `datetime` scalar set; supplies a
+  required non-null UUID identifier; and resolves the database and client from
+  the validated application manifest. It emits deterministic Domain,
+  Application Contracts, and Application source through absent-file creations
+  and controlled module-root edits. Generated application services depend on
+  repository, authorization, and identifier ports and authorize every use case
+  before accessing a repository. It also emits selected-provider SQLx
+  repositories, bound queries, explicit typed Infrastructure composition, and
+  provider-correct table migrations. It emits transport-focused Axum handlers,
+  composes their concrete services and Bearer routes explicitly into the
+  application host, and contributes resource OpenAPI documents without moving
+  validation, authorization, transactions, or persistence into Presentation.
+  It also emits application-owned Leptos list and create/edit surfaces,
+  transport-focused server functions, typed service context, localized labels,
+  and explicit route and navigation contributions. UI permission checks remain
+  presentation concerns; generated application services retain authorization.
+  The same tool independently plans
+  provider-specific, append-only application migration scaffolds without
+  connecting to a database or changing historical migrations.
 - `scripts/` contains local validation and release helpers.
   The generated-application gate uses public CLI output for both database
   profiles, verifies it before staging local dependencies in a separate copy,
-  and exercises native, hydration, upgrade, and production-container contracts.
+  generates an application-owned migration through the public mutation command,
+  and exercises native, hydration, disposable-database upgrade, and
+  production-container contracts. Rendered-application validations use stable,
+  locked workspaces and isolated repository-owned build caches under
+  `target/validation/`; their cleanup command does not own normal developer
+  Cargo output.
 - `.github/workflows/` contains validation and release automation.
 
 Do not create future-facing directories, manifests, modules, tools, clients, or
@@ -171,7 +212,7 @@ sh scripts/framework-check.sh
 sh scripts/official-modules-check.sh
 ```
 
-Focused source-runnable CLI validation:
+Focused source-runnable CLI and application-mutation tooling validation:
 
 ```sh
 sh scripts/cli-check.sh

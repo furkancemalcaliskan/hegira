@@ -106,9 +106,10 @@ The repository validation workflow separates these responsibilities:
 - `tooling` validates the DX baseline, source-runnable CLI, rendering tool,
   component manifests, workspace-external layered application, locked
   dependency boundaries, hydration, and release output;
-- `generated-application` validates fresh SQLite and PostgreSQL applications,
-  the supported v0.2.0 upgrade, locked application dependency boundaries, and
-  the rendered production container;
+- `generated-application` validates untouched public CLI output, then mutates
+  separate SQLite and PostgreSQL validation copies through the public resource
+  command and exercises their locked dependency boundaries, supported v0.2.0
+  upgrades, generated HTTP contract, and rendered production container;
 - `quality` aggregates the four repository ownership gates under the existing
   required status context;
 - `supply-chain` runs dependency policy and vulnerability checks.
@@ -154,7 +155,7 @@ sh scripts/release-policy.sh
 ```
 
 Validate the source-runnable CLI command, diagnostic, and process-outcome
-contracts:
+contracts together with deterministic existing-application change planning:
 
 ```sh
 sh scripts/cli-check.sh
@@ -166,8 +167,10 @@ verify default and explicit application
 selections, independent release-source dependencies, deterministic output,
 destination conflicts, interactive default equivalence, supported-choice
 mapping, cancellation, non-TTY behavior, and the absence of global
-configuration requirements. Prompt tests inject deterministic input and capture
-output without relying on a host terminal.
+configuration requirements. They also verify read-only application discovery,
+explicit-root inspection, versioned inspection output, mutation compatibility,
+and incompatible or unsupported application outcomes. Prompt tests inject
+deterministic input and capture output without relying on a host terminal.
 
 SQLite and PostgreSQL requests have committed whole-tree fingerprints covering
 file paths and bytes, including binary assets, and are compared with equivalent
@@ -178,6 +181,65 @@ On Linux, a child-only file-size limit exercises actual renderer write failure,
 staging cleanup, sentinel preservation, and a successful retry. Catalog failure
 is tested through the CLI dispatcher with a disposable missing source. These
 tests neither build generated applications nor require network access.
+
+The same gate validates `application_mutator` plan ordering, explicit absent and
+content-digest preconditions, duplicate and conflicting path diagnostics,
+canonical relative-path enforcement, content-redacted summaries, managed Rust
+module registration, and lossless TOML integration edits. Fixtures cover
+customized surrounding source, already-present results, and missing, duplicate,
+reordered, or incompatible integration points. The canonical layered
+application's declared integration points are exercised without publishing a
+change plan. CLI fixtures verify that dry-run performs no application-root I/O,
+human output lists every ordered operation, machine output is deterministic and
+versioned, empty plans are stable no-ops, planning conflicts preserve the
+conflict outcome, and dry-run and apply report the identical content-redacted
+plan. Publisher fixtures cover exclusive mutation locking, digest and
+identity rechecks, symlink and ancestor replacement, destination races,
+filesystem-semantic preflight, successful edit/create publication, reverse
+rollback after injected failures, and explicit incomplete-recovery reporting.
+These tests operate only on disposable temporary application fixtures. A
+guarded child-process fixture exits during multi-file publication to verify that
+the durable, content-redacted recovery marker survives process termination and
+blocks a subsequent mutation attempt.
+
+The CLI gate also validates `resource_generator` naming and ownership. Its
+fixtures cover deterministic singular/plural derivation, explicit irregular
+plurals, acronym boundaries, reserved and occupied namespaces, brand-neutral
+canonical package ownership, safe application-relative paths, and distinct
+permission identifiers.
+
+The same fixtures validate the immutable resource specification: its required
+UUID identifier, closed scalar set, nullable fields, deterministic field order
+and versioned serialization, selected SQLite/PostgreSQL and Leptos context,
+duplicate and reserved names, and code-, SQL-, and path-shaped input rejection.
+Specification validation reads no database and constructs no change plan.
+
+Inward-layer generator fixtures build one deterministic six-operation plan:
+three absent-file creations and three digest-preconditioned module-root edits.
+They parse every generated Rust source, reject existing or conflicting module
+registrations, verify transport and provider types stay out of inward layers,
+and require explicit authorization before repository access. The canonical
+application carries the UUID, datetime, and serialization dependencies needed
+by those generated inward layers. Persistence, HTTP, and UI source is not
+emitted by this plan.
+
+Persistence-generator fixtures validate separate SQLite and PostgreSQL output,
+provider-specific schema types and placeholders, bound runtime values,
+application-owned SQLx repository-port implementations, explicit typed service
+composition, controlled Infrastructure registration, and append-only migration
+history. Generated Rust is parsed before publication, and an existing module
+registration fails before migration planning. HTTP and UI source remains
+outside this persistence plan.
+
+Migration-generator fixtures cover manifest-selected SQLite and PostgreSQL
+paths, append-only numeric identities, deterministic scaffolds and plans,
+identity and history conflicts, unchanged historical bytes, coordination-state
+preconditions, and symlink rejection. CLI fixtures verify that migration
+dry-run and apply report the identical content-redacted plan while dry-run
+performs no writes. A real permission failure verifies that staging cleanup
+leaves no partial migration and permits a successful retry. All application
+roots are disposable fixtures; the command never connects to or mutates a
+database.
 
 Validate the workspace-external canonical layered application base against the
 current framework checkout:
@@ -208,6 +270,19 @@ the renderer snapshot and failure-path tests, installs the client package lock,
 validates the rendered workspace's direct application and Hegira dependencies,
 validates native workspace targets and tests, compiles the hydration target,
 and produces the full-stack Cargo Leptos release output.
+
+The generated-application gate first creates pristine SQLite and PostgreSQL
+applications through public `hegira new` commands and verifies that output
+against the canonical package before producing separate repository-validation
+copies with local framework dependencies. It runs the public resource command
+only on those disposable copies. The gate compares repeated dry-run output,
+requires dry-run and apply to expose the same plan, checks invalid and duplicate
+process outcomes, proves the public output remains pristine, and verifies every
+historical migration checksum remains unchanged. The generated application
+tests require SQLx to record the generated resource migration, table, and
+permissions during fresh installation and the supported v0.2.0 upgrade. SQLite
+uses an in-memory database; PostgreSQL uses only the Compose database created
+and explicitly authorized by the gate.
 
 The renderer is an internal maintainer tool rather than the public Hegira CLI.
 To inspect an independently copyable release-style render:
@@ -246,18 +321,71 @@ This requires Node/npm, `cargo-leptos`, and the `wasm32-unknown-unknown` target;
 the generated-application CI jobs install these prerequisites explicitly.
 
 The check runs SQLite fresh-install and upgrade tests in memory, and starts an
-ephemeral PostgreSQL container for the
-equivalent PostgreSQL contracts. It then builds the rendered application image,
-boots it against the disposable database, and verifies readiness, hydration
-assets, security headers, and unauthenticated Bearer API behavior. The check
-also validates the rendered workspace's locked direct dependency graph and
-rejects retired compatibility packages. It stages a credential-free framework
-source view under the disposable render so
-the same relative Cargo paths work on the host and inside the Docker build. It
-generates runtime-only database and JWT values and removes its containers,
-network, database state, validation image, and rendered output on exit. Compose
-project and image names are assigned by the check rather than inherited from
-the caller. It never targets the maintainer's configured database.
+ephemeral PostgreSQL container for the equivalent PostgreSQL contracts. It then
+builds the rendered application image, boots it against the disposable
+database, and verifies readiness, hydration assets, security headers,
+unauthenticated Bearer rejection, and authorized generated-resource CRUD
+through the HTTP, application-service, and repository layers. The check also
+validates the rendered workspace's locked direct dependency graph and rejects
+retired compatibility packages. It stages a credential-free framework source
+view under the disposable render so the same relative Cargo paths work on the
+host and inside the Docker build. It generates runtime-only database and JWT
+values and removes its containers, network, database state, validation image,
+and rendered output on exit. Compose project and image names are assigned by
+the check rather than inherited from the caller. It never targets the
+maintainer's configured database.
+
+Failures in this job are owned by the contract boundary named in the output:
+
+- public creation or canonical verification failures belong to the CLI render
+  and template-package contract;
+- dry-run, apply, conflict, or pristine-output failures belong to the CLI,
+  application mutator, or resource generator;
+- native, hydration, or dependency-boundary failures belong to the generated
+  source or its selected provider composition;
+- fresh-install or upgrade failures belong to application migration and
+  provider persistence composition;
+- readiness, asset, security-header, authentication, authorization, or CRUD
+  failures belong to the production container and generated runtime contract.
+
+The `quality` job must propagate any such failure through the existing stable
+`quality` status context. Do not split this scenario into a second protected
+branch check merely to diagnose one of its internal stages.
+
+### Validation build-cache lifecycle
+
+The layered-template, generated-feature, and generated-application checks use
+repository-owned state below `target/validation/`:
+
+- `workspaces/<check>` is a stable staging path. Its contents are recreated for
+  each invocation and removed on success, failure, interruption, and supported
+  termination signals. Keeping the path stable prevents each disposable render
+  from becoming a new Cargo package source identity.
+- `build/<check>` is that check's persistent Cargo target directory. It is
+  intentionally separate from normal `target/debug` developer output and may
+  be reused by later equivalent validations.
+- `locks/<check>` prevents two local invocations from sharing the same staging
+  workspace. A remaining lock after an uncatchable process termination must be
+  removed only after confirming that no matching validation process is active.
+
+Inspect the cleanup operation, then remove all repository-owned validation
+build caches and the three legacy pre-v0.5.0 validation target directories:
+
+```sh
+sh scripts/clean-validation-cache.sh --dry-run
+sh scripts/clean-validation-cache.sh
+```
+
+Cleanup refuses to run while a validation lock exists and rejects symlinked or
+non-directory cache roots. It does not remove normal Cargo output such as
+`target/debug`, Cargo registry downloads, or Git dependency checkouts. Use
+`cargo clean` separately only when normal developer build output should also be
+discarded. Provider, feature, native, WebAssembly, release, and Cargo Leptos
+profiles legitimately occupy separate artifact sets; this lifecycle bounds
+growth caused by changing disposable source paths rather than weakening that
+matrix. Checks that compile only packages from the framework repository continue
+to use Cargo's normal target selection and are not owned by this cleanup
+contract.
 
 To reproduce pull request metadata validation with a saved GitHub
 `pull_request` event:

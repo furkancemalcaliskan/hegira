@@ -71,7 +71,9 @@ ownership:
 | `templates/applications/layered/` | Workspace-external, brand-neutral layered application base with application-owned server, web, configuration, migration composition, and deployment files |
 | `templates/package.toml` | Versioned canonical component-package identity, framework compatibility, component graph, and source digest |
 | `templates/components/` | Typed data-only component manifests that define the canonical application composition |
-| `tools/hegira_cli/` | Source-runnable `hegira new` with guided and non-interactive application creation, stable diagnostics, and exit outcomes |
+| `tools/application_mutator/` | Typed change plans, conflict-aware Rust and TOML editors, and failure-safe publication for coordinated existing-application changes |
+| `tools/hegira_cli/` | Source-runnable application creation and inspection plus reviewable layered resource and application-owned migration generation with stable diagnostics and exit outcomes |
+| `tools/resource_generator/` | Typed layered resource specifications plus inward-layer, provider-specific SQLx persistence, explicit Axum/OpenAPI and Leptos UI composition, and append-only migration planning |
 | `tools/template_renderer/` | Reusable deterministic render core with a separate disposable repository-validation adapter; it is not a public CLI |
 
 The canonical rendered application is an independent Cargo workspace, consumes framework
@@ -99,8 +101,9 @@ The prompts show the implemented choices and defaults, summarize the resulting a
 ask for confirmation before any files are written. Non-interactive terminals never wait for
 prompt input and require the application name and destination explicitly.
 Supplying both inputs skips prompts and confirmation. Only SQLite/PostgreSQL,
-Leptos, and Identity selections are supported; generation does not provide
-module management, code generators, or automatic upgrades.
+Leptos, and Identity selections are supported for application creation. The
+CLI also generates complete layered resources and application-owned migration
+scaffolds; it does not provide module management or automatic upgrades.
 
 Its stable process outcomes are success (`0`), internal error (`1`), usage
 error (`2`), validation error (`3`), and conflict (`4`). Human-readable help
@@ -146,6 +149,49 @@ Open `http://127.0.0.1:3000`. The SQLite profile seeds the development admin
 configured in the generated application's `config/sqlite.yaml`. Development startup owns its
 SQLite database creation, migrations, and configured seed behavior.
 
+Inspect the application identity, selected adapters, framework release, and
+mutation compatibility without changing any files:
+
+```sh
+cargo run --locked --manifest-path /path/to/hegira/Cargo.toml \
+  -p hegira_cli -- inspect
+```
+
+Run the command from anywhere below the application root, or pass
+`--application-root <path>` explicitly. Add `--json` for the deterministic,
+versioned machine-readable contract. See [Inspecting an existing application](docs/getting-started.md#inspect-an-existing-application)
+for discovery, compatibility, and safety behavior.
+
+From a generated application, create an append-only migration scaffold for
+the database adapter selected in `hegira.toml`:
+
+```sh
+cargo run --locked --manifest-path /path/to/hegira/Cargo.toml \
+  -p hegira_cli -- generate migration add_orders
+```
+
+Use `--dry-run` to review the same content-redacted change plan that apply
+publishes, or `--json` for deterministic machine-readable output. The command
+writes a provider-specific SQL scaffold under
+`crates/infrastructure/migrations/` and advances its private generator state;
+it never connects to a database, runs a migration, or edits historical files.
+Replace `/path/to/hegira` with the framework source checkout or release archive
+used to run the source-only CLI. See [Getting started](docs/getting-started.md#generate-an-application-migration)
+for identity, conflict, and publication details.
+
+Generate one explicitly typed resource across the Domain, Application
+Contracts, Application, selected SQLx, Axum/OpenAPI, and selected Leptos
+surfaces with one atomic plan:
+
+```sh
+cargo run --locked --manifest-path /path/to/hegira/Cargo.toml \
+  -p hegira_cli -- generate resource Order \
+  --field name:string --field fulfilled_at:datetime?
+```
+
+Use `--plural <NAME>` for an irregular plural. The command reports the manual
+migration and validation steps after publication; it does not execute them.
+
 ## Documentation
 
 - [Getting started](docs/getting-started.md)
@@ -173,11 +219,21 @@ source-runnable CLI ownership:
 sh scripts/backend-check.sh
 ```
 
-Validate CLI-generated SQLite and PostgreSQL applications, including their fresh and upgrade migration paths,
-production image, and HTTP contract, with disposable Docker state:
+Validate CLI-generated and resource-mutated SQLite and PostgreSQL
+applications, including their fresh and upgrade migration paths, production
+image, and HTTP contract, with disposable Docker state:
 
 ```sh
 sh scripts/generated-application-check.sh
+```
+
+Repository-owned validation builds use stable workspaces and isolated caches
+under `target/validation/`. Inspect or remove only those caches without touching
+normal `target/debug` development output:
+
+```sh
+sh scripts/clean-validation-cache.sh --dry-run
+sh scripts/clean-validation-cache.sh
 ```
 
 The CI official-module job sets `WITH_IGNORED_DB_TESTS=true` and supplies a

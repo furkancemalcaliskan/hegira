@@ -66,7 +66,14 @@ export const WORKSPACE_DEPENDENCY_POLICY = Object.freeze({
     "identity_domain_shared",
     "leptos_support",
   ],
-  hegira_cli: ["template_renderer"],
+  application_mutator: [],
+  hegira_cli: [
+    "application_manifest",
+    "application_mutator",
+    "resource_generator",
+    "template_renderer",
+  ],
+  resource_generator: ["application_manifest", "application_mutator"],
   template_renderer: ["application_manifest"],
 });
 
@@ -98,7 +105,9 @@ export const WORKSPACE_PACKAGE_POLICY = Object.freeze({
   identity_sqlx: packageContract("module", "retain"),
   identity_http: packageContract("module", "retain"),
   identity_leptos: packageContract("module", "retain"),
+  application_mutator: packageContract("tool", "retain"),
   hegira_cli: packageContract("tool", "retain"),
+  resource_generator: packageContract("tool", "retain"),
   template_renderer: packageContract("tool", "refactor-and-retain", [148]),
 });
 
@@ -162,7 +171,11 @@ export const GENERATED_APPLICATION_DEPENDENCY_POLICY = Object.freeze({
     "app_domain_shared",
     "http_support",
   ],
-  app_web: ["identity_leptos", "leptos_support"],
+  app_web: [
+    "app_application_contracts",
+    "identity_leptos",
+    "leptos_support",
+  ],
   app_server: [
     "app_infrastructure",
     "app_presentation",

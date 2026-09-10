@@ -4,6 +4,87 @@ All notable changes are documented here. Releases follow Semantic Versioning.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-10
+
+### Added
+
+- Added read-only discovery and inspection of existing generated applications,
+  with explicit-root selection, human-readable output, a deterministic
+  versioned JSON contract, and fail-closed mutation compatibility assessment.
+- Added typed, deterministic, content-redacted change plans for existing
+  applications, including digest-preconditioned structured Rust and TOML edits,
+  no-write dry runs, atomic publication, reverse rollback, and durable recovery
+  state after interrupted or uncertain mutations.
+- Added typed layered resource naming and ownership with deterministic Rust,
+  route, permission, database, and application-relative artifact identities,
+  explicit irregular plurals, and pre-plan reserved-name and collision checks.
+- Added an immutable resource specification with a required UUID identifier,
+  deterministic nullable fields, a closed scalar set, manifest-selected
+  database and client adapters, and injection-resistant input validation.
+- Added a shared CLI mutation execution contract with no-write dry runs,
+  ordered human-readable operations, deterministic versioned JSON summaries,
+  stable no-op and conflict outcomes, and publication from the same validated
+  content-redacted plan used for preview.
+- Added manifest-selected SQLite and PostgreSQL migration scaffold generation
+  with append-only application-owned histories, deterministic dry-run/apply
+  plans, collision-safe version coordination, and no database access.
+- Added end-to-end migration generator validation across CLI-created SQLite and
+  PostgreSQL applications, including deterministic plans, immutable historical
+  checksums, failure recovery, disposable database application, supported
+  upgrades, and the production container.
+- Added deterministic Domain, Application Contracts, and Application resource
+  source planning with controlled module registration, UUID identifiers,
+  transport-neutral contracts, repository and identifier ports, and explicit
+  application-layer authorization before every generated use case.
+- Added selected-provider SQLx repositories, bound queries, append-only table
+  migrations, permission seeds, and explicit typed Infrastructure composition
+  for generated resources.
+- Added transport-focused Axum handlers, separately composed Bearer routes,
+  stable HTTP error mapping, and application-owned OpenAPI contributions for
+  generated resources.
+- Added Leptos list and create/edit surfaces, typed server-function context,
+  mutation feedback, delete confirmation, localization, routes, navigation,
+  and presentation-only permission gates for generated resources.
+- Added the complete `hegira generate resource` command, which composes every
+  selected application layer into one validated atomic mutation plan and
+  reports the developer-owned migration and validation steps.
+
+### Changed
+
+- Made generated-and-mutated SQLite and PostgreSQL applications a required
+  quality gate covering deterministic dry-run/apply behavior, historical
+  migration integrity, fresh and supported upgrade paths, native and hydration
+  builds, production containers, authentication, authorization, and generated
+  resource HTTP behavior.
+- Isolated rendered-application validation builds under stable
+  `target/validation/` workspaces and caches, with locking and a scoped cleanup
+  command that does not remove normal developer Cargo output.
+- Documented the implemented application inspection, compatibility, mutation,
+  recovery, generation ownership, and security contracts.
+
+### Security
+
+- Existing-application resolution and publication reject symlink traversal,
+  ancestor replacement, stale preconditions, destination races, unsupported
+  filesystem semantics, and incomplete recovery instead of following or
+  overwriting untrusted state.
+- Generated application services authorize every use case before repository
+  access. Bearer API composition remains separate from cookie-authenticated
+  browser/BFF policy, and UI permission checks remain presentation behavior.
+
+### Upgrade And Maintainer Notes
+
+- Mutation commands require the application manifest to select the supported
+  canonical components and adapters and to match the exact framework release
+  compiled into the CLI. v0.4.0 applications remain readable by inspection but
+  are not automatically upgraded or mutated by the v0.5.0 CLI.
+- Resource and migration generation creates application-owned source only. It
+  does not infer business invariants, connect to a database, execute migrations,
+  run formatters, build the application, or replace developer review.
+- Distribution remains source-only, with no crates.io publication, standalone
+  executable, container image, application bundle, preview, or deployment. See
+  the [v0.5.0 release notes](docs/releases/v0.5.0.md) for the complete contract.
+
 ## [0.4.0] - 2026-09-06
 
 ### Security

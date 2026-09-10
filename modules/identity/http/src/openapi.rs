@@ -148,8 +148,15 @@ pub fn routes<S>() -> Router<S>
 where
     S: Clone + Send + Sync + 'static,
 {
+    routes_with_document(document())
+}
+
+pub fn routes_with_document<S>(document: utoipa::openapi::OpenApi) -> Router<S>
+where
+    S: Clone + Send + Sync + 'static,
+{
     SwaggerUi::new("/swagger-ui")
-        .url("/api-docs/openapi.json", document())
+        .url("/api-docs/openapi.json", document)
         .into()
 }
 

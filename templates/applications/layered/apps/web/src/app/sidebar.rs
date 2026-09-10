@@ -167,5 +167,7 @@ fn NavItemIcon(icon: NavIcon) -> impl IntoView {
         NavIcon::Roles => view! { <Users class="size-4" /> }.into_any(),
         NavIcon::Users => view! { <Users class="size-4" /> }.into_any(),
         NavIcon::Profile => view! { <CircleUser class="size-4" /> }.into_any(),
+        // hegira:nav-icon-views
+        // hegira:nav-icon-views:end
     }
 }

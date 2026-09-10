@@ -101,7 +101,12 @@ ssr = [
     "dep:tracing",
     "dep:storage",
 ]
-openapi = ["ssr", "identity_application_contracts/openapi", "identity_http/openapi"]
+openapi = [
+    "ssr",
+    "app_presentation/openapi",
+    "identity_application_contracts/openapi",
+    "identity_http/openapi",
+]
 wasm-split = ["app_web/wasm-split"]
 cache-redis = ["ssr", "app_infrastructure/cache-redis", "cache/redis", "http_support/cache-redis"]
 metrics-prometheus = ["ssr", "observability/metrics-prometheus"]

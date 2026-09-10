@@ -25,7 +25,9 @@ members = [
     "modules/identity/sqlx",
     "modules/identity/http",
     "modules/identity/leptos",
+    "tools/application_mutator",
     "tools/hegira_cli",
+    "tools/resource_generator",
     "tools/template_renderer",
 ]
 

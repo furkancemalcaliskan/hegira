@@ -1,0 +1,18 @@
+[package]
+name = "resource_generator"
+description = "Typed layered resource generation contracts for the Hegira application framework"
+version = "0.5.0"
+edition = "2024"
+license = "Apache-2.0"
+publish = false
+rust-version = "1.96"
+
+[dependencies]
+application_manifest = { path = "../../crates/application_manifest" }
+application_mutator = { path = "../application_mutator" }
+serde = { version = "1.0", features = ["derive"] }
+toml = "1.0"
+
+[dev-dependencies]
+serde_json = "1.0"
+syn = { version = "2.0", features = ["full"] }

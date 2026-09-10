@@ -29,6 +29,19 @@ fn hegira(arguments: &[&str]) -> Output {
     result
 }
 
+fn hegira_at(working_directory: &Path, arguments: &[&str]) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_hegira"))
+        .args(arguments)
+        .env_clear()
+        .env("HOME", working_directory)
+        .env("USERPROFILE", working_directory)
+        .env("XDG_CONFIG_HOME", working_directory)
+        .env("PATH", "")
+        .current_dir(working_directory)
+        .output()
+        .expect("hegira command should run")
+}
+
 #[test]
 fn top_level_help_is_human_readable_output() {
     let result = hegira(&["--help"]);
@@ -39,6 +52,301 @@ fn top_level_help_is_human_readable_output() {
     assert!(output.starts_with("Create and maintain Hegira applications"));
     assert!(output.contains("Usage: hegira <COMMAND>"));
     assert!(output.contains("new"));
+    assert!(output.contains("inspect"));
+    assert!(output.contains("generate"));
+}
+
+#[test]
+fn migration_help_exposes_reviewable_mutation_options() {
+    let result = hegira(&["generate", "migration", "--help"]);
+
+    assert!(result.status.success());
+    assert!(result.stderr.is_empty());
+    let output = String::from_utf8(result.stdout).expect("help should be UTF-8");
+    assert!(output.contains("Usage: hegira generate migration"));
+    assert!(output.contains("--application-root"));
+    assert!(output.contains("--dry-run"));
+    assert!(output.contains("--json"));
+}
+
+#[test]
+fn resource_help_exposes_typed_fields_and_reviewable_mutation_options() {
+    let result = hegira(&["generate", "resource", "--help"]);
+
+    assert!(result.status.success());
+    assert!(result.stderr.is_empty());
+    let output = String::from_utf8(result.stdout).expect("help should be UTF-8");
+    assert!(output.contains("Usage: hegira generate resource"));
+    assert!(output.contains("--field <NAME:TYPE>"));
+    assert!(output.contains("--plural"));
+    assert!(output.contains("--application-root"));
+    assert!(output.contains("--dry-run"));
+    assert!(output.contains("--json"));
+}
+
+#[test]
+fn complete_resource_dry_run_and_apply_share_one_atomic_plan() {
+    let output = TestDirectory::new("complete-resource");
+    let application = output.path().join("application");
+    let created = hegira(&[
+        "new",
+        "resource-app",
+        "--destination",
+        path_argument(&application),
+    ]);
+    assert!(created.status.success(), "{:?}", created.stderr);
+    let before = output_tree(&application);
+    let arguments = [
+        "generate",
+        "resource",
+        "OrderItem",
+        "--field",
+        "name:string",
+        "--field",
+        "published_at:datetime?",
+        "--json",
+    ];
+
+    let dry_run = hegira_at(
+        &application,
+        &[
+            "generate",
+            "resource",
+            "OrderItem",
+            "--field",
+            "name:string",
+            "--field",
+            "published_at:datetime?",
+            "--dry-run",
+            "--json",
+        ],
+    );
+    assert!(dry_run.status.success(), "{:?}", dry_run.stderr);
+    assert!(dry_run.stderr.is_empty());
+    let dry_run: serde_json::Value = serde_json::from_slice(&dry_run.stdout).unwrap();
+    assert_eq!(dry_run["mode"], "dry-run");
+    assert_eq!(dry_run["outcome"], "planned");
+    assert_eq!(dry_run["changed_files"], 20);
+    assert_eq!(output_tree(&application), before);
+
+    let applied = hegira_at(&application, &arguments);
+    assert!(applied.status.success(), "{:?}", applied.stderr);
+    assert!(applied.stderr.is_empty());
+    let applied: serde_json::Value = serde_json::from_slice(&applied.stdout).unwrap();
+    assert_eq!(applied["mode"], "apply");
+    assert_eq!(applied["outcome"], "applied");
+    assert_eq!(dry_run["plan"], applied["plan"]);
+    for path in [
+        "crates/domain/src/order_item.rs",
+        "crates/application_contracts/src/order_item.rs",
+        "crates/application/src/order_item.rs",
+        "crates/infrastructure/src/order_item.rs",
+        "crates/presentation/src/order_item.rs",
+        "apps/web/src/order_item.rs",
+        "crates/infrastructure/migrations/sqlite/010_order_item.sql",
+    ] {
+        assert!(application.join(path).is_file(), "missing {path}");
+    }
+    let infrastructure =
+        fs::read_to_string(application.join("crates/infrastructure/src/order_item.rs")).unwrap();
+    assert!(infrastructure.contains("OrderItemAuthorizationAdapter"));
+    let server = fs::read_to_string(application.join("apps/server/src/server.rs")).unwrap();
+    assert!(server.contains("app_presentation::order_item::bearer_api_routes"));
+    assert!(server.contains("app_web::order_item::OrderItemLeptosServices"));
+
+    let after = output_tree(&application);
+    let repeated = hegira_at(
+        &application,
+        &[
+            "generate",
+            "resource",
+            "OrderItem",
+            "--field",
+            "name:string",
+        ],
+    );
+    assert_eq!(repeated.status.code(), Some(4));
+    assert!(repeated.stdout.is_empty());
+    assert!(String::from_utf8_lossy(&repeated.stderr).contains("collides"));
+    assert_eq!(output_tree(&application), after);
+}
+
+#[test]
+fn invalid_resource_fields_fail_before_application_writes() {
+    let output = TestDirectory::new("invalid-resource-field");
+    let application = output.path().join("application");
+    let created = hegira(&[
+        "new",
+        "resource-app",
+        "--destination",
+        path_argument(&application),
+    ]);
+    assert!(created.status.success(), "{:?}", created.stderr);
+    let before = output_tree(&application);
+
+    let result = hegira_at(
+        &application,
+        &["generate", "resource", "Order", "--field", "total:decimal"],
+    );
+
+    assert_eq!(result.status.code(), Some(3));
+    assert!(result.stdout.is_empty());
+    assert!(String::from_utf8_lossy(&result.stderr).contains("unsupported scalar"));
+    assert_eq!(output_tree(&application), before);
+}
+
+#[test]
+fn partial_resource_conflicts_do_not_publish_any_other_layer() {
+    let output = TestDirectory::new("partial-resource-conflict");
+    let application = output.path().join("application");
+    let created = hegira(&[
+        "new",
+        "resource-app",
+        "--destination",
+        path_argument(&application),
+    ]);
+    assert!(created.status.success(), "{:?}", created.stderr);
+    fs::write(
+        application.join("crates/application/src/order.rs"),
+        "preserved partial resource",
+    )
+    .unwrap();
+    let before = output_tree(&application);
+
+    let result = hegira_at(
+        &application,
+        &["generate", "resource", "Order", "--field", "name:string"],
+    );
+
+    assert_eq!(result.status.code(), Some(4));
+    assert!(result.stdout.is_empty());
+    assert_eq!(output_tree(&application), before);
+    assert!(!application.join("crates/domain/src/order.rs").exists());
+}
+
+#[test]
+fn sqlite_migration_dry_run_and_apply_share_one_append_only_plan() {
+    let output = TestDirectory::new("sqlite-migration");
+    let application = output.path().join("application");
+    let created = hegira(&[
+        "new",
+        "migration-app",
+        "--destination",
+        path_argument(&application),
+    ]);
+    assert!(created.status.success(), "{:?}", created.stderr);
+    let historical = fs::read(
+        application
+            .join("crates/infrastructure/migrations/sqlite/009_retire_catalog_persistence.sql"),
+    )
+    .unwrap();
+
+    let dry_run = hegira_at(
+        &application,
+        &["generate", "migration", "add_orders", "--dry-run", "--json"],
+    );
+    assert!(dry_run.status.success(), "{:?}", dry_run.stderr);
+    assert!(dry_run.stderr.is_empty());
+    let dry_run: serde_json::Value = serde_json::from_slice(&dry_run.stdout).unwrap();
+    assert_eq!(dry_run["mode"], "dry-run");
+    assert_eq!(dry_run["outcome"], "planned");
+    assert_eq!(dry_run["changed_files"], 2);
+    let migration = application.join("crates/infrastructure/migrations/sqlite/010_add_orders.sql");
+    let state = application.join("crates/infrastructure/migrations/.hegira-generator.toml");
+    assert!(!migration.exists());
+    assert!(!state.exists());
+
+    let applied = hegira_at(
+        &application,
+        &["generate", "migration", "add_orders", "--json"],
+    );
+    assert!(applied.status.success(), "{:?}", applied.stderr);
+    let applied: serde_json::Value = serde_json::from_slice(&applied.stdout).unwrap();
+    assert_eq!(dry_run["plan"], applied["plan"]);
+    assert_eq!(applied["outcome"], "applied");
+    assert!(migration.is_file());
+    assert!(state.is_file());
+    assert_eq!(
+        fs::read(
+            application
+                .join("crates/infrastructure/migrations/sqlite/009_retire_catalog_persistence.sql")
+        )
+        .unwrap(),
+        historical
+    );
+
+    let repeated = hegira_at(&application, &["generate", "migration", "add_orders"]);
+    assert_eq!(repeated.status.code(), Some(4));
+    assert!(repeated.stdout.is_empty());
+    assert!(
+        String::from_utf8(repeated.stderr)
+            .unwrap()
+            .contains("already exists at version 10")
+    );
+}
+
+#[test]
+fn postgres_manifest_selects_only_the_postgres_migration_history() {
+    let output = TestDirectory::new("postgres-migration");
+    let application = output.path().join("application");
+    let created = hegira(&[
+        "new",
+        "postgres-migration-app",
+        "--destination",
+        path_argument(&application),
+        "--database",
+        "postgres",
+    ]);
+    assert!(created.status.success(), "{:?}", created.stderr);
+
+    let result = hegira_at(
+        output.path(),
+        &[
+            "generate",
+            "migration",
+            "add_orders",
+            "--application-root",
+            path_argument(&application),
+        ],
+    );
+
+    assert!(result.status.success(), "{:?}", result.stderr);
+    assert!(
+        application
+            .join("crates/infrastructure/migrations/postgres/023_add_orders.sql")
+            .is_file()
+    );
+    assert!(
+        !application
+            .join("crates/infrastructure/migrations/sqlite/010_add_orders.sql")
+            .exists()
+    );
+    let source = fs::read_to_string(
+        application.join("crates/infrastructure/migrations/postgres/023_add_orders.sql"),
+    )
+    .unwrap();
+    assert!(source.contains("Application-owned PostgreSQL migration"));
+    assert!(!source.contains("DATABASE_URL"));
+}
+
+#[test]
+fn invalid_migration_identity_fails_before_application_writes() {
+    let output = TestDirectory::new("invalid-migration");
+    let application = output.path().join("application");
+    let created = hegira(&[
+        "new",
+        "migration-app",
+        "--destination",
+        path_argument(&application),
+    ]);
+    assert!(created.status.success(), "{:?}", created.stderr);
+    let before = output_tree(&application);
+
+    let result = hegira_at(&application, &["generate", "migration", "../drop_table"]);
+
+    assert_eq!(result.status.code(), Some(3));
+    assert!(result.stdout.is_empty());
+    assert_eq!(output_tree(&application), before);
 }
 
 #[test]
@@ -194,7 +502,7 @@ fn new_generates_the_default_layered_application_without_prompts() {
         .expect("workspace manifest should exist");
     assert!(server_manifest.contains("default = [\"db-sqlite\"]"));
     assert!(workspace_manifest.contains("git = \"https://github.com/"));
-    assert!(workspace_manifest.contains("tag = \"v0.4.0\""));
+    assert!(workspace_manifest.contains("tag = \"v0.5.0\""));
     assert!(!workspace_manifest.contains(repository_root().to_string_lossy().as_ref()));
 }
 
@@ -272,6 +580,121 @@ fn existing_destination_is_a_conflict_and_is_not_modified() {
         fs::read_to_string(destination.join("preserved.txt")).expect("sentinel should remain"),
         "preserved"
     );
+}
+
+#[test]
+fn inspect_reports_the_discovered_application_without_writing() {
+    let root = TestDirectory::new("inspect-human");
+    let application = root.path().join("application");
+    let created = hegira(&[
+        "new",
+        "inspection-app",
+        "--destination",
+        path_argument(&application),
+    ]);
+    assert!(created.status.success(), "{:?}", created.stderr);
+    let before = output_tree(&application);
+
+    let result = hegira_at(&application.join("apps/web/src"), &["inspect"]);
+
+    assert!(result.status.success(), "{:?}", result.stderr);
+    assert!(result.stderr.is_empty());
+    let output = String::from_utf8(result.stdout).expect("inspection should be UTF-8");
+    assert!(output.contains("Application: inspection-app\n"));
+    assert!(output.contains(&format!(
+        "Root: {}\n",
+        fs::canonicalize(&application).unwrap().display()
+    )));
+    assert!(output.contains("Manifest schema: 1\n"));
+    assert!(output.contains("Framework: https://github.com/furkancemalcaliskan/hegira.git"));
+    assert!(output.contains("Components: layered-base, layered-leptos-identity\n"));
+    assert!(output.contains("Databases: sqlite\n"));
+    assert!(output.contains("Clients: leptos\n"));
+    assert!(output.ends_with("Mutation compatibility: compatible\n"));
+    assert_eq!(output_tree(&application), before);
+}
+
+#[test]
+fn inspect_json_is_versioned_deterministic_and_matches_explicit_resolution() {
+    let root = TestDirectory::new("inspect-json");
+    let application = root.path().join("application");
+    assert!(
+        hegira(&[
+            "new",
+            "json-app",
+            "--destination",
+            path_argument(&application),
+        ])
+        .status
+        .success()
+    );
+    let before = output_tree(&application);
+
+    let discovered = hegira_at(&application.join("crates/domain"), &["inspect", "--json"]);
+    let explicit = hegira_at(
+        root.path(),
+        &[
+            "inspect",
+            "--application-root",
+            path_argument(&application),
+            "--json",
+        ],
+    );
+
+    assert!(discovered.status.success(), "{:?}", discovered.stderr);
+    assert!(explicit.status.success(), "{:?}", explicit.stderr);
+    assert_eq!(discovered.stdout, explicit.stdout);
+    let document: serde_json::Value =
+        serde_json::from_slice(&discovered.stdout).expect("inspection JSON should parse");
+    assert_eq!(document["output_schema"], 1);
+    assert_eq!(document["manifest"]["application"], "json-app");
+    assert_eq!(document["manifest"]["schema"], 1);
+    assert_eq!(document["manifest"]["selection"]["databases"][0], "sqlite");
+    assert_eq!(document["manifest"]["selection"]["clients"][0], "leptos");
+    assert_eq!(document["mutation_compatibility"]["status"], "compatible");
+    assert_eq!(output_tree(&application), before);
+}
+
+#[test]
+fn inspect_reports_unsupported_releases_without_mutating_or_failing() {
+    let root = TestDirectory::new("inspect-unsupported");
+    let application = root.path().join("application");
+    assert!(
+        hegira(&[
+            "new",
+            "old-app",
+            "--destination",
+            path_argument(&application),
+        ])
+        .status
+        .success()
+    );
+    let manifest_path = application.join("hegira.toml");
+    let current = format!("v{}", env!("CARGO_PKG_VERSION"));
+    let manifest = fs::read_to_string(&manifest_path).unwrap();
+    fs::write(&manifest_path, manifest.replace(&current, "v0.1.0")).unwrap();
+    let before = output_tree(&application);
+
+    let result = hegira_at(&application, &["inspect"]);
+
+    assert!(result.status.success(), "{:?}", result.stderr);
+    assert!(result.stderr.is_empty());
+    assert!(
+        String::from_utf8_lossy(&result.stdout)
+            .contains("Mutation compatibility: unsupported (framework.version is v0.1.0")
+    );
+    assert_eq!(output_tree(&application), before);
+}
+
+#[test]
+fn inspect_missing_root_is_a_validation_failure_without_global_state() {
+    let root = TestDirectory::new("inspect-missing");
+    let result = hegira_at(root.path(), &["inspect"]);
+
+    assert_eq!(result.status.code(), Some(3));
+    assert!(result.stdout.is_empty());
+    assert!(String::from_utf8_lossy(&result.stderr).contains("no hegira.toml"));
+    assert_eq!(fs::read_dir(root.path()).unwrap().count(), 0);
 }
 
 fn path_argument(path: &Path) -> &str {
@@ -395,8 +818,8 @@ fn explicit_sibling_destination_still_works() {
 #[test]
 fn provider_snapshots_and_interactive_requests_match() {
     for (database, expected) in [
-        ("sqlite", 15487919659099468535_u64),
-        ("postgres", 6188907983057865708_u64),
+        ("sqlite", 16165926348028193469_u64),
+        ("postgres", 6271968349784276084_u64),
     ] {
         let root = TestDirectory::new(database);
         let explicit = root.path().join("explicit");
@@ -428,7 +851,7 @@ fn provider_snapshots_and_interactive_requests_match() {
         assert!(manifest.contains("clients = [\"leptos\"]"));
         assert!(manifest.contains("\"layered-leptos-identity\""));
         let workspace = fs::read_to_string(explicit.join("Cargo.toml")).unwrap();
-        assert!(workspace.contains("tag = \"v0.4.0\""));
+        assert!(workspace.contains("tag = \"v0.5.0\""));
         assert!(!workspace.contains(repository_root().to_str().unwrap()));
         assert!(!explicit.join(".git").exists());
         assert!(!explicit.join("target").exists());
@@ -570,6 +993,45 @@ fn real_write_failure_cleans_staging_and_allows_retry() {
         ])
         .status
         .success()
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn migration_write_failure_is_reported_without_partial_application_changes() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let root = TestDirectory::new("migration-write-failure");
+    let application = root.path().join("application");
+    assert!(
+        hegira(&[
+            "new",
+            "migration-write-test",
+            "--destination",
+            path_argument(&application),
+        ])
+        .status
+        .success()
+    );
+    let migration_directory = application.join("crates/infrastructure/migrations/sqlite");
+    let original_permissions = fs::metadata(&migration_directory).unwrap().permissions();
+    let mut read_only = original_permissions.clone();
+    read_only.set_mode(0o500);
+    fs::set_permissions(&migration_directory, read_only).unwrap();
+    let before = output_tree(&application);
+
+    let failed = hegira_at(&application, &["generate", "migration", "write_failure"]);
+
+    fs::set_permissions(&migration_directory, original_permissions).unwrap();
+    assert_eq!(failed.status.code(), Some(1), "{:?}", failed.stderr);
+    assert!(failed.stdout.is_empty());
+    assert!(String::from_utf8_lossy(&failed.stderr).contains("cannot create a private staged"));
+    assert_eq!(output_tree(&application), before);
+    assert!(!application.join(".hegira-mutation.lock").exists());
+    assert!(
+        hegira_at(&application, &["generate", "migration", "write_failure"])
+            .status
+            .success()
     );
 }
 

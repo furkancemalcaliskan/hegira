@@ -9,5 +9,11 @@ publish.workspace = true
 [dependencies]
 app_domain.workspace = true
 app_domain_shared.workspace = true
+chrono.workspace = true
 serde.workspace = true
+uuid.workspace = true
+utoipa = { workspace = true, optional = true }
 
+[features]
+default = []
+openapi = ["dep:utoipa"]

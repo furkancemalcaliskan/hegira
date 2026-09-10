@@ -1,3 +1,4 @@
+pub mod bearer;
 pub mod csrf;
 pub mod policy;
 pub mod rate_limit;

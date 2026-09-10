@@ -25,7 +25,9 @@ const PACKAGE_LOCATIONS = Object.freeze({
   identity_sqlx: "modules/identity/sqlx",
   identity_http: "modules/identity/http",
   identity_leptos: "modules/identity/leptos",
+  application_mutator: "tools/application_mutator",
   hegira_cli: "tools/hegira_cli",
+  resource_generator: "tools/resource_generator",
   template_renderer: "tools/template_renderer",
 });
 
@@ -480,7 +482,7 @@ test("accepts a permitted Hegira release-source dependency", () => {
   );
   runtime.path = null;
   runtime.source =
-    "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.4.0";
+    "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.5.0";
 
   assert.deepEqual(validateGeneratedApplicationMetadata(metadata), []);
 });
@@ -533,7 +535,7 @@ test("rejects a retired compatibility package from the Hegira release source", (
         to: "web",
         path: null,
         source:
-          "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.4.0",
+          "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.5.0",
       },
     ]),
   );
