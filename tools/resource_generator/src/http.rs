@@ -182,7 +182,7 @@ fn authorization_source(specification: &ResourceSpecification) -> String {
     writeln!(source, "use crate::config::AppConfig;").unwrap();
     writeln!(
         source,
-        "use crate::identity::{{IdentityRepositoryAdapter, authorization::CachedAuthorization, sessions::SessionRepositoryAdapter}};"
+        "use crate::identity::{{IdentityRepositoryAdapter, authorization::RepositoryAuthorization, sessions::SessionRepositoryAdapter}};"
     )
     .unwrap();
     writeln!(
@@ -190,7 +190,6 @@ fn authorization_source(specification: &ResourceSpecification) -> String {
         "use crate::security::token_service::JwtTokenService;"
     )
     .unwrap();
-    writeln!(source, "use cache::CacheAdapter;").unwrap();
     writeln!(source, "use identity_application::identity::authorization::{{AuthorizationService, CurrentUserProvider, TokenCurrentUserProvider}};").unwrap();
     writeln!(
         source,
@@ -207,14 +206,14 @@ fn authorization_source(specification: &ResourceSpecification) -> String {
     writeln!(source, "    current_users: TokenCurrentUserProvider<SessionRepositoryAdapter, IdentityRepositoryAdapter, JwtTokenService>,").unwrap();
     writeln!(
         source,
-        "    authorization: CachedAuthorization<IdentityRepositoryAdapter, CacheAdapter>,"
+        "    authorization: RepositoryAuthorization<IdentityRepositoryAdapter>,"
     )
     .unwrap();
     writeln!(source, "}}\n").unwrap();
     writeln!(source, "impl {entity}AuthorizationAdapter {{").unwrap();
     writeln!(
         source,
-        "    pub fn new(pool: DatabasePool, config: &AppConfig, cache: CacheAdapter) -> Self {{"
+        "    pub fn new(pool: DatabasePool, config: &AppConfig) -> Self {{"
     )
     .unwrap();
     writeln!(
@@ -226,7 +225,11 @@ fn authorization_source(specification: &ResourceSpecification) -> String {
     writeln!(source, "        let lifetime = chrono::Duration::seconds(config.sessions.max_lifetime_seconds as i64);").unwrap();
     writeln!(source, "        Self {{").unwrap();
     writeln!(source, "            current_users: TokenCurrentUserProvider::new(sessions, repository.clone(), JwtTokenService::new_with_lifetime(config.security.jwt_secret.clone(), lifetime)),").unwrap();
-    writeln!(source, "            authorization: CachedAuthorization::new(repository, cache, std::time::Duration::from_secs(config.cache.authorization_ttl_seconds)),").unwrap();
+    writeln!(
+        source,
+        "            authorization: RepositoryAuthorization::new(repository),"
+    )
+    .unwrap();
     writeln!(source, "        }}").unwrap();
     writeln!(source, "    }}").unwrap();
     writeln!(source, "}}\n").unwrap();
@@ -302,7 +305,7 @@ fn service_field(specification: &ResourceSpecification) -> String {
 
 fn service_initialization(specification: &ResourceSpecification) -> String {
     let module = specification.names().rust_module();
-    format!("{module}: {module}_service(pool.clone(), config, cache.clone()),")
+    format!("{module}: {module}_service(pool.clone(), config),")
 }
 
 fn service_factory(specification: &ResourceSpecification) -> String {
@@ -310,7 +313,7 @@ fn service_factory(specification: &ResourceSpecification) -> String {
     let module = names.rust_module();
     let entity = names.singular_type();
     format!(
-        "pub fn {module}_service(pool: DatabasePool, config: &AppConfig, cache: CacheAdapter) -> Application{entity}Service {{\n    let authorization = {entity}AuthorizationAdapter::new(pool.clone(), config, cache);\n    compose_{module}_service(&pool, authorization).expect(\"selected resource database must match the application database\")\n}}"
+        "pub fn {module}_service(pool: DatabasePool, config: &AppConfig) -> Application{entity}Service {{\n    let authorization = {entity}AuthorizationAdapter::new(pool.clone(), config);\n    compose_{module}_service(&pool, authorization).expect(\"selected resource database must match the application database\")\n}}"
     )
 }
 
@@ -759,8 +762,15 @@ clients = ["leptos"]
             "crates/infrastructure/src/identity/services.rs",
         );
         assert!(services.contains("pub order_item: ApplicationOrderItemService"));
-        assert!(services.contains("order_item_service(pool.clone(), config, cache.clone())"));
+        assert!(services.contains("order_item_service(pool.clone(), config)"));
         syn::parse_file(services).unwrap();
+
+        let infrastructure = content(first.plan(), "crates/infrastructure/src/order_item.rs");
+        assert!(infrastructure.contains("RepositoryAuthorization"));
+        assert!(!infrastructure.contains("CachedAuthorization"));
+        assert!(infrastructure.contains("TokenCurrentUserProvider"));
+        assert!(infrastructure.contains("self.authorization.require"));
+        syn::parse_file(infrastructure).unwrap();
 
         let server = content(first.plan(), SERVER_SOURCE);
         assert!(server.contains("app_presentation::order_item::bearer_api_routes"));

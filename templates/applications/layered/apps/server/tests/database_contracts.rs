@@ -51,19 +51,52 @@ fn expected_generated_migration() -> Option<(i64, String)> {
     }
 }
 
+fn expected_generated_resource() -> Option<(String, String)> {
+    let table = std::env::var("HEGIRA_TEST_GENERATED_RESOURCE_TABLE");
+    let permission_prefix = std::env::var("HEGIRA_TEST_GENERATED_PERMISSION_PREFIX");
+    match (table, permission_prefix) {
+        (Err(std::env::VarError::NotPresent), Err(std::env::VarError::NotPresent)) => None,
+        (Ok(table), Ok(permission_prefix)) => Some((table, permission_prefix)),
+        _ => panic!(
+            "generated resource validation requires both the table and permission-prefix variables"
+        ),
+    }
+}
+
 #[cfg(feature = "db-sqlite")]
 async fn assert_expected_generated_sqlite_migration(pool: &sqlx::SqlitePool) {
     let Some((version, description)) = expected_generated_migration() else {
         return;
     };
-    let recorded: (String, bool) = sqlx::query_as(
-        "SELECT description, success FROM _sqlx_migrations WHERE version = ?1",
-    )
-    .bind(version)
-    .fetch_one(pool)
-    .await
-    .expect("the generated SQLite migration should be recorded");
+    let recorded: (String, bool) =
+        sqlx::query_as("SELECT description, success FROM _sqlx_migrations WHERE version = ?1")
+            .bind(version)
+            .fetch_one(pool)
+            .await
+            .expect("the generated SQLite migration should be recorded");
     assert_eq!(recorded, (description, true));
+}
+
+#[cfg(feature = "db-sqlite")]
+async fn assert_expected_generated_sqlite_resource(pool: &sqlx::SqlitePool) {
+    let Some((table, permission_prefix)) = expected_generated_resource() else {
+        return;
+    };
+    let table_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?1")
+            .bind(table)
+            .fetch_one(pool)
+            .await
+            .expect("the generated SQLite resource table should be queryable");
+    assert_eq!(table_count, 1);
+    let permission_pattern = format!("{permission_prefix}.%");
+    let permission_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM permissions WHERE name LIKE ?1")
+            .bind(permission_pattern)
+            .fetch_one(pool)
+            .await
+            .expect("the generated SQLite resource permissions should be queryable");
+    assert_eq!(permission_count, 5);
 }
 
 #[cfg(feature = "db-postgres")]
@@ -71,14 +104,39 @@ async fn assert_expected_generated_postgres_migration(pool: &sqlx::PgPool) {
     let Some((version, description)) = expected_generated_migration() else {
         return;
     };
-    let recorded: (String, bool) = sqlx::query_as(
-        "SELECT description, success FROM _sqlx_migrations WHERE version = $1",
+    let recorded: (String, bool) =
+        sqlx::query_as("SELECT description, success FROM _sqlx_migrations WHERE version = $1")
+            .bind(version)
+            .fetch_one(pool)
+            .await
+            .expect("the generated PostgreSQL migration should be recorded");
+    assert_eq!(recorded, (description, true));
+}
+
+#[cfg(feature = "db-postgres")]
+async fn assert_expected_generated_postgres_resource(pool: &sqlx::PgPool) {
+    let Some((table, permission_prefix)) = expected_generated_resource() else {
+        return;
+    };
+    let table_exists: bool = sqlx::query_scalar(
+        "SELECT EXISTS (
+            SELECT 1 FROM information_schema.tables
+            WHERE table_schema = 'public' AND table_name = $1
+         )",
     )
-    .bind(version)
+    .bind(table)
     .fetch_one(pool)
     .await
-    .expect("the generated PostgreSQL migration should be recorded");
-    assert_eq!(recorded, (description, true));
+    .expect("the generated PostgreSQL resource table should be queryable");
+    assert!(table_exists);
+    let permission_pattern = format!("{permission_prefix}.%");
+    let permission_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM permissions WHERE name LIKE $1")
+            .bind(permission_pattern)
+            .fetch_one(pool)
+            .await
+            .expect("the generated PostgreSQL resource permissions should be queryable");
+    assert_eq!(permission_count, 5);
 }
 
 #[cfg(feature = "db-sqlite")]
@@ -103,6 +161,7 @@ async fn sqlite_fresh_install_applies_the_generated_application_plan() {
     .expect("fresh SQLite tables should be queryable");
     assert_eq!(tables, ["app_settings", "sessions", "users"]);
     assert_expected_generated_sqlite_migration(&pool).await;
+    assert_expected_generated_sqlite_resource(&pool).await;
 }
 
 #[cfg(feature = "db-sqlite")]
@@ -126,6 +185,7 @@ async fn sqlite_v020_upgrade_retires_catalog_state_and_preserves_history() {
         .expect("the current SQLite schema should upgrade from v0.2.0");
     assert_v020_sqlite_upgrade(&pool).await;
     assert_expected_generated_sqlite_migration(&pool).await;
+    assert_expected_generated_sqlite_resource(&pool).await;
 }
 
 #[cfg(feature = "db-sqlite")]
@@ -234,6 +294,31 @@ fn disposable_postgres() -> (
 }
 
 #[cfg(feature = "db-postgres")]
+async fn reset_postgres_scenario(
+    database: &persistence::DatabasePool,
+    pool: &sqlx::PgPool,
+    authorization: &app_infrastructure::operations::DisposableDatabaseReset,
+) {
+    app_infrastructure::operations::reset_database(database, authorization)
+        .await
+        .expect("the explicitly disposable PostgreSQL schema should reset");
+
+    let Some((table, _)) = expected_generated_resource() else {
+        return;
+    };
+    let statement: String =
+        sqlx::query_scalar("SELECT format('DROP TABLE IF EXISTS %I', $1::text)")
+            .bind(table)
+            .fetch_one(pool)
+            .await
+            .expect("the generated resource table name should be safely quoted");
+    sqlx::query(&statement)
+        .execute(pool)
+        .await
+        .expect("the generated resource fixture should reset between PostgreSQL scenarios");
+}
+
+#[cfg(feature = "db-postgres")]
 #[tokio::test]
 #[ignore = "requires an explicitly disposable generated-application PostgreSQL database"]
 async fn postgres_fresh_install_and_v020_upgrade_pass() {
@@ -250,9 +335,7 @@ async fn postgres_fresh_install_and_v020_upgrade_pass() {
     .expect("the generated application migration plan must remain valid");
     let migrator = plan.migrator();
 
-    app_infrastructure::operations::reset_database(&database, &reset_authorization)
-        .await
-        .expect("the explicitly disposable PostgreSQL schema should reset");
+    reset_postgres_scenario(&database, &pool, &reset_authorization).await;
     migrator
         .run(&pool)
         .await
@@ -268,10 +351,9 @@ async fn postgres_fresh_install_and_v020_upgrade_pass() {
     .expect("fresh PostgreSQL tables should be queryable");
     assert_eq!(tables, ["app_settings", "sessions", "users"]);
     assert_expected_generated_postgres_migration(&pool).await;
+    assert_expected_generated_postgres_resource(&pool).await;
 
-    app_infrastructure::operations::reset_database(&database, &reset_authorization)
-        .await
-        .expect("the explicitly disposable PostgreSQL schema should reset");
+    reset_postgres_scenario(&database, &pool, &reset_authorization).await;
     migrations_through(migrator, POSTGRES_V020_LAST_MIGRATION)
         .run(&pool)
         .await
@@ -283,6 +365,7 @@ async fn postgres_fresh_install_and_v020_upgrade_pass() {
         .expect("the current PostgreSQL schema should upgrade from v0.2.0");
     assert_v020_postgres_upgrade(&pool).await;
     assert_expected_generated_postgres_migration(&pool).await;
+    assert_expected_generated_postgres_resource(&pool).await;
 }
 
 #[cfg(feature = "db-postgres")]
