@@ -138,7 +138,7 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: templates/applications/layered/apps/web/src/package-lock.json
-      - name: Validate generated and mutated applications in production
+      - name: Validate generated applications across development and production
         run: sh scripts/generated-application-check.sh
 
   quality:

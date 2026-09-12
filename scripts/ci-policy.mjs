@@ -39,6 +39,9 @@ const GENERATED_APPLICATION_CONTRACTS = [
   ["resource dry-run", '--application-root "$validation_root" --dry-run --json'],
   ["resource apply", '--application-root "$validation_root" --json'],
   ["pristine public output check", 'test ! -e "$staging_parent/$database-source/$generated_resource_path"'],
+  ["disposable development validation", 'development_root="$staging_parent/sqlite-development-validation"'],
+  ["documented development build", "APP_ENV=sqlite cargo leptos build -p app_server"],
+  ["documented development features", "--bin-features ssr,db-sqlite --lib-features hydrate"],
   ["locked generated workspace tests", "cargo test --locked --workspace"],
   ["generated hydration build", "--features hydrate"],
   ["production container build", 'docker build --tag "$GENERATED_APP_IMAGE" "$generated_root"'],
@@ -136,6 +139,14 @@ export function validateGeneratedApplicationScript(script) {
         `generated application validation is missing ${description}: ${contract}`,
       );
     }
+  }
+  const developmentBuild = script.match(
+    /APP_ENV=sqlite cargo leptos build[\s\S]*?--lib-features hydrate/,
+  )?.[0];
+  if (developmentBuild?.includes("--release")) {
+    errors.push(
+      "generated application validation must exercise the non-release development build",
+    );
   }
   for (const secretReference of ["${{ secrets.", "GH_TOKEN", "GITHUB_TOKEN"]) {
     if (script.includes(secretReference)) {
