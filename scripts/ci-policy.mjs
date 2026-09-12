@@ -33,6 +33,11 @@ const QUALITY_DEPENDENCIES = [
 const GENERATED_APPLICATION_CONTRACTS = [
   ["public SQLite application creation", "-- new sqlite-application"],
   ["public PostgreSQL application creation", "-- new postgres-application"],
+  ["canonical application lockfile", 'test -f "$staging_parent/sqlite-source/Cargo.lock"'],
+  [
+    "byte-identical provider lockfiles",
+    'cmp "$staging_parent/sqlite-source/Cargo.lock" "$staging_parent/postgres-source/Cargo.lock"',
+  ],
   ["both selected database profiles", "for database in sqlite postgres; do"],
   ["verified public CLI source", '--generated-source "$staging_parent/$database-source"'],
   ["public resource mutation", "-- generate resource"],
@@ -42,6 +47,8 @@ const GENERATED_APPLICATION_CONTRACTS = [
   ["disposable development validation", 'development_root="$staging_parent/sqlite-development-validation"'],
   ["documented development build", "APP_ENV=sqlite cargo leptos build -p app_server"],
   ["documented development features", "--bin-features ssr,db-sqlite --lib-features hydrate"],
+  ["locked Cargo Leptos server build", "--bin-cargo-args=--locked"],
+  ["locked Cargo Leptos client build", "--lib-cargo-args=--locked"],
   ["locked generated workspace tests", "cargo test --locked --workspace"],
   ["generated hydration build", "--features hydrate"],
   ["production container build", 'docker build --tag "$GENERATED_APP_IMAGE" "$generated_root"'],

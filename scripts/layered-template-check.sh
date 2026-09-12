@@ -44,15 +44,18 @@ fi
   npm ci --prefix apps/web/src
   PATH="$staging_root/apps/web/src/node_modules/.bin:$PATH"
   export PATH
-  cargo check --workspace --all-targets --all-features
+  cargo generate-lockfile
+  test -f Cargo.lock
+  cargo check --locked --workspace --all-targets --all-features
   node "$repo_root/scripts/architecture-boundaries.mjs" \
     check-generated --root "$staging_root"
-  cargo check -p app_server --no-default-features --features hydrate \
+  cargo check --locked -p app_server --no-default-features --features hydrate \
     --target wasm32-unknown-unknown
-  cargo clippy --workspace --all-targets --all-features -- -D warnings
-  cargo test --workspace --all-features
+  cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+  cargo test --locked --workspace --all-features
   cargo leptos build -p app_server --release \
-    --bin-features ssr,db-postgres --lib-features hydrate
+    --bin-features ssr,db-postgres --lib-features hydrate \
+    --bin-cargo-args=--locked --lib-cargo-args=--locked
 )
 
 echo "canonical layered application template: ok"

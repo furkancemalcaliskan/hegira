@@ -49,6 +49,7 @@ cargo run --locked --quiet -p template_renderer \
 (
   cd "$generated_root"
   cargo generate-lockfile
+  test -f Cargo.lock
   if [ -n "$target" ]; then
     cargo check --locked --no-default-features \
       --package app_server --features "$features" --target "$target"

@@ -13,7 +13,8 @@ dependencies and build the default PostgreSQL production profile:
 npm ci --prefix apps/web/src
 PATH="$PWD/apps/web/src/node_modules/.bin:$PATH" \
   cargo leptos build -p app_server --release \
-  --bin-features ssr,db-postgres --lib-features hydrate
+  --bin-features ssr,db-postgres --lib-features hydrate \
+  --bin-cargo-args=--locked --lib-cargo-args=--locked
 ```
 
 

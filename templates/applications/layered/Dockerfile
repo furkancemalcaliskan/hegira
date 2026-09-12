@@ -10,7 +10,8 @@ COPY . .
 RUN npm ci --prefix apps/web/src && \
     PATH="/app/apps/web/src/node_modules/.bin:${PATH}" \
       cargo leptos build -p app_server --release \
-      --bin-features ssr,db-postgres --lib-features hydrate
+      --bin-features ssr,db-postgres --lib-features hydrate \
+      --bin-cargo-args=--locked --lib-cargo-args=--locked
 
 FROM debian:bookworm-slim AS runtime
 

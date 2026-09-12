@@ -1216,7 +1216,7 @@ fn create_application(
         || writeln!(output, "  npm ci --prefix apps/web/src").is_err()
         || writeln!(
             output,
-            "  APP_ENV={database} cargo leptos watch -p app_server --bin-features ssr,{} --lib-features hydrate",
+            "  APP_ENV={database} cargo leptos watch -p app_server --bin-features ssr,{} --lib-features hydrate --bin-cargo-args=--locked --lib-cargo-args=--locked",
             command.database.feature()
         )
         .is_err()

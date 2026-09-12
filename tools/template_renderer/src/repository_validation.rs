@@ -177,6 +177,11 @@ fn patch_plan(
         }
     }
 
+    render_plan
+        .files
+        .remove(Path::new("Cargo.lock"))
+        .ok_or_else(|| validation_error("canonical application lockfile is missing"))?;
+
     Ok(render_plan)
 }
 

@@ -249,10 +249,15 @@ sh scripts/layered-template-check.sh
 ```
 
 The check works on a disposable copy. The reusable render core preserves pinned
-release-style dependencies and does not write maintainer paths into template
-source files. Repository checks explicitly select the separate validation
-adapter, which patches declared framework dependencies only in the disposable
-output. These local-source options are absent from the normal renderer command.
+release-style dependencies and the canonical application lockfile without
+writing maintainer paths into template source files. Repository checks
+explicitly select the separate validation adapter, which patches declared
+framework dependencies only in the disposable output. Because that copy uses
+local path dependencies, the adapter removes its incompatible release lockfile
+and the owning validation script regenerates a disposable lock before invoking
+locked Cargo commands. Normal render output and CLI-created applications retain
+the package lockfile unchanged. These local-source options are absent from the
+normal renderer command.
 Before either path plans output, it verifies the canonical package identity,
 framework compatibility, declared component set, and locked source digest.
 After an intentional package-source change, calculate the replacement digest
@@ -265,11 +270,11 @@ cargo run --locked -p template_renderer --example package_digest -- \
 
 Review the complete package diff before replacing `content_digest` in
 `templates/package.toml`.
-The check runs
-the renderer snapshot and failure-path tests, installs the client package lock,
-validates the rendered workspace's direct application and Hegira dependencies,
-validates native workspace targets and tests, compiles the hydration target,
-and produces the full-stack Cargo Leptos release output.
+The check runs the renderer snapshot and failure-path tests, installs the client
+package lock, regenerates only the disposable local-source Cargo lock, validates
+the rendered workspace's direct application and Hegira dependencies through
+locked commands, validates native workspace targets and tests, compiles the
+hydration target, and produces the full-stack Cargo Leptos release output.
 
 The generated-application gate first creates pristine SQLite and PostgreSQL
 applications through public `hegira new` commands and verifies that output
@@ -311,7 +316,8 @@ sh scripts/generated-application-check.sh
 ```
 
 The check invokes the public `hegira new` command for default SQLite and explicit
-PostgreSQL applications. The normal CLI output retains pinned release sources.
+PostgreSQL applications. The normal CLI output retains pinned release sources
+and the byte-identical canonical Cargo lockfile.
 The repository-only adapter verifies every generated file against the requested
 canonical output before publishing a separate validation copy with local framework
 dependencies and an explicit workspace exclusion for that staged framework.
@@ -462,6 +468,8 @@ tag, verify:
 - `develop` has been promoted to `main` through a pull request;
 - `CHANGELOG.md`, every workspace package version, and affected documentation
   are current;
+- the canonical application `Cargo.lock` resolves framework packages from the
+  release tag to one reviewed commit revision;
 - `docs/releases/vX.Y.Z.md` is ready;
 - a manual release workflow run on the intended `main` commit succeeds.
 
