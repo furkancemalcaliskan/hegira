@@ -1,6 +1,6 @@
 FROM node:22-bookworm-slim AS node
 
-FROM rust:1.97.0-bookworm AS builder
+FROM rust:1.98.0-bookworm AS builder
 
 WORKDIR /app
 COPY --from=node /usr/local /usr/local
