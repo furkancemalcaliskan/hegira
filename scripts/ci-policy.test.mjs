@@ -83,6 +83,9 @@ const validGeneratedApplicationScript = `#!/usr/bin/env sh
 set -eu
 cargo run --locked --quiet -p hegira_cli -- new sqlite-application
 cargo run --locked --quiet -p hegira_cli -- new postgres-application
+development_root="$staging_parent/sqlite-development-validation"
+APP_ENV=sqlite cargo leptos build -p app_server \
+  --bin-features ssr,db-sqlite --lib-features hydrate
 for database in sqlite postgres; do
   renderer --generated-source "$staging_parent/$database-source"
   hegira -- generate resource --application-root "$validation_root" --dry-run --json
@@ -131,6 +134,30 @@ test("accepts the generated and mutated application contract", () => {
   assert.deepEqual(
     validateGeneratedApplicationScript(validGeneratedApplicationScript),
     [],
+  );
+});
+
+test("rejects a missing documented development build", () => {
+  const errors = validateGeneratedApplicationScript(
+    validGeneratedApplicationScript.replace(
+      "APP_ENV=sqlite cargo leptos build -p app_server",
+      "true",
+    ),
+  );
+  assert.ok(
+    errors.some((error) => error.includes("documented development build")),
+  );
+});
+
+test("rejects replacing the development build with a release build", () => {
+  const errors = validateGeneratedApplicationScript(
+    validGeneratedApplicationScript.replace(
+      "cargo leptos build -p app_server",
+      "cargo leptos build --release -p app_server",
+    ),
+  );
+  assert.ok(
+    errors.some((error) => error.includes("non-release development build")),
   );
 });
 

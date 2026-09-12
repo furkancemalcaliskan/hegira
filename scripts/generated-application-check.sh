@@ -30,6 +30,23 @@ application_fingerprint() {
   )
 }
 
+stage_framework_source() (
+  validation_root="$1"
+  framework_root="$validation_root/.hegira-validation/framework"
+  mkdir -p "$framework_root"
+  tar -C "$repo_root" \
+    --exclude='.git' \
+    --exclude='.env' \
+    --exclude='node_modules' \
+    --exclude='target' \
+    --exclude='*.sqlite3' \
+    --exclude='*.sqlite3-shm' \
+    --exclude='*.sqlite3-wal' \
+    -cf - \
+    Cargo.toml Cargo.lock rust-toolchain.toml .cargo crates modules tools |
+    tar -xf - -C "$framework_root"
+)
+
 expect_exit() {
   expected="$1"
   shift
@@ -74,9 +91,29 @@ if find "$repo_root/.cargo" "$repo_root/crates" \
   exit 1
 fi
 
+development_root="$staging_parent/sqlite-development-validation"
+cargo run --locked --quiet -p template_renderer \
+  --example repository_validation_renderer -- render \
+  --repository-root "$repo_root" --template layered \
+  --generated-source "$staging_parent/sqlite-source" \
+  --output "$development_root" --framework-root "$repo_root" \
+  --framework-path .hegira-validation/framework \
+  --set application_name=sqlite-application \
+  --set database_adapter=sqlite --set database_feature=db-sqlite \
+  --set client_adapter=leptos --set component_id=layered-leptos-identity
+stage_framework_source "$development_root"
+
+(
+  cd "$development_root"
+  npm ci --prefix apps/web/src
+  PATH="$development_root/apps/web/src/node_modules/.bin:$PATH"
+  export PATH
+  APP_ENV=sqlite cargo leptos build -p app_server \
+    --bin-features ssr,db-sqlite --lib-features hydrate
+)
+
 for database in sqlite postgres; do
   validation_root="$staging_parent/$database-validation"
-  framework_root="$validation_root/.hegira-validation/framework"
   migration_artifacts="$staging_parent/$database-migration-artifacts"
   mkdir -p "$migration_artifacts"
   cargo run --locked --quiet -p template_renderer \
@@ -160,18 +197,7 @@ for database in sqlite postgres; do
   application_fingerprint "$validation_root" >"$migration_artifacts/after-duplicate.sha256"
   cmp "$migration_artifacts/before-duplicate.sha256" "$migration_artifacts/after-duplicate.sha256"
 
-  mkdir -p "$framework_root"
-  tar -C "$repo_root" \
-    --exclude='.git' \
-    --exclude='.env' \
-    --exclude='node_modules' \
-    --exclude='target' \
-    --exclude='*.sqlite3' \
-    --exclude='*.sqlite3-shm' \
-    --exclude='*.sqlite3-wal' \
-    -cf - \
-    Cargo.toml Cargo.lock rust-toolchain.toml .cargo crates modules tools |
-    tar -xf - -C "$framework_root"
+  stage_framework_source "$validation_root"
 
   (
     cd "$validation_root"
@@ -334,4 +360,4 @@ deleted_status=$(curl --silent --show-error --output "$artifacts_dir/resource-de
   "$base_url/api/validation-records/$resource_id")
 test "$deleted_status" = "404"
 
-echo "CLI-generated application validation passed for generated resources, SQLite, PostgreSQL, v0.2.0 upgrades, authorized HTTP CRUD, and the production container"
+echo "CLI-generated application validation passed for development builds, generated resources, SQLite, PostgreSQL, v0.2.0 upgrades, authorized HTTP CRUD, and the production container"

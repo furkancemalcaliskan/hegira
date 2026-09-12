@@ -315,8 +315,11 @@ PostgreSQL applications. The normal CLI output retains pinned release sources.
 The repository-only adapter verifies every generated file against the requested
 canonical output before publishing a separate validation copy with local framework
 dependencies and an explicit workspace exclusion for that staged framework.
-The CLI outputs are never rewritten. Each provider copy runs native
-workspace checks and tests, WASM hydration checks, and a Cargo-Leptos release build.
+The CLI outputs are never rewritten. A dedicated disposable copy of the
+pristine SQLite output runs the documented non-release Cargo Leptos development
+build without starting a persistent watcher or server. Each provider copy then
+runs native workspace checks and tests, WASM hydration checks, and a Cargo-Leptos
+release build.
 This requires Node/npm, `cargo-leptos`, and the `wasm32-unknown-unknown` target;
 the generated-application CI jobs install these prerequisites explicitly.
 
@@ -341,8 +344,8 @@ Failures in this job are owned by the contract boundary named in the output:
   and template-package contract;
 - dry-run, apply, conflict, or pristine-output failures belong to the CLI,
   application mutator, or resource generator;
-- native, hydration, or dependency-boundary failures belong to the generated
-  source or its selected provider composition;
+- development, native, hydration, or dependency-boundary failures belong to
+  the generated source or its selected provider composition;
 - fresh-install or upgrade failures belong to application migration and
   provider persistence composition;
 - readiness, asset, security-header, authentication, authorization, or CRUD
