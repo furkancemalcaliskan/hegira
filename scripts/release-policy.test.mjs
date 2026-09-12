@@ -6,6 +6,7 @@ import test from "node:test";
 
 import {
   currentReleaseRef,
+  validateCanonicalApplicationLock,
   validateReleaseFiles,
   validateReleaseMetadata,
   validateReleaseWorkflow,
@@ -34,6 +35,9 @@ function metadata(overrides = {}) {
 function releaseFixture() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "hegira-release-"));
   fs.mkdirSync(path.join(root, "docs", "releases"), { recursive: true });
+  fs.mkdirSync(path.join(root, "templates", "applications", "layered"), {
+    recursive: true,
+  });
   fs.writeFileSync(
     path.join(root, "CHANGELOG.md"),
     "# Changelog\n\n## [0.2.0] - 2026-07-24\n",
@@ -41,6 +45,14 @@ function releaseFixture() {
   fs.writeFileSync(
     path.join(root, "docs", "releases", "v0.2.0.md"),
     "# Hegira v0.2.0\n",
+  );
+  fs.writeFileSync(
+    path.join(root, "templates", "package.toml"),
+    '[framework]\nrepository = "https://github.com/example/hegira.git"\nversion = "v0.2.0"\n',
+  );
+  fs.writeFileSync(
+    path.join(root, "templates", "applications", "layered", "Cargo.lock"),
+    'source = "git+https://github.com/example/hegira.git?tag=v0.2.0#0123456789abcdef0123456789abcdef01234567"\n',
   );
   return root;
 }
@@ -125,6 +137,32 @@ test("accepts matching changelog and versioned release notes", (context) => {
   const root = releaseFixture();
   context.after(() => fs.rmSync(root, { recursive: true, force: true }));
   assert.deepEqual(validateReleaseFiles(root, "v0.2.0"), []);
+});
+
+test("accepts a canonical application lock resolved from one release revision", (context) => {
+  const root = releaseFixture();
+  context.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  assert.deepEqual(validateCanonicalApplicationLock(root, "v0.2.0"), []);
+});
+
+test("rejects a missing canonical application lock", (context) => {
+  const root = releaseFixture();
+  context.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.rmSync(path.join(root, "templates", "applications", "layered", "Cargo.lock"));
+  const errors = validateCanonicalApplicationLock(root, "v0.2.0");
+  assert.ok(errors.some((error) => error.includes("lockfile is missing")));
+});
+
+test("rejects a canonical application lock resolved outside the release tag", (context) => {
+  const root = releaseFixture();
+  context.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const lockPath = path.join(root, "templates", "applications", "layered", "Cargo.lock");
+  fs.writeFileSync(
+    lockPath,
+    fs.readFileSync(lockPath, "utf8").replace("?tag=v0.2.0", "?branch=main"),
+  );
+  const errors = validateCanonicalApplicationLock(root, "v0.2.0");
+  assert.ok(errors.some((error) => error.includes("outside the release tag")));
 });
 
 test("rejects a missing dated changelog release", (context) => {

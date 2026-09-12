@@ -488,6 +488,7 @@ fn new_generates_the_default_layered_application_without_prompts() {
     let stdout = String::from_utf8(result.stdout).expect("output should be UTF-8");
     assert!(stdout.contains("Created my-application"));
     assert!(stdout.contains("APP_ENV=sqlite cargo leptos watch"));
+    assert!(stdout.contains("--bin-cargo-args=--locked --lib-cargo-args=--locked"));
 
     let manifest = fs::read_to_string(destination.join("hegira.toml"))
         .expect("application manifest should exist");
@@ -504,6 +505,9 @@ fn new_generates_the_default_layered_application_without_prompts() {
     assert!(workspace_manifest.contains("git = \"https://github.com/"));
     assert!(workspace_manifest.contains("tag = \"v0.5.0\""));
     assert!(!workspace_manifest.contains(repository_root().to_string_lossy().as_ref()));
+    let lockfile = fs::read_to_string(destination.join("Cargo.lock"))
+        .expect("application lockfile should exist");
+    assert!(lockfile.contains("?tag=v0.5.0#"));
 }
 
 #[test]
@@ -528,6 +532,7 @@ fn new_represents_an_explicit_postgres_selection_consistently() {
     let stdout = String::from_utf8(result.stdout).expect("output should be UTF-8");
     assert!(stdout.contains("APP_ENV=development cargo leptos watch"));
     assert!(stdout.contains("--bin-features ssr,db-postgres"));
+    assert!(stdout.contains("--bin-cargo-args=--locked --lib-cargo-args=--locked"));
 
     let manifest = fs::read_to_string(destination.join("hegira.toml"))
         .expect("application manifest should exist");
@@ -818,8 +823,8 @@ fn explicit_sibling_destination_still_works() {
 #[test]
 fn provider_snapshots_and_interactive_requests_match() {
     for (database, expected) in [
-        ("sqlite", 16165926348028193469_u64),
-        ("postgres", 6271968349784276084_u64),
+        ("sqlite", 7070345313341594354_u64),
+        ("postgres", 6535897176847809763_u64),
     ] {
         let root = TestDirectory::new(database);
         let explicit = root.path().join("explicit");

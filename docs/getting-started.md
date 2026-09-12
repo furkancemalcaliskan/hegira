@@ -313,11 +313,16 @@ conflicts instead of silently replacing migration history.
 
 ## Run With SQLite
 
+The generated `Cargo.lock` is part of the release-verified application source.
+Keep it in version control and use explicit `cargo update` operations when the
+application intentionally adopts a different dependency graph.
+
 ```sh
 cd ../my-application
 npm ci --prefix apps/web/src
 APP_ENV=sqlite cargo leptos watch -p app_server \
-  --bin-features ssr,db-sqlite --lib-features hydrate
+  --bin-features ssr,db-sqlite --lib-features hydrate \
+  --bin-cargo-args=--locked --lib-cargo-args=--locked
 ```
 
 Open `http://127.0.0.1:3000`. The SQLite development profile creates its local
@@ -336,7 +341,8 @@ POSTGRES_PASSWORD=local-development-only docker compose up -d database
 APP_ENV=development \
 APP__DATABASE__URL=postgres://postgres:local-development-only@localhost:5432/application \
 cargo leptos watch -p app_server \
-  --bin-features ssr,db-postgres --lib-features hydrate
+  --bin-features ssr,db-postgres --lib-features hydrate \
+  --bin-cargo-args=--locked --lib-cargo-args=--locked
 ```
 
 The development profile may run migrations and seed data automatically.

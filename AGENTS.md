@@ -141,7 +141,8 @@ Start the current SQLite profile:
 
 ```sh
 APP_ENV=sqlite cargo leptos watch -p app_server \
-  --bin-features ssr,db-sqlite --lib-features hydrate
+  --bin-features ssr,db-sqlite --lib-features hydrate \
+  --bin-cargo-args=--locked --lib-cargo-args=--locked
 ```
 
 The application listens on `http://127.0.0.1:3000`. See

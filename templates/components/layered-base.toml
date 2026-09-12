@@ -5,6 +5,7 @@ include = [
   ".dockerignore",
   ".env.example",
   ".gitignore",
+  "Cargo.lock",
   "config",
   "crates",
   "docker-compose.yml",

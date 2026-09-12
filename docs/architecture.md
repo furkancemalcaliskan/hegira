@@ -47,10 +47,14 @@ automatic module discovery, application upgrades, or registry distribution.
 ```
 
 `templates/applications/layered/` is deliberately excluded from the root Cargo
-workspace. A rendered application owns its server, web client, DDD layers,
-configuration, migrations, deployment files, dependency lock, and future
-product changes. The framework repository does not own an application runtime
-configuration or production image.
+workspace. Its canonical `Cargo.lock` records the registry checksums and exact
+framework git revision verified for the package release. Every normal render
+receives those bytes unchanged. The generated application then owns its server,
+web client, DDD layers, configuration, migrations, deployment files, dependency
+lock, and future product changes. The framework repository does not own an
+application runtime configuration or production image. Application owners may
+update dependencies intentionally; generation never performs an implicit
+dependency upgrade.
 
 Template changes affect subsequent generation, not existing applications.
 Generated files are application-owned source, not a synchronized view of the

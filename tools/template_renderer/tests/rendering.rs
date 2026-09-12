@@ -29,17 +29,15 @@ fn stages_verified_generated_bytes_without_mutating_release_source() {
     template_renderer::repository_validation::stage_generated(&request, &source).unwrap();
     assert_eq!(before, output_tree(&source));
     let staged = output_tree(&destination);
+    assert!(before.contains_key(Path::new("Cargo.lock")));
+    assert!(!staged.contains_key(Path::new("Cargo.lock")));
     assert!(
         fs::read_to_string(destination.join("Cargo.toml"))
             .unwrap()
             .contains("exclude = [\".hegira-validation/framework\"]")
     );
-    assert_eq!(
-        before.keys().collect::<Vec<_>>(),
-        staged.keys().collect::<Vec<_>>()
-    );
     for (path, bytes) in &before {
-        if path.file_name().unwrap() != "Cargo.toml" {
+        if path.file_name().unwrap() != "Cargo.toml" && path.file_name().unwrap() != "Cargo.lock" {
             assert_eq!(bytes, &staged[path], "{}", path.display());
         }
     }
@@ -222,6 +220,14 @@ fn layered_template_renders_release_dependencies_and_binary_assets() {
     assert!(!manifest.contains("{{"));
     assert!(!manifest.contains(&repository.to_string_lossy().into_owned()));
 
+    let lockfile = fs::read_to_string(output.join("Cargo.lock")).expect("lockfile should exist");
+    let framework_source = format!(
+        "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v{}#",
+        env!("CARGO_PKG_VERSION")
+    );
+    assert!(lockfile.contains(&framework_source));
+    assert!(!lockfile.contains("{{"));
+
     let application_manifest = ApplicationManifest::read(output.join("hegira.toml"))
         .expect("generated application manifest should be valid");
     assert_eq!(application_manifest.application, "application");
@@ -381,6 +387,7 @@ fn repository_validation_can_patch_framework_dependencies_locally() {
     render_for_validation(&request).expect("locally patched render should succeed");
 
     let manifest = fs::read_to_string(output.join("Cargo.toml")).expect("manifest should exist");
+    assert!(!output.join("Cargo.lock").exists());
     let application_path = repository.join("modules/identity/application");
     assert!(manifest.contains(&format!(
         "identity_application = {{ path = {:?}, default-features = false }}",

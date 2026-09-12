@@ -83,6 +83,9 @@ cargo run --locked --quiet -p hegira_cli -- new sqlite-application \
 cargo run --locked --quiet -p hegira_cli -- new postgres-application \
   --destination "$staging_parent/postgres-source" \
   --database postgres --client leptos --component identity
+test -f "$staging_parent/sqlite-source/Cargo.lock"
+test -f "$staging_parent/postgres-source/Cargo.lock"
+cmp "$staging_parent/sqlite-source/Cargo.lock" "$staging_parent/postgres-source/Cargo.lock"
 
 if find "$repo_root/.cargo" "$repo_root/crates" \
   "$repo_root/modules" "$repo_root/tools" \
@@ -105,11 +108,13 @@ stage_framework_source "$development_root"
 
 (
   cd "$development_root"
+  cargo generate-lockfile
   npm ci --prefix apps/web/src
   PATH="$development_root/apps/web/src/node_modules/.bin:$PATH"
   export PATH
   APP_ENV=sqlite cargo leptos build -p app_server \
-    --bin-features ssr,db-sqlite --lib-features hydrate
+    --bin-features ssr,db-sqlite --lib-features hydrate \
+    --bin-cargo-args=--locked --lib-cargo-args=--locked
 )
 
 for database in sqlite postgres; do
@@ -217,7 +222,8 @@ for database in sqlite postgres; do
     PATH="$validation_root/apps/web/src/node_modules/.bin:$PATH"
     export PATH
     cargo leptos build -p app_server --release \
-      --bin-features "ssr,db-$database" --lib-features hydrate
+      --bin-features "ssr,db-$database" --lib-features hydrate \
+      --bin-cargo-args=--locked --lib-cargo-args=--locked
   )
 done
 

@@ -83,9 +83,12 @@ const validGeneratedApplicationScript = `#!/usr/bin/env sh
 set -eu
 cargo run --locked --quiet -p hegira_cli -- new sqlite-application
 cargo run --locked --quiet -p hegira_cli -- new postgres-application
+test -f "$staging_parent/sqlite-source/Cargo.lock"
+cmp "$staging_parent/sqlite-source/Cargo.lock" "$staging_parent/postgres-source/Cargo.lock"
 development_root="$staging_parent/sqlite-development-validation"
 APP_ENV=sqlite cargo leptos build -p app_server \
-  --bin-features ssr,db-sqlite --lib-features hydrate
+  --bin-features ssr,db-sqlite --lib-features hydrate \
+  --bin-cargo-args=--locked --lib-cargo-args=--locked
 for database in sqlite postgres; do
   renderer --generated-source "$staging_parent/$database-source"
   hegira -- generate resource --application-root "$validation_root" --dry-run --json
@@ -158,6 +161,42 @@ test("rejects replacing the development build with a release build", () => {
   );
   assert.ok(
     errors.some((error) => error.includes("non-release development build")),
+  );
+});
+
+test("rejects generated applications without the canonical Cargo lock", () => {
+  const errors = validateGeneratedApplicationScript(
+    validGeneratedApplicationScript.replace(
+      'test -f "$staging_parent/sqlite-source/Cargo.lock"',
+      "true",
+    ),
+  );
+  assert.ok(
+    errors.some((error) => error.includes("canonical application lockfile")),
+  );
+});
+
+test("rejects generated applications without byte-identical provider locks", () => {
+  const errors = validateGeneratedApplicationScript(
+    validGeneratedApplicationScript.replace(
+      'cmp "$staging_parent/sqlite-source/Cargo.lock" "$staging_parent/postgres-source/Cargo.lock"',
+      "true",
+    ),
+  );
+  assert.ok(
+    errors.some((error) => error.includes("byte-identical provider lockfiles")),
+  );
+});
+
+test("rejects unlocked Cargo Leptos builds", () => {
+  const errors = validateGeneratedApplicationScript(
+    validGeneratedApplicationScript.replace(
+      "--bin-cargo-args=--locked --lib-cargo-args=--locked",
+      "",
+    ),
+  );
+  assert.ok(
+    errors.some((error) => error.includes("locked Cargo Leptos")),
   );
 });
 

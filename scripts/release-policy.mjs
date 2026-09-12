@@ -53,6 +53,69 @@ function releaseVersion(releaseRef) {
   return match === null ? null : releaseRef.slice(1);
 }
 
+function escapeRegularExpression(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+export function validateCanonicalApplicationLock(root, releaseRef) {
+  const errors = [];
+  const packagePath = path.join(root, "templates", "package.toml");
+  const lockPath = path.join(
+    root,
+    "templates",
+    "applications",
+    "layered",
+    "Cargo.lock",
+  );
+  if (!fs.existsSync(packagePath)) {
+    return ["canonical component package manifest is missing"];
+  }
+  if (!fs.existsSync(lockPath)) {
+    return ["canonical application lockfile is missing"];
+  }
+
+  const packageManifest = fs.readFileSync(packagePath, "utf8");
+  const frameworkSection =
+    packageManifest.match(/(?:^|\n)\[framework\]\n([\s\S]*?)(?=\n\[|$)/)?.[1] ??
+    "";
+  const repository = frameworkSection.match(/^repository = "([^"]+)"$/m)?.[1];
+  const version = frameworkSection.match(/^version = "([^"]+)"$/m)?.[1];
+  if (!repository || !version) {
+    return ["canonical component package framework identity is invalid"];
+  }
+  if (version !== releaseRef) {
+    errors.push(
+      `canonical component package framework version is ${version}, expected ${releaseRef}`,
+    );
+  }
+
+  const lockfile = fs.readFileSync(lockPath, "utf8");
+  const sourcePattern = new RegExp(
+    `^source = "git\\+${escapeRegularExpression(repository)}\\?tag=${escapeRegularExpression(releaseRef)}#[0-9a-f]{40}"$`,
+    "gm",
+  );
+  const expectedSources = lockfile.match(sourcePattern) ?? [];
+  const repositorySources = lockfile
+    .split("\n")
+    .filter((line) => line.startsWith(`source = "git+${repository}`));
+  if (expectedSources.length === 0) {
+    errors.push(
+      "canonical application lockfile contains no framework package resolved from the release tag",
+    );
+  }
+  if (expectedSources.length !== repositorySources.length) {
+    errors.push(
+      "canonical application lockfile contains a framework source outside the release tag",
+    );
+  }
+  if (new Set(expectedSources).size > 1) {
+    errors.push(
+      "canonical application lockfile resolves framework packages to multiple revisions",
+    );
+  }
+  return errors;
+}
+
 function readWorkspaceMetadata(root) {
   const result = spawnSync(
     "cargo",
@@ -137,6 +200,7 @@ export function validateReleaseFiles(root, releaseRef) {
   if (version === null) {
     return errors;
   }
+  errors.push(...validateCanonicalApplicationLock(root, releaseRef));
 
   const changelogPath = path.join(root, "CHANGELOG.md");
   if (!fs.existsSync(changelogPath)) {
