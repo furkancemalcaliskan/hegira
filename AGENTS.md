@@ -54,8 +54,9 @@ commands change. Never describe planned work as implemented.
   seed composition plus explicitly authorized disposable-database reset for
   validation; it does not use compatibility migration helpers or `db_migrator`.
   Each render owns a validated `hegira.toml` containing only application
-  identity, framework source/version, selected components, and database/client
-  adapters. Runtime configuration and secrets do not belong in that manifest.
+  identity, framework source/version, installed component-package, component,
+  module and capability composition, and selected database/client adapters.
+  Runtime configuration and secrets do not belong in that manifest.
 - `templates/package.toml` identifies the versioned canonical, data-only
   component package, its compatible framework release source, contained
   templates/components, and locked source digest. `templates/components/`

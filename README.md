@@ -77,11 +77,11 @@ ownership:
 | `tools/template_renderer/` | Reusable deterministic render core with a separate disposable repository-validation adapter; it is not a public CLI |
 
 The canonical rendered application is an independent Cargo workspace, consumes framework
-packages from a pinned release source, and records its generation identity and selected
-components in a validated `hegira.toml`. Runtime configuration and secrets remain outside that
-manifest. The canonical package locks its source inputs with a deterministic SHA-256 digest so
-repository-local or untracked files cannot silently enter generated output. Releases remain
-source-only; the CLI is not distributed through crates.io or as a standalone
+packages from a pinned release source, and records its generation identity, installed
+composition, and selected adapters in a validated `hegira.toml`. Runtime configuration and
+secrets remain outside that manifest. The canonical package locks its source inputs with a
+deterministic SHA-256 digest so repository-local or untracked files cannot silently enter
+generated output. Releases remain source-only; the CLI is not distributed through crates.io or as a standalone
 executable. Keep the source tree available when running the source-built CLI.
 
 The source-runnable CLI can create the canonical layered application non-interactively with

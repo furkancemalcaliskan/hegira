@@ -464,8 +464,10 @@ fn validate_field_name(name: &str) -> Result<(), SpecificationError> {
 #[cfg(test)]
 mod tests {
     use application_manifest::{
-        APPLICATION_MANIFEST_SCHEMA, ApplicationSelection, FrameworkContract,
-        HEGIRA_FRAMEWORK_REPOSITORY, LAYERED_BASE_COMPONENT, LAYERED_LEPTOS_IDENTITY_COMPONENT,
+        APPLICATION_MANIFEST_SCHEMA, ApplicationCapability, ApplicationComposition,
+        ApplicationSelection, FrameworkContract, HEGIRA_COMPONENT_PACKAGE,
+        HEGIRA_FRAMEWORK_REPOSITORY, IDENTITY_MODULE, InstalledComponent, InstalledModule,
+        LAYERED_BASE_COMPONENT, LAYERED_LEPTOS_IDENTITY_COMPONENT, PackageIdentity,
     };
 
     use super::*;
@@ -479,15 +481,33 @@ mod tests {
                 version: "v0.5.0".to_owned(),
             },
             selection: ApplicationSelection {
-                components: [
-                    LAYERED_BASE_COMPONENT.to_owned(),
-                    LAYERED_LEPTOS_IDENTITY_COMPONENT.to_owned(),
-                ]
-                .into_iter()
-                .collect(),
+                components: BTreeSet::new(),
                 databases: [database].into_iter().collect(),
                 clients: [ClientAdapter::Leptos].into_iter().collect(),
             },
+            composition: Some(ApplicationComposition {
+                package: PackageIdentity {
+                    id: HEGIRA_COMPONENT_PACKAGE.to_owned(),
+                    version: "v0.5.0".to_owned(),
+                },
+                components: [LAYERED_BASE_COMPONENT, LAYERED_LEPTOS_IDENTITY_COMPONENT]
+                    .map(|id| InstalledComponent {
+                        id: id.to_owned(),
+                        version: "v0.5.0".to_owned(),
+                    })
+                    .into_iter()
+                    .collect(),
+                modules: vec![InstalledModule {
+                    id: IDENTITY_MODULE.to_owned(),
+                    version: "v0.5.0".to_owned(),
+                }],
+                capabilities: [
+                    ApplicationCapability::Authentication,
+                    ApplicationCapability::Authorization,
+                ]
+                .into_iter()
+                .collect(),
+            }),
         }
     }
 
@@ -677,10 +697,7 @@ mod tests {
         )
         .unwrap_err();
 
-        assert_eq!(
-            ambiguous.kind(),
-            SpecificationErrorKind::UnsupportedSelection
-        );
+        assert_eq!(ambiguous.kind(), SpecificationErrorKind::InvalidManifest);
         assert_eq!(invalid.kind(), SpecificationErrorKind::InvalidManifest);
     }
 

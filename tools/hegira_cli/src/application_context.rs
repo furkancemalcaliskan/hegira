@@ -384,7 +384,7 @@ mod tests {
 
     fn manifest(version: &str) -> String {
         format!(
-            r#"schema = 1
+            r#"schema = 2
 application = "context-app"
 
 [framework]
@@ -392,9 +392,27 @@ repository = "https://github.com/furkancemalcaliskan/hegira.git"
 version = "{version}"
 
 [selection]
-components = ["layered-base", "layered-leptos-identity"]
 databases = ["sqlite"]
 clients = ["leptos"]
+
+[composition]
+capabilities = ["authentication", "authorization"]
+
+[composition.package]
+id = "hegira-canonical"
+version = "{version}"
+
+[[composition.components]]
+id = "layered-base"
+version = "{version}"
+
+[[composition.components]]
+id = "layered-leptos-identity"
+version = "{version}"
+
+[[composition.modules]]
+id = "identity"
+version = "{version}"
 "#
         )
     }
