@@ -71,9 +71,9 @@ for (const base of ["develop", "main"]) {
   test(`accepts the isolated funding maintenance pull request to ${base}`, () => {
     assert.deepEqual(
       validatePullRequest({
-        title: "chore(repository): add funding configuration",
+        title: "chore(repository): use GitHub Sponsors funding",
         body: "Repository funding metadata only.",
-        head: `chore/funding-configuration-${base}`,
+        head: `chore/github-sponsors-configuration-${base}`,
         base,
         actor: "maintainer",
         headRepository: "furkancemalcaliskan/hegira",
@@ -86,9 +86,9 @@ for (const base of ["develop", "main"]) {
 
 test("rejects a funding maintenance branch targeting the other protected branch", () => {
   const errors = validatePullRequest({
-    title: "chore(repository): add funding configuration",
+    title: "chore(repository): use GitHub Sponsors funding",
     body: "Repository funding metadata only.",
-    head: "chore/funding-configuration-main",
+    head: "chore/github-sponsors-configuration-main",
     base: "develop",
     actor: "maintainer",
     headRepository: "furkancemalcaliskan/hegira",
@@ -99,9 +99,9 @@ test("rejects a funding maintenance branch targeting the other protected branch"
 
 test("rejects funding maintenance from a fork", () => {
   const errors = validatePullRequest({
-    title: "chore(repository): add funding configuration",
+    title: "chore(repository): use GitHub Sponsors funding",
     body: "Repository funding metadata only.",
-    head: "chore/funding-configuration-main",
+    head: "chore/github-sponsors-configuration-main",
     base: "main",
     actor: "contributor",
     headRepository: "contributor/hegira",
@@ -112,9 +112,9 @@ test("rejects funding maintenance from a fork", () => {
 
 test("rejects an issue closure in funding maintenance", () => {
   const errors = validatePullRequest({
-    title: "chore(repository): add funding configuration",
+    title: "chore(repository): use GitHub Sponsors funding",
     body: "Closes #55",
-    head: "chore/funding-configuration-develop",
+    head: "chore/github-sponsors-configuration-develop",
     base: "develop",
     actor: "maintainer",
     headRepository: "furkancemalcaliskan/hegira",
