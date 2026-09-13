@@ -24,10 +24,10 @@ const ISSUE_BRANCH = new RegExp(
 const RELEASE_TITLE =
   /^release: promote hegira v[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)? to main$/;
 const FUNDING_MAINTENANCE_TITLE =
-  "chore(repository): add funding configuration";
+  "chore(repository): use GitHub Sponsors funding";
 const FUNDING_MAINTENANCE_BRANCHES = new Map([
-  ["chore/funding-configuration-develop", "develop"],
-  ["chore/funding-configuration-main", "main"],
+  ["chore/github-sponsors-configuration-develop", "develop"],
+  ["chore/github-sponsors-configuration-main", "main"],
 ]);
 
 const REQUIRED_FILES = [
@@ -156,10 +156,10 @@ export function validateRepository(root) {
   const fundingFile = path.join(root, ".github", "FUNDING.yml");
   if (
     fs.existsSync(fundingFile) &&
-    readText(fundingFile) !== "buy_me_a_coffee: furkancemalcaliskan\n"
+    readText(fundingFile) !== "github: furkancemalcaliskan\n"
   ) {
     errors.push(
-      ".github/FUNDING.yml must contain only the approved Buy Me a Coffee identity",
+      ".github/FUNDING.yml must contain only the approved GitHub Sponsors identity",
     );
   }
 
