@@ -67,6 +67,62 @@ test("rejects an ordinary issue pull request targeting main", () => {
   assert.ok(errors.some((error) => error.includes("only develop")));
 });
 
+for (const base of ["develop", "main"]) {
+  test(`accepts the isolated funding maintenance pull request to ${base}`, () => {
+    assert.deepEqual(
+      validatePullRequest({
+        title: "chore(repository): add funding configuration",
+        body: "Repository funding metadata only.",
+        head: `chore/funding-configuration-${base}`,
+        base,
+        actor: "maintainer",
+        headRepository: "furkancemalcaliskan/hegira",
+        baseRepository: "furkancemalcaliskan/hegira",
+      }),
+      [],
+    );
+  });
+}
+
+test("rejects a funding maintenance branch targeting the other protected branch", () => {
+  const errors = validatePullRequest({
+    title: "chore(repository): add funding configuration",
+    body: "Repository funding metadata only.",
+    head: "chore/funding-configuration-main",
+    base: "develop",
+    actor: "maintainer",
+    headRepository: "furkancemalcaliskan/hegira",
+    baseRepository: "furkancemalcaliskan/hegira",
+  });
+  assert.ok(errors.some((error) => error.includes("must target main")));
+});
+
+test("rejects funding maintenance from a fork", () => {
+  const errors = validatePullRequest({
+    title: "chore(repository): add funding configuration",
+    body: "Repository funding metadata only.",
+    head: "chore/funding-configuration-main",
+    base: "main",
+    actor: "contributor",
+    headRepository: "contributor/hegira",
+    baseRepository: "furkancemalcaliskan/hegira",
+  });
+  assert.ok(errors.some((error) => error.includes("this repository")));
+});
+
+test("rejects an issue closure in funding maintenance", () => {
+  const errors = validatePullRequest({
+    title: "chore(repository): add funding configuration",
+    body: "Closes #55",
+    head: "chore/funding-configuration-develop",
+    base: "develop",
+    actor: "maintainer",
+    headRepository: "furkancemalcaliskan/hegira",
+    baseRepository: "furkancemalcaliskan/hegira",
+  });
+  assert.ok(errors.some((error) => error.includes("must not close")));
+});
+
 test("accepts a Dependabot pull request to develop", () => {
   const errors = validatePullRequest({
     title: "build(deps): bump dependencies",

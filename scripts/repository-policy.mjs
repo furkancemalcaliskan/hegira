@@ -23,6 +23,12 @@ const ISSUE_BRANCH = new RegExp(
 );
 const RELEASE_TITLE =
   /^release: promote hegira v[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)? to main$/;
+const FUNDING_MAINTENANCE_TITLE =
+  "chore(repository): add funding configuration";
+const FUNDING_MAINTENANCE_BRANCHES = new Map([
+  ["chore/funding-configuration-develop", "develop"],
+  ["chore/funding-configuration-main", "main"],
+]);
 
 const REQUIRED_FILES = [
   "AGENTS.md",
@@ -147,6 +153,16 @@ function markdownFiles(root) {
 export function validateRepository(root) {
   const errors = [];
 
+  const fundingFile = path.join(root, ".github", "FUNDING.yml");
+  if (
+    fs.existsSync(fundingFile) &&
+    readText(fundingFile) !== "buy_me_a_coffee: furkancemalcaliskan\n"
+  ) {
+    errors.push(
+      ".github/FUNDING.yml must contain only the approved Buy Me a Coffee identity",
+    );
+  }
+
   for (const required of REQUIRED_FILES) {
     const requiredFile = path.join(root, required);
     if (!fs.existsSync(requiredFile) || !fs.statSync(requiredFile).isFile()) {
@@ -228,6 +244,31 @@ export function validatePullRequest(metadata) {
 
   const dependabot =
     actor === "dependabot[bot]" && head.startsWith("dependabot/");
+
+  const fundingMaintenanceBase = FUNDING_MAINTENANCE_BRANCHES.get(head);
+  if (fundingMaintenanceBase !== undefined) {
+    if (base !== fundingMaintenanceBase) {
+      errors.push(
+        `funding maintenance branch ${head} must target ${fundingMaintenanceBase}; received base: ${base}`,
+      );
+    }
+    if (title !== FUNDING_MAINTENANCE_TITLE) {
+      errors.push(
+        `funding maintenance title must be: ${FUNDING_MAINTENANCE_TITLE}`,
+      );
+    }
+    if (
+      headRepository === "" ||
+      baseRepository === "" ||
+      headRepository !== baseRepository
+    ) {
+      errors.push("funding maintenance must originate from this repository");
+    }
+    if (closingIssues(body).length !== 0) {
+      errors.push("funding maintenance must not close an issue");
+    }
+    return errors;
+  }
 
   if (dependabot) {
     if (base !== "develop") {
