@@ -610,8 +610,11 @@ fn inspect_reports_the_discovered_application_without_writing() {
         "Root: {}\n",
         fs::canonicalize(&application).unwrap().display()
     )));
-    assert!(output.contains("Manifest schema: 1\n"));
+    assert!(output.contains("Manifest schema: 2\n"));
     assert!(output.contains("Framework: https://github.com/furkancemalcaliskan/hegira.git"));
+    assert!(output.contains("Component package: hegira-canonical @ v0.5.0\n"));
+    assert!(output.contains("Modules: identity\n"));
+    assert!(output.contains("Capabilities: authentication, authorization\n"));
     assert!(output.contains("Components: layered-base, layered-leptos-identity\n"));
     assert!(output.contains("Databases: sqlite\n"));
     assert!(output.contains("Clients: leptos\n"));
@@ -653,7 +656,15 @@ fn inspect_json_is_versioned_deterministic_and_matches_explicit_resolution() {
         serde_json::from_slice(&discovered.stdout).expect("inspection JSON should parse");
     assert_eq!(document["output_schema"], 1);
     assert_eq!(document["manifest"]["application"], "json-app");
-    assert_eq!(document["manifest"]["schema"], 1);
+    assert_eq!(document["manifest"]["schema"], 2);
+    assert_eq!(
+        document["manifest"]["composition"]["package"]["id"],
+        "hegira-canonical"
+    );
+    assert_eq!(
+        document["manifest"]["composition"]["modules"][0]["id"],
+        "identity"
+    );
     assert_eq!(document["manifest"]["selection"]["databases"][0], "sqlite");
     assert_eq!(document["manifest"]["selection"]["clients"][0], "leptos");
     assert_eq!(document["mutation_compatibility"]["status"], "compatible");
@@ -823,8 +834,8 @@ fn explicit_sibling_destination_still_works() {
 #[test]
 fn provider_snapshots_and_interactive_requests_match() {
     for (database, expected) in [
-        ("sqlite", 7070345313341594354_u64),
-        ("postgres", 6535897176847809763_u64),
+        ("sqlite", 14452012182216820692_u64),
+        ("postgres", 1208563287255221323_u64),
     ] {
         let root = TestDirectory::new(database);
         let explicit = root.path().join("explicit");

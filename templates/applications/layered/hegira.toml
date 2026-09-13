@@ -1,4 +1,4 @@
-schema = 1
+schema = 2
 application = "{{application_name}}"
 
 [framework]
@@ -6,6 +6,24 @@ repository = "{{framework_repository}}"
 version = "{{framework_version}}"
 
 [selection]
-components = ["layered-base", "{{component_id}}"]
 databases = ["{{database_adapter}}"]
 clients = ["{{client_adapter}}"]
+
+[composition]
+capabilities = ["authentication", "authorization"]
+
+[composition.package]
+id = "{{package_id}}"
+version = "{{package_version}}"
+
+[[composition.components]]
+id = "layered-base"
+version = "{{package_version}}"
+
+[[composition.components]]
+id = "{{component_id}}"
+version = "{{package_version}}"
+
+[[composition.modules]]
+id = "identity"
+version = "{{package_version}}"

@@ -232,6 +232,13 @@ fn layered_template_renders_release_dependencies_and_binary_assets() {
         .expect("generated application manifest should be valid");
     assert_eq!(application_manifest.application, "application");
     assert_eq!(application_manifest.framework.version, "v0.5.0");
+    let composition = application_manifest
+        .composition
+        .expect("generated application manifest should record composition state");
+    assert_eq!(composition.package.id, "hegira-canonical");
+    assert_eq!(composition.package.version, "v0.5.0");
+    assert_eq!(composition.modules.len(), 1);
+    assert_eq!(composition.modules[0].id, "identity");
     assert_eq!(
         application_manifest.selection.databases,
         [DatabaseAdapter::Sqlite].into_iter().collect()
@@ -277,20 +284,27 @@ fn package_digest_rejects_untracked_component_content() {
 }
 
 #[test]
-fn package_framework_identity_cannot_be_overridden() {
+fn package_identity_cannot_be_overridden() {
     let repository = repository_root();
-    let output_parent = TestDirectory::new("package-framework-override");
-    let output = output_parent.path().join("application");
-    let mut request = canonical_request(&repository, output.clone());
-    request
-        .variables
-        .insert("framework_version".to_string(), "v9.9.9".to_string());
+    let output_parent = TestDirectory::new("package-identity-override");
+    for (variable, value) in [
+        ("framework_repository", "https://example.com/framework.git"),
+        ("framework_version", "v9.9.9"),
+        ("package_id", "untrusted-package"),
+        ("package_version", "v9.9.9"),
+    ] {
+        let output = output_parent.path().join(variable);
+        let mut request = canonical_request(&repository, output.clone());
+        request
+            .variables
+            .insert(variable.to_owned(), value.to_owned());
 
-    let error = render(&request).expect_err("package framework version should be immutable");
+        let error = render(&request).expect_err("package identity should be immutable");
 
-    assert_eq!(error.kind(), RendererErrorKind::Variables);
-    assert!(error.to_string().contains("not declared"));
-    assert!(!output.exists());
+        assert_eq!(error.kind(), RendererErrorKind::Variables);
+        assert!(error.to_string().contains("not declared"));
+        assert!(!output.exists());
+    }
 }
 
 #[test]

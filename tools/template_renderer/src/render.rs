@@ -176,6 +176,8 @@ fn resolve_variables(
         for (name, value) in [
             ("framework_repository", &package.framework.repository),
             ("framework_version", &package.framework.version),
+            ("package_id", &package.id),
+            ("package_version", &package.version),
         ] {
             if variables.insert(name.to_string(), value.clone()).is_some() {
                 return Err(RendererError::with_kind(

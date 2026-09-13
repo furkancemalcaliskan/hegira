@@ -9,7 +9,8 @@ use std::{
 };
 
 use application_manifest::{
-    ClientAdapter, DatabaseAdapter, MutationCompatibility, MutationCompatibilityPolicy,
+    ApplicationCapability, ClientAdapter, DatabaseAdapter, MutationCompatibility,
+    MutationCompatibilityPolicy,
 };
 use application_mutator::{ChangePlan, PlannedFileChange};
 use clap::{Args, Parser, Subcommand, ValueEnum, error::ErrorKind};
@@ -443,9 +444,10 @@ fn generate_resource(
         Ok(names) => names,
         Err(diagnostic) => return write_diagnostic(diagnostic, diagnostics),
     };
+    let installed_components = manifest.installed_component_ids();
     let namespace = match ArtifactNamespace::new(
         &manifest.application,
-        manifest.selection.components.iter(),
+        installed_components.iter(),
         source_names.iter(),
     ) {
         Ok(namespace) => namespace,
@@ -904,8 +906,7 @@ fn render_human_inspection(context: &ApplicationContext) -> String {
     let mut output = String::new();
     if let Some(manifest) = &context.manifest {
         let components = manifest
-            .selection
-            .components
+            .installed_component_ids()
             .iter()
             .map(String::as_str)
             .collect::<Vec<_>>()
@@ -938,6 +939,31 @@ fn render_human_inspection(context: &ApplicationContext) -> String {
             manifest.framework.repository, manifest.framework.version
         )
         .unwrap();
+        if let Some(composition) = &manifest.composition {
+            let modules = composition
+                .modules
+                .iter()
+                .map(|module| module.id.as_str())
+                .collect::<Vec<_>>()
+                .join(", ");
+            let capabilities = composition
+                .capabilities
+                .iter()
+                .map(|capability| match capability {
+                    ApplicationCapability::Authentication => "authentication",
+                    ApplicationCapability::Authorization => "authorization",
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
+            writeln!(
+                output,
+                "Component package: {} @ {}",
+                composition.package.id, composition.package.version
+            )
+            .unwrap();
+            writeln!(output, "Modules: {modules}").unwrap();
+            writeln!(output, "Capabilities: {capabilities}").unwrap();
+        }
         writeln!(output, "Components: {components}").unwrap();
         writeln!(output, "Databases: {databases}").unwrap();
         writeln!(output, "Clients: {clients}").unwrap();
