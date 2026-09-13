@@ -67,8 +67,14 @@ release: promote hegira vX.Y.Z to main
 ```
 
 Dependabot updates are the only standing exception to the issue and branch
-requirements. They still require review and all checks required by their target
-branch.
+requirements for dependency changes. The repository's funding metadata is a
+second, deliberately narrow maintenance exception: an explicitly authorized
+update uses isolated `chore/funding-configuration-develop` and
+`chore/funding-configuration-main` branches created from their respective
+targets, the pull request title `chore(repository): add funding configuration`,
+and no closing issue reference. This prevents unreleased `develop` work from
+being carried into `main`. Both exceptions still require review and all checks
+required by their target branch.
 
 ## Pull Requests
 
