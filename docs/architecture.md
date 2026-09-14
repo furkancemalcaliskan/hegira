@@ -304,6 +304,21 @@ application. Repeated edits return an explicit already-present result. Missing,
 duplicated, reordered, or type-incompatible integration points fail with typed
 diagnostics before a plan is produced.
 
+Component edit operations further close the available destinations to typed
+layer module roots, package manifests, application capability configuration,
+server and Leptos contribution blocks, Infrastructure configuration fields,
+and provider-specific module migration lists. Cargo dependency declarations
+can only consume an existing workspace dependency or declare a credential-free
+HTTPS framework repository at a stable SemVer tag in the root workspace;
+package paths, branches, revisions, registries, and command-shaped sources are
+not represented. Feature entries and managed Rust entries use the same
+lossless, conflict-aware editors. Sequential operations against one file must
+form an unbroken result-digest chain and collapse into one owner-preserving
+edit before entering the installation plan. The canonical application exposes
+managed PostgreSQL and SQLite module-migration blocks and an Infrastructure
+module-configuration field block; these markers do not execute migrations or
+change runtime configuration by themselves.
+
 Failure-safe publication is a separate stage over the validated plan. The
 publisher opens the real application root and every change parent without
 following symlinks, creates an exclusive `.hegira-mutation.lock` recovery

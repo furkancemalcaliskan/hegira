@@ -18,15 +18,20 @@ mod installation;
 mod publisher;
 
 pub use editor::{
-    RUST_MODULES_END, RUST_MODULES_START, StructuredEditError, StructuredEditErrorKind,
-    StructuredEditKind, StructuredEditOutcome, plan_rust_managed_entry, plan_rust_module,
+    CargoDependency, CargoDependencySection, CargoDependencySource, RUST_MODULES_END,
+    RUST_MODULES_START, StructuredEditError, StructuredEditErrorKind, StructuredEditKind,
+    StructuredEditOutcome, plan_cargo_dependency, plan_rust_managed_entry, plan_rust_module,
     plan_toml_array_string, plan_toml_table_string,
 };
 pub use installation::{
     ApplicationFileOwner, COMPONENT_INSTALLATION_SUMMARY_SCHEMA, ComponentArtifact,
-    ComponentContribution, ComponentInstallationError, ComponentInstallationErrorKind,
-    ComponentInstallationPlan, ComponentInstallationSummary, ComponentIntegration,
-    OwnedChangeSummary, plan_component_installation,
+    ComponentCargoManifest, ComponentConfigurationTarget, ComponentContribution,
+    ComponentEditError, ComponentEditOutcome, ComponentInstallationError,
+    ComponentInstallationErrorKind, ComponentInstallationPlan, ComponentInstallationSummary,
+    ComponentIntegration, ComponentManagedRustTarget, ComponentRustModuleTarget,
+    OwnedChangeSummary, compose_component_contributions, plan_component_cargo_dependency,
+    plan_component_cargo_feature, plan_component_configuration_entry, plan_component_installation,
+    plan_component_managed_rust_entry, plan_component_rust_module,
 };
 pub use publisher::{
     MUTATION_MARKER, MutationError, MutationErrorKind, MutationReceipt, publish_change_plan,

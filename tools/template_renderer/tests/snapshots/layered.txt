@@ -1,6 +1,6 @@
 package=hegira-canonical@v0.5.0
 framework=https://github.com/furkancemalcaliskan/hegira.git#v0.5.0
-digest=sha256:48abadbef8afc77ccbd54e63ebf9309ea2bf6996e6a6b1f3cdf4e00ccc2d993c
+digest=sha256:d2f11ba1793d839de509be3114f13f1b176cc7dc199aafd8aacb1636e536fb09
 components=layered-base,layered-leptos-identity
 6986e1a96f1eaa98 .dockerignore
 4845a8e7ed4a8aa1 .env.example
@@ -63,7 +63,7 @@ fba197e4c0ea8f58 crates/infrastructure/migrations/postgres/007_app_settings.sql
 f3ba72816961bb19 crates/infrastructure/migrations/sqlite/008_catalog_products.sql
 e4f90a35c538e114 crates/infrastructure/migrations/sqlite/009_retire_catalog_persistence.sql
 c7fcf44104381606 crates/infrastructure/src/audit/mod.rs
-e7dfb3ecc0d37529 crates/infrastructure/src/config.rs
+b3bd5ad804b3b836 crates/infrastructure/src/config.rs
 963ba6d322a3632c crates/infrastructure/src/database.rs
 9f4566e08ef15f01 crates/infrastructure/src/identity/authorization/mod.rs
 ed912714d31a65c0 crates/infrastructure/src/identity/authorization/service.rs
@@ -74,7 +74,7 @@ cf1381fa5f66e850 crates/infrastructure/src/identity/oauth/mod.rs
 2c4d87b9763b4f68 crates/infrastructure/src/identity/sessions/mod.rs
 4f0c462e9fee0d87 crates/infrastructure/src/identity/sessions/redis_session.rs
 a9ff15cbbfb6a6a4 crates/infrastructure/src/lib.rs
-c4723abea8cac667 crates/infrastructure/src/operations.rs
+a5cee92157b6a0cb crates/infrastructure/src/operations.rs
 7cb7827bbd706f3b crates/infrastructure/src/security/mod.rs
 0ed16015226b6cba crates/infrastructure/src/security/password_hasher.rs
 102d00dfca4c5e89 crates/infrastructure/src/security/token_service.rs
