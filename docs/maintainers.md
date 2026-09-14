@@ -185,8 +185,10 @@ tests neither build generated applications nor require network access.
 
 The same gate validates `application_mutator` plan ordering, explicit absent and
 content-digest preconditions, duplicate and conflicting path diagnostics,
-canonical relative-path enforcement, content-redacted summaries, managed Rust
-module registration, and lossless TOML integration edits. Fixtures cover
+canonical relative-path enforcement, content-redacted summaries, additive
+component identities, canonical file ownership, cross-owner rejection,
+append-only migration history, managed Rust module registration, and lossless
+TOML integration edits. Fixtures cover
 customized surrounding source, already-present results, and missing, duplicate,
 reordered, or incompatible integration points. The canonical layered
 application's declared integration points are exercised without publishing a

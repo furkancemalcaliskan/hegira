@@ -282,6 +282,18 @@ and digests. They never expose source or resulting file content. The crate does
 not execute generated code or provide the repository-validation dependency
 rewriting available to maintainer tooling.
 
+Additive component installation has a separate typed plan over the same change
+contract. A request names one not-yet-installed component and supplies only
+application-owned artifacts or digest-preconditioned integrations. The closed
+owner set covers the workspace and application manifests, configuration, both
+application hosts, and each canonical layered package; a contribution outside
+its declared owner is rejected. Component artifacts always become absent-file
+creations. Integrations always remain digest-preconditioned edits, and existing
+application migration files cannot be edited. Empty, duplicate, already
+installed, invalidly named, cross-owner, and path-conflicting requests fail
+before publication. The versioned installation summary adds component and
+owner identities to the underlying content-redacted operation metadata.
+
 Structured editors operate only on declared integration points. Canonical Rust
 layer roots contain an explicit generated-module block; registrations inside
 that block must be unique and deterministically ordered, while matching

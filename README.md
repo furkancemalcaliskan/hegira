@@ -71,7 +71,7 @@ ownership:
 | `templates/applications/layered/` | Workspace-external, brand-neutral layered application base with application-owned server, web, configuration, migration composition, and deployment files |
 | `templates/package.toml` | Versioned canonical component-package identity, framework compatibility, component graph, and source digest |
 | `templates/components/` | Typed data-only component manifests that define the canonical application composition |
-| `tools/application_mutator/` | Typed change plans, conflict-aware Rust and TOML editors, and failure-safe publication for coordinated existing-application changes |
+| `tools/application_mutator/` | Typed additive component and general change plans, canonical file ownership, conflict-aware Rust and TOML editors, and failure-safe publication for coordinated existing-application changes |
 | `tools/hegira_cli/` | Source-runnable application creation and inspection plus reviewable layered resource and application-owned migration generation with stable diagnostics and exit outcomes |
 | `tools/resource_generator/` | Typed layered resource specifications plus inward-layer, provider-specific SQLx persistence, explicit Axum/OpenAPI and Leptos UI composition, and append-only migration planning |
 | `tools/template_renderer/` | Reusable deterministic render core with a separate disposable repository-validation adapter; it is not a public CLI |

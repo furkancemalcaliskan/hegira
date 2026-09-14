@@ -71,11 +71,14 @@ commands change. Never describe planned work as implemented.
   maintainer checks may select the adapter that rewrites them. It is not the
   public Hegira CLI.
 - `tools/application_mutator/` contains the deterministic, content-redacted
-  existing-application change-plan contract. It validates ordered relative
-  creates, digest-preconditioned edits, and conflict-aware managed Rust and
-  TOML integration points. Publication is serialized by an application-owned
-  recovery marker, anchored to opened directories, precondition-checked, and
-  rolled back on recoverable failures without following symlinks.
+  existing-application change-plan contract. Its additive component plan maps
+  canonically owned artifacts and integrations to ordered relative creates and
+  digest-preconditioned edits, rejects historical migration edits, and exposes
+  only versioned content-redacted summaries. Managed Rust and TOML integration
+  points remain conflict-aware. Publication is serialized by an
+  application-owned recovery marker, anchored to opened directories,
+  precondition-checked, and rolled back on recoverable failures without
+  following symlinks.
 - `tools/hegira_cli/` contains the source-runnable `hegira` command shell,
   deterministic interactive and non-interactive layered application creation,
   read-only existing-application inspection with human and versioned JSON
