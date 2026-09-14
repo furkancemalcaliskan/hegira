@@ -4,13 +4,16 @@ use std::{
     path::{Component, Path, PathBuf},
 };
 
-use application_manifest::FrameworkContract;
+use application_manifest::{ApplicationCapability, FrameworkContract, PackageIdentity};
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 
 use crate::{RendererError, Result};
 
-const MANIFEST_SCHEMA: u32 = 1;
+const TEMPLATE_MANIFEST_SCHEMA: u32 = 1;
+const COMPONENT_PACKAGE_MANIFEST_SCHEMA: u32 = 2;
+const COMPONENT_MANIFEST_SCHEMA: u32 = 2;
+const LEGACY_COMPONENT_MANIFEST_SCHEMA: u32 = 1;
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -31,6 +34,7 @@ pub struct ComponentPackageManifest {
     pub framework: FrameworkContract,
     pub templates: Vec<String>,
     pub components: Vec<String>,
+    pub modules: Vec<String>,
     pub content_digest: String,
 }
 
@@ -39,12 +43,22 @@ pub struct ComponentPackageManifest {
 pub struct ComponentManifest {
     pub schema: u32,
     pub id: String,
+    #[serde(default)]
+    pub version: Option<String>,
     pub source: PathBuf,
     pub include: Vec<PathBuf>,
     #[serde(default)]
     pub requires: Vec<String>,
     #[serde(default)]
     pub conflicts: Vec<String>,
+    #[serde(default)]
+    pub optional_dependencies: Vec<String>,
+    #[serde(default)]
+    pub modules: Vec<String>,
+    #[serde(default)]
+    pub provides_capabilities: Vec<ApplicationCapability>,
+    #[serde(default)]
+    pub requires_capabilities: Vec<ApplicationCapability>,
     #[serde(default)]
     pub framework_dependencies: Vec<FrameworkDependency>,
     #[serde(skip)]
@@ -118,7 +132,7 @@ impl ManifestCatalog {
             .join(template_id)
             .join("template.toml");
         let template: TemplateManifest = read_manifest(&template_path, "template")?;
-        validate_schema(template.schema, &template_path)?;
+        validate_schema(template.schema, TEMPLATE_MANIFEST_SCHEMA, &template_path)?;
         validate_identifier(&template.id, "template")?;
         if template.id != template_id {
             return Err(RendererError::new(format!(
@@ -180,8 +194,13 @@ impl ManifestCatalog {
             }
 
             let mut component: ComponentManifest = read_manifest(&component_path, "component")?;
-            validate_schema(component.schema, &component_path)?;
-            validate_component(&component)?;
+            let expected_schema = if package.is_some() {
+                COMPONENT_MANIFEST_SCHEMA
+            } else {
+                LEGACY_COMPONENT_MANIFEST_SCHEMA
+            };
+            validate_schema(component.schema, expected_schema, &component_path)?;
+            validate_component(&component, package.as_ref())?;
             component.manifest_path = component_path.clone();
             if components.insert(component.id.clone(), component).is_some() {
                 return Err(RendererError::new(format!(
@@ -293,6 +312,62 @@ impl ManifestCatalog {
     }
 
     pub fn resolve_components(&self) -> Result<Vec<&ComponentManifest>> {
+        if let Some(package) = &self.package {
+            let request = crate::CompositionRequest::new(
+                package.framework.clone(),
+                PackageIdentity {
+                    id: package.id.clone(),
+                    version: package.version.clone(),
+                },
+                self.template.components.clone(),
+            );
+            let graph = crate::composition::resolve(package, &self.components, &request)
+                .map_err(|error| RendererError::new(error.to_string()))?;
+            return graph
+                .components
+                .iter()
+                .map(|component| {
+                    self.components.get(&component.id).ok_or_else(|| {
+                        RendererError::new(format!(
+                            "resolved component does not exist: {}",
+                            component.id
+                        ))
+                    })
+                })
+                .collect();
+        }
+
+        self.resolve_legacy_components()
+    }
+
+    pub fn resolve_composition(
+        &self,
+        request: &crate::CompositionRequest,
+    ) -> std::result::Result<crate::ResolvedComposition, crate::CompositionError> {
+        let Some(package) = &self.package else {
+            return Err(crate::CompositionError::missing_package());
+        };
+        crate::composition::resolve(package, &self.components, request)
+    }
+
+    pub fn resolve_template_composition(
+        &self,
+    ) -> std::result::Result<crate::ResolvedComposition, crate::CompositionError> {
+        let Some(package) = &self.package else {
+            return Err(crate::CompositionError::missing_package());
+        };
+        let request = crate::CompositionRequest::new(
+            package.framework.clone(),
+            PackageIdentity {
+                id: package.id.clone(),
+                version: package.version.clone(),
+            },
+            self.template.components.clone(),
+        );
+        crate::composition::resolve(package, &self.components, &request)
+    }
+
+    fn resolve_legacy_components(&self) -> Result<Vec<&ComponentManifest>> {
         let mut selected = BTreeSet::new();
         let mut temporary = BTreeSet::new();
         let mut resolved = Vec::new();
@@ -437,7 +512,7 @@ fn content_digest(entries: &BTreeMap<String, Vec<u8>>) -> String {
 }
 
 fn validate_package(package: &ComponentPackageManifest, path: &Path) -> Result<()> {
-    validate_schema(package.schema, path)?;
+    validate_schema(package.schema, COMPONENT_PACKAGE_MANIFEST_SCHEMA, path)?;
     validate_identifier(&package.id, "component package")?;
     package.framework.validate().map_err(|error| {
         RendererError::new(format!("invalid component package framework: {error}"))
@@ -448,8 +523,9 @@ fn validate_package(package: &ComponentPackageManifest, path: &Path) -> Result<(
             package.version, package.framework.version
         )));
     }
-    validate_sorted_identifiers(&package.templates, "package template")?;
-    validate_sorted_identifiers(&package.components, "package component")?;
+    validate_sorted_identifiers(&package.templates, "package template", false)?;
+    validate_sorted_identifiers(&package.components, "package component", false)?;
+    validate_sorted_identifiers(&package.modules, "package module", true)?;
     let digest = package
         .content_digest
         .strip_prefix("sha256:")
@@ -466,8 +542,8 @@ fn validate_package(package: &ComponentPackageManifest, path: &Path) -> Result<(
     Ok(())
 }
 
-fn validate_sorted_identifiers(values: &[String], kind: &str) -> Result<()> {
-    if values.is_empty() {
+fn validate_sorted_identifiers(values: &[String], kind: &str, allow_empty: bool) -> Result<()> {
+    if values.is_empty() && !allow_empty {
         return Err(RendererError::new(format!(
             "component package declares no {kind}s"
         )));
@@ -509,8 +585,27 @@ where
     })
 }
 
-fn validate_component(component: &ComponentManifest) -> Result<()> {
+fn validate_component(
+    component: &ComponentManifest,
+    package: Option<&ComponentPackageManifest>,
+) -> Result<()> {
     validate_identifier(&component.id, "component")?;
+    match (package, &component.version) {
+        (Some(_), Some(_)) => {}
+        (Some(_), None) => {
+            return Err(RendererError::new(format!(
+                "packaged component {} declares no version",
+                component.id
+            )));
+        }
+        (None, None) => {}
+        (None, Some(_)) => {
+            return Err(RendererError::new(format!(
+                "unpackaged legacy component {} cannot declare a version",
+                component.id
+            )));
+        }
+    }
     validate_relative_path(&component.source, "component source")?;
     if component.include.is_empty() {
         return Err(RendererError::new(format!(
@@ -521,11 +616,45 @@ fn validate_component(component: &ComponentManifest) -> Result<()> {
     for include in &component.include {
         validate_relative_path(include, "component include")?;
     }
-    for requirement in &component.requires {
-        validate_identifier(requirement, "component requirement")?;
+    validate_sorted_identifiers(&component.requires, "component requirement", true)?;
+    validate_sorted_identifiers(&component.conflicts, "component conflict", true)?;
+    validate_sorted_identifiers(
+        &component.optional_dependencies,
+        "component optional dependency",
+        true,
+    )?;
+    validate_sorted_identifiers(&component.modules, "component module", true)?;
+    validate_sorted_capabilities(
+        &component.provides_capabilities,
+        "provided component capability",
+    )?;
+    validate_sorted_capabilities(
+        &component.requires_capabilities,
+        "required component capability",
+    )?;
+    for relation in component
+        .requires
+        .iter()
+        .chain(&component.optional_dependencies)
+        .chain(&component.conflicts)
+    {
+        if relation == &component.id {
+            return Err(RendererError::new(format!(
+                "component {} cannot reference itself",
+                component.id
+            )));
+        }
     }
-    for conflict in &component.conflicts {
-        validate_identifier(conflict, "component conflict")?;
+    if component
+        .requires
+        .iter()
+        .chain(&component.optional_dependencies)
+        .any(|dependency| component.conflicts.contains(dependency))
+    {
+        return Err(RendererError::new(format!(
+            "component {} cannot both depend on and conflict with the same component",
+            component.id
+        )));
     }
     for dependency in &component.framework_dependencies {
         validate_identifier(&dependency.name, "framework dependency")?;
@@ -535,11 +664,20 @@ fn validate_component(component: &ComponentManifest) -> Result<()> {
     Ok(())
 }
 
-fn validate_schema(schema: u32, path: &Path) -> Result<()> {
-    if schema != MANIFEST_SCHEMA {
+fn validate_schema(schema: u32, expected: u32, path: &Path) -> Result<()> {
+    if schema != expected {
         return Err(RendererError::new(format!(
-            "unsupported manifest schema {schema} in {}; expected {MANIFEST_SCHEMA}",
+            "unsupported manifest schema {schema} in {}; expected {expected}",
             path.display()
+        )));
+    }
+    Ok(())
+}
+
+fn validate_sorted_capabilities(values: &[ApplicationCapability], kind: &str) -> Result<()> {
+    if values.windows(2).any(|pair| pair[0] >= pair[1]) {
+        return Err(RendererError::new(format!(
+            "component {kind}s must be sorted and unique"
         )));
     }
     Ok(())

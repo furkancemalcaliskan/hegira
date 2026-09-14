@@ -299,9 +299,11 @@ cargo run --locked -p template_renderer -- render \
   --output /tmp/hegira-layered
 ```
 
-The destination must not already exist. Component manifests declare their
-requirements, conflicts, source inputs, and repository-validation dependency
-patches. They cannot execute shell commands.
+The destination must not already exist. Schema-2 component manifests declare
+exact package-aligned versions, required and optional dependencies, conflicts,
+capabilities, official modules, source inputs, and repository-validation
+dependency patches. The renderer resolves their closed graph deterministically
+before reading component source. They cannot execute shell commands.
 
 Destination parents must already exist and must not contain symlinks. Publication
 uses the same no-overwrite policy for normal rendering and repository validation.
