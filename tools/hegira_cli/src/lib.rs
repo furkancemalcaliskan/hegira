@@ -1,5 +1,5 @@
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     ffi::OsString,
     fmt::Write as _,
     fs,
@@ -9,8 +9,8 @@ use std::{
 };
 
 use application_manifest::{
-    ApplicationCapability, ClientAdapter, DatabaseAdapter, MutationCompatibility,
-    MutationCompatibilityPolicy,
+    ApplicationCapability, ClientAdapter, DatabaseAdapter, InstalledModule, MutationCompatibility,
+    MutationCompatibilityPolicy, PackageIdentity,
 };
 use application_mutator::{ChangePlan, PlannedFileChange};
 use clap::{Args, Parser, Subcommand, ValueEnum, error::ErrorKind};
@@ -24,7 +24,10 @@ use resource_generator::{
     plan_resource_persistence, plan_resource_web,
 };
 use serde::Serialize;
-use template_renderer::{RenderRequest, RendererError, RendererErrorKind, render};
+use template_renderer::{
+    CompositionDiagnostic, CompositionRequest, ManifestCatalog, RenderRequest, RendererError,
+    RendererErrorKind, render,
+};
 
 mod application_context;
 mod mutation;
@@ -392,9 +395,13 @@ fn run_command(
             Ok(None) => CliExit::Success,
             Err(diagnostic) => write_diagnostic(diagnostic, diagnostics),
         },
-        CliCommand::Inspect(command) => {
-            inspect_application(command, working_directory, output, diagnostics)
-        }
+        CliCommand::Inspect(command) => inspect_application(
+            command,
+            repository_root,
+            working_directory,
+            output,
+            diagnostics,
+        ),
         CliCommand::Generate(command) => match command.command {
             GeneratorCommand::Resource(command) => {
                 generate_resource(command, working_directory, output, diagnostics)
@@ -838,11 +845,39 @@ struct InspectionOutput<'a> {
     output_schema: u32,
     application_root: &'a str,
     manifest: Option<&'a application_manifest::ApplicationManifest>,
+    composition: &'a CompositionInspection,
     mutation_compatibility: &'a MutationCompatibility,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+enum CompositionInspectionStatus {
+    Compatible,
+    Unresolved,
+    Unavailable,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct InspectedComponent {
+    id: String,
+    version: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct CompositionInspection {
+    status: CompositionInspectionStatus,
+    package: Option<PackageIdentity>,
+    components: Vec<InspectedComponent>,
+    modules: Vec<InstalledModule>,
+    capabilities: BTreeSet<ApplicationCapability>,
+    databases: BTreeSet<DatabaseAdapter>,
+    clients: BTreeSet<ClientAdapter>,
+    diagnostics: Vec<CompositionDiagnostic>,
 }
 
 fn inspect_application(
     command: InspectCommand,
+    repository_root: PathBuf,
     working_directory: PathBuf,
     output: &mut impl Write,
     diagnostics: &mut impl Write,
@@ -874,6 +909,10 @@ fn inspect_application(
             return write_diagnostic(diagnostic, diagnostics);
         }
     };
+    let composition = match inspect_composition(&repository_root, &context) {
+        Ok(composition) => composition,
+        Err(diagnostic) => return write_diagnostic(diagnostic, diagnostics),
+    };
 
     let rendered = if command.json {
         let root = context
@@ -881,16 +920,17 @@ fn inspect_application(
             .to_str()
             .expect("application context paths are validated as UTF-8");
         serde_json::to_string_pretty(&InspectionOutput {
-            output_schema: 1,
+            output_schema: 2,
             application_root: root,
             manifest: context.manifest.as_ref(),
+            composition: &composition,
             mutation_compatibility: &context.compatibility,
         })
         .map_err(|error| {
             CliDiagnostic::internal(format!("cannot serialize application inspection: {error}"))
         })
     } else {
-        Ok(render_human_inspection(&context))
+        Ok(render_human_inspection(&context, &composition))
     };
     let rendered = match rendered {
         Ok(rendered) => rendered,
@@ -902,34 +942,104 @@ fn inspect_application(
     CliExit::Success
 }
 
-fn render_human_inspection(context: &ApplicationContext) -> String {
+fn inspect_composition(
+    repository_root: &Path,
+    context: &ApplicationContext,
+) -> Result<CompositionInspection, CliDiagnostic> {
+    let Some(manifest) = &context.manifest else {
+        return Ok(CompositionInspection {
+            status: CompositionInspectionStatus::Unavailable,
+            package: None,
+            components: Vec::new(),
+            modules: Vec::new(),
+            capabilities: BTreeSet::new(),
+            databases: BTreeSet::new(),
+            clients: BTreeSet::new(),
+            diagnostics: Vec::new(),
+        });
+    };
+
+    let databases = manifest.selection.databases.clone();
+    let clients = manifest.selection.clients.clone();
+    let Some(recorded) = &manifest.composition else {
+        return Ok(CompositionInspection {
+            status: CompositionInspectionStatus::Unavailable,
+            package: None,
+            components: manifest
+                .installed_component_ids()
+                .into_iter()
+                .map(|id| InspectedComponent { id, version: None })
+                .collect(),
+            modules: Vec::new(),
+            capabilities: BTreeSet::new(),
+            databases,
+            clients,
+            diagnostics: Vec::new(),
+        });
+    };
+
+    let catalog = ManifestCatalog::load(repository_root, "layered").map_err(|_| {
+        CliDiagnostic::internal("cannot load the bundled component package for inspection")
+    })?;
+    let request = CompositionRequest::new(
+        manifest.framework.clone(),
+        recorded.package.clone(),
+        recorded
+            .components
+            .iter()
+            .map(|component| component.id.clone()),
+    )
+    .with_recorded_state(
+        recorded.modules.clone(),
+        recorded.capabilities.iter().copied(),
+    );
+
+    match catalog.resolve_composition(&request) {
+        Ok(resolved) => {
+            let components = resolved
+                .installed_components()
+                .map(|component| InspectedComponent {
+                    id: component.id,
+                    version: Some(component.version),
+                })
+                .collect();
+            Ok(CompositionInspection {
+                status: CompositionInspectionStatus::Compatible,
+                package: Some(resolved.package),
+                components,
+                modules: resolved.modules,
+                capabilities: resolved.capabilities,
+                databases,
+                clients,
+                diagnostics: Vec::new(),
+            })
+        }
+        Err(error) => Ok(CompositionInspection {
+            status: CompositionInspectionStatus::Unresolved,
+            package: Some(recorded.package.clone()),
+            components: recorded
+                .components
+                .iter()
+                .map(|component| InspectedComponent {
+                    id: component.id.clone(),
+                    version: Some(component.version.clone()),
+                })
+                .collect(),
+            modules: recorded.modules.clone(),
+            capabilities: recorded.capabilities.clone(),
+            databases,
+            clients,
+            diagnostics: error.diagnostics().to_vec(),
+        }),
+    }
+}
+
+fn render_human_inspection(
+    context: &ApplicationContext,
+    composition: &CompositionInspection,
+) -> String {
     let mut output = String::new();
     if let Some(manifest) = &context.manifest {
-        let components = manifest
-            .installed_component_ids()
-            .iter()
-            .map(String::as_str)
-            .collect::<Vec<_>>()
-            .join(", ");
-        let databases = manifest
-            .selection
-            .databases
-            .iter()
-            .map(|database| match database {
-                DatabaseAdapter::Postgres => "postgres",
-                DatabaseAdapter::Sqlite => "sqlite",
-            })
-            .collect::<Vec<_>>()
-            .join(", ");
-        let clients = manifest
-            .selection
-            .clients
-            .iter()
-            .map(|client| match client {
-                ClientAdapter::Leptos => "leptos",
-            })
-            .collect::<Vec<_>>()
-            .join(", ");
         writeln!(output, "Application: {}", manifest.application).unwrap();
         writeln!(output, "Root: {}", context.root.display()).unwrap();
         writeln!(output, "Manifest schema: {}", manifest.schema).unwrap();
@@ -939,37 +1049,55 @@ fn render_human_inspection(context: &ApplicationContext) -> String {
             manifest.framework.repository, manifest.framework.version
         )
         .unwrap();
-        if let Some(composition) = &manifest.composition {
-            let modules = composition
-                .modules
-                .iter()
-                .map(|module| module.id.as_str())
-                .collect::<Vec<_>>()
-                .join(", ");
-            let capabilities = composition
-                .capabilities
-                .iter()
-                .map(|capability| match capability {
-                    ApplicationCapability::Authentication => "authentication",
-                    ApplicationCapability::Authorization => "authorization",
-                })
-                .collect::<Vec<_>>()
-                .join(", ");
+        writeln!(
+            output,
+            "Composition status: {}",
+            composition_status_name(composition.status)
+        )
+        .unwrap();
+        if let Some(package) = &composition.package {
             writeln!(
                 output,
                 "Component package: {} @ {}",
-                composition.package.id, composition.package.version
+                package.id, package.version
             )
             .unwrap();
-            writeln!(output, "Modules: {modules}").unwrap();
-            writeln!(output, "Capabilities: {capabilities}").unwrap();
         }
-        writeln!(output, "Components: {components}").unwrap();
-        writeln!(output, "Databases: {databases}").unwrap();
-        writeln!(output, "Clients: {clients}").unwrap();
+        writeln!(
+            output,
+            "Components: {}",
+            format_inspected_components(&composition.components)
+        )
+        .unwrap();
+        writeln!(
+            output,
+            "Modules: {}",
+            format_installed_modules(&composition.modules)
+        )
+        .unwrap();
+        writeln!(
+            output,
+            "Capabilities: {}",
+            format_capabilities(&composition.capabilities)
+        )
+        .unwrap();
+        writeln!(
+            output,
+            "Databases: {}",
+            format_databases(&composition.databases)
+        )
+        .unwrap();
+        writeln!(output, "Clients: {}", format_clients(&composition.clients)).unwrap();
+        if !composition.diagnostics.is_empty() {
+            writeln!(output, "Composition diagnostics:").unwrap();
+            for diagnostic in &composition.diagnostics {
+                writeln!(output, "  - {diagnostic}").unwrap();
+            }
+        }
     } else {
         writeln!(output, "Root: {}", context.root.display()).unwrap();
         writeln!(output, "Manifest: unsupported by the current parser").unwrap();
+        writeln!(output, "Composition status: unavailable").unwrap();
     }
     match &context.compatibility {
         MutationCompatibility::Compatible => {
@@ -983,6 +1111,76 @@ fn render_human_inspection(context: &ApplicationContext) -> String {
         }
     }
     output
+}
+
+fn composition_status_name(status: CompositionInspectionStatus) -> &'static str {
+    match status {
+        CompositionInspectionStatus::Compatible => "compatible",
+        CompositionInspectionStatus::Unresolved => "unresolved",
+        CompositionInspectionStatus::Unavailable => "unavailable",
+    }
+}
+
+fn format_inspected_components(components: &[InspectedComponent]) -> String {
+    format_named_versions(
+        components
+            .iter()
+            .map(|component| (component.id.as_str(), component.version.as_deref())),
+    )
+}
+
+fn format_installed_modules(modules: &[InstalledModule]) -> String {
+    format_named_versions(
+        modules
+            .iter()
+            .map(|module| (module.id.as_str(), Some(module.version.as_str()))),
+    )
+}
+
+fn format_named_versions<'a>(
+    values: impl IntoIterator<Item = (&'a str, Option<&'a str>)>,
+) -> String {
+    let values = values
+        .into_iter()
+        .map(|(id, version)| match version {
+            Some(version) => format!("{id} @ {version}"),
+            None => id.to_owned(),
+        })
+        .collect::<Vec<_>>();
+    if values.is_empty() {
+        "none".to_owned()
+    } else {
+        values.join(", ")
+    }
+}
+
+fn format_capabilities(capabilities: &BTreeSet<ApplicationCapability>) -> String {
+    format_names(capabilities.iter().map(|capability| match capability {
+        ApplicationCapability::Authentication => "authentication",
+        ApplicationCapability::Authorization => "authorization",
+    }))
+}
+
+fn format_databases(databases: &BTreeSet<DatabaseAdapter>) -> String {
+    format_names(databases.iter().map(|database| match database {
+        DatabaseAdapter::Postgres => "postgres",
+        DatabaseAdapter::Sqlite => "sqlite",
+    }))
+}
+
+fn format_clients(clients: &BTreeSet<ClientAdapter>) -> String {
+    format_names(clients.iter().map(|client| match client {
+        ClientAdapter::Leptos => "leptos",
+    }))
+}
+
+fn format_names<'a>(values: impl IntoIterator<Item = &'a str>) -> String {
+    let values = values.into_iter().collect::<Vec<_>>();
+    if values.is_empty() {
+        "none".to_owned()
+    } else {
+        values.join(", ")
+    }
 }
 
 fn resolve_new_command(

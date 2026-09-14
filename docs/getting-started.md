@@ -185,17 +185,22 @@ cargo run --locked --manifest-path /path/to/hegira/Cargo.toml \
 ```
 
 Human output reports the application identity, resolved root, manifest schema,
-framework repository and version, installed package, components, modules and
-capabilities, database, client, and mutation compatibility. JSON output has
-`output_schema: 1` and exposes the same application root, typed manifest when
-the schema is understood, and a
-`mutation_compatibility` value of `compatible`, `incompatible`, or
-`unsupported` with the responsible manifest field.
+framework repository and version, installed package, versioned components and
+modules, capabilities, database, client, composition status, and mutation
+compatibility. Composition is `compatible` when the recorded state resolves
+against the bundled canonical graph, `unresolved` with sorted typed diagnostics
+when it does not, and `unavailable` for a legacy or unparsed manifest. JSON
+output has `output_schema: 2`; its `composition` object exposes the same status,
+recorded or resolved composition, adapters, and diagnostics in stable order.
+The typed manifest remains available when its schema is understood, and
+`mutation_compatibility` remains `compatible`, `incompatible`, or `unsupported`
+with the responsible manifest field.
 
 Inspection is read-only. It opens the manifest and required application-owned
 `apps/`, `crates/`, and `config/` roots without following symlinks. It does not
-read runtime configuration, environment values, user-home state, or secrets,
-and it does not write application files.
+read application source, runtime configuration, environment values, user-home
+state, or secrets; it exposes no machine-local framework path and does not
+write application files.
 
 ## Compatibility And Mutation Safety
 
