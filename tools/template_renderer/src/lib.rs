@@ -1,3 +1,4 @@
+mod composition;
 mod destination;
 mod manifest;
 mod render;
@@ -84,3 +85,7 @@ impl Display for RendererError {
 }
 
 impl std::error::Error for RendererError {}
+pub use composition::{
+    COMPOSITION_GRAPH_SCHEMA, CompositionDiagnostic, CompositionDiagnosticKind, CompositionError,
+    CompositionRequest, ResolvedComponent, ResolvedComposition,
+};

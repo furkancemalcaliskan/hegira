@@ -5,7 +5,9 @@ use std::{
     sync::atomic::{AtomicU64, Ordering},
 };
 
-use application_manifest::{ApplicationManifest, ClientAdapter, DatabaseAdapter};
+use application_manifest::{
+    ApplicationCapability, ApplicationManifest, ClientAdapter, DatabaseAdapter,
+};
 use template_renderer::{
     ManifestCatalog, RenderRequest, RendererErrorKind, plan, plan_snapshot, render,
     repository_validation::{RepositoryValidationRequest, render as render_for_validation},
@@ -163,6 +165,42 @@ fn reusable_plan_exposes_components_and_files_before_publication() {
     );
     assert!(plan.files().any(|path| path == Path::new("hegira.toml")));
     assert!(!output.exists());
+}
+
+#[test]
+fn canonical_package_resolves_the_versioned_component_module_and_capability_graph() {
+    let repository = repository_root();
+    let catalog = ManifestCatalog::load(&repository, "layered").expect("catalog should load");
+    let graph = catalog
+        .resolve_template_composition()
+        .expect("canonical composition should resolve");
+
+    assert_eq!(graph.schema, 1);
+    assert_eq!(graph.package.id, "hegira-canonical");
+    assert_eq!(graph.package.version, "v0.5.0");
+    assert_eq!(
+        graph
+            .components
+            .iter()
+            .map(|component| component.id.as_str())
+            .collect::<Vec<_>>(),
+        ["layered-base", "layered-leptos-identity"]
+    );
+    assert_eq!(graph.modules.len(), 1);
+    assert_eq!(graph.modules[0].id, "identity");
+    assert_eq!(graph.modules[0].version, "v0.5.0");
+    assert_eq!(
+        graph.capabilities,
+        [
+            ApplicationCapability::Authentication,
+            ApplicationCapability::Authorization,
+        ]
+        .into_iter()
+        .collect()
+    );
+    let snapshot = graph.to_toml().expect("resolved graph should serialize");
+    assert!(!snapshot.contains(&repository.to_string_lossy().into_owned()));
+    assert!(!snapshot.contains("source"));
 }
 
 #[test]

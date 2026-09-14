@@ -59,8 +59,11 @@ commands change. Never describe planned work as implemented.
   Runtime configuration and secrets do not belong in that manifest.
 - `templates/package.toml` identifies the versioned canonical, data-only
   component package, its compatible framework release source, contained
-  templates/components, and locked source digest. `templates/components/`
-  contains that package's typed component manifests. Package-controlled
+  templates/components and official modules, and locked source digest.
+  `templates/components/` contains that package's typed component manifests.
+  Their closed composition graph resolves exact package/framework versions,
+  required and optional dependencies, conflicts, capabilities, and official
+  module ownership deterministically before rendering. Package-controlled
   framework source variables cannot be overridden by a normal render.
 - `tools/template_renderer/` contains the reusable deterministic and atomic
   render core plus an explicitly separate repository-validation adapter. The

@@ -1,5 +1,6 @@
-schema = 1
+schema = 2
 id = "layered-base"
+version = "v0.5.0"
 source = "applications/layered"
 include = [
   ".dockerignore",
@@ -11,3 +12,4 @@ include = [
   "docker-compose.yml",
   "hegira.toml",
 ]
+optional_dependencies = ["layered-leptos-identity"]

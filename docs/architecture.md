@@ -465,19 +465,32 @@ authorization token and is never part of normal startup.
 Component manifests select the layered base and the Leptos Identity adapter.
 `templates/package.toml` gives this data-only graph a release-aligned package
 identity, declares its compatible HTTPS framework source and stable SemVer
-tag, enumerates the contained template and components, and locks every
-manifest and included source path with a deterministic SHA-256 digest. Package
-loading rejects unknown or unsorted identities, source-tree changes, local or
-credentialed framework locations, mismatched versions, and undeclared
-component manifests before planning output. Component manifests cannot define
-execution hooks.
+tag, enumerates the contained template, components and official modules, and
+locks every manifest and included source path with a deterministic SHA-256
+digest. Package loading rejects unknown or unsorted identities, source-tree
+changes, local or credentialed framework locations, mismatched versions, and
+undeclared component manifests before planning output. Component manifests
+cannot define execution hooks.
 
-The reusable renderer exposes typed request, plan, publication-result, and
-error-category contracts. It resolves requirements and conflicts, substitutes
-declared variables, detects output collisions, rejects symbolic links and path
-traversal, constructs the entire output plan before writing, and atomically
-publishes into a previously absent destination. It has no network, process, or
-repository-event dependency and does not execute component scripts.
+The schema-2 package and component manifests form a closed composition graph.
+Resolution accepts an explicit framework/package identity and component root
+set, then produces a canonical topological component order, exact component
+and module versions, and the accumulated capability set. Required dependencies
+join the graph automatically; optional dependencies are validated but join it
+only when explicitly selected. Cycles, missing dependencies, selected
+conflicts, missing capabilities, duplicate module ownership, and incompatible
+framework, package, module, or recorded capability state return sorted typed
+diagnostics. Resolution reads data already loaded into the catalog and performs
+no write, process execution, network access, source resolution, or runtime
+configuration lookup.
+
+The reusable renderer exposes typed composition request/result/diagnostic,
+render request, plan, publication-result, and error-category contracts. It
+consumes the resolved graph, substitutes declared variables, detects output
+collisions, rejects symbolic links and path traversal, constructs the entire
+output plan before writing, and atomically publishes into a previously absent
+destination. It has no network, process, or repository-event dependency and
+does not execute component scripts.
 
 Normal renders retain pinned release-source dependencies. Repository
 validation selects a separate adapter that rewrites only a disposable render
