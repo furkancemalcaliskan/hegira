@@ -342,6 +342,121 @@ fn package_digest_rejects_untracked_component_content() {
 }
 
 #[test]
+fn package_rejects_files_outside_the_declared_component_graph() {
+    let repository = repository_root();
+    let fixture = TestDirectory::new("package-undeclared-file");
+    copy_directory(
+        &repository.join("templates"),
+        &fixture.path().join("templates"),
+    );
+    fs::write(
+        fixture.path().join("templates/undeclared.txt"),
+        "must not be consumed",
+    )
+    .expect("undeclared package entry should be written");
+    let output = fixture.path().join("application");
+
+    let error = render(&canonical_request(fixture.path(), output.clone()))
+        .expect_err("undeclared package content should fail");
+
+    assert_eq!(error.kind(), RendererErrorKind::Catalog);
+    assert!(error.to_string().contains("missing or undeclared files"));
+    assert!(!error.to_string().contains("must not be consumed"));
+    assert!(!output.exists());
+}
+
+#[test]
+fn package_rejects_an_incomplete_declared_source_set() {
+    let repository = repository_root();
+    let fixture = TestDirectory::new("package-incomplete");
+    copy_directory(
+        &repository.join("templates"),
+        &fixture.path().join("templates"),
+    );
+    fs::remove_file(
+        fixture
+            .path()
+            .join("templates/applications/layered/config/development.yaml"),
+    )
+    .expect("declared package source should be removed");
+    let output = fixture.path().join("application");
+
+    let error = render(&canonical_request(fixture.path(), output.clone()))
+        .expect_err("incomplete package content should fail");
+
+    assert_eq!(error.kind(), RendererErrorKind::Catalog);
+    assert!(error.to_string().contains("content digest mismatch"));
+    assert!(!output.exists());
+}
+
+#[test]
+fn package_manifest_diagnostics_redact_credentials_and_source_content() {
+    let repository = repository_root();
+    let fixture = TestDirectory::new("package-diagnostic-redaction");
+    copy_directory(
+        &repository.join("templates"),
+        &fixture.path().join("templates"),
+    );
+    let secret = "not-a-real-secret-value";
+    let package_path = fixture.path().join("templates/package.toml");
+    let package = fs::read_to_string(&package_path)
+        .expect("component package manifest should be readable")
+        .replace(
+            "https://github.com/furkancemalcaliskan/hegira.git",
+            &format!("https://user:{secret}@github.com/furkancemalcaliskan/hegira.git"),
+        );
+    fs::write(package_path, package).expect("component package manifest should be updated");
+
+    let error = ManifestCatalog::load(fixture.path(), "layered")
+        .expect_err("credentialed package identity should fail");
+
+    assert!(error.to_string().contains("invalid framework repository"));
+    assert!(!error.to_string().contains(secret));
+    assert!(!error.to_string().contains("user:"));
+}
+
+#[test]
+fn package_identity_is_bound_to_the_bundled_release() {
+    let repository = repository_root();
+    let fixture = TestDirectory::new("package-identity");
+    copy_directory(
+        &repository.join("templates"),
+        &fixture.path().join("templates"),
+    );
+    let package_path = fixture.path().join("templates/package.toml");
+    let package = fs::read_to_string(&package_path)
+        .expect("component package manifest should be readable")
+        .replace("id = \"hegira-canonical\"", "id = \"other-package\"");
+    fs::write(package_path, package).expect("component package manifest should be updated");
+
+    let error = ManifestCatalog::load(fixture.path(), "layered")
+        .expect_err("unexpected package identity should fail");
+
+    assert!(error.to_string().contains("bundled package"));
+}
+
+#[cfg(unix)]
+#[test]
+fn package_root_must_not_be_a_symbolic_link() {
+    use std::os::unix::fs::symlink;
+
+    let repository = repository_root();
+    let fixture = TestDirectory::new("package-root-symlink");
+    let real = fixture.path().join("real-templates");
+    copy_directory(&repository.join("templates"), &real);
+    symlink(&real, fixture.path().join("templates"))
+        .expect("package root symlink should be created");
+    let output = fixture.path().join("application");
+
+    let error = render(&canonical_request(fixture.path(), output.clone()))
+        .expect_err("symlinked package root should fail");
+
+    assert_eq!(error.kind(), RendererErrorKind::Safety);
+    assert!(error.to_string().contains("without symlinks"));
+    assert!(!output.exists());
+}
+
+#[test]
 fn package_identity_cannot_be_overridden() {
     let repository = repository_root();
     let output_parent = TestDirectory::new("package-identity-override");
@@ -668,8 +783,8 @@ fn symbolic_links_in_component_content_fail_before_creating_output() {
 
     let error = render(&fixture.request(output.clone())).expect_err("source symlink should fail");
 
-    assert_eq!(error.kind(), RendererErrorKind::Rendering);
-    assert!(error.to_string().contains("may not be a symbolic link"));
+    assert_eq!(error.kind(), RendererErrorKind::Safety);
+    assert!(error.to_string().contains("must not be symbolic links"));
     assert!(!output.exists());
 }
 

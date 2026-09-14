@@ -74,14 +74,16 @@ ownership:
 | `tools/application_mutator/` | Typed additive component and general change plans, canonical file ownership, controlled Cargo/Rust/TOML integration, and failure-safe publication for coordinated existing-application changes |
 | `tools/hegira_cli/` | Source-runnable application creation and inspection plus reviewable layered resource and application-owned migration generation with stable diagnostics and exit outcomes |
 | `tools/resource_generator/` | Typed layered resource specifications plus inward-layer, provider-specific SQLx persistence, explicit Axum/OpenAPI and Leptos UI composition, and append-only migration planning |
-| `tools/template_renderer/` | Reusable deterministic render core with a separate disposable repository-validation adapter; it is not a public CLI |
+| `tools/template_renderer/` | Reusable deterministic render core with no-follow, digest-verified package-source loading and a separate disposable repository-validation adapter; it is not a public CLI |
 
 The canonical rendered application is an independent Cargo workspace, consumes framework
 packages from a pinned release source, and records its generation identity, installed
 composition, and selected adapters in a validated `hegira.toml`. Runtime configuration and
 secrets remain outside that manifest. The canonical package locks its source inputs with a
 deterministic SHA-256 digest so repository-local or untracked files cannot silently enter
-generated output. Releases remain source-only; the CLI is not distributed through crates.io or as a standalone
+generated output. Package and framework identity, declared paths, regular-file types, and the
+opened package root are verified before those snapshot bytes become render input. Releases remain
+source-only; the CLI is not distributed through crates.io or as a standalone
 executable. Keep the source tree available when running the source-built CLI.
 
 The source-runnable CLI can create the canonical layered application non-interactively with

@@ -307,7 +307,12 @@ The destination must not already exist. Schema-2 component manifests declare
 exact package-aligned versions, required and optional dependencies, conflicts,
 capabilities, official modules, source inputs, and repository-validation
 dependency patches. The renderer resolves their closed graph deterministically
-before reading component source. They cannot execute shell commands.
+before component source becomes render input. Package traversal uses anchored
+no-follow reads and one immutable snapshot for manifests, the locked digest,
+and rendered bytes. Symlinks, special files, root replacement, undeclared or
+missing paths, and package or framework identity mismatches fail before output;
+diagnostics do not expose package content or credentials. They cannot execute
+shell commands or access the network.
 
 Destination parents must already exist and must not contain symlinks. Publication
 uses the same no-overwrite policy for normal rendering and repository validation.

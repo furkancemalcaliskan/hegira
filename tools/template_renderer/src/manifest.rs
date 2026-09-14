@@ -1,14 +1,16 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
-    fs,
     path::{Component, Path, PathBuf},
 };
 
-use application_manifest::{ApplicationCapability, FrameworkContract, PackageIdentity};
+use application_manifest::{
+    ApplicationCapability, FrameworkContract, HEGIRA_COMPONENT_PACKAGE,
+    HEGIRA_FRAMEWORK_REPOSITORY, PackageIdentity,
+};
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 
-use crate::{RendererError, Result};
+use crate::{RendererError, Result, package_source::PackageSource};
 
 const TEMPLATE_MANIFEST_SCHEMA: u32 = 1;
 const COMPONENT_PACKAGE_MANIFEST_SCHEMA: u32 = 2;
@@ -79,6 +81,7 @@ pub struct FrameworkDependency {
 pub struct ManifestCatalog {
     repository_root: PathBuf,
     templates_root: PathBuf,
+    source: PackageSource,
     template: TemplateManifest,
     components: BTreeMap<String, ComponentManifest>,
     package: Option<ComponentPackageManifest>,
@@ -107,13 +110,12 @@ impl ManifestCatalog {
         validate_identifier(template_id, "template")?;
 
         let repository_root = canonical_directory(repository_root, "repository root")?;
-        let templates_root =
-            canonical_directory(&repository_root.join("templates"), "templates root")?;
-        let package_path = templates_root.join("package.toml");
-        let package = if package_path.is_file() {
-            let package: ComponentPackageManifest =
-                read_manifest(&package_path, "component package")?;
-            validate_package(&package, &package_path)?;
+        let templates_root = repository_root.join("templates");
+        let source = PackageSource::open(&templates_root)?;
+        let package_path = Path::new("package.toml");
+        let package = if let Some(bytes) = source.file(package_path) {
+            let package: ComponentPackageManifest = read_manifest(bytes, "component package")?;
+            validate_package(&package, package_path)?;
             if !package
                 .templates
                 .iter()
@@ -127,11 +129,11 @@ impl ManifestCatalog {
         } else {
             None
         };
-        let template_path = templates_root
-            .join("applications")
+        let template_path = PathBuf::from("applications")
             .join(template_id)
             .join("template.toml");
-        let template: TemplateManifest = read_manifest(&template_path, "template")?;
+        let template: TemplateManifest =
+            read_required_manifest(&source, &template_path, "template")?;
         validate_schema(template.schema, TEMPLATE_MANIFEST_SCHEMA, &template_path)?;
         validate_identifier(&template.id, "template")?;
         if template.id != template_id {
@@ -154,46 +156,27 @@ impl ManifestCatalog {
             validate_variable(variable)?;
         }
 
-        let components_directory = templates_root.join("components");
-        let mut component_paths = fs::read_dir(&components_directory)
-            .map_err(|error| {
-                RendererError::new(format!(
-                    "failed to read component manifests from {}: {error}",
-                    components_directory.display()
-                ))
-            })?
-            .map(|entry| {
-                entry.map(|entry| entry.path()).map_err(|error| {
-                    RendererError::new(format!("failed to read component manifest entry: {error}"))
-                })
-            })
-            .collect::<Result<Vec<_>>>()?;
+        let mut component_paths = source
+            .files_below(Path::new("components"))
+            .map(|(path, _)| path.to_path_buf())
+            .collect::<Vec<_>>();
         component_paths.sort();
 
         let mut components = BTreeMap::new();
         for component_path in component_paths {
-            let metadata = fs::symlink_metadata(&component_path).map_err(|error| {
-                RendererError::new(format!(
-                    "failed to inspect component manifest {}: {error}",
-                    component_path.display()
-                ))
-            })?;
-            if metadata.file_type().is_symlink() {
-                return Err(RendererError::new(format!(
-                    "component manifest may not be a symbolic link: {}",
-                    component_path.display()
-                )));
-            }
-            if !metadata.is_file()
+            if component_path.parent() != Some(Path::new("components"))
                 || component_path
                     .extension()
                     .and_then(|extension| extension.to_str())
                     != Some("toml")
             {
-                continue;
+                return Err(RendererError::new(
+                    "component package contains an undeclared component manifest entry",
+                ));
             }
 
-            let mut component: ComponentManifest = read_manifest(&component_path, "component")?;
+            let mut component: ComponentManifest =
+                read_required_manifest(&source, &component_path, "component")?;
             let expected_schema = if package.is_some() {
                 COMPONENT_MANIFEST_SCHEMA
             } else {
@@ -223,10 +206,12 @@ impl ManifestCatalog {
         let catalog = Self {
             repository_root,
             templates_root,
+            source,
             template,
             components,
             package,
         };
+        catalog.validate_declared_package_files()?;
         if validate_content_digest {
             catalog.validate_package_content()?;
         }
@@ -270,45 +255,114 @@ impl ManifestCatalog {
             return Ok(None);
         }
         let mut entries = BTreeMap::new();
-        let template_path = self
-            .templates_root
-            .join("applications")
-            .join(&self.template.id)
-            .join("template.toml");
-        insert_package_entry(
-            &mut entries,
-            format!("applications/{}/template.toml", self.template.id),
-            fs::read(&template_path).map_err(|error| {
-                RendererError::new(format!(
-                    "failed to read packaged template manifest: {error}"
-                ))
-            })?,
-        )?;
+        let package = self.package.as_ref().expect("package presence was checked");
+        for template in &package.templates {
+            let path = PathBuf::from("applications")
+                .join(template)
+                .join("template.toml");
+            insert_package_entry(
+                &mut entries,
+                path_to_package_key(&path)?,
+                self.required_file(&path, "packaged template manifest")?
+                    .to_vec(),
+            )?;
+        }
 
         for component in self.components.values() {
+            let manifest_path = PathBuf::from("components").join(format!("{}.toml", component.id));
             insert_package_entry(
                 &mut entries,
                 format!("components/{}.toml", component.id),
-                fs::read(&component.manifest_path).map_err(|error| {
-                    RendererError::new(format!(
-                        "failed to read packaged component manifest: {error}"
-                    ))
-                })?,
+                self.required_file(&manifest_path, "packaged component manifest")?
+                    .to_vec(),
             )?;
-            let source_root = component.source_root(&self.templates_root)?;
-            let mut includes = component.include.clone();
-            includes.sort();
-            for include in includes {
-                collect_package_entries(
-                    component,
-                    &source_root,
-                    &source_root.join(include),
+            for (relative, bytes) in self.component_files(component)? {
+                insert_package_entry(
                     &mut entries,
+                    format!(
+                        "sources/{}/{}",
+                        component.id,
+                        path_to_package_key(&relative)?
+                    ),
+                    bytes.to_vec(),
                 )?;
             }
         }
 
         Ok(Some(content_digest(&entries)))
+    }
+
+    fn required_file(&self, path: &Path, kind: &str) -> Result<&[u8]> {
+        self.source.file(path).ok_or_else(|| {
+            RendererError::new(format!("component package is missing the declared {kind}"))
+        })
+    }
+
+    pub(crate) fn component_files<'a>(
+        &'a self,
+        component: &ComponentManifest,
+    ) -> Result<Vec<(PathBuf, &'a [u8])>> {
+        let source_root = &component.source;
+        let mut selected = BTreeMap::<PathBuf, &'a [u8]>::new();
+        for include in &component.include {
+            let declared = source_root.join(include);
+            if let Some(bytes) = self.source.file(&declared) {
+                let relative = declared.strip_prefix(source_root).map_err(|_| {
+                    RendererError::new("component source declaration escapes its source root")
+                })?;
+                selected.insert(relative.to_path_buf(), bytes);
+                continue;
+            }
+            let descendants = self
+                .source
+                .files_below(&declared)
+                .filter(|(path, _)| *path != declared)
+                .collect::<Vec<_>>();
+            if descendants.is_empty() {
+                return Err(RendererError::new(
+                    "component include does not identify a declared package file or directory",
+                ));
+            }
+            for (path, bytes) in descendants {
+                let relative = path.strip_prefix(source_root).map_err(|_| {
+                    RendererError::new("component source declaration escapes its source root")
+                })?;
+                selected.insert(relative.to_path_buf(), bytes);
+            }
+        }
+        Ok(selected.into_iter().collect())
+    }
+
+    fn validate_declared_package_files(&self) -> Result<()> {
+        let Some(package) = &self.package else {
+            return Ok(());
+        };
+        let mut declared = BTreeSet::from([PathBuf::from("package.toml")]);
+        for template in &package.templates {
+            declared.insert(
+                PathBuf::from("applications")
+                    .join(template)
+                    .join("template.toml"),
+            );
+        }
+        for component in self.components.values() {
+            declared.insert(PathBuf::from("components").join(format!("{}.toml", component.id)));
+            let source_root = &component.source;
+            for (relative, _) in self.component_files(component)? {
+                declared.insert(source_root.join(relative));
+            }
+        }
+        let observed = self
+            .source
+            .files()
+            .map(|(path, _)| path.to_path_buf())
+            .collect::<BTreeSet<_>>();
+        if declared != observed {
+            return Err(RendererError::new(
+                "component package contains missing or undeclared files",
+            ));
+        }
+        Ok(())
     }
 
     pub fn resolve_components(&self) -> Result<Vec<&ComponentManifest>> {
@@ -426,50 +480,8 @@ impl ManifestCatalog {
     }
 }
 
-fn collect_package_entries(
-    component: &ComponentManifest,
-    source_root: &Path,
-    candidate: &Path,
-    entries: &mut BTreeMap<String, Vec<u8>>,
-) -> Result<()> {
-    let metadata = fs::symlink_metadata(candidate).map_err(|error| {
-        RendererError::new(format!(
-            "failed to inspect packaged component input: {error}"
-        ))
-    })?;
-    if metadata.file_type().is_symlink() {
-        return Err(RendererError::new(
-            "packaged component input may not be a symbolic link",
-        ));
-    }
-    if metadata.is_dir() {
-        let mut children = fs::read_dir(candidate)
-            .map_err(|error| {
-                RendererError::new(format!(
-                    "failed to read packaged component directory: {error}"
-                ))
-            })?
-            .map(|entry| {
-                entry.map(|entry| entry.path()).map_err(|error| {
-                    RendererError::new(format!("failed to read packaged component entry: {error}"))
-                })
-            })
-            .collect::<Result<Vec<_>>>()?;
-        children.sort();
-        for child in children {
-            collect_package_entries(component, source_root, &child, entries)?;
-        }
-        return Ok(());
-    }
-    if !metadata.is_file() {
-        return Err(RendererError::new(
-            "packaged component input is not a regular file or directory",
-        ));
-    }
-    let relative = candidate
-        .strip_prefix(source_root)
-        .map_err(|_| RendererError::new("packaged component input escapes its source root"))?;
-    let relative = relative
+fn path_to_package_key(path: &Path) -> Result<String> {
+    let parts = path
         .components()
         .map(|component| match component {
             Component::Normal(value) => Ok(value.to_string_lossy()),
@@ -477,13 +489,8 @@ fn collect_package_entries(
                 "packaged component input contains an invalid path component",
             )),
         })
-        .collect::<Result<Vec<_>>>()?
-        .join("/");
-    let package_path = format!("sources/{}/{relative}", component.id);
-    let bytes = fs::read(candidate).map_err(|error| {
-        RendererError::new(format!("failed to read packaged component input: {error}"))
-    })?;
-    insert_package_entry(entries, package_path, bytes)
+        .collect::<Result<Vec<_>>>()?;
+    Ok(parts.join("/"))
 }
 
 fn insert_package_entry(
@@ -514,14 +521,30 @@ fn content_digest(entries: &BTreeMap<String, Vec<u8>>) -> String {
 fn validate_package(package: &ComponentPackageManifest, path: &Path) -> Result<()> {
     validate_schema(package.schema, COMPONENT_PACKAGE_MANIFEST_SCHEMA, path)?;
     validate_identifier(&package.id, "component package")?;
-    package.framework.validate().map_err(|error| {
-        RendererError::new(format!("invalid component package framework: {error}"))
-    })?;
+    if package.id != HEGIRA_COMPONENT_PACKAGE {
+        return Err(RendererError::new(
+            "component package identity does not match the bundled package",
+        ));
+    }
+    package
+        .framework
+        .validate()
+        .map_err(|_| RendererError::new("invalid framework repository in component package"))?;
+    if package.framework.repository != HEGIRA_FRAMEWORK_REPOSITORY {
+        return Err(RendererError::new(
+            "component package framework source does not match the bundled release source",
+        ));
+    }
     if package.version != package.framework.version {
-        return Err(RendererError::new(format!(
-            "component package version {} does not match framework version {}",
-            package.version, package.framework.version
-        )));
+        return Err(RendererError::new(
+            "component package version does not match framework version",
+        ));
+    }
+    let bundled_version = format!("v{}", env!("CARGO_PKG_VERSION"));
+    if package.version != bundled_version {
+        return Err(RendererError::new(
+            "component package version does not match the bundled framework release",
+        ));
     }
     validate_sorted_identifiers(&package.templates, "package template", false)?;
     validate_sorted_identifiers(&package.components, "package component", false)?;
@@ -559,29 +582,29 @@ fn validate_sorted_identifiers(values: &[String], kind: &str, allow_empty: bool)
     Ok(())
 }
 
-impl ComponentManifest {
-    pub(crate) fn source_root(&self, templates_root: &Path) -> Result<PathBuf> {
-        let source = canonical_directory(&templates_root.join(&self.source), "component source")?;
-        ensure_inside(templates_root, &source, "component source")?;
-        Ok(source)
-    }
-}
-
-fn read_manifest<T>(path: &Path, kind: &str) -> Result<T>
+fn read_required_manifest<'a, T>(source: &'a PackageSource, path: &Path, kind: &str) -> Result<T>
 where
     T: for<'de> Deserialize<'de>,
 {
-    let source = fs::read_to_string(path).map_err(|error| {
-        RendererError::new(format!(
-            "failed to read {kind} manifest {}: {error}",
-            path.display()
-        ))
+    let bytes = source.file(path).ok_or_else(|| {
+        RendererError::new(format!("component package is missing the {kind} manifest"))
     })?;
-    toml::from_str(&source).map_err(|error| {
-        RendererError::new(format!(
-            "invalid {kind} manifest {}: {error}",
-            path.display()
-        ))
+    read_manifest(bytes, kind)
+}
+
+fn read_manifest<T>(bytes: &[u8], kind: &str) -> Result<T>
+where
+    T: for<'de> Deserialize<'de>,
+{
+    let source = std::str::from_utf8(bytes)
+        .map_err(|_| RendererError::new(format!("invalid {kind} manifest encoding")))?;
+    toml::from_str(source).map_err(|error| {
+        let reason = if error.to_string().contains("unknown field") {
+            ": unknown field"
+        } else {
+            ""
+        };
+        RendererError::new(format!("invalid {kind} manifest{reason}"))
     })
 }
 
@@ -721,19 +744,8 @@ pub(crate) fn validate_relative_path(path: &Path, kind: &str) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn ensure_inside(parent: &Path, candidate: &Path, kind: &str) -> Result<()> {
-    if !candidate.starts_with(parent) {
-        return Err(RendererError::new(format!(
-            "{kind} escapes {}: {}",
-            parent.display(),
-            candidate.display()
-        )));
-    }
-    Ok(())
-}
-
 fn canonical_directory(path: &Path, kind: &str) -> Result<PathBuf> {
-    let canonical = fs::canonicalize(path).map_err(|error| {
+    let canonical = std::fs::canonicalize(path).map_err(|error| {
         RendererError::new(format!(
             "failed to resolve {kind} {}: {error}",
             path.display()

@@ -87,7 +87,7 @@ fn build_plan(request: &RenderRequest) -> Result<RenderPlan> {
     let mut files = BTreeMap::new();
 
     for component in &components {
-        collect_component_files(component, catalog.templates_root(), &variables, &mut files)?;
+        collect_component_files(&catalog, component, &variables, &mut files)?;
     }
 
     validate_application_manifest(&components, &files)?;
@@ -191,134 +191,30 @@ fn resolve_variables(
 }
 
 fn collect_component_files(
+    catalog: &ManifestCatalog,
     component: &ComponentManifest,
-    templates_root: &Path,
     variables: &BTreeMap<String, String>,
     files: &mut BTreeMap<PathBuf, PlannedFile>,
 ) -> Result<()> {
-    let source_root = component.source_root(templates_root)?;
-    let mut includes = component.include.clone();
-    includes.sort();
-
-    for include in includes {
-        let candidate = source_root.join(&include);
-        let metadata = fs::symlink_metadata(&candidate).map_err(|error| {
-            RendererError::new(format!(
-                "failed to inspect component input {}: {error}",
-                candidate.display()
-            ))
-        })?;
-        if metadata.file_type().is_symlink() {
-            return Err(RendererError::new(format!(
-                "component input may not be a symbolic link: {}",
-                candidate.display()
-            )));
+    for (output, bytes) in catalog.component_files(component)? {
+        let bytes = substitute_variables(&output, bytes.to_vec(), variables)?;
+        if let Some(existing) = files.insert(
+            output.clone(),
+            PlannedFile {
+                bytes,
+                owner: component.id.clone(),
+            },
+        ) {
+            return Err(RendererError::with_kind(
+                RendererErrorKind::Collision,
+                format!(
+                    "output collision at {} between components {} and {}",
+                    output.display(),
+                    existing.owner,
+                    component.id
+                ),
+            ));
         }
-        if metadata.is_dir() {
-            collect_directory(component, &source_root, &candidate, variables, files)?;
-        } else if metadata.is_file() {
-            collect_file(component, &source_root, &candidate, variables, files)?;
-        } else {
-            return Err(RendererError::new(format!(
-                "component input is not a regular file or directory: {}",
-                candidate.display()
-            )));
-        }
-    }
-    Ok(())
-}
-
-fn collect_directory(
-    component: &ComponentManifest,
-    source_root: &Path,
-    directory: &Path,
-    variables: &BTreeMap<String, String>,
-    files: &mut BTreeMap<PathBuf, PlannedFile>,
-) -> Result<()> {
-    let mut entries = fs::read_dir(directory)
-        .map_err(|error| {
-            RendererError::new(format!(
-                "failed to read component directory {}: {error}",
-                directory.display()
-            ))
-        })?
-        .map(|entry| {
-            entry.map(|entry| entry.path()).map_err(|error| {
-                RendererError::new(format!(
-                    "failed to read entry in {}: {error}",
-                    directory.display()
-                ))
-            })
-        })
-        .collect::<Result<Vec<_>>>()?;
-    entries.sort();
-
-    for entry in entries {
-        let metadata = fs::symlink_metadata(&entry).map_err(|error| {
-            RendererError::new(format!(
-                "failed to inspect component input {}: {error}",
-                entry.display()
-            ))
-        })?;
-        if metadata.file_type().is_symlink() {
-            return Err(RendererError::new(format!(
-                "component input may not be a symbolic link: {}",
-                entry.display()
-            )));
-        }
-        if metadata.is_dir() {
-            collect_directory(component, source_root, &entry, variables, files)?;
-        } else if metadata.is_file() {
-            collect_file(component, source_root, &entry, variables, files)?;
-        } else {
-            return Err(RendererError::new(format!(
-                "component input is not a regular file or directory: {}",
-                entry.display()
-            )));
-        }
-    }
-    Ok(())
-}
-
-fn collect_file(
-    component: &ComponentManifest,
-    source_root: &Path,
-    source: &Path,
-    variables: &BTreeMap<String, String>,
-    files: &mut BTreeMap<PathBuf, PlannedFile>,
-) -> Result<()> {
-    let output = source
-        .strip_prefix(source_root)
-        .map_err(|_| {
-            RendererError::new(format!(
-                "component input escapes source root: {}",
-                source.display()
-            ))
-        })?
-        .to_path_buf();
-    let bytes = fs::read(source).map_err(|error| {
-        RendererError::new(format!(
-            "failed to read component input {}: {error}",
-            source.display()
-        ))
-    })?;
-    let bytes = substitute_variables(&output, bytes, variables)?;
-    if let Some(existing) = files.insert(
-        output.clone(),
-        PlannedFile {
-            bytes,
-            owner: component.id.clone(),
-        },
-    ) {
-        return Err(RendererError::with_kind(
-            RendererErrorKind::Collision,
-            format!(
-                "output collision at {} between components {} and {}",
-                output.display(),
-                existing.owner,
-                component.id
-            ),
-        ));
     }
     Ok(())
 }
