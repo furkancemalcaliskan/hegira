@@ -32,6 +32,8 @@ pub struct AppConfig {
     pub health: HealthConfig,
     pub seed: SeedConfig,
     pub logging: LoggingConfig,
+    // hegira:module-config-fields
+    // hegira:module-config-fields:end
 }
 
 #[derive(Debug, Clone, Deserialize)]

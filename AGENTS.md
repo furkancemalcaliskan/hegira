@@ -74,8 +74,10 @@ commands change. Never describe planned work as implemented.
   existing-application change-plan contract. Its additive component plan maps
   canonically owned artifacts and integrations to ordered relative creates and
   digest-preconditioned edits, rejects historical migration edits, and exposes
-  only versioned content-redacted summaries. Managed Rust and TOML integration
-  points remain conflict-aware. Publication is serialized by an
+  only versioned content-redacted summaries. Typed component editors constrain
+  Cargo dependencies, features, module roots, routes, provider migrations,
+  configuration, and client contributions to explicit managed points; chained
+  edits preserve their first observed digest. Publication is serialized by an
   application-owned recovery marker, anchored to opened directories,
   precondition-checked, and rolled back on recoverable failures without
   following symlinks.

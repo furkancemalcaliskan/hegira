@@ -4,7 +4,7 @@ version = "v0.5.0"
 templates = ["layered"]
 components = ["layered-base", "layered-leptos-identity"]
 modules = ["identity"]
-content_digest = "sha256:48abadbef8afc77ccbd54e63ebf9309ea2bf6996e6a6b1f3cdf4e00ccc2d993c"
+content_digest = "sha256:d2f11ba1793d839de509be3114f13f1b176cc7dc199aafd8aacb1636e536fb09"
 
 [framework]
 repository = "https://github.com/furkancemalcaliskan/hegira.git"
