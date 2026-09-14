@@ -14,12 +14,19 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 
 mod editor;
+mod installation;
 mod publisher;
 
 pub use editor::{
     RUST_MODULES_END, RUST_MODULES_START, StructuredEditError, StructuredEditErrorKind,
     StructuredEditKind, StructuredEditOutcome, plan_rust_managed_entry, plan_rust_module,
     plan_toml_array_string, plan_toml_table_string,
+};
+pub use installation::{
+    ApplicationFileOwner, COMPONENT_INSTALLATION_SUMMARY_SCHEMA, ComponentArtifact,
+    ComponentContribution, ComponentInstallationError, ComponentInstallationErrorKind,
+    ComponentInstallationPlan, ComponentInstallationSummary, ComponentIntegration,
+    OwnedChangeSummary, plan_component_installation,
 };
 pub use publisher::{
     MUTATION_MARKER, MutationError, MutationErrorKind, MutationReceipt, publish_change_plan,
@@ -150,6 +157,10 @@ impl FileCreation {
             result_digest,
         })
     }
+
+    pub fn path(&self) -> &ChangePath {
+        &self.path
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -183,6 +194,10 @@ impl StructuredFileEdit {
 
     pub fn resulting_content(&self) -> &[u8] {
         &self.content
+    }
+
+    pub fn path(&self) -> &ChangePath {
+        &self.path
     }
 }
 
