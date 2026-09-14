@@ -9,7 +9,8 @@ use application_manifest::{
     ApplicationCapability, ApplicationManifest, ClientAdapter, DatabaseAdapter,
 };
 use template_renderer::{
-    ManifestCatalog, RenderRequest, RendererErrorKind, plan, plan_snapshot, render,
+    CompositionDiagnosticKind, ManifestCatalog, RenderRequest, RendererErrorKind, plan,
+    plan_snapshot, render,
     repository_validation::{RepositoryValidationRequest, render as render_for_validation},
 };
 
@@ -201,6 +202,25 @@ fn canonical_package_resolves_the_versioned_component_module_and_capability_grap
     let snapshot = graph.to_toml().expect("resolved graph should serialize");
     assert!(!snapshot.contains(&repository.to_string_lossy().into_owned()));
     assert!(!snapshot.contains("source"));
+}
+
+#[test]
+fn package_less_catalog_rejects_composition_with_a_typed_diagnostic() {
+    let fixture = Fixture::new("composition-package-unavailable");
+    fixture.write_template("components = [\"base\"]\n");
+    fixture.write_component("base", "", &[("base.txt", "base")]);
+    let catalog = ManifestCatalog::load(fixture.root.path(), "test")
+        .expect("legacy package-less catalog should load");
+
+    let error = catalog
+        .resolve_template_composition()
+        .expect_err("composition requires an explicit package identity");
+
+    assert_eq!(error.diagnostics().len(), 1);
+    assert_eq!(
+        error.diagnostics()[0].kind,
+        CompositionDiagnosticKind::PackageUnavailable
+    );
 }
 
 #[test]

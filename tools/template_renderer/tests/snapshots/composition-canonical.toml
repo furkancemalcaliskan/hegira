@@ -1,0 +1,32 @@
+schema = 1
+capabilities = ["authentication", "authorization"]
+
+[framework]
+repository = "https://github.com/furkancemalcaliskan/hegira.git"
+version = "v0.5.0"
+
+[package]
+id = "hegira-canonical"
+version = "v0.5.0"
+
+[[components]]
+id = "base"
+version = "v0.5.0"
+required_dependencies = []
+optional_dependencies = ["identity"]
+modules = []
+provides_capabilities = []
+requires_capabilities = []
+
+[[components]]
+id = "identity"
+version = "v0.5.0"
+required_dependencies = ["base"]
+optional_dependencies = []
+modules = ["identity"]
+provides_capabilities = ["authentication", "authorization"]
+requires_capabilities = []
+
+[[modules]]
+id = "identity"
+version = "v0.5.0"

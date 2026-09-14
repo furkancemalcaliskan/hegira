@@ -705,6 +705,14 @@ mod tests {
         )
     }
 
+    fn diagnostic_kinds(error: &CompositionError) -> BTreeSet<CompositionDiagnosticKind> {
+        error
+            .diagnostics()
+            .iter()
+            .map(|diagnostic| diagnostic.kind)
+            .collect()
+    }
+
     #[test]
     fn equivalent_root_order_produces_byte_equivalent_canonical_graphs() {
         let package = package();
@@ -726,6 +734,17 @@ mod tests {
         );
         assert_eq!(first.modules[0].id, "identity");
         assert_eq!(first.capabilities.len(), 2);
+    }
+
+    #[test]
+    fn canonical_graph_matches_the_stable_machine_snapshot() {
+        let graph = resolve(&package(), &components(), &request(["identity", "base"]))
+            .expect("canonical graph should resolve");
+
+        assert_eq!(
+            graph.to_toml().expect("graph should serialize"),
+            include_str!("../tests/snapshots/composition-canonical.toml")
+        );
     }
 
     #[test]
@@ -759,11 +778,7 @@ mod tests {
 
         let error = resolve(&package, &components, &request(["identity"]))
             .expect_err("cycles, conflicts, and missing capabilities must fail");
-        let kinds = error
-            .diagnostics()
-            .iter()
-            .map(|diagnostic| diagnostic.kind)
-            .collect::<BTreeSet<_>>();
+        let kinds = diagnostic_kinds(&error);
 
         assert!(kinds.contains(&CompositionDiagnosticKind::DependencyCycle));
         assert!(kinds.contains(&CompositionDiagnosticKind::ComponentConflict));
@@ -794,11 +809,7 @@ mod tests {
 
         let error = resolve(&package, &components, &incompatible)
             .expect_err("untrusted incompatible state must fail closed");
-        let kinds = error
-            .diagnostics()
-            .iter()
-            .map(|diagnostic| diagnostic.kind)
-            .collect::<BTreeSet<_>>();
+        let kinds = diagnostic_kinds(&error);
 
         for expected in [
             CompositionDiagnosticKind::FrameworkVersionMismatch,
@@ -809,5 +820,111 @@ mod tests {
         ] {
             assert!(kinds.contains(&expected), "missing diagnostic {expected:?}");
         }
+    }
+
+    #[test]
+    fn adversarial_metadata_returns_every_typed_rejection_without_sensitive_content() {
+        const SOURCE_BODY: &str = "source-body-must-not-appear";
+        const ENVIRONMENT_VALUE: &str = "environment-value-must-not-appear";
+
+        let package = package();
+        let mut components = components();
+        let base = components.get_mut("base").unwrap();
+        base.version = Some("v0.4.0".to_owned());
+        base.source = PathBuf::from(SOURCE_BODY);
+        base.include = vec![PathBuf::from(ENVIRONMENT_VALUE)];
+        base.requires = vec!["identity".to_owned(), "missing-required".to_owned()];
+        base.optional_dependencies = vec!["missing-optional".to_owned()];
+        base.conflicts = vec!["identity".to_owned()];
+        base.modules = vec!["identity".to_owned(), "undeclared".to_owned()];
+        base.requires_capabilities = vec![ApplicationCapability::Authorization];
+        components
+            .get_mut("identity")
+            .unwrap()
+            .provides_capabilities
+            .clear();
+
+        let mut adversarial = request(["identity", "identity", "Invalid", "missing-root"])
+            .with_recorded_state(
+                [
+                    InstalledModule {
+                        id: "identity".to_owned(),
+                        version: "v0.4.0".to_owned(),
+                    },
+                    InstalledModule {
+                        id: "identity".to_owned(),
+                        version: "v0.4.0".to_owned(),
+                    },
+                    InstalledModule {
+                        id: "unexpected".to_owned(),
+                        version: "v0.5.0".to_owned(),
+                    },
+                ],
+                [ApplicationCapability::Authentication],
+            );
+        adversarial.framework.repository = "https://example.com/framework.git".to_owned();
+        adversarial.framework.version = "v0.4.0".to_owned();
+        adversarial.package.id = "other-package".to_owned();
+        adversarial.package.version = "v0.4.0".to_owned();
+
+        let error = resolve(&package, &components, &adversarial)
+            .expect_err("adversarial composition must fail closed");
+        let kinds = diagnostic_kinds(&error);
+
+        for expected in [
+            CompositionDiagnosticKind::InvalidComponent,
+            CompositionDiagnosticKind::DuplicateComponent,
+            CompositionDiagnosticKind::MissingComponent,
+            CompositionDiagnosticKind::MissingOptionalDependency,
+            CompositionDiagnosticKind::DependencyCycle,
+            CompositionDiagnosticKind::ComponentConflict,
+            CompositionDiagnosticKind::FrameworkRepositoryMismatch,
+            CompositionDiagnosticKind::FrameworkVersionMismatch,
+            CompositionDiagnosticKind::PackageIdentityMismatch,
+            CompositionDiagnosticKind::PackageVersionMismatch,
+            CompositionDiagnosticKind::ComponentVersionMismatch,
+            CompositionDiagnosticKind::UndeclaredModule,
+            CompositionDiagnosticKind::DuplicateModuleOwner,
+            CompositionDiagnosticKind::DuplicateRecordedModule,
+            CompositionDiagnosticKind::MissingRecordedModule,
+            CompositionDiagnosticKind::UnexpectedRecordedModule,
+            CompositionDiagnosticKind::ModuleVersionMismatch,
+            CompositionDiagnosticKind::MissingCapability,
+            CompositionDiagnosticKind::RecordedCapabilityMismatch,
+        ] {
+            assert!(kinds.contains(&expected), "missing diagnostic {expected:?}");
+        }
+        assert_eq!(
+            error.to_string(),
+            include_str!("../tests/snapshots/composition-invalid.txt").trim_end()
+        );
+        assert!(
+            error
+                .diagnostics()
+                .windows(2)
+                .all(|pair| pair[0] <= pair[1])
+        );
+        assert!(!error.to_string().contains(SOURCE_BODY));
+        assert!(!error.to_string().contains(ENVIRONMENT_VALUE));
+    }
+
+    #[test]
+    fn resolution_does_not_read_component_source_or_runtime_environment() {
+        const UNAVAILABLE_SOURCE: &str = "/unavailable/private/component-source";
+        const UNAVAILABLE_INCLUDE: &str = "runtime-environment-value";
+
+        let package = package();
+        let mut components = components();
+        for component in components.values_mut() {
+            component.source = PathBuf::from(UNAVAILABLE_SOURCE);
+            component.include = vec![PathBuf::from(UNAVAILABLE_INCLUDE)];
+        }
+
+        let graph = resolve(&package, &components, &request(["identity"]))
+            .expect("composition must use only loaded metadata");
+        let output = graph.to_toml().expect("graph should serialize");
+
+        assert!(!output.contains(UNAVAILABLE_SOURCE));
+        assert!(!output.contains(UNAVAILABLE_INCLUDE));
     }
 }
