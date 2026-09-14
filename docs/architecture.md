@@ -355,9 +355,14 @@ builds.
 
 The CLI library also owns a read-only existing-application context resolver.
 `hegira inspect` uses it to provide concise human-readable application identity,
-framework, selection, and mutation-compatibility information. `--json` exposes
-the same state through an explicitly versioned deterministic output contract,
-and `--application-root <path>` selects a root for automation. Otherwise the
+framework, adapters, mutation compatibility, and component-composition status.
+For a current manifest, inspection resolves its recorded package, components,
+modules, and capabilities against the bundled canonical graph. Compatible
+state includes exact versions; unresolved state includes every sorted typed
+graph diagnostic without blocking inspection. Legacy or unparsed manifests
+report composition as unavailable rather than inventing state. `--json`
+exposes the same information through output schema 2, and
+`--application-root <path>` selects a root for automation. Otherwise the
 resolver discovers `hegira.toml` from a real working directory and its real
 ancestors. Discovery rejects multiple candidate manifests as ambiguous rather
 than selecting one implicitly. Directory-relative, no-follow reads anchor the
@@ -365,8 +370,8 @@ manifest and the required application-owned `apps/`, `crates/`, and `config/`
 roots to the opened application root. The resolver returns the typed manifest
 when the current parser supports it and always returns the mutation
 compatibility assessment when one can be determined. Inspection reads no
-runtime configuration, environment value, user-home state, or secret, and it
-performs no writes.
+runtime configuration, environment value, user-home state, application source,
+or secret, exposes no machine-local framework path, and performs no writes.
 
 When an application name or destination is omitted in an interactive terminal,
 the same command gathers missing values through a guided workflow, displays the

@@ -598,6 +598,12 @@ fn inspect_reports_the_discovered_application_without_writing() {
         path_argument(&application),
     ]);
     assert!(created.status.success(), "{:?}", created.stderr);
+    let runtime_secret = "inspection-runtime-secret-must-not-appear";
+    fs::write(
+        application.join("config/development.yaml"),
+        format!("private_value: {runtime_secret}\n"),
+    )
+    .unwrap();
     let before = output_tree(&application);
 
     let result = hegira_at(&application.join("apps/web/src"), &["inspect"]);
@@ -612,13 +618,18 @@ fn inspect_reports_the_discovered_application_without_writing() {
     )));
     assert!(output.contains("Manifest schema: 2\n"));
     assert!(output.contains("Framework: https://github.com/furkancemalcaliskan/hegira.git"));
+    assert!(output.contains("Composition status: compatible\n"));
     assert!(output.contains("Component package: hegira-canonical @ v0.5.0\n"));
-    assert!(output.contains("Modules: identity\n"));
+    assert!(
+        output.contains("Components: layered-base @ v0.5.0, layered-leptos-identity @ v0.5.0\n")
+    );
+    assert!(output.contains("Modules: identity @ v0.5.0\n"));
     assert!(output.contains("Capabilities: authentication, authorization\n"));
-    assert!(output.contains("Components: layered-base, layered-leptos-identity\n"));
     assert!(output.contains("Databases: sqlite\n"));
     assert!(output.contains("Clients: leptos\n"));
     assert!(output.ends_with("Mutation compatibility: compatible\n"));
+    assert!(!output.contains(runtime_secret));
+    assert!(!output.contains(repository_root().to_string_lossy().as_ref()));
     assert_eq!(output_tree(&application), before);
 }
 
@@ -654,7 +665,7 @@ fn inspect_json_is_versioned_deterministic_and_matches_explicit_resolution() {
     assert_eq!(discovered.stdout, explicit.stdout);
     let document: serde_json::Value =
         serde_json::from_slice(&discovered.stdout).expect("inspection JSON should parse");
-    assert_eq!(document["output_schema"], 1);
+    assert_eq!(document["output_schema"], 2);
     assert_eq!(document["manifest"]["application"], "json-app");
     assert_eq!(document["manifest"]["schema"], 2);
     assert_eq!(
@@ -667,7 +678,72 @@ fn inspect_json_is_versioned_deterministic_and_matches_explicit_resolution() {
     );
     assert_eq!(document["manifest"]["selection"]["databases"][0], "sqlite");
     assert_eq!(document["manifest"]["selection"]["clients"][0], "leptos");
+    assert_eq!(document["composition"]["status"], "compatible");
+    assert_eq!(
+        document["composition"]["components"][0]["id"],
+        "layered-base"
+    );
+    assert_eq!(
+        document["composition"]["components"][0]["version"],
+        "v0.5.0"
+    );
+    assert_eq!(document["composition"]["modules"][0]["id"], "identity");
+    assert_eq!(document["composition"]["databases"][0], "sqlite");
+    assert_eq!(document["composition"]["clients"][0], "leptos");
+    assert_eq!(
+        document["composition"]["capabilities"],
+        serde_json::json!(["authentication", "authorization"])
+    );
+    assert_eq!(
+        document["composition"]["diagnostics"],
+        serde_json::json!([])
+    );
     assert_eq!(document["mutation_compatibility"]["status"], "compatible");
+    assert_eq!(output_tree(&application), before);
+}
+
+#[test]
+fn inspect_reports_unresolved_composition_without_mutating_the_application() {
+    let root = TestDirectory::new("inspect-composition-conflict");
+    let application = root.path().join("application");
+    assert!(
+        hegira(&[
+            "new",
+            "conflict-app",
+            "--destination",
+            path_argument(&application),
+        ])
+        .status
+        .success()
+    );
+    let manifest_path = application.join("hegira.toml");
+    let manifest = fs::read_to_string(&manifest_path).unwrap();
+    let version = format!("v{}", env!("CARGO_PKG_VERSION"));
+    fs::write(
+        &manifest_path,
+        format!(
+            "{manifest}\n[[composition.components]]\nid = \"unavailable-component\"\nversion = \"{version}\"\n"
+        ),
+    )
+    .unwrap();
+    let before = output_tree(&application);
+
+    let human = hegira_at(&application, &["inspect"]);
+    let json = hegira_at(&application, &["inspect", "--json"]);
+
+    assert!(human.status.success(), "{:?}", human.stderr);
+    assert!(json.status.success(), "{:?}", json.stderr);
+    let human = String::from_utf8(human.stdout).unwrap();
+    assert!(human.contains("Composition status: unresolved\n"));
+    assert!(human.contains("Composition diagnostics:\n"));
+    assert!(human.contains("missing-component: unavailable-component"));
+    let document: serde_json::Value = serde_json::from_slice(&json.stdout).unwrap();
+    assert_eq!(document["composition"]["status"], "unresolved");
+    assert_eq!(
+        document["composition"]["diagnostics"][0]["kind"],
+        "missing-component"
+    );
+    assert_eq!(document["mutation_compatibility"]["status"], "unsupported");
     assert_eq!(output_tree(&application), before);
 }
 
@@ -695,10 +771,10 @@ fn inspect_reports_unsupported_releases_without_mutating_or_failing() {
 
     assert!(result.status.success(), "{:?}", result.stderr);
     assert!(result.stderr.is_empty());
-    assert!(
-        String::from_utf8_lossy(&result.stdout)
-            .contains("Mutation compatibility: unsupported (framework.version is v0.1.0")
-    );
+    let output = String::from_utf8_lossy(&result.stdout);
+    assert!(output.contains("Composition status: unresolved\n"));
+    assert!(output.contains("framework-version-mismatch: framework.version"));
+    assert!(output.contains("Mutation compatibility: unsupported (framework.version is v0.1.0"));
     assert_eq!(output_tree(&application), before);
 }
 

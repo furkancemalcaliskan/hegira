@@ -168,8 +168,9 @@ selections, independent release-source dependencies, deterministic output,
 destination conflicts, interactive default equivalence, supported-choice
 mapping, cancellation, non-TTY behavior, and the absence of global
 configuration requirements. They also verify read-only application discovery,
-explicit-root inspection, versioned inspection output, mutation compatibility,
-and incompatible or unsupported application outcomes. Prompt tests inject
+explicit-root inspection, output-schema-2 composition status, exact installed
+versions, stable graph diagnostics, mutation compatibility, redaction, and
+incompatible or unsupported application outcomes. Prompt tests inject
 deterministic input and capture output without relying on a host terminal.
 
 SQLite and PostgreSQL requests have committed whole-tree fingerprints covering
