@@ -1,6 +1,7 @@
 mod composition;
 mod destination;
 mod manifest;
+mod package_source;
 mod render;
 pub mod repository_validation;
 
@@ -59,7 +60,9 @@ impl RendererError {
     }
 
     pub(crate) fn classified(mut self, kind: RendererErrorKind) -> Self {
-        self.kind = kind;
+        if self.kind == RendererErrorKind::Rendering {
+            self.kind = kind;
+        }
         self
     }
 

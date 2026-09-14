@@ -68,8 +68,11 @@ commands change. Never describe planned work as implemented.
 - `tools/template_renderer/` contains the reusable deterministic and atomic
   render core plus an explicitly separate repository-validation adapter. The
   normal render contract preserves pinned release sources; only disposable
-  maintainer checks may select the adapter that rewrites them. It is not the
-  public Hegira CLI.
+  maintainer checks may select the adapter that rewrites them. Package loading
+  snapshots source through directory-anchored no-follow reads, authenticates
+  the bundled package and framework identity, rejects graph-undeclared files,
+  and renders only from the digest-verified snapshot. It is not the public
+  Hegira CLI.
 - `tools/application_mutator/` contains the deterministic, content-redacted
   existing-application change-plan contract. Its additive component plan maps
   canonically owned artifacts and integrations to ordered relative creates and

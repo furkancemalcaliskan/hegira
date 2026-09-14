@@ -504,6 +504,18 @@ changes, local or credentialed framework locations, mismatched versions, and
 undeclared component manifests before planning output. Component manifests
 cannot define execution hooks.
 
+The package source is opened below a directory descriptor without following
+symlinks. Every descendant must be a regular file or real directory and is
+bounded by per-file, total-byte, and file-count limits. The loader rechecks the
+opened package-root identity after traversal, rejects replacement races, and
+retains one immutable byte snapshot for manifest parsing, digest verification,
+and rendering. The observed file set must equal the manifests' declared
+template, component, and included-source graph; missing and graph-undeclared
+files fail before destination publication. Invalid manifests and path failures
+produce content-redacted diagnostics, and package loading performs no network
+or process execution. Safe package-source access currently fails closed outside
+Linux and Apple platforms.
+
 The schema-2 package and component manifests form a closed composition graph.
 Resolution accepts an explicit framework/package identity and component root
 set, then produces a canonical topological component order, exact component
@@ -518,7 +530,7 @@ configuration lookup.
 
 The reusable renderer exposes typed composition request/result/diagnostic,
 render request, plan, publication-result, and error-category contracts. It
-consumes the resolved graph, substitutes declared variables, detects output
+consumes the resolved graph and the same verified package snapshot, substitutes declared variables, detects output
 collisions, rejects symbolic links and path traversal, constructs the entire
 output plan before writing, and atomically publishes into a previously absent
 destination. It has no network, process, or repository-event dependency and
