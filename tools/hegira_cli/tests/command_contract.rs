@@ -53,7 +53,140 @@ fn top_level_help_is_human_readable_output() {
     assert!(output.contains("Usage: hegira <COMMAND>"));
     assert!(output.contains("new"));
     assert!(output.contains("inspect"));
+    assert!(output.contains("component"));
     assert!(output.contains("generate"));
+}
+
+#[test]
+fn component_add_help_exposes_reviewable_mutation_options() {
+    let result = hegira(&["component", "add", "--help"]);
+
+    assert!(result.status.success());
+    assert!(result.stderr.is_empty());
+    let output = String::from_utf8(result.stdout).expect("help should be UTF-8");
+    assert!(output.contains("Usage: hegira component add"));
+    assert!(output.contains("<COMPONENT>"));
+    assert!(output.contains("--application-root"));
+    assert!(output.contains("--dry-run"));
+    assert!(output.contains("--json"));
+}
+
+#[test]
+fn repeated_component_add_is_a_stable_non_destructive_conflict() {
+    let output = TestDirectory::new("component-already-installed");
+    let application = output.path().join("application");
+    let created = hegira(&[
+        "new",
+        "component-app",
+        "--destination",
+        path_argument(&application),
+    ]);
+    assert!(created.status.success(), "{:?}", created.stderr);
+    let before = output_tree(&application);
+
+    let result = hegira_at(
+        &application,
+        &["component", "add", "layered-leptos-identity"],
+    );
+
+    assert_eq!(result.status.code(), Some(4));
+    assert!(result.stdout.is_empty());
+    assert!(String::from_utf8_lossy(&result.stderr).contains("already installed"));
+    assert_eq!(output_tree(&application), before);
+}
+
+#[test]
+fn unknown_component_fails_validation_without_application_writes() {
+    let output = TestDirectory::new("component-unknown");
+    let application = output.path().join("application");
+    let created = hegira(&[
+        "new",
+        "component-app",
+        "--destination",
+        path_argument(&application),
+    ]);
+    assert!(created.status.success(), "{:?}", created.stderr);
+    let before = output_tree(&application);
+
+    let result = hegira_at(
+        &application,
+        &[
+            "component",
+            "add",
+            "unknown-component",
+            "--dry-run",
+            "--json",
+        ],
+    );
+
+    assert_eq!(result.status.code(), Some(3));
+    assert!(result.stdout.is_empty());
+    assert!(String::from_utf8_lossy(&result.stderr).contains("missing-component"));
+    assert_eq!(output_tree(&application), before);
+}
+
+#[test]
+fn component_without_bundled_contributions_cannot_publish_partial_state() {
+    let output = TestDirectory::new("component-without-contributions");
+    let application = output.path().join("application");
+    let created = hegira(&[
+        "new",
+        "component-app",
+        "--destination",
+        path_argument(&application),
+    ]);
+    assert!(created.status.success(), "{:?}", created.stderr);
+    let version = format!("v{}", env!("CARGO_PKG_VERSION"));
+    fs::write(
+        application.join("hegira.toml"),
+        format!(
+            r#"schema = 2
+application = "component-app"
+
+[framework]
+repository = "https://github.com/furkancemalcaliskan/hegira.git"
+version = "{version}"
+
+[selection]
+databases = ["sqlite"]
+clients = ["leptos"]
+
+[composition]
+capabilities = []
+
+[composition.package]
+id = "hegira-canonical"
+version = "{version}"
+
+[[composition.components]]
+id = "layered-base"
+version = "{version}"
+"#
+        ),
+    )
+    .unwrap();
+    let before = output_tree(&application);
+
+    let result = hegira_at(
+        output.path(),
+        &[
+            "component",
+            "add",
+            "layered-leptos-identity",
+            "--application-root",
+            path_argument(&application),
+            "--dry-run",
+            "--json",
+        ],
+    );
+
+    assert_eq!(result.status.code(), Some(3));
+    assert!(result.stdout.is_empty());
+    assert!(
+        String::from_utf8_lossy(&result.stderr)
+            .contains("does not declare additive installation contributions")
+    );
+    assert_eq!(output_tree(&application), before);
 }
 
 #[test]
