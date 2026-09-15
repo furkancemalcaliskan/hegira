@@ -1127,11 +1127,28 @@ mod platform {
         };
 
         use super::*;
-        use crate::{FileCreation, StructuredFileEdit};
+        use crate::{
+            ApplicationFileOwner, ComponentArtifact, ComponentContribution,
+            ComponentInstallationErrorKind, ComponentInstallationPlan, ComponentIntegration,
+            FileCreation, StructuredFileEdit, plan_component_installation,
+        };
 
         static NEXT_FIXTURE: AtomicU64 = AtomicU64::new(0);
 
         struct Fixture {
+            root: PathBuf,
+        }
+
+        const COMPONENT_WORKSPACE_ORIGINAL: &[u8] = b"[workspace]\nmembers = []\n";
+        const COMPONENT_WORKSPACE_RESULT: &[u8] =
+            b"[workspace]\nmembers = []\n\n[workspace.dependencies]\nidentity_http = \"0.6\"\n";
+        const COMPONENT_SERVER_ORIGINAL: &[u8] = b"pub fn routes() {}\n";
+        const COMPONENT_SERVER_RESULT: &[u8] = b"pub fn routes() { identity_routes(); }\n";
+        const COMPONENT_DOMAIN_ORIGINAL: &[u8] = b"pub mod existing;\n";
+        const COMPONENT_DOMAIN_RESULT: &[u8] = b"pub mod existing;\npub mod identity;\n";
+        const COMPONENT_ARTIFACT: &[u8] = b"pub struct IdentityUser;\n";
+
+        struct ComponentFixture {
             root: PathBuf,
         }
 
@@ -1169,10 +1186,98 @@ mod platform {
             }
         }
 
+        impl ComponentFixture {
+            fn new(name: &str) -> Self {
+                let id = NEXT_FIXTURE.fetch_add(1, Ordering::Relaxed);
+                let root = std::env::temp_dir().join(format!(
+                    "hegira-component-mutation-test-{}-{id}-{name}",
+                    std::process::id()
+                ));
+                stdfs::create_dir(&root).unwrap();
+                stdfs::create_dir_all(root.join("apps/server/src")).unwrap();
+                stdfs::create_dir_all(root.join("crates/domain/src")).unwrap();
+                stdfs::write(root.join("Cargo.toml"), COMPONENT_WORKSPACE_ORIGINAL).unwrap();
+                stdfs::write(
+                    root.join("apps/server/src/server.rs"),
+                    COMPONENT_SERVER_ORIGINAL,
+                )
+                .unwrap();
+                stdfs::write(
+                    root.join("crates/domain/src/lib.rs"),
+                    COMPONENT_DOMAIN_ORIGINAL,
+                )
+                .unwrap();
+                Self { root }
+            }
+
+            fn plan(&self) -> ComponentInstallationPlan {
+                component_plan(&self.root)
+            }
+        }
+
         impl Drop for Fixture {
             fn drop(&mut self) {
                 let _ = stdfs::remove_dir_all(&self.root);
             }
+        }
+
+        impl Drop for ComponentFixture {
+            fn drop(&mut self) {
+                let _ = stdfs::remove_dir_all(&self.root);
+            }
+        }
+
+        fn component_plan(root: &Path) -> ComponentInstallationPlan {
+            fn integration(
+                owner: ApplicationFileOwner,
+                path: &str,
+                original: &[u8],
+                result: &[u8],
+            ) -> ComponentContribution {
+                ComponentIntegration::new(
+                    owner,
+                    StructuredFileEdit::new(path, original, result.to_vec()).unwrap(),
+                )
+                .unwrap()
+                .into()
+            }
+
+            assert!(
+                root.is_dir(),
+                "component fixtures use an existing disposable root"
+            );
+            plan_component_installation(
+                "identity",
+                ["layered-base"],
+                [
+                    integration(
+                        ApplicationFileOwner::Server,
+                        "apps/server/src/server.rs",
+                        COMPONENT_SERVER_ORIGINAL,
+                        COMPONENT_SERVER_RESULT,
+                    ),
+                    ComponentArtifact::new(
+                        ApplicationFileOwner::Domain,
+                        "crates/domain/src/identity.rs",
+                        COMPONENT_ARTIFACT.to_vec(),
+                    )
+                    .unwrap()
+                    .into(),
+                    integration(
+                        ApplicationFileOwner::WorkspaceManifest,
+                        "Cargo.toml",
+                        COMPONENT_WORKSPACE_ORIGINAL,
+                        COMPONENT_WORKSPACE_RESULT,
+                    ),
+                    integration(
+                        ApplicationFileOwner::Domain,
+                        "crates/domain/src/lib.rs",
+                        COMPONENT_DOMAIN_ORIGINAL,
+                        COMPONENT_DOMAIN_RESULT,
+                    ),
+                ],
+            )
+            .unwrap()
         }
 
         fn injected() -> MutationError {
@@ -1249,6 +1354,216 @@ mod platform {
             publish_change_plan(&first.root, &first_plan).unwrap();
             publish_change_plan(&second.root, &second_plan).unwrap();
             assert_eq!(snapshot(&first.root), snapshot(&second.root));
+        }
+
+        #[test]
+        fn component_dry_run_apply_and_retry_share_one_non_destructive_plan() {
+            let fixture = ComponentFixture::new("plan-identity");
+            let plan = fixture.plan();
+            let dry_run = plan.summary();
+
+            let receipt = publish_change_plan(&fixture.root, plan.changes()).unwrap();
+
+            assert_eq!(receipt.changed_files(), dry_run.changes.len());
+            assert_eq!(plan.summary(), dry_run);
+            assert_eq!(
+                stdfs::read(fixture.root.join("Cargo.toml")).unwrap(),
+                COMPONENT_WORKSPACE_RESULT
+            );
+            assert_eq!(
+                stdfs::read(fixture.root.join("apps/server/src/server.rs")).unwrap(),
+                COMPONENT_SERVER_RESULT
+            );
+            assert_eq!(
+                stdfs::read(fixture.root.join("crates/domain/src/lib.rs")).unwrap(),
+                COMPONENT_DOMAIN_RESULT
+            );
+            assert_eq!(
+                stdfs::read(fixture.root.join("crates/domain/src/identity.rs")).unwrap(),
+                COMPONENT_ARTIFACT
+            );
+            assert!(!fixture.root.join(MUTATION_MARKER).exists());
+
+            let installed = snapshot(&fixture.root);
+            let retry = publish_change_plan(&fixture.root, plan.changes()).unwrap_err();
+            assert_eq!(retry.kind(), MutationErrorKind::PreconditionFailed);
+            assert_eq!(snapshot(&fixture.root), installed);
+            assert!(!fixture.root.join(MUTATION_MARKER).exists());
+
+            let already_installed = plan_component_installation(
+                "identity",
+                ["layered-base", "identity"],
+                std::iter::empty::<ComponentContribution>(),
+            )
+            .unwrap_err();
+            assert_eq!(
+                already_installed.kind(),
+                ComponentInstallationErrorKind::AlreadyInstalled
+            );
+        }
+
+        #[test]
+        fn component_failures_at_each_publication_phase_restore_the_application() {
+            for (name, injection) in [
+                ("before-preflight", HookPoint::BeforeFilesystemPreflight),
+                ("before-publication", HookPoint::BeforePublication),
+                ("during-publication", HookPoint::AfterChange(1)),
+                ("after-publication", HookPoint::AfterChange(3)),
+            ] {
+                let fixture = ComponentFixture::new(name);
+                let plan = fixture.plan();
+                assert_eq!(plan.changes().changes().len(), 4);
+                let original = snapshot(&fixture.root);
+
+                let error = publish_with(&fixture.root, plan.changes(), |point| {
+                    if point == injection {
+                        return Err(injected());
+                    }
+                    Ok(())
+                })
+                .unwrap_err();
+
+                assert_eq!(error.kind(), MutationErrorKind::PublicationFailed);
+                assert_eq!(snapshot(&fixture.root), original);
+                assert!(!fixture.root.join(MUTATION_MARKER).exists());
+            }
+        }
+
+        #[test]
+        fn stale_component_edits_and_occupied_artifacts_preserve_user_changes() {
+            let stale = ComponentFixture::new("stale-edit");
+            let stale_plan = stale.plan();
+            let server = stale.root.join("apps/server/src/server.rs");
+            stdfs::write(&server, "pub fn user_routes() {}\n").unwrap();
+            let stale_state = snapshot(&stale.root);
+
+            let error = publish_change_plan(&stale.root, stale_plan.changes()).unwrap_err();
+            assert_eq!(error.kind(), MutationErrorKind::PreconditionFailed);
+            assert_eq!(error.path().unwrap().as_str(), "apps/server/src/server.rs");
+            assert_eq!(snapshot(&stale.root), stale_state);
+            assert!(!stale.root.join(MUTATION_MARKER).exists());
+
+            let occupied = ComponentFixture::new("occupied-artifact");
+            let occupied_plan = occupied.plan();
+            let artifact = occupied.root.join("crates/domain/src/identity.rs");
+            stdfs::write(&artifact, "pub struct UserOwnedIdentity;\n").unwrap();
+            let occupied_state = snapshot(&occupied.root);
+
+            let error = publish_change_plan(&occupied.root, occupied_plan.changes()).unwrap_err();
+            assert_eq!(error.kind(), MutationErrorKind::PreconditionFailed);
+            assert_eq!(
+                error.path().unwrap().as_str(),
+                "crates/domain/src/identity.rs"
+            );
+            assert_eq!(snapshot(&occupied.root), occupied_state);
+            assert!(!occupied.root.join(MUTATION_MARKER).exists());
+        }
+
+        #[test]
+        fn component_destination_symlinks_never_redirect_publication_or_cleanup() {
+            let fixture = ComponentFixture::new("destination-symlink");
+            let plan = fixture.plan();
+            let outside = fixture.root.with_extension("component-outside");
+            stdfs::write(&outside, "outside remains unchanged\n").unwrap();
+            symlink(&outside, fixture.root.join("crates/domain/src/identity.rs")).unwrap();
+
+            let error = publish_change_plan(&fixture.root, plan.changes()).unwrap_err();
+
+            assert_eq!(error.kind(), MutationErrorKind::PreconditionFailed);
+            assert_eq!(
+                stdfs::read_to_string(&outside).unwrap(),
+                "outside remains unchanged\n"
+            );
+            assert!(!fixture.root.join(MUTATION_MARKER).exists());
+            stdfs::remove_file(outside).unwrap();
+        }
+
+        #[test]
+        fn replaced_component_parent_never_redirects_publication_or_rollback() {
+            let fixture = ComponentFixture::new("parent-replacement");
+            let plan = fixture.plan();
+            let server = fixture.root.join("apps/server");
+            let moved = fixture.root.join("apps/server-original");
+            let outside = fixture.root.with_extension("component-parent-outside");
+            stdfs::create_dir(&outside).unwrap();
+            stdfs::write(outside.join("sentinel"), "outside remains unchanged\n").unwrap();
+
+            let error = publish_with(&fixture.root, plan.changes(), |point| {
+                if point == HookPoint::BeforePublication {
+                    stdfs::rename(&server, &moved).unwrap();
+                    symlink(&outside, &server).unwrap();
+                }
+                Ok(())
+            })
+            .unwrap_err();
+
+            assert_eq!(error.kind(), MutationErrorKind::UnsafeRoot);
+            assert_eq!(
+                stdfs::read(fixture.root.join("Cargo.toml")).unwrap(),
+                COMPONENT_WORKSPACE_ORIGINAL
+            );
+            assert_eq!(
+                stdfs::read(moved.join("src/server.rs")).unwrap(),
+                COMPONENT_SERVER_ORIGINAL
+            );
+            assert_eq!(
+                stdfs::read_to_string(outside.join("sentinel")).unwrap(),
+                "outside remains unchanged\n"
+            );
+            assert!(!fixture.root.join("crates/domain/src/identity.rs").exists());
+            assert!(!fixture.root.join(MUTATION_MARKER).exists());
+
+            stdfs::remove_file(&server).unwrap();
+            stdfs::rename(moved, server).unwrap();
+            stdfs::remove_dir_all(outside).unwrap();
+        }
+
+        #[test]
+        fn interrupted_component_installation_is_redacted_and_blocks_retry() {
+            let fixture = ComponentFixture::new("process-interruption");
+            let plan = fixture.plan();
+            let output = child_test(
+                "publisher::platform::tests::interrupted_component_publication_helper",
+                (
+                    "HEGIRA_COMPONENT_MUTATION_INTERRUPTION_ROOT",
+                    fixture.root.as_os_str().to_os_string(),
+                ),
+            );
+            assert_eq!(
+                output.status.code(),
+                Some(87),
+                "child stderr: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+
+            let marker = stdfs::read_to_string(fixture.root.join(MUTATION_MARKER)).unwrap();
+            for path in [
+                "Cargo.toml",
+                "apps/server/src/server.rs",
+                "crates/domain/src/identity.rs",
+                "crates/domain/src/lib.rs",
+            ] {
+                assert!(marker.contains(path));
+            }
+            for content in [
+                COMPONENT_WORKSPACE_RESULT,
+                COMPONENT_SERVER_RESULT,
+                COMPONENT_DOMAIN_RESULT,
+                COMPONENT_ARTIFACT,
+            ] {
+                assert!(
+                    !marker
+                        .as_bytes()
+                        .windows(content.len())
+                        .any(|window| window == content)
+                );
+            }
+            assert_eq!(
+                publish_change_plan(&fixture.root, plan.changes())
+                    .unwrap_err()
+                    .kind(),
+                MutationErrorKind::RecoveryRequired
+            );
         }
 
         #[test]
@@ -1533,6 +1848,30 @@ mod platform {
                 Ok(())
             });
             panic!("interruption helper returned without terminating");
+        }
+
+        #[test]
+        #[ignore = "subprocess interruption helper"]
+        fn interrupted_component_publication_helper() {
+            let Some(root) = std::env::var_os("HEGIRA_COMPONENT_MUTATION_INTERRUPTION_ROOT") else {
+                return;
+            };
+            let root = PathBuf::from(root);
+            assert_eq!(root.parent(), Some(std::env::temp_dir().as_path()));
+            assert!(
+                root.file_name()
+                    .and_then(OsStr::to_str)
+                    .is_some_and(|name| name.starts_with("hegira-component-mutation-test-")),
+                "interruption helpers may operate only on disposable component fixtures"
+            );
+            let plan = component_plan(&root);
+            let _ = publish_with(&root, plan.changes(), |point| {
+                if point == HookPoint::AfterChange(1) {
+                    std::process::exit(87);
+                }
+                Ok(())
+            });
+            panic!("component interruption helper returned without terminating");
         }
 
         #[test]
