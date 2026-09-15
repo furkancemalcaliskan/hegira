@@ -370,7 +370,13 @@ explicitly versioned, and includes the content-redacted plan summary rather
 than file bodies, runtime configuration, credentials, environment values, or
 machine-local framework paths. Empty plans are successful no-ops, planning and
 state conflicts retain the conflict process outcome, and invalid plans retain a
-validation outcome. `hegira generate resource <name> --field <name:type>` uses
+validation outcome. `hegira component add <component>` first validates the
+application mutation contract, authenticates the bundled package, and resolves
+the requested target graph. It rejects installed, unknown, conflicting, or
+non-additive components before publication and never executes component code or
+accepts a remote package coordinate. A resolved additive unit is converted to
+one `ComponentInstallationPlan` and handed to the same mutation executor.
+`hegira generate resource <name> --field <name:type>` uses
 this contract to compose the Domain, Application Contracts, Application,
 selected SQLx, Axum/OpenAPI, and selected Leptos emitter plans into one atomic
 change. Chained edits preserve the first observed precondition and final

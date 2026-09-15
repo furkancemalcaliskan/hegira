@@ -18,6 +18,7 @@ cargo build --locked -p hegira_cli
 cargo run --locked -p hegira_cli -- --help
 cargo run --locked -p hegira_cli -- new --help
 cargo run --locked -p hegira_cli -- inspect --help
+cargo run --locked -p hegira_cli -- component add --help
 cargo run --locked -p hegira_cli -- generate resource --help
 cargo run --locked -p hegira_cli -- generate migration --help
 ```
@@ -154,12 +155,19 @@ Runtime settings belong in `config/{APP_ENV}.yaml` and environment overrides;
 credentials never belong in `hegira.toml`. See
 [Configuration](configuration.md) for the separate runtime contract.
 
-The CLI currently exposes application creation, read-only inspection, complete
-layered resource generation, and application-owned migration scaffold
-generation. It does not provide module management, migration execution or
-rollback, automatic upgrades, remote component installation, or additional
-client templates. Optional runtime providers are configured explicitly in the
-application; they are not extra `new` selections.
+The CLI currently exposes application creation, read-only inspection, a
+reviewable bundled-component addition boundary, complete layered resource
+generation, and application-owned migration scaffold generation. Component
+addition accepts one bundled component identity, resolves the authenticated
+package graph, and uses the shared `--dry-run` and `--json` mutation contract.
+An already installed component, an unknown component, or a component without a
+bundled additive contribution unit fails without changing the application. The
+command never downloads a package, executes component code, or interprets a
+remote coordinate. The CLI does not provide component removal, module
+management, migration execution or rollback, automatic upgrades, remote
+component installation, or additional client templates. Optional runtime
+providers are configured explicitly in the application; they are not extra
+`new` selections.
 
 Successful creation and help use stdout; diagnostics use stderr. Exit codes
 are `0` (success, including guided cancellation), `1` (internal error),
@@ -205,9 +213,9 @@ write application files.
 ## Compatibility And Mutation Safety
 
 `inspect` can report an incompatible or unsupported application successfully,
-but `generate resource` and `generate migration` fail with conflict exit code
-`4` unless the application is compatible with the running CLI. The current
-mutation policy requires:
+but `component add`, `generate resource`, and `generate migration` fail with
+conflict exit code `4` unless the application is compatible with the running
+CLI. The current mutation policy requires:
 
 - manifest schema `2` and the canonical Hegira framework repository;
 - the exact framework release version compiled into the CLI;
