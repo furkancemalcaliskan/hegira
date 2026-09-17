@@ -4,11 +4,11 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use application_manifest::ApplicationManifest;
+use application_manifest::{ApplicationComposition, ApplicationManifest};
 
 use crate::{
     ComponentManifest, ComponentPackageManifest, ManifestCatalog, RendererError, RendererErrorKind,
-    Result, manifest::validate_variable,
+    ResolvedComposition, Result, manifest::validate_variable,
 };
 
 #[derive(Debug)]
@@ -16,6 +16,8 @@ pub struct RenderRequest {
     pub repository_root: PathBuf,
     pub template: String,
     pub output: PathBuf,
+    /// Explicit package component roots. `None` selects the template default.
+    pub components: Option<Vec<String>>,
     pub variables: BTreeMap<String, String>,
 }
 
@@ -23,6 +25,7 @@ pub struct RenderRequest {
 pub struct RenderResult {
     pub output: PathBuf,
     pub package: Option<ComponentPackageManifest>,
+    pub composition: Option<ResolvedComposition>,
     pub components: Vec<String>,
     pub files: Vec<PathBuf>,
 }
@@ -30,6 +33,7 @@ pub struct RenderResult {
 #[derive(Debug)]
 pub struct RenderPlan {
     pub(crate) package: Option<ComponentPackageManifest>,
+    pub(crate) composition: Option<ResolvedComposition>,
     pub(crate) components: Vec<String>,
     pub(crate) files: BTreeMap<PathBuf, PlannedFile>,
 }
@@ -80,9 +84,32 @@ pub fn plan(request: &RenderRequest) -> Result<RenderPlan> {
 fn build_plan(request: &RenderRequest) -> Result<RenderPlan> {
     let catalog = ManifestCatalog::load(&request.repository_root, &request.template)
         .map_err(|error| error.classified(RendererErrorKind::Catalog))?;
-    let components = catalog
-        .resolve_components()
-        .map_err(|error| error.classified(RendererErrorKind::ComponentResolution))?;
+    let composition = if catalog.package().is_some() {
+        Some(
+            catalog
+                .resolve_component_roots(request.components.as_deref())
+                .map_err(|error| {
+                    RendererError::with_kind(
+                        RendererErrorKind::ComponentResolution,
+                        error.to_string(),
+                    )
+                })?,
+        )
+    } else {
+        if request.components.is_some() {
+            return Err(RendererError::with_kind(
+                RendererErrorKind::ComponentResolution,
+                "explicit component selection requires a component package",
+            ));
+        }
+        None
+    };
+    let components = match &composition {
+        Some(composition) => catalog.components_for(composition)?,
+        None => catalog
+            .resolve_components()
+            .map_err(|error| error.classified(RendererErrorKind::ComponentResolution))?,
+    };
     let variables = resolve_variables(&catalog, &request.variables)?;
     let mut files = BTreeMap::new();
 
@@ -90,11 +117,15 @@ fn build_plan(request: &RenderRequest) -> Result<RenderPlan> {
         collect_component_files(&catalog, component, &variables, &mut files)?;
     }
 
+    if let Some(composition) = &composition {
+        write_resolved_application_composition(composition, &mut files)?;
+    }
     validate_application_manifest(&components, &files)?;
 
     reject_repository_path_leaks(catalog.repository_root(), &files)?;
     Ok(RenderPlan {
         package: catalog.package().cloned(),
+        composition,
         components: components
             .into_iter()
             .map(|component| component.id.clone())
@@ -112,6 +143,10 @@ impl RenderPlan {
         &self.components
     }
 
+    pub fn composition(&self) -> Option<&ResolvedComposition> {
+        self.composition.as_ref()
+    }
+
     pub fn files(&self) -> impl ExactSizeIterator<Item = &Path> {
         self.files.keys().map(PathBuf::as_path)
     }
@@ -123,9 +158,48 @@ pub fn publish(output: &Path, plan: RenderPlan) -> Result<RenderResult> {
     Ok(RenderResult {
         output,
         package: plan.package,
+        composition: plan.composition,
         components: plan.components,
         files: plan.files.into_keys().collect(),
     })
+}
+
+fn write_resolved_application_composition(
+    composition: &ResolvedComposition,
+    files: &mut BTreeMap<PathBuf, PlannedFile>,
+) -> Result<()> {
+    let Some(planned) = files.get_mut(Path::new("hegira.toml")) else {
+        return Ok(());
+    };
+    let source = std::str::from_utf8(&planned.bytes).map_err(|_| {
+        RendererError::with_kind(
+            RendererErrorKind::ApplicationManifest,
+            "generated application manifest is not UTF-8",
+        )
+    })?;
+    let mut manifest: ApplicationManifest = toml::from_str(source).map_err(|error| {
+        RendererError::with_kind(
+            RendererErrorKind::ApplicationManifest,
+            format!("invalid generated application manifest skeleton: {error}"),
+        )
+    })?;
+    manifest.framework = composition.framework.clone();
+    manifest.composition = Some(ApplicationComposition {
+        package: composition.package.clone(),
+        components: composition.installed_components().collect(),
+        modules: composition.modules.clone(),
+        capabilities: composition.capabilities.clone(),
+    });
+    planned.bytes = manifest
+        .to_toml()
+        .map_err(|error| {
+            RendererError::with_kind(
+                RendererErrorKind::ApplicationManifest,
+                format!("invalid resolved application manifest: {error}"),
+            )
+        })?
+        .into_bytes();
+    Ok(())
 }
 
 fn validate_application_manifest(

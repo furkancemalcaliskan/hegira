@@ -1419,10 +1419,6 @@ fn create_application(
         command.client.adapter().to_string(),
     );
     variables.insert(
-        "component_id".to_string(),
-        command.component.id().to_string(),
-    );
-    variables.insert(
         "database_adapter".to_string(),
         command.database.adapter().to_string(),
     );
@@ -1435,6 +1431,7 @@ fn create_application(
         repository_root,
         template: "layered".to_string(),
         output: command.destination.clone(),
+        components: Some(vec![command.component.id().to_string()]),
         variables,
     };
     if let Err(error) = render(&request) {

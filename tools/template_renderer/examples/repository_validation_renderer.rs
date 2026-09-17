@@ -58,6 +58,7 @@ fn run() -> Result<(), String> {
             repository_root: repository_root.ok_or_else(usage)?,
             template: template.ok_or_else(usage)?,
             output: output.ok_or_else(usage)?,
+            components: None,
             variables,
         },
         framework_root: framework_root.ok_or_else(usage)?,

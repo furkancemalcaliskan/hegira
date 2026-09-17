@@ -366,29 +366,11 @@ impl ManifestCatalog {
     }
 
     pub fn resolve_components(&self) -> Result<Vec<&ComponentManifest>> {
-        if let Some(package) = &self.package {
-            let request = crate::CompositionRequest::new(
-                package.framework.clone(),
-                PackageIdentity {
-                    id: package.id.clone(),
-                    version: package.version.clone(),
-                },
-                self.template.components.clone(),
-            );
-            let graph = crate::composition::resolve(package, &self.components, &request)
+        if self.package.is_some() {
+            let graph = self
+                .resolve_component_roots(None)
                 .map_err(|error| RendererError::new(error.to_string()))?;
-            return graph
-                .components
-                .iter()
-                .map(|component| {
-                    self.components.get(&component.id).ok_or_else(|| {
-                        RendererError::new(format!(
-                            "resolved component does not exist: {}",
-                            component.id
-                        ))
-                    })
-                })
-                .collect();
+            return self.components_for(&graph);
         }
 
         self.resolve_legacy_components()
@@ -407,6 +389,16 @@ impl ManifestCatalog {
     pub fn resolve_template_composition(
         &self,
     ) -> std::result::Result<crate::ResolvedComposition, crate::CompositionError> {
+        self.resolve_component_roots(None)
+    }
+
+    /// Resolve caller-selected component roots against the package identity
+    /// authenticated by this catalog. Callers may select composition roots,
+    /// but cannot substitute the package or framework source contract.
+    pub fn resolve_component_roots(
+        &self,
+        roots: Option<&[String]>,
+    ) -> std::result::Result<crate::ResolvedComposition, crate::CompositionError> {
         let Some(package) = &self.package else {
             return Err(crate::CompositionError::missing_package());
         };
@@ -416,9 +408,29 @@ impl ManifestCatalog {
                 id: package.id.clone(),
                 version: package.version.clone(),
             },
-            self.template.components.clone(),
+            roots
+                .map(<[String]>::to_vec)
+                .unwrap_or_else(|| self.template.components.clone()),
         );
         crate::composition::resolve(package, &self.components, &request)
+    }
+
+    pub(crate) fn components_for(
+        &self,
+        graph: &crate::ResolvedComposition,
+    ) -> Result<Vec<&ComponentManifest>> {
+        graph
+            .components
+            .iter()
+            .map(|component| {
+                self.components.get(&component.id).ok_or_else(|| {
+                    RendererError::new(format!(
+                        "resolved component does not exist: {}",
+                        component.id
+                    ))
+                })
+            })
+            .collect()
     }
 
     fn resolve_legacy_components(&self) -> Result<Vec<&ComponentManifest>> {
