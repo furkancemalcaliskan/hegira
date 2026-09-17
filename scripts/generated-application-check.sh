@@ -103,7 +103,7 @@ cargo run --locked --quiet -p template_renderer \
   --framework-path .hegira-validation/framework \
   --set application_name=sqlite-application \
   --set database_adapter=sqlite --set database_feature=db-sqlite \
-  --set client_adapter=leptos --set component_id=layered-leptos-identity
+  --set client_adapter=leptos
 stage_framework_source "$development_root"
 
 (
@@ -129,7 +129,7 @@ for database in sqlite postgres; do
     --framework-path .hegira-validation/framework \
     --set "application_name=$database-application" \
     --set "database_adapter=$database" --set "database_feature=db-$database" \
-    --set client_adapter=leptos --set component_id=layered-leptos-identity
+    --set client_adapter=leptos
 
   case "$database" in
     sqlite)
