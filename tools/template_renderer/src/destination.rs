@@ -300,6 +300,7 @@ pub(crate) mod platform {
             stdfs::create_dir(&root).unwrap();
             let plan = RenderPlan {
                 package: None,
+                composition: None,
                 components: vec![],
                 files: BTreeMap::from([(
                     PathBuf::from("nested/file.txt"),

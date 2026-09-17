@@ -10,20 +10,8 @@ databases = ["{{database_adapter}}"]
 clients = ["{{client_adapter}}"]
 
 [composition]
-capabilities = ["authentication", "authorization"]
+components = []
 
 [composition.package]
 id = "{{package_id}}"
-version = "{{package_version}}"
-
-[[composition.components]]
-id = "layered-base"
-version = "{{package_version}}"
-
-[[composition.components]]
-id = "{{component_id}}"
-version = "{{package_version}}"
-
-[[composition.modules]]
-id = "identity"
 version = "{{package_version}}"

@@ -358,8 +358,11 @@ invalid usage, `3` for validation failure, and `4` for a destination or state
 conflict. `hegira new <name> --destination <path>` renders the canonical
 layered application with SQLite, Leptos, and Identity defaults. The database,
 client, and component selections can also be stated explicitly. Generation
-writes the destination atomically and never executes generated or external
-commands.
+maps the component selection to package roots and hands those roots to the
+renderer. The renderer resolves them through the authenticated package graph;
+the CLI does not maintain a second file, module, or capability composition.
+Generation writes the destination atomically and never executes generated or
+external commands.
 
 The CLI library provides common `--dry-run` and `--json` options for mutation
 commands. A command constructs and validates one typed `ChangePlan`, then hands
@@ -535,19 +538,26 @@ no write, process execution, network access, source resolution, or runtime
 configuration lookup.
 
 The reusable renderer exposes typed composition request/result/diagnostic,
-render request, plan, publication-result, and error-category contracts. It
-consumes the resolved graph and the same verified package snapshot, substitutes declared variables, detects output
-collisions, rejects symbolic links and path traversal, constructs the entire
-output plan before writing, and atomically publishes into a previously absent
-destination. It has no network, process, or repository-event dependency and
-does not execute component scripts.
+render request, plan, publication-result, and error-category contracts. A
+render request may choose component roots, but the loaded package exclusively
+supplies the framework and package identities. The renderer resolves those
+roots once and uses that same result to select component files and serialize
+the component, module, and capability state in `hegira.toml`; template source
+does not maintain a duplicate composition list. It consumes the same verified
+package snapshot, substitutes declared variables, detects output collisions,
+rejects symbolic links and path traversal, constructs the entire output plan
+before writing, and atomically publishes into a previously absent destination.
+It has no network, process, or repository-event dependency and does not execute
+component scripts.
 
 Normal renders retain pinned release-source dependencies. Repository
 validation selects a separate adapter that rewrites only a disposable render
 to consume a staged, credential-free view of the current framework source.
 The generated-application gate first invokes the public CLI for SQLite and
 PostgreSQL. Its staging adapter verifies the CLI output paths and bytes against
-the canonical request, then patches declared dependencies in a separate copy.
+the canonical request, uses the render plan's resolved component graph when
+selecting declared dependency rewrites, then patches those dependencies in a
+separate copy.
 An in-tree framework copy is excluded from automatic Cargo workspace membership
 so application checks cannot enable framework/module defaults accidentally.
 Native tests, hydration, release builds, upgrades, and production-container

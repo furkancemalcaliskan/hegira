@@ -106,9 +106,12 @@ Generated files and directories start with owner-only permissions (0600/0700).
 | `--component` | `identity` | `identity` |
 
 Each invocation selects one database. Identity resolves to `layered-base` and
-`layered-leptos-identity`; the CLI does not provide an empty or Identity-free
-composition. Database selection sets the generated default Cargo feature and
-recommended startup profile, not database credentials or provisioning.
+`layered-leptos-identity` through the bundled package's authenticated
+composition graph; that single resolved result controls both rendered files and
+the composition recorded in `hegira.toml`. The CLI does not provide an empty or
+Identity-free composition. Database selection sets the generated default Cargo
+feature and recommended startup profile, not database credentials or
+provisioning.
 
 For an explicit PostgreSQL
 application, use:

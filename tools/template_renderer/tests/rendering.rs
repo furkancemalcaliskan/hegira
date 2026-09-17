@@ -146,6 +146,23 @@ fn identical_generation_inputs_render_byte_equivalent_output_trees() {
 }
 
 #[test]
+fn explicit_default_roots_match_the_template_default_byte_for_byte() {
+    let repository = repository_root();
+    let output_parent = TestDirectory::new("explicit-default-composition");
+    let default_output = output_parent.path().join("template-default");
+    let explicit_output = output_parent.path().join("explicit-default");
+    let default_request = canonical_request(&repository, default_output.clone());
+    let mut explicit_request = canonical_request(&repository, explicit_output.clone());
+    explicit_request.components = Some(vec!["layered-leptos-identity".to_owned()]);
+
+    let default_result = render(&default_request).expect("template default should render");
+    let explicit_result = render(&explicit_request).expect("explicit default should render");
+
+    assert_eq!(default_result.composition, explicit_result.composition);
+    assert_eq!(output_tree(&default_output), output_tree(&explicit_output));
+}
+
+#[test]
 fn reusable_plan_exposes_components_and_files_before_publication() {
     let repository = repository_root();
     let output_parent = TestDirectory::new("plan-contract");
@@ -163,6 +180,17 @@ fn reusable_plan_exposes_components_and_files_before_publication() {
     assert_eq!(
         plan.components(),
         ["layered-base", "layered-leptos-identity"]
+    );
+    let composition = plan
+        .composition()
+        .expect("canonical render should expose its resolved composition");
+    assert_eq!(
+        composition
+            .components
+            .iter()
+            .map(|component| component.id.as_str())
+            .collect::<Vec<_>>(),
+        plan.components()
     );
     assert!(plan.files().any(|path| path == Path::new("hegira.toml")));
     assert!(!output.exists());
@@ -845,6 +873,7 @@ fn canonical_request(repository: &Path, output: PathBuf) -> RenderRequest {
         repository_root: repository.to_path_buf(),
         template: "layered".to_string(),
         output,
+        components: None,
         variables: BTreeMap::new(),
     }
 }
@@ -929,6 +958,7 @@ impl Fixture {
             repository_root: self.root.path().to_path_buf(),
             template: "test".to_string(),
             output,
+            components: None,
             variables: BTreeMap::new(),
         }
     }

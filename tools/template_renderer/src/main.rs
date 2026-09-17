@@ -48,6 +48,7 @@ fn run() -> Result<(), String> {
         repository_root: repository_root.ok_or_else(usage)?,
         template: template.ok_or_else(usage)?,
         output: output.ok_or_else(usage)?,
+        components: None,
         variables,
     };
     let result = render(&request).map_err(|error| error.to_string())?;

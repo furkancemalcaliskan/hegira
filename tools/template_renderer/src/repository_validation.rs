@@ -134,7 +134,10 @@ fn patch_plan(
 ) -> Result<RenderPlan> {
     let catalog = ManifestCatalog::load(&request.render.repository_root, &request.render.template)
         .map_err(classify)?;
-    let components = catalog.resolve_components().map_err(classify)?;
+    let components = match render_plan.composition() {
+        Some(composition) => catalog.components_for(composition).map_err(classify)?,
+        None => catalog.resolve_components().map_err(classify)?,
+    };
     let framework_root = fs::canonicalize(&request.framework_root)
         .map_err(|error| validation_error(format!("failed to resolve framework root: {error}")))?;
     if !framework_root.is_dir() {
