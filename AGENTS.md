@@ -53,6 +53,10 @@ commands change. Never describe planned work as implemented.
   Its Infrastructure operation surface owns startup migration and Identity
   seed composition plus explicitly authorized disposable-database reset for
   validation; it does not use compatibility migration helpers or `db_migrator`.
+  `templates/applications/layered-minimal/` contains the explicit module-free
+  outward-layer variant. It preserves the server, Leptos client, selected SQLx
+  provider, configuration, and deployment boundaries while recording no
+  official module or authentication/authorization capabilities.
   Each render owns a validated `hegira.toml` containing only application
   identity, framework source/version, installed component-package, component,
   module and capability composition, and selected database/client adapters.

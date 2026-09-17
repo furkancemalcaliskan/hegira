@@ -1,0 +1,62 @@
+[workspace]
+resolver = "3"
+members = [
+    "apps/server",
+    "apps/web",
+    "crates/domain_shared",
+    "crates/domain",
+    "crates/application_contracts",
+    "crates/application",
+    "crates/infrastructure",
+    "crates/presentation",
+]
+default-members = ["apps/server"]
+
+[profile.wasm-release]
+inherits = "release"
+opt-level = "z"
+lto = true
+codegen-units = 1
+debug = 0
+panic = "abort"
+strip = "symbols"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+rust-version = "1.96"
+publish = false
+
+[workspace.dependencies]
+app_domain_shared = { path = "crates/domain_shared" }
+app_domain = { path = "crates/domain" }
+app_application_contracts = { path = "crates/application_contracts" }
+app_application = { path = "crates/application" }
+app_infrastructure = { path = "crates/infrastructure", default-features = false }
+app_presentation = { path = "crates/presentation", default-features = false }
+app_web = { path = "apps/web", default-features = false }
+
+# Framework packages are consumed as release dependencies. Repository
+# validation patches this source only in a disposable copy.
+configuration = { git = "{{framework_repository}}", tag = "{{framework_version}}" }
+http_support = { git = "{{framework_repository}}", tag = "{{framework_version}}" }
+persistence = { git = "{{framework_repository}}", tag = "{{framework_version}}", default-features = false }
+platform_core = { git = "{{framework_repository}}", tag = "{{framework_version}}" }
+runtime = { git = "{{framework_repository}}", tag = "{{framework_version}}" }
+
+axum = "0.8.9"
+chrono = { version = "0.4.44", features = ["serde"] }
+console_error_panic_hook = "0.1.7"
+leptos = "0.8.19"
+leptos_axum = "0.8.9"
+leptos_meta = "0.8.6"
+leptos_router = "0.8.13"
+serde = { version = "1.0.228", features = ["derive"] }
+sqlx = { version = "0.8.6", features = ["runtime-tokio-rustls", "migrate", "uuid"] }
+tokio = { version = "1.52.3", features = ["rt-multi-thread", "macros", "signal"] }
+tower-http = { version = "0.7.0", features = ["compression-br", "compression-gzip", "limit", "timeout"] }
+tracing = "0.1.44"
+utoipa = { version = "5.4.0", features = ["chrono", "uuid"] }
+uuid = { version = "1.23.2", features = ["v4", "serde", "js"] }
+wasm-bindgen = "0.2.114"

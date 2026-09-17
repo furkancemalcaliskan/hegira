@@ -1,0 +1,21 @@
+[package]
+name = "app_infrastructure"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+configuration.workspace = true
+persistence.workspace = true
+platform_core.workspace = true
+serde.workspace = true
+sqlx.workspace = true
+tracing.workspace = true
+
+[features]
+default = ["{{database_feature}}"]
+db-postgres = ["persistence/db-postgres", "sqlx/postgres"]
+db-sqlite = ["persistence/db-sqlite", "sqlx/sqlite"]
+

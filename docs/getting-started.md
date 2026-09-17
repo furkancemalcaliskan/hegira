@@ -103,13 +103,21 @@ Generated files and directories start with owner-only permissions (0600/0700).
 |---|---|---|
 | `--database` | `sqlite`, `postgres` | `sqlite` |
 | `--client` | `leptos` | `leptos` |
-| `--component` | `identity` | `identity` |
+| `--composition` (`--component` alias) | `identity`, `minimal` | `identity` |
 
 Each invocation selects one database. Identity resolves to `layered-base` and
 `layered-leptos-identity` through the bundled package's authenticated
 composition graph; that single resolved result controls both rendered files and
-the composition recorded in `hegira.toml`. The CLI does not provide an empty or
-Identity-free composition. Database selection sets the generated default Cargo
+the composition recorded in `hegira.toml`. The explicit `minimal` selection
+resolves to `layered-base` and `layered-leptos-minimal`. It preserves the
+Leptos client, server host, application-owned DDD layers, selected SQLx
+provider, configuration, and deployment source without installing an official
+module or recording authentication and authorization capabilities. The secure
+Identity composition remains the default.
+
+Minimal does not synthesize anonymous or allow-all authorization. Protected
+resource generation is unavailable until a compatible authorization-providing
+module has been installed. Database selection sets the generated default Cargo
 feature and recommended startup profile, not database credentials or
 provisioning.
 
@@ -121,11 +129,22 @@ cargo run --locked -p hegira_cli -- new my-application \
   --destination ../my-application \
   --database postgres \
   --client leptos \
-  --component identity
+  --composition identity
 ```
 
 This is an alternative to the SQLite example, not a second command to run
 against the same destination.
+
+Select the module-free starting point only when the application is intended to
+add its capabilities explicitly:
+
+```sh
+cargo run --locked -p hegira_cli -- new my-minimal-application \
+  --destination ../my-minimal-application \
+  --database sqlite \
+  --client leptos \
+  --composition minimal
+```
 
 ## Generated Ownership And `hegira.toml`
 

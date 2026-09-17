@@ -1,0 +1,17 @@
+environment: test
+application:
+  name: Application
+server:
+  addr: 127.0.0.1:0
+  request_timeout_seconds: 5
+  body_limit_bytes: 2097152
+database:
+  backend: sqlite
+  url: sqlite::memory:
+  max_connections: 1
+  auto_migrate: true
+startup:
+  ensure_database: false
+logging:
+  filter: warn
+

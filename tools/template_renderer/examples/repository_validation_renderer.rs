@@ -27,6 +27,7 @@ fn run() -> Result<(), String> {
     let mut framework_root = None;
     let mut framework_path = None;
     let mut generated_source = None;
+    let mut components = Vec::new();
     let mut variables = BTreeMap::new();
 
     while let Some(flag) = arguments.next() {
@@ -38,6 +39,7 @@ fn run() -> Result<(), String> {
             "--framework-root" => framework_root = Some(PathBuf::from(value)),
             "--framework-path" => framework_path = Some(PathBuf::from(value)),
             "--generated-source" => generated_source = Some(PathBuf::from(value)),
+            "--component" => components.push(value),
             "--set" => {
                 let (name, value) = value
                     .split_once('=')
@@ -58,7 +60,7 @@ fn run() -> Result<(), String> {
             repository_root: repository_root.ok_or_else(usage)?,
             template: template.ok_or_else(usage)?,
             output: output.ok_or_else(usage)?,
-            components: None,
+            components: (!components.is_empty()).then_some(components),
             variables,
         },
         framework_root: framework_root.ok_or_else(usage)?,
@@ -80,5 +82,5 @@ fn run() -> Result<(), String> {
 }
 
 fn usage() -> String {
-    "usage: repository_validation_renderer render --repository-root <path> --template <id> --output <path> --framework-root <path> [--framework-path <path>] [--generated-source <path>] [--set NAME=VALUE]".to_string()
+    "usage: repository_validation_renderer render --repository-root <path> --template <id> --output <path> --framework-root <path> [--framework-path <path>] [--generated-source <path>] [--component <id>] [--set NAME=VALUE]".to_string()
 }

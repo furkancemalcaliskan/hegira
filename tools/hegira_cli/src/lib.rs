@@ -181,8 +181,8 @@ struct NewCommand {
     #[arg(long, value_enum)]
     client: Option<ClientChoice>,
 
-    /// Official application component.
-    #[arg(long, value_enum)]
+    /// Initial application composition.
+    #[arg(long = "composition", visible_alias = "component", value_enum)]
     component: Option<ComponentChoice>,
 }
 
@@ -251,18 +251,21 @@ impl ClientChoice {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 enum ComponentChoice {
     Identity,
+    Minimal,
 }
 
 impl ComponentChoice {
     const fn id(self) -> &'static str {
         match self {
             Self::Identity => "layered-leptos-identity",
+            Self::Minimal => "layered-leptos-minimal",
         }
     }
 
     const fn name(self) -> &'static str {
         match self {
             Self::Identity => "identity",
+            Self::Minimal => "minimal",
         }
     }
 }
@@ -1243,7 +1246,7 @@ fn resolve_new_command(
         .and_then(|()| writeln!(output, "  Destination: {}", destination.display()))
         .and_then(|()| writeln!(output, "  Database: {}", database.adapter()))
         .and_then(|()| writeln!(output, "  Client: {}", client.adapter()))
-        .and_then(|()| writeln!(output, "  Component: {}", component.name()))
+        .and_then(|()| writeln!(output, "  Composition: {}", component.name()))
         .map_err(output_diagnostic)?;
 
     match confirm(input, output)? {
@@ -1346,12 +1349,14 @@ fn resolve_component(
         return Ok(value);
     }
     loop {
-        let Some(value) = prompt(input, output, "Component [identity]: ")? else {
+        let Some(value) = prompt(input, output, "Composition [identity] (identity/minimal): ")?
+        else {
             return Ok(None);
         };
         match value.to_ascii_lowercase().as_str() {
             "" | "identity" => return Ok(Some(ComponentChoice::Identity)),
-            _ => writeln!(output, "The currently supported component is `identity`.")
+            "minimal" => return Ok(Some(ComponentChoice::Minimal)),
+            _ => writeln!(output, "Please choose `identity` or `minimal`.")
                 .map_err(output_diagnostic)?,
         }
     }
@@ -1451,6 +1456,16 @@ fn create_application(
             output,
             "  APP_ENV={database} cargo leptos watch -p app_server --bin-features ssr,{} --lib-features hydrate --bin-cargo-args=--locked --lib-cargo-args=--locked",
             command.database.feature()
+        )
+        .is_err()
+    {
+        return CliExit::Internal;
+    }
+
+    if command.component == ComponentChoice::Minimal
+        && writeln!(
+            output,
+            "  Note: the minimal composition has no authentication or authorization capability; protected resource generation remains unavailable until a compatible module is installed."
         )
         .is_err()
     {

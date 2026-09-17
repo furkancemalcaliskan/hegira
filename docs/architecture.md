@@ -33,7 +33,8 @@ automatic module discovery, application upgrades, or registry distribution.
 ├── templates/
 │   ├── package.toml         versioned canonical package contract
 │   ├── applications/
-│   │   └── layered/         independent full-stack application source
+│   │   ├── layered/         recommended Identity-enabled application source
+│   │   └── layered-minimal/ explicit module-free outward-layer variant
 │   └── components/          typed application-component manifests
 ├── tools/
 │   ├── application_mutator/ existing-application change-plan core
@@ -46,15 +47,22 @@ automatic module discovery, application upgrades, or registry distribution.
 └── Cargo.lock               locked framework dependency graph
 ```
 
-`templates/applications/layered/` is deliberately excluded from the root Cargo
-workspace. Its canonical `Cargo.lock` records the registry checksums and exact
-framework git revision verified for the package release. Every normal render
-receives those bytes unchanged. The generated application then owns its server,
-web client, DDD layers, configuration, migrations, deployment files, dependency
-lock, and future product changes. The framework repository does not own an
-application runtime configuration or production image. Application owners may
-update dependencies intentionally; generation never performs an implicit
-dependency upgrade.
+The application sources under `templates/applications/` are deliberately
+excluded from the root Cargo workspace. Their canonical `Cargo.lock` files
+record the registry checksums and exact framework git revision verified for the
+package release. Every normal render receives the selected composition's bytes
+unchanged. Both supported compositions resolve the common `layered-base` DDD
+source. The recommended default adds `layered-leptos-identity`; the explicit
+minimal selection adds `layered-leptos-minimal` and records no official module,
+authentication capability, or authorization capability. Both retain a Leptos
+client, server host, selected SQLx provider, configuration, and deployment
+source.
+
+The generated application then owns its server, web client, DDD layers,
+configuration, migrations, deployment files, dependency lock, and future
+product changes. The framework repository does not own an application runtime
+configuration or production image. Application owners may update dependencies
+intentionally; generation never performs an implicit dependency upgrade.
 
 Template changes affect subsequent generation, not existing applications.
 Generated files are application-owned source, not a synchronized view of the

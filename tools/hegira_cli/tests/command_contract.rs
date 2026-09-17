@@ -572,7 +572,7 @@ fn interactive_selection_reprompts_and_maps_to_supported_values() {
     assert!(diagnostics.is_empty());
     assert!(stdout.contains("Please choose `sqlite` or `postgres`."));
     assert!(stdout.contains("The currently supported client is `leptos`."));
-    assert!(stdout.contains("The currently supported component is `identity`."));
+    assert!(stdout.contains("Please choose `identity` or `minimal`."));
     assert!(stdout.contains("Destination: "));
     assert!(stdout.contains("Database: postgres"));
     let manifest = fs::read_to_string(destination.join("hegira.toml"))
@@ -1095,6 +1095,44 @@ fn provider_snapshots_and_interactive_requests_match() {
             "review {database} output before updating its snapshot"
         );
     }
+}
+
+#[test]
+fn explicit_minimal_composition_is_module_free_and_deterministic() {
+    let root = TestDirectory::new("minimal-composition");
+    let destination = root.path().join("application");
+    let result = hegira(&[
+        "new",
+        "minimal-app",
+        "--destination",
+        path_argument(&destination),
+        "--database",
+        "sqlite",
+        "--client",
+        "leptos",
+        "--composition",
+        "minimal",
+    ]);
+    assert!(result.status.success(), "{:?}", result.stderr);
+    assert!(
+        String::from_utf8_lossy(&result.stdout)
+            .contains("no authentication or authorization capability")
+    );
+
+    let manifest = fs::read_to_string(destination.join("hegira.toml")).unwrap();
+    assert!(manifest.contains("id = \"layered-base\""));
+    assert!(manifest.contains("id = \"layered-leptos-minimal\""));
+    assert!(!manifest.contains("id = \"identity\""));
+    let manifest = application_manifest::ApplicationManifest::from_toml(&manifest).unwrap();
+    let composition = manifest.composition.unwrap();
+    assert!(composition.modules.is_empty());
+    assert!(composition.capabilities.is_empty());
+
+    let workspace = fs::read_to_string(destination.join("Cargo.toml")).unwrap();
+    assert!(!workspace.contains("identity_"));
+    let server = fs::read_to_string(destination.join("apps/server/src/server.rs")).unwrap();
+    assert!(!server.contains("identity_"));
+    assert!(!server.contains("/api/auth"));
 }
 
 #[test]

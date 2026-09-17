@@ -68,7 +68,8 @@ ownership:
 |---|---|
 | `crates/` | Application-independent framework primitives, application-manifest contract, providers, and runtime support |
 | `modules/identity/` | Canonical source for the official layered Identity module and its SQLx, Axum, and Leptos adapters |
-| `templates/applications/layered/` | Workspace-external, brand-neutral layered application base with application-owned server, web, configuration, migration composition, and deployment files |
+| `templates/applications/layered/` | Workspace-external recommended Identity-enabled layered application source |
+| `templates/applications/layered-minimal/` | Explicit module-free server, Leptos, provider, configuration, and deployment variant built on the same layered base |
 | `templates/package.toml` | Versioned canonical component-package identity, framework compatibility, component graph, and source digest |
 | `templates/components/` | Typed data-only component manifests that define the canonical application composition |
 | `tools/application_mutator/` | Typed additive component and general change plans, canonical file ownership, controlled Cargo/Rust/TOML integration, and failure-safe publication for coordinated existing-application changes |
@@ -102,8 +103,10 @@ Run `cargo run --locked -p hegira_cli -- new` in an interactive terminal for a g
 The prompts show the implemented choices and defaults, summarize the resulting application, and
 ask for confirmation before any files are written. Non-interactive terminals never wait for
 prompt input and require the application name and destination explicitly.
-Supplying both inputs skips prompts and confirmation. Only SQLite/PostgreSQL,
-Leptos, and Identity selections are supported for application creation. The
+Supplying both inputs skips prompts and confirmation. SQLite/PostgreSQL and
+Leptos are supported for application creation. Identity remains the recommended
+default composition; an explicit module-free `minimal` composition is also
+available. The
 CLI also generates complete layered resources and application-owned migration
 scaffolds; it does not provide module management or automatic upgrades.
 
@@ -124,8 +127,10 @@ cd ../my-application
 ```
 
 Pass `--database postgres` to make PostgreSQL the generated application's selected and default
-database adapter. `--client leptos` and `--component identity` may be supplied explicitly for
-automation; they are the currently supported client and official component selections.
+database adapter. `--client leptos` and `--composition identity` may be supplied explicitly for
+automation. Use `--composition minimal` only for a layered application without
+an installed authentication or authorization module; protected resource
+generation remains unavailable in that state.
 
 Use a new destination under an existing real parent directory. Existing entries
 are never overwritten. See [Getting started](docs/getting-started.md) for identity,
