@@ -7,8 +7,8 @@ pub mod repository_validation;
 
 pub use destination::validate_destination;
 pub use manifest::{
-    ComponentManifest, ComponentPackageManifest, FrameworkDependency, ManifestCatalog,
-    TemplateManifest,
+    ComponentInstallationContribution, ComponentInstallationManifest, ComponentManifest,
+    ComponentPackageManifest, FrameworkDependency, ManifestCatalog, TemplateManifest,
 };
 pub use render::{RenderPlan, RenderRequest, RenderResult, plan, plan_snapshot, publish, render};
 

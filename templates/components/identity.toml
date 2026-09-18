@@ -1,135 +1,118 @@
 schema = 3
-id = "layered-leptos-identity"
+id = "identity"
 version = "v0.5.0"
-source = "applications/layered"
-include = [
-  ".env.example",
-  "Cargo.lock",
-  "Cargo.toml",
-  "Dockerfile",
-  "apps",
-  "config",
-  "crates/infrastructure",
-  "crates/presentation",
-  "docker-compose.yml",
-]
-requires = ["layered-base"]
+source = "applications/layered-minimal"
+include = []
+requires = ["layered-leptos-minimal"]
+conflicts = ["layered-leptos-identity"]
 modules = ["identity"]
 provides_capabilities = ["authentication", "authorization"]
 
-[[framework_dependencies]]
+[installation]
+module = "identity"
+databases = ["postgres", "sqlite"]
+clients = ["leptos"]
+contributions = [
+  "authentication-seed",
+  "background-jobs",
+  "bearer-api-routes",
+  "capability-preflight",
+  "configuration",
+  "cookie-bff-routes",
+  "leptos-navigation",
+  "leptos-routes",
+  "openapi",
+  "postgres-migration-source",
+  "sqlite-migration-source",
+]
+
+[[installation.framework_dependencies]]
 manifest = "Cargo.toml"
 name = "audit"
 path = "crates/audit"
 
-[[framework_dependencies]]
+[[installation.framework_dependencies]]
 manifest = "Cargo.toml"
 name = "background_jobs"
 path = "crates/background_jobs"
 
-[[framework_dependencies]]
+[[installation.framework_dependencies]]
 manifest = "Cargo.toml"
 name = "cache"
 path = "crates/cache"
 
-[[framework_dependencies]]
-manifest = "Cargo.toml"
-name = "configuration"
-path = "crates/configuration"
-
-[[framework_dependencies]]
-manifest = "Cargo.toml"
-name = "http_support"
-path = "crates/http_support"
-
-[[framework_dependencies]]
+[[installation.framework_dependencies]]
 manifest = "Cargo.toml"
 name = "identity_application"
 path = "modules/identity/application"
 default_features = false
 
-[[framework_dependencies]]
+[[installation.framework_dependencies]]
 manifest = "Cargo.toml"
 name = "identity_application_contracts"
 path = "modules/identity/application_contracts"
 
-[[framework_dependencies]]
+[[installation.framework_dependencies]]
 manifest = "Cargo.toml"
 name = "identity_domain"
 path = "modules/identity/domain"
 
-[[framework_dependencies]]
+[[installation.framework_dependencies]]
 manifest = "Cargo.toml"
 name = "identity_domain_shared"
 path = "modules/identity/domain_shared"
 
-[[framework_dependencies]]
+[[installation.framework_dependencies]]
 manifest = "Cargo.toml"
 name = "identity_http"
 path = "modules/identity/http"
 default_features = false
 
-[[framework_dependencies]]
+[[installation.framework_dependencies]]
 manifest = "Cargo.toml"
 name = "identity_leptos"
 path = "modules/identity/leptos"
 default_features = false
 
-[[framework_dependencies]]
+[[installation.framework_dependencies]]
 manifest = "Cargo.toml"
 name = "identity_sqlx"
 path = "modules/identity/sqlx"
 default_features = false
 
-[[framework_dependencies]]
+[[installation.framework_dependencies]]
 manifest = "Cargo.toml"
 name = "leptos_support"
 path = "crates/leptos_support"
 default_features = false
 
-[[framework_dependencies]]
+[[installation.framework_dependencies]]
 manifest = "Cargo.toml"
 name = "mail"
 path = "crates/mail"
 
-[[framework_dependencies]]
+[[installation.framework_dependencies]]
 manifest = "Cargo.toml"
 name = "observability"
 path = "crates/observability"
 
-[[framework_dependencies]]
-manifest = "Cargo.toml"
-name = "persistence"
-path = "crates/persistence"
-default_features = false
-
-[[framework_dependencies]]
-manifest = "Cargo.toml"
-name = "platform_core"
-path = "crates/platform_core"
-
-[[framework_dependencies]]
-manifest = "Cargo.toml"
-name = "runtime"
-path = "crates/runtime"
-
-[[framework_dependencies]]
+[[installation.framework_dependencies]]
 manifest = "Cargo.toml"
 name = "search"
 path = "crates/search"
 default_features = false
 
-[[framework_dependencies]]
+[[installation.framework_dependencies]]
 manifest = "Cargo.toml"
 name = "security"
 path = "crates/security"
 
-[[framework_dependencies]]
+[[installation.framework_dependencies]]
 manifest = "Cargo.toml"
 name = "settings"
 path = "crates/settings"
 
-[[framework_dependencies]]
+[[installation.framework_dependencies]]
 manifest = "Cargo.toml"
 name = "storage"
 path = "crates/storage"

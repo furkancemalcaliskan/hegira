@@ -8,7 +8,7 @@ use application_manifest::{
 };
 use serde::Serialize;
 
-use crate::{ComponentManifest, ComponentPackageManifest};
+use crate::{ComponentInstallationManifest, ComponentManifest, ComponentPackageManifest};
 
 pub const COMPOSITION_GRAPH_SCHEMA: u32 = 1;
 
@@ -93,6 +93,8 @@ pub struct ResolvedComponent {
     pub modules: Vec<String>,
     pub provides_capabilities: Vec<ApplicationCapability>,
     pub requires_capabilities: Vec<ApplicationCapability>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub installation: Option<ComponentInstallationManifest>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
@@ -405,6 +407,7 @@ pub(crate) fn resolve(
                 modules: component.modules.clone(),
                 provides_capabilities: component.provides_capabilities.clone(),
                 requires_capabilities: component.requires_capabilities.clone(),
+                installation: component.installation.clone(),
             }
         })
         .collect();
@@ -663,7 +666,7 @@ mod tests {
 
     fn component(id: &str) -> ComponentManifest {
         ComponentManifest {
-            schema: 2,
+            schema: 3,
             id: id.to_owned(),
             version: Some("v0.5.0".to_owned()),
             source: PathBuf::from("applications/layered"),
@@ -675,6 +678,7 @@ mod tests {
             provides_capabilities: Vec::new(),
             requires_capabilities: Vec::new(),
             framework_dependencies: Vec::<FrameworkDependency>::new(),
+            installation: None,
             manifest_path: PathBuf::new(),
         }
     }
