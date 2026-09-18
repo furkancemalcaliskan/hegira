@@ -9,8 +9,8 @@ use application_manifest::{
     ApplicationCapability, ApplicationManifest, ClientAdapter, DatabaseAdapter,
 };
 use template_renderer::{
-    CompositionDiagnosticKind, ManifestCatalog, RenderRequest, RendererErrorKind, plan,
-    plan_snapshot, render,
+    ComponentInstallationContribution, CompositionDiagnosticKind, CompositionRequest,
+    ManifestCatalog, RenderRequest, RendererErrorKind, plan, plan_snapshot, render,
     repository_validation::{RepositoryValidationRequest, render as render_for_validation},
 };
 
@@ -230,6 +230,112 @@ fn canonical_package_resolves_the_versioned_component_module_and_capability_grap
     let snapshot = graph.to_toml().expect("resolved graph should serialize");
     assert!(!snapshot.contains(&repository.to_string_lossy().into_owned()));
     assert!(!snapshot.contains("source"));
+}
+
+#[test]
+fn identity_installation_resolves_trusted_layered_contributions_without_vendored_source() {
+    let repository = repository_root();
+    let catalog = ManifestCatalog::load(&repository, "layered").expect("catalog should load");
+    let package = catalog.package().expect("canonical package should exist");
+    let graph = catalog
+        .resolve_composition(&CompositionRequest::new(
+            package.framework.clone(),
+            application_manifest::PackageIdentity {
+                id: package.id.clone(),
+                version: package.version.clone(),
+            },
+            ["identity".to_owned()],
+        ))
+        .expect("Identity installation composition should resolve");
+
+    assert_eq!(
+        graph
+            .components
+            .iter()
+            .map(|component| component.id.as_str())
+            .collect::<Vec<_>>(),
+        ["layered-base", "layered-leptos-minimal", "identity"]
+    );
+    let identity = graph.components.last().unwrap();
+    let installation = identity
+        .installation
+        .as_ref()
+        .expect("Identity should declare one installation unit");
+    assert_eq!(installation.module, "identity");
+    assert_eq!(
+        installation.databases,
+        [DatabaseAdapter::Postgres, DatabaseAdapter::Sqlite]
+    );
+    assert_eq!(installation.clients, [ClientAdapter::Leptos]);
+    assert_eq!(
+        installation.contributions,
+        [
+            ComponentInstallationContribution::AuthenticationSeed,
+            ComponentInstallationContribution::BackgroundJobs,
+            ComponentInstallationContribution::BearerApiRoutes,
+            ComponentInstallationContribution::CapabilityPreflight,
+            ComponentInstallationContribution::Configuration,
+            ComponentInstallationContribution::CookieBffRoutes,
+            ComponentInstallationContribution::LeptosNavigation,
+            ComponentInstallationContribution::LeptosRoutes,
+            ComponentInstallationContribution::Openapi,
+            ComponentInstallationContribution::PostgresMigrationSource,
+            ComponentInstallationContribution::SqliteMigrationSource,
+        ]
+    );
+    for dependency in installation
+        .framework_dependencies
+        .iter()
+        .filter(|dependency| dependency.name.starts_with("identity_"))
+    {
+        assert!(dependency.path.starts_with("modules/identity"));
+        assert_eq!(dependency.manifest, Path::new("Cargo.toml"));
+    }
+    assert_eq!(graph.modules.len(), 1);
+    assert_eq!(graph.modules[0].id, "identity");
+    assert_eq!(
+        graph.capabilities,
+        [
+            ApplicationCapability::Authentication,
+            ApplicationCapability::Authorization,
+        ]
+        .into_iter()
+        .collect()
+    );
+}
+
+#[test]
+fn installable_component_metadata_fails_closed_on_source_and_provider_ambiguity() {
+    let repository = repository_root();
+    for (name, from, to, expected) in [
+        (
+            "vendored-source",
+            "include = []",
+            "include = [\"Cargo.toml\"]",
+            "cannot render or vendor application source",
+        ),
+        (
+            "missing-provider-migration",
+            "databases = [\"postgres\", \"sqlite\"]",
+            "databases = [\"sqlite\"]",
+            "database adapters and migration-source contributions must match",
+        ),
+    ] {
+        let fixture = TestDirectory::new(name);
+        copy_directory(
+            &repository.join("templates"),
+            &fixture.path().join("templates"),
+        );
+        let identity_path = fixture.path().join("templates/components/identity.toml");
+        let source = fs::read_to_string(&identity_path).unwrap();
+        let modified = source.replacen(from, to, 1);
+        assert_ne!(source, modified);
+        fs::write(identity_path, modified).unwrap();
+
+        let error = ManifestCatalog::load(fixture.path(), "layered")
+            .expect_err("invalid installation metadata should fail before digest validation");
+        assert!(error.to_string().contains(expected), "{error}");
+    }
 }
 
 #[test]

@@ -67,7 +67,13 @@ commands change. Never describe planned work as implemented.
   `templates/components/` contains that package's typed component manifests.
   Their closed composition graph resolves exact package/framework versions,
   required and optional dependencies, conflicts, capabilities, and official
-  module ownership deterministically before rendering. Package-controlled
+  module ownership deterministically before rendering. Schema-3 component
+  manifests also distinguish source-rendered components from source-free,
+  typed additive installation units. The bundled Identity installation unit
+  records its supported adapters, release-pinned dependencies, provider
+  migration sources, configuration, security transports, OpenAPI, and Leptos
+  contributions without executing code or vendoring module source.
+  Package-controlled
   framework source variables cannot be overridden by a normal render.
 - `tools/template_renderer/` contains the reusable deterministic and atomic
   render core plus an explicitly separate repository-validation adapter. The

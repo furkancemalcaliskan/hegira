@@ -1,4 +1,4 @@
-schema = 2
+schema = 3
 id = "layered-base"
 version = "v0.5.0"
 source = "applications/layered"
@@ -11,4 +11,4 @@ include = [
   "crates/domain_shared",
   "hegira.toml",
 ]
-optional_dependencies = ["layered-leptos-identity", "layered-leptos-minimal"]
+optional_dependencies = ["identity", "layered-leptos-identity", "layered-leptos-minimal"]

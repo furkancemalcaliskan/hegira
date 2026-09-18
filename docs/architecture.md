@@ -533,7 +533,17 @@ produce content-redacted diagnostics, and package loading performs no network
 or process execution. Safe package-source access currently fails closed outside
 Linux and Apple platforms.
 
-The schema-2 package and component manifests form a closed composition graph.
+The schema-2 package manifest and schema-3 component manifests form a closed
+composition graph. Schema-3 distinguishes rendered components from additive
+installation units. An installation unit cannot include or vendor source; it
+declares exactly one owned module, compatible database and client adapters,
+typed contribution kinds, and sorted release-pinned framework dependencies.
+The bundled `identity` unit requires the minimal Leptos composition and records
+its configuration, seed, background work, provider migration sources, separate
+cookie-BFF and Bearer API routes, OpenAPI, Leptos routes and navigation, and
+capability-preflight contributions. This metadata is inert package data; it
+does not execute code, migrations, or installation by itself.
+
 Resolution accepts an explicit framework/package identity and component root
 set, then produces a canonical topological component order, exact component
 and module versions, and the accumulated capability set. Required dependencies

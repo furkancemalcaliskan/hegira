@@ -71,7 +71,7 @@ ownership:
 | `templates/applications/layered/` | Workspace-external recommended Identity-enabled layered application source |
 | `templates/applications/layered-minimal/` | Explicit module-free server, Leptos, provider, configuration, and deployment variant built on the same layered base |
 | `templates/package.toml` | Versioned canonical component-package identity, framework compatibility, component graph, and source digest |
-| `templates/components/` | Typed data-only component manifests that define the canonical application composition |
+| `templates/components/` | Typed data-only manifests for canonical rendering and trusted additive component contributions |
 | `tools/application_mutator/` | Typed additive component and general change plans, canonical file ownership, controlled Cargo/Rust/TOML integration, and failure-safe publication for coordinated existing-application changes |
 | `tools/hegira_cli/` | Source-runnable application creation and inspection plus reviewable layered resource and application-owned migration generation with stable diagnostics and exit outcomes |
 | `tools/resource_generator/` | Typed layered resource specifications plus inward-layer, provider-specific SQLx persistence, explicit Axum/OpenAPI and Leptos UI composition, and append-only migration planning |

@@ -4,17 +4,17 @@ use std::{
 };
 
 use application_manifest::{
-    ApplicationCapability, FrameworkContract, HEGIRA_COMPONENT_PACKAGE,
-    HEGIRA_FRAMEWORK_REPOSITORY, PackageIdentity,
+    ApplicationCapability, ClientAdapter, DatabaseAdapter, FrameworkContract,
+    HEGIRA_COMPONENT_PACKAGE, HEGIRA_FRAMEWORK_REPOSITORY, PackageIdentity,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::{RendererError, Result, package_source::PackageSource};
 
 const TEMPLATE_MANIFEST_SCHEMA: u32 = 1;
 const COMPONENT_PACKAGE_MANIFEST_SCHEMA: u32 = 2;
-const COMPONENT_MANIFEST_SCHEMA: u32 = 2;
+const COMPONENT_MANIFEST_SCHEMA: u32 = 3;
 const LEGACY_COMPONENT_MANIFEST_SCHEMA: u32 = 1;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -48,6 +48,7 @@ pub struct ComponentManifest {
     #[serde(default)]
     pub version: Option<String>,
     pub source: PathBuf,
+    #[serde(default)]
     pub include: Vec<PathBuf>,
     #[serde(default)]
     pub requires: Vec<String>,
@@ -63,11 +64,13 @@ pub struct ComponentManifest {
     pub requires_capabilities: Vec<ApplicationCapability>,
     #[serde(default)]
     pub framework_dependencies: Vec<FrameworkDependency>,
+    #[serde(default)]
+    pub installation: Option<ComponentInstallationManifest>,
     #[serde(skip)]
     pub(crate) manifest_path: PathBuf,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct FrameworkDependency {
     pub manifest: PathBuf,
@@ -75,6 +78,32 @@ pub struct FrameworkDependency {
     pub path: PathBuf,
     #[serde(default)]
     pub default_features: Option<bool>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ComponentInstallationManifest {
+    pub module: String,
+    pub databases: Vec<DatabaseAdapter>,
+    pub clients: Vec<ClientAdapter>,
+    pub contributions: Vec<ComponentInstallationContribution>,
+    pub framework_dependencies: Vec<FrameworkDependency>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ComponentInstallationContribution {
+    AuthenticationSeed,
+    BackgroundJobs,
+    BearerApiRoutes,
+    CapabilityPreflight,
+    Configuration,
+    CookieBffRoutes,
+    LeptosNavigation,
+    LeptosRoutes,
+    Openapi,
+    PostgresMigrationSource,
+    SqliteMigrationSource,
 }
 
 #[derive(Debug)]
@@ -642,9 +671,9 @@ fn validate_component(
         }
     }
     validate_relative_path(&component.source, "component source")?;
-    if component.include.is_empty() {
+    if component.include.is_empty() && component.installation.is_none() {
         return Err(RendererError::new(format!(
-            "component {} includes no files",
+            "rendered component {} includes no files",
             component.id
         )));
     }
@@ -695,6 +724,110 @@ fn validate_component(
         validate_identifier(&dependency.name, "framework dependency")?;
         validate_relative_path(&dependency.manifest, "framework dependency manifest")?;
         validate_relative_path(&dependency.path, "framework dependency path")?;
+    }
+    if let Some(installation) = &component.installation {
+        validate_installation(component, installation)?;
+    }
+    Ok(())
+}
+
+fn validate_installation(
+    component: &ComponentManifest,
+    installation: &ComponentInstallationManifest,
+) -> Result<()> {
+    validate_identifier(&installation.module, "installation module")?;
+    if component.modules.as_slice() != [installation.module.as_str()] {
+        return Err(RendererError::new(format!(
+            "installable component {} must own exactly its declared module",
+            component.id
+        )));
+    }
+    if !component.include.is_empty() {
+        return Err(RendererError::new(format!(
+            "installable component {} cannot render or vendor application source",
+            component.id
+        )));
+    }
+    if component.requires.is_empty() {
+        return Err(RendererError::new(format!(
+            "installable component {} declares no compatible application base",
+            component.id
+        )));
+    }
+    validate_sorted_values(&installation.databases, "installation database adapter")?;
+    validate_sorted_values(&installation.clients, "installation client adapter")?;
+    validate_sorted_values(&installation.contributions, "installation contribution")?;
+    if installation.framework_dependencies.is_empty() {
+        return Err(RendererError::new(format!(
+            "installable component {} declares no framework dependencies",
+            component.id
+        )));
+    }
+    for dependency in &installation.framework_dependencies {
+        validate_identifier(&dependency.name, "installation framework dependency")?;
+        validate_relative_path(
+            &dependency.manifest,
+            "installation framework dependency manifest",
+        )?;
+        validate_relative_path(&dependency.path, "installation framework dependency path")?;
+    }
+    if installation
+        .framework_dependencies
+        .windows(2)
+        .any(|pair| pair[0].name >= pair[1].name)
+    {
+        return Err(RendererError::new(
+            "installation framework dependencies must be sorted and unique",
+        ));
+    }
+    if installation
+        .framework_dependencies
+        .iter()
+        .any(|dependency| dependency.manifest != Path::new("Cargo.toml"))
+    {
+        return Err(RendererError::new(
+            "installation framework dependencies must target the workspace manifest",
+        ));
+    }
+    let dependency_paths = installation
+        .framework_dependencies
+        .iter()
+        .map(|dependency| &dependency.path)
+        .collect::<BTreeSet<_>>();
+    if dependency_paths.len() != installation.framework_dependencies.len() {
+        return Err(RendererError::new(
+            "installation framework dependency paths must be unique",
+        ));
+    }
+    for (database, contribution) in [
+        (
+            DatabaseAdapter::Postgres,
+            ComponentInstallationContribution::PostgresMigrationSource,
+        ),
+        (
+            DatabaseAdapter::Sqlite,
+            ComponentInstallationContribution::SqliteMigrationSource,
+        ),
+    ] {
+        if installation.databases.contains(&database)
+            != installation.contributions.contains(&contribution)
+        {
+            return Err(RendererError::new(
+                "installation database adapters and migration-source contributions must match",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_sorted_values<T: Ord>(values: &[T], kind: &str) -> Result<()> {
+    if values.is_empty() {
+        return Err(RendererError::new(format!("component declares no {kind}s")));
+    }
+    if values.windows(2).any(|pair| pair[0] >= pair[1]) {
+        return Err(RendererError::new(format!(
+            "component {kind}s must be sorted and unique"
+        )));
     }
     Ok(())
 }
