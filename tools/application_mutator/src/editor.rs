@@ -4,7 +4,9 @@ use std::{
     path::Path,
 };
 
-use toml_edit::{Array, DocumentMut, InlineTable, Item, TableLike, Value, value};
+use toml_edit::{
+    Array, ArrayOfTables, DocumentMut, InlineTable, Item, Table, TableLike, Value, value,
+};
 
 use crate::{ChangePath, ChangePlanError, StructuredFileEdit};
 
@@ -17,6 +19,7 @@ pub enum StructuredEditKind {
     RustManagedEntry,
     CargoDependency,
     TomlArrayString,
+    TomlArrayTable,
     TomlTableString,
 }
 
@@ -42,6 +45,9 @@ impl CargoDependencySection {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CargoDependencySource {
     Workspace,
+    Registry {
+        version: String,
+    },
     FrameworkRelease {
         repository: String,
         version: String,
@@ -91,6 +97,27 @@ impl CargoDependency {
                 repository: repository.into(),
                 version: version.into(),
                 default_features,
+            },
+            optional,
+            features: features.into_iter().map(Into::into).collect(),
+        }
+    }
+
+    pub fn registry<N, V, F>(
+        name: N,
+        version: V,
+        optional: bool,
+        features: impl IntoIterator<Item = F>,
+    ) -> Self
+    where
+        N: Into<String>,
+        V: Into<String>,
+        F: Into<String>,
+    {
+        Self {
+            name: name.into(),
+            source: CargoDependencySource::Registry {
+                version: version.into(),
             },
             optional,
             features: features.into_iter().map(Into::into).collect(),
@@ -536,6 +563,7 @@ fn cargo_dependency_matches(existing: &Item, dependency: &CargoDependency) -> bo
         "workspace",
         "git",
         "tag",
+        "version",
         "default-features",
         "optional",
         "features",
@@ -549,6 +577,13 @@ fn cargo_dependency_matches(existing: &Item, dependency: &CargoDependency) -> bo
             declaration.get("workspace").and_then(Item::as_bool) == Some(true)
                 && declaration.get("git").is_none()
                 && declaration.get("tag").is_none()
+                && declaration.get("default-features").is_none()
+        }
+        CargoDependencySource::Registry { version } => {
+            declaration.get("workspace").is_none()
+                && declaration.get("git").is_none()
+                && declaration.get("tag").is_none()
+                && declaration.get("version").and_then(Item::as_str) == Some(version)
                 && declaration.get("default-features").is_none()
         }
         CargoDependencySource::FrameworkRelease {
@@ -591,6 +626,9 @@ fn cargo_dependency_value(dependency: &CargoDependency) -> Value {
     match &dependency.source {
         CargoDependencySource::Workspace => {
             declaration.insert("workspace", Value::from(true));
+        }
+        CargoDependencySource::Registry { version } => {
+            declaration.insert("version", Value::from(version.as_str()));
         }
         CargoDependencySource::FrameworkRelease {
             repository,
@@ -663,7 +701,23 @@ fn validate_cargo_dependency(
                 "workspace dependency declarations require an immutable framework release source",
             ))
         }
+        (
+            CargoDependencySource::Registry { version },
+            CargoDependencySection::WorkspaceDependencies,
+        ) if !dependency.optional && valid_registry_version(version) => Ok(()),
+        (CargoDependencySource::Registry { .. }, CargoDependencySection::WorkspaceDependencies) => {
+            Err(StructuredEditError::at_path(
+                StructuredEditErrorKind::InvalidInput,
+                path,
+                "registry workspace dependencies require an exact stable SemVer version",
+            ))
+        }
         (CargoDependencySource::Workspace, _) => Ok(()),
+        (CargoDependencySource::Registry { .. }, _) => Err(StructuredEditError::at_path(
+            StructuredEditErrorKind::InvalidInput,
+            path,
+            "application package dependencies must consume the workspace declaration",
+        )),
         (CargoDependencySource::FrameworkRelease { .. }, _) => Err(StructuredEditError::at_path(
             StructuredEditErrorKind::InvalidInput,
             path,
@@ -708,6 +762,16 @@ fn valid_release_version(value: &str) -> bool {
         return false;
     };
     let parts = version.split('.').collect::<Vec<_>>();
+    parts.len() == 3
+        && parts.iter().all(|part| {
+            !part.is_empty()
+                && part.bytes().all(|byte| byte.is_ascii_digit())
+                && (part == &"0" || !part.starts_with('0'))
+        })
+}
+
+fn valid_registry_version(value: &str) -> bool {
+    let parts = value.split('.').collect::<Vec<_>>();
     parts.len() == 3
         && parts.iter().all(|part| {
             !part.is_empty()
@@ -772,6 +836,108 @@ pub fn plan_toml_array_string(
     array.push(entry);
     planned(
         StructuredEditKind::TomlArrayString,
+        path,
+        observed_source,
+        document.to_string().into_bytes(),
+    )
+}
+
+/// Adds one `{ id, version }` entry to a TOML array of tables while preserving
+/// the surrounding application manifest. Entries are ordered by identifier so
+/// repeated planning is deterministic.
+pub fn plan_toml_identity_entry(
+    path: impl AsRef<Path>,
+    observed_source: &[u8],
+    table_path: &[&str],
+    key: &str,
+    id: &str,
+    version: &str,
+) -> Result<StructuredEditOutcome, StructuredEditError> {
+    let path = ChangePath::new(path)?;
+    if table_path.is_empty()
+        || table_path.iter().any(|part| !valid_toml_key(part))
+        || !valid_toml_key(key)
+        || !valid_marker_identifier(id)
+        || !valid_release_version(version)
+    {
+        return Err(StructuredEditError::at_path(
+            StructuredEditErrorKind::InvalidInput,
+            &path,
+            "TOML identity entries require validated table, key, id, and release version values",
+        ));
+    }
+    let source = std::str::from_utf8(observed_source).map_err(|_| {
+        StructuredEditError::at_path(
+            StructuredEditErrorKind::InvalidSource,
+            &path,
+            "TOML integration source must be UTF-8",
+        )
+    })?;
+    let mut document = parse_toml(source, &path)?;
+    let table = find_table(&mut document, table_path, &path)?;
+    if table.get(key).is_none() {
+        table.insert(key, Item::ArrayOfTables(ArrayOfTables::new()));
+    }
+    let entries = table
+        .get_mut(key)
+        .and_then(Item::as_array_of_tables_mut)
+        .ok_or_else(|| {
+            StructuredEditError::at_path(
+                StructuredEditErrorKind::MissingIntegrationPoint,
+                &path,
+                "declared TOML array-of-tables integration point has another type",
+            )
+        })?;
+
+    let mut identities = Vec::new();
+    for entry in entries.iter() {
+        let entry_id = entry.get("id").and_then(Item::as_str).ok_or_else(|| {
+            StructuredEditError::at_path(
+                StructuredEditErrorKind::TomlConflict,
+                &path,
+                "TOML identity entry has no string `id`",
+            )
+        })?;
+        let entry_version = entry.get("version").and_then(Item::as_str).ok_or_else(|| {
+            StructuredEditError::at_path(
+                StructuredEditErrorKind::TomlConflict,
+                &path,
+                "TOML identity entry has no string `version`",
+            )
+        })?;
+        if entry_id == id {
+            return if entry_version == version {
+                Ok(StructuredEditOutcome::AlreadyPresent {
+                    kind: StructuredEditKind::TomlArrayTable,
+                    path,
+                })
+            } else {
+                Err(StructuredEditError::at_path(
+                    StructuredEditErrorKind::TomlConflict,
+                    &path,
+                    format!("TOML identity `{id}` already uses version `{entry_version}`"),
+                ))
+            };
+        }
+        identities.push(entry_id.to_owned());
+    }
+    if !identities.iter().is_sorted()
+        || identities.iter().collect::<BTreeSet<_>>().len() != identities.len()
+    {
+        return Err(StructuredEditError::at_path(
+            StructuredEditErrorKind::TomlConflict,
+            &path,
+            "TOML identity entries must be unique and sorted by id",
+        ));
+    }
+
+    let mut entry = Table::new();
+    entry.insert("id", value(id));
+    entry.insert("version", value(version));
+    let position = identities.partition_point(|existing| existing.as_str() < id);
+    entries.insert(position, entry);
+    planned(
+        StructuredEditKind::TomlArrayTable,
         path,
         observed_source,
         document.to_string().into_bytes(),

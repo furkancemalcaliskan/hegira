@@ -14,6 +14,8 @@ pub fn DashboardRoute() -> impl IntoView {
             <p>
                 "This application contains the server, web client, DDD layers, persistence, and deployment foundation without an authentication module."
             </p>
+            // hegira:module-navigation
+            // hegira:module-navigation:end
         </section>
     }
 }

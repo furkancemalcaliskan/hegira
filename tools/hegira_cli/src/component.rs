@@ -50,7 +50,7 @@ pub(crate) fn run(
             command,
             repository_root,
             working_directory,
-            unavailable_installation_plan,
+            crate::identity_installation::plan,
             output,
             diagnostics,
         ),
@@ -122,23 +122,22 @@ fn add_component_with(
         );
     }
 
-    execute_mutation_plan(
-        &context.root,
-        plan.changes(),
-        command.mutation,
-        output,
-        diagnostics,
-    )
-}
-
-fn unavailable_installation_plan(
-    _: &ApplicationContext,
-    _: &ResolvedComposition,
-    component: &str,
-) -> Result<ComponentInstallationPlan, CliDiagnostic> {
-    Err(CliDiagnostic::validation(format!(
-        "bundled component `{component}` does not declare additive installation contributions"
-    )))
+    let mutation = command.mutation;
+    let exit = execute_mutation_plan(&context.root, plan.changes(), mutation, output, diagnostics);
+    if exit == CliExit::Success && !mutation.json() && command.component == "identity" {
+        let prefix = if mutation.dry_run() {
+            "After applying the plan"
+        } else {
+            "Next"
+        };
+        if let Err(error) = writeln!(
+            output,
+            "{prefix}: review Identity configuration, run `cargo generate-lockfile`, apply the selected database migrations, then run `cargo fmt --all` and the application checks."
+        ) {
+            return write_diagnostic(crate::output_diagnostic(error), diagnostics);
+        }
+    }
+    exit
 }
 
 fn composition_diagnostic(error: CompositionError) -> CliDiagnostic {

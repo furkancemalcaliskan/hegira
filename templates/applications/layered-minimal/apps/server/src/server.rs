@@ -28,7 +28,11 @@ async fn serve() -> Result<(), String> {
     )
     .map_err(|error| error.to_string())?;
 
+    // hegira:module-preflight
+    // hegira:module-preflight:end
     let database = app_infrastructure::operations::initialize_database(&config).await?;
+    // hegira:module-initialization
+    // hegira:module-initialization:end
     let state = ServerState {
         name: config.application.name.clone(),
         database,
@@ -57,11 +61,23 @@ async fn serve() -> Result<(), String> {
         .merge(application_routes)
         .with_state(());
     let web_routes = Router::<LeptosOptions>::new()
-        .leptos_routes(&leptos_options, routes, {
-            let options = leptos_options.clone();
-            move || shell(options.clone())
-        })
+        .leptos_routes_with_context(
+            &leptos_options,
+            routes,
+            move || {
+                // hegira:resource-leptos-contexts
+                // hegira:resource-leptos-contexts:end
+            },
+            {
+                let options = leptos_options.clone();
+                move || shell(options.clone())
+            },
+        )
         .fallback(leptos_axum::file_and_error_handler(shell));
+    let web_routes = web_routes
+        // hegira:cookie-bff-policy
+        // hegira:cookie-bff-policy:end
+        ;
 
     let app = operational_routes
         .merge(web_routes)
@@ -72,6 +88,8 @@ async fn serve() -> Result<(), String> {
             config.is_production(),
             http_support::security_headers::set,
         ))
+        // hegira:module-rate-limit
+        // hegira:module-rate-limit:end
         .layer(CompressionLayer::new())
         .layer(RequestBodyLimitLayer::new(config.server.body_limit_bytes))
         .layer(TimeoutLayer::with_status_code(
@@ -84,10 +102,13 @@ async fn serve() -> Result<(), String> {
     let listener = tokio::net::TcpListener::bind(addr)
         .await
         .map_err(|error| format!("failed to bind application server: {error}"))?;
-    axum::serve(listener, app.into_make_service())
-        .with_graceful_shutdown(runtime::shutdown_signal())
-        .await
-        .map_err(|error| format!("application server error: {error}"))
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    )
+    .with_graceful_shutdown(runtime::shutdown_signal())
+    .await
+    .map_err(|error| format!("application server error: {error}"))
 }
 
 async fn healthz(axum::Extension(state): axum::Extension<ServerState>) -> String {

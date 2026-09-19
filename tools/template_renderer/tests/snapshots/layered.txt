@@ -1,6 +1,6 @@
 package=hegira-canonical@v0.5.0
 framework=https://github.com/furkancemalcaliskan/hegira.git#v0.5.0
-digest=sha256:cfef21dddd6d1d1f5576bd996586e42cfff7ae8e8feeeda2465e8972ddfdb48a
+digest=sha256:0de66e393e766b1658b3350cdffd684ba88fa78aa453037a04a5f1333d78a49d
 components=layered-base,layered-leptos-identity
 6986e1a96f1eaa98 .dockerignore
 4845a8e7ed4a8aa1 .env.example

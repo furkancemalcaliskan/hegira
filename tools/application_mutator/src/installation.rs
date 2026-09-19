@@ -9,7 +9,7 @@ use crate::{
     CargoDependency, CargoDependencySection, ChangeOperation, ChangePath, ChangePlan,
     ChangePlanError, FileCreation, PlannedFileChange, PreconditionSummary, StructuredEditError,
     StructuredEditKind, StructuredEditOutcome, StructuredFileEdit, plan_cargo_dependency,
-    plan_rust_managed_entry, plan_rust_module, plan_toml_array_string,
+    plan_rust_managed_entry, plan_rust_module, plan_toml_array_string, plan_toml_identity_entry,
 };
 
 pub const COMPONENT_INSTALLATION_SUMMARY_SCHEMA: u32 = 1;
@@ -155,6 +155,13 @@ impl ComponentContribution {
         match self {
             Self::Artifact(artifact) => artifact.creation.path(),
             Self::Integration(integration) => integration.edit.path(),
+        }
+    }
+
+    pub fn resulting_content(&self) -> &[u8] {
+        match self {
+            Self::Artifact(artifact) => artifact.creation.resulting_content(),
+            Self::Integration(integration) => integration.edit.resulting_content(),
         }
     }
 
@@ -309,9 +316,16 @@ pub enum ComponentManagedRustTarget {
     InfrastructureConfigurationFields,
     InfrastructurePostgresMigrationSources,
     InfrastructureSqliteMigrationSources,
+    ServerInitialization,
+    ServerPreflight,
+    ServerRateLimit,
+    ServerModules,
     ServerBearerRoutes,
+    ServerCookieBffPolicy,
     ServerOpenApiDocuments,
     ServerLeptosContexts,
+    WebDashboardNavigation,
+    WebProviders,
     WebNativeRoutes,
     WebSplitRoutes,
     WebNavigationItems,
@@ -340,6 +354,31 @@ impl ComponentManagedRustTarget {
                 "apps/server/src/server.rs",
                 "resource-bearer-routes",
             ),
+            Self::ServerInitialization => (
+                ApplicationFileOwner::Server,
+                "apps/server/src/server.rs",
+                "module-initialization",
+            ),
+            Self::ServerPreflight => (
+                ApplicationFileOwner::Server,
+                "apps/server/src/server.rs",
+                "module-preflight",
+            ),
+            Self::ServerRateLimit => (
+                ApplicationFileOwner::Server,
+                "apps/server/src/server.rs",
+                "module-rate-limit",
+            ),
+            Self::ServerModules => (
+                ApplicationFileOwner::Server,
+                "apps/server/src/lib.rs",
+                "module-server-modules",
+            ),
+            Self::ServerCookieBffPolicy => (
+                ApplicationFileOwner::Server,
+                "apps/server/src/server.rs",
+                "cookie-bff-policy",
+            ),
             Self::ServerOpenApiDocuments => (
                 ApplicationFileOwner::Server,
                 "apps/server/src/server.rs",
@@ -349,6 +388,16 @@ impl ComponentManagedRustTarget {
                 ApplicationFileOwner::Server,
                 "apps/server/src/server.rs",
                 "resource-leptos-contexts",
+            ),
+            Self::WebDashboardNavigation => (
+                ApplicationFileOwner::Web,
+                "apps/web/src/dashboard.rs",
+                "module-navigation",
+            ),
+            Self::WebProviders => (
+                ApplicationFileOwner::Web,
+                "apps/web/src/root.rs",
+                "module-web-providers",
             ),
             Self::WebNativeRoutes => (
                 ApplicationFileOwner::Web,
@@ -372,6 +421,8 @@ impl ComponentManagedRustTarget {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ComponentConfigurationTarget {
     Capabilities,
+    Components,
+    Modules,
 }
 
 impl ComponentConfigurationTarget {
@@ -390,8 +441,40 @@ impl ComponentConfigurationTarget {
                 &["composition"],
                 "capabilities",
             ),
+            Self::Components | Self::Modules => (
+                ApplicationFileOwner::ApplicationManifest,
+                "hegira.toml",
+                &[],
+                "",
+            ),
         }
     }
+}
+
+pub fn plan_component_composition_identity(
+    target: ComponentConfigurationTarget,
+    observed_source: &[u8],
+    id: &str,
+    version: &str,
+) -> Result<ComponentEditOutcome, ComponentEditError> {
+    let key = match target {
+        ComponentConfigurationTarget::Components => "components",
+        ComponentConfigurationTarget::Modules => "modules",
+        ComponentConfigurationTarget::Capabilities => {
+            return Err(ComponentEditError::UnsupportedConfigurationTarget);
+        }
+    };
+    component_edit_outcome(
+        ApplicationFileOwner::ApplicationManifest,
+        plan_toml_identity_entry(
+            "hegira.toml",
+            observed_source,
+            &["composition"],
+            key,
+            id,
+            version,
+        )?,
+    )
 }
 
 #[derive(Debug)]
@@ -491,13 +574,16 @@ pub enum ComponentEditError {
     Structured(StructuredEditError),
     Installation(ComponentInstallationError),
     UnsupportedCargoSection,
+    UnsupportedConfigurationTarget,
 }
 
 impl ComponentEditError {
     pub fn structured_kind(&self) -> Option<crate::StructuredEditErrorKind> {
         match self {
             Self::Structured(error) => Some(error.kind()),
-            Self::Installation(_) | Self::UnsupportedCargoSection => None,
+            Self::Installation(_)
+            | Self::UnsupportedCargoSection
+            | Self::UnsupportedConfigurationTarget => None,
         }
     }
 }
@@ -510,6 +596,9 @@ impl Display for ComponentEditError {
             Self::UnsupportedCargoSection => formatter.write_str(
                 "workspace dependencies belong only in the workspace manifest; package manifests must use their local dependency sections",
             ),
+            Self::UnsupportedConfigurationTarget => formatter.write_str(
+                "the selected application-manifest target does not contain versioned identities",
+            ),
         }
     }
 }
@@ -520,6 +609,7 @@ impl std::error::Error for ComponentEditError {
             Self::Structured(error) => Some(error),
             Self::Installation(error) => Some(error),
             Self::UnsupportedCargoSection => None,
+            Self::UnsupportedConfigurationTarget => None,
         }
     }
 }
