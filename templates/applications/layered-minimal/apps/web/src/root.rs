@@ -20,6 +20,8 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
 #[component]
 pub fn App() -> impl IntoView {
     provide_meta_context();
+    // hegira:module-web-providers
+    // hegira:module-web-providers:end
     view! {
         <Stylesheet id="leptos" href="/pkg/app.css"/>
         <Title text="Application"/>

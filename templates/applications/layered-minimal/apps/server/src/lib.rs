@@ -5,6 +5,9 @@ pub use app_web;
 #[cfg(feature = "ssr")]
 pub mod server;
 
+// hegira:module-server-modules
+// hegira:module-server-modules:end
+
 #[cfg(feature = "hydrate")]
 #[wasm_bindgen::prelude::wasm_bindgen]
 pub fn hydrate() {

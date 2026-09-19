@@ -21,7 +21,7 @@ pub use editor::{
     CargoDependency, CargoDependencySection, CargoDependencySource, RUST_MODULES_END,
     RUST_MODULES_START, StructuredEditError, StructuredEditErrorKind, StructuredEditKind,
     StructuredEditOutcome, plan_cargo_dependency, plan_rust_managed_entry, plan_rust_module,
-    plan_toml_array_string, plan_toml_table_string,
+    plan_toml_array_string, plan_toml_identity_entry, plan_toml_table_string,
 };
 pub use installation::{
     ApplicationFileOwner, COMPONENT_INSTALLATION_SUMMARY_SCHEMA, ComponentArtifact,
@@ -30,7 +30,8 @@ pub use installation::{
     ComponentInstallationErrorKind, ComponentInstallationPlan, ComponentInstallationSummary,
     ComponentIntegration, ComponentManagedRustTarget, ComponentRustModuleTarget,
     OwnedChangeSummary, compose_component_contributions, plan_component_cargo_dependency,
-    plan_component_cargo_feature, plan_component_configuration_entry, plan_component_installation,
+    plan_component_cargo_feature, plan_component_composition_identity,
+    plan_component_configuration_entry, plan_component_installation,
     plan_component_managed_rust_entry, plan_component_rust_module,
 };
 pub use publisher::{
@@ -165,6 +166,10 @@ impl FileCreation {
 
     pub fn path(&self) -> &ChangePath {
         &self.path
+    }
+
+    pub fn resulting_content(&self) -> &[u8] {
+        &self.content
     }
 }
 

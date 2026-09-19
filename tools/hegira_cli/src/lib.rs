@@ -31,6 +31,7 @@ use template_renderer::{
 
 mod application_context;
 mod component;
+mod identity_installation;
 mod mutation;
 
 use component::ComponentCommand;

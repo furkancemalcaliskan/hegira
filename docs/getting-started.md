@@ -191,6 +191,18 @@ component installation, or additional client templates. Optional runtime
 providers are configured explicitly in the application; they are not extra
 `new` selections.
 
+For a compatible minimal Leptos application, `component add identity` previews
+or applies the bundled Identity integration for its selected SQLite or
+PostgreSQL provider. Review first with `hegira component add identity --dry-run`
+from the application root. The apply plan updates `hegira.toml`, Cargo
+dependencies, application-owned Identity integration, provider migrations,
+Bearer API and cookie-BFF composition, and Leptos routes together. It does not
+run migrations or regenerate `Cargo.lock`; after applying, review runtime
+configuration, run `cargo generate-lockfile`, apply migrations against the
+intended database, and validate the application before deployment. A repeated
+add is a conflict and does not modify the application. Identity owns `/` after
+installation; the original dashboard remains at `/dashboard`.
+
 Successful creation and help use stdout; diagnostics use stderr. Exit codes
 are `0` (success, including guided cancellation), `1` (internal error),
 `2` (usage error), `3` (validation failure), and `4` (destination conflict).

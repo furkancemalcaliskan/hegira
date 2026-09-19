@@ -387,7 +387,13 @@ the requested target graph. It rejects installed, unknown, conflicting, or
 non-additive components before publication and never executes component code or
 accepts a remote package coordinate. A resolved additive unit is converted to
 one `ComponentInstallationPlan` and handed to the same mutation executor.
-`hegira generate resource <name> --field <name:type>` uses
+The bundled Identity unit composes into a compatible minimal Leptos application
+for the selected SQLite or PostgreSQL provider. It updates the application
+manifest and source in one preconditioned publication, with configuration
+preflight before database initialization. The command does not connect to a
+database, run migrations, regenerate the lockfile, or initialize providers that
+the minimal host has not composed; the maintainer performs those post-install
+steps explicitly. `hegira generate resource <name> --field <name:type>` uses
 this contract to compose the Domain, Application Contracts, Application,
 selected SQLx, Axum/OpenAPI, and selected Leptos emitter plans into one atomic
 change. Chained edits preserve the first observed precondition and final

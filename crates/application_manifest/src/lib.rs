@@ -21,9 +21,16 @@ pub const HEGIRA_FRAMEWORK_REPOSITORY: &str = "https://github.com/furkancemalcal
 pub const HEGIRA_COMPONENT_PACKAGE: &str = "hegira-canonical";
 pub const LAYERED_BASE_COMPONENT: &str = "layered-base";
 pub const LAYERED_LEPTOS_IDENTITY_COMPONENT: &str = "layered-leptos-identity";
+pub const LAYERED_LEPTOS_MINIMAL_COMPONENT: &str = "layered-leptos-minimal";
+pub const IDENTITY_COMPONENT: &str = "identity";
 pub const IDENTITY_MODULE: &str = "identity";
 
-const SUPPORTED_COMPONENTS: [&str; 2] = [LAYERED_BASE_COMPONENT, LAYERED_LEPTOS_IDENTITY_COMPONENT];
+const SUPPORTED_COMPONENTS: [&str; 4] = [
+    LAYERED_BASE_COMPONENT,
+    LAYERED_LEPTOS_IDENTITY_COMPONENT,
+    LAYERED_LEPTOS_MINIMAL_COMPONENT,
+    IDENTITY_COMPONENT,
+];
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -65,7 +72,7 @@ pub struct ApplicationComposition {
     pub components: Vec<InstalledComponent>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub modules: Vec<InstalledModule>,
-    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    #[serde(default)]
     pub capabilities: BTreeSet<ApplicationCapability>,
 }
 
@@ -827,7 +834,8 @@ fn validate_composition(
         }
     }
 
-    let identity_component = component_ids.contains(LAYERED_LEPTOS_IDENTITY_COMPONENT);
+    let identity_component = component_ids.contains(LAYERED_LEPTOS_IDENTITY_COMPONENT)
+        || component_ids.contains(IDENTITY_COMPONENT);
     let identity_module = module_ids.contains(IDENTITY_MODULE);
     if identity_component != identity_module {
         return Err(ManifestError::IncompatibleSelection(

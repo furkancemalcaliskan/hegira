@@ -96,6 +96,88 @@ fn repeated_component_add_is_a_stable_non_destructive_conflict() {
 }
 
 #[test]
+fn identity_installation_is_reviewable_atomic_and_repeated_add_is_safe() {
+    for database in ["sqlite", "postgres"] {
+        let output = TestDirectory::new(&format!("identity-install-{database}"));
+        let application = output.path().join("application");
+        let created = hegira(&[
+            "new",
+            "component-app",
+            "--destination",
+            path_argument(&application),
+            "--composition",
+            "minimal",
+            "--database",
+            database,
+        ]);
+        assert!(created.status.success(), "{:?}", created.stderr);
+        let before = output_tree(&application);
+
+        let dry_run = hegira_at(
+            &application,
+            &["component", "add", "identity", "--dry-run", "--json"],
+        );
+        assert!(dry_run.status.success(), "{:?}", dry_run.stderr);
+        let dry_run: serde_json::Value = serde_json::from_slice(&dry_run.stdout).unwrap();
+        assert_eq!(dry_run["mode"], "dry-run");
+        assert_eq!(dry_run["outcome"], "planned");
+        assert_eq!(output_tree(&application), before);
+
+        let applied = hegira_at(&application, &["component", "add", "identity", "--json"]);
+        assert!(applied.status.success(), "{:?}", applied.stderr);
+        let applied: serde_json::Value = serde_json::from_slice(&applied.stdout).unwrap();
+        assert_eq!(applied["outcome"], "applied");
+        assert_eq!(dry_run["plan"], applied["plan"]);
+
+        let manifest = fs::read_to_string(application.join("hegira.toml")).unwrap();
+        assert!(manifest.contains("id = \"identity\""));
+        assert!(manifest.contains("\"authentication\""));
+        assert!(manifest.contains("\"authorization\""));
+        let operations =
+            fs::read_to_string(application.join("crates/infrastructure/src/operations.rs"))
+                .unwrap();
+        assert!(operations.contains(&format!(
+            "identity_sqlx::identity::migrations::{database}_migration_source()"
+        )));
+        let routes = fs::read_to_string(application.join("apps/web/src/routes.rs")).unwrap();
+        assert!(routes.contains("<identity_leptos::identity::routes::IdentityRoutes/>"));
+        assert!(!routes.contains("<Route path=StaticSegment(\"\") view=DashboardRoute/>"));
+
+        let after = output_tree(&application);
+        let repeated = hegira_at(&application, &["component", "add", "identity"]);
+        assert_eq!(repeated.status.code(), Some(4));
+        assert!(String::from_utf8_lossy(&repeated.stderr).contains("already installed"));
+        assert_eq!(output_tree(&application), after);
+    }
+}
+
+#[test]
+fn identity_installation_preserves_an_occupied_application_artifact() {
+    let output = TestDirectory::new("identity-install-occupied");
+    let application = output.path().join("application");
+    let created = hegira(&[
+        "new",
+        "component-app",
+        "--destination",
+        path_argument(&application),
+        "--composition",
+        "minimal",
+    ]);
+    assert!(created.status.success(), "{:?}", created.stderr);
+    fs::write(
+        application.join("apps/server/src/identity_runtime.rs"),
+        "// owned by app\n",
+    )
+    .unwrap();
+    let before = output_tree(&application);
+
+    let result = hegira_at(&application, &["component", "add", "identity"]);
+    assert_eq!(result.status.code(), Some(4));
+    assert!(String::from_utf8_lossy(&result.stderr).contains("identity_runtime.rs"));
+    assert_eq!(output_tree(&application), before);
+}
+
+#[test]
 fn unknown_component_fails_validation_without_application_writes() {
     let output = TestDirectory::new("component-unknown");
     let application = output.path().join("application");

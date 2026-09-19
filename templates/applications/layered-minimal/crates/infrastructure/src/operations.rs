@@ -18,15 +18,17 @@ pub fn migration_sources(
 ) -> Result<Vec<ModuleMigrationSource>, &'static str> {
     match backend {
         #[cfg(feature = "db-postgres")]
-        DatabaseBackend::Postgres => Ok(vec![ModuleMigrationSource::new(
-            "application",
-            &POSTGRES_APPLICATION_MIGRATIONS,
-        )]),
+        DatabaseBackend::Postgres => Ok(vec![
+            ModuleMigrationSource::new("application", &POSTGRES_APPLICATION_MIGRATIONS),
+            // hegira:module-migrations-postgres
+            // hegira:module-migrations-postgres:end
+        ]),
         #[cfg(feature = "db-sqlite")]
-        DatabaseBackend::Sqlite => Ok(vec![ModuleMigrationSource::new(
-            "application",
-            &SQLITE_APPLICATION_MIGRATIONS,
-        )]),
+        DatabaseBackend::Sqlite => Ok(vec![
+            ModuleMigrationSource::new("application", &SQLITE_APPLICATION_MIGRATIONS),
+            // hegira:module-migrations-sqlite
+            // hegira:module-migrations-sqlite:end
+        ]),
         #[allow(unreachable_patterns)]
         _ => Err("the selected database migration source is not included in this build"),
     }
