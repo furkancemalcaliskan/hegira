@@ -18,6 +18,7 @@ cargo build --locked -p hegira_cli
 cargo run --locked -p hegira_cli -- --help
 cargo run --locked -p hegira_cli -- new --help
 cargo run --locked -p hegira_cli -- inspect --help
+cargo run --locked -p hegira_cli -- doctor --help
 cargo run --locked -p hegira_cli -- component add --help
 cargo run --locked -p hegira_cli -- generate resource --help
 cargo run --locked -p hegira_cli -- generate migration --help
@@ -243,6 +244,32 @@ Inspection is read-only. It opens the manifest and required application-owned
 read application source, runtime configuration, environment values, user-home
 state, or secrets; it exposes no machine-local framework path and does not
 write application files.
+
+## Diagnose An Existing Application
+
+From the application root, run the source-built CLI's read-only doctor:
+
+```sh
+cargo run --locked --manifest-path /path/to/hegira/Cargo.toml \
+  -p hegira_cli -- doctor
+```
+
+Use `--application-root /path/to/my-application` for an explicit root and
+`--json` for a versioned `output_schema: 1` report. Doctor checks manifest and
+component compatibility, the mutation recovery marker, selected Identity
+route/transport/migration integration points, the selected database's runtime
+requirements, and local Rust, WASM, cargo-leptos, Node.js, and npm prerequisites.
+It reports `PASS`, `WARN`, and `FAIL` in fixed order. Missing development tools
+and an unprobed PostgreSQL service are warnings; invalid composition, unsafe
+integration state, or a recovery marker is a validation failure (exit code `3`).
+Warnings alone return exit code `0`.
+
+Doctor neither changes application files nor connects to a database or external
+service. It reads only bounded, symlink-safe application integration sources and
+reports no source bodies, runtime configuration, environment values, credentials,
+or machine-local paths. Integration-reference checks are diagnostics, not proof
+that the compiled HTTP policy is secure. It does not repair a failed check;
+review the reported action before attempting another mutation.
 
 ## Compatibility And Mutation Safety
 

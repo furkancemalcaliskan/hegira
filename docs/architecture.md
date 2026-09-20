@@ -427,6 +427,12 @@ compatibility assessment when one can be determined. Inspection reads no
 runtime configuration, environment value, user-home state, application source,
 or secret, exposes no machine-local framework path, and performs no writes.
 
+The `doctor` command reuses that resolver and the bundled composition graph. It
+checks the recovery marker and bounded, no-follow application integration
+sources without reading runtime configuration or connecting to a provider.
+Its local tool checks and selected-provider requirements are diagnostics, not
+startup preflight or application mutation.
+
 When an application name or destination is omitted in an interactive terminal,
 the same command gathers missing values through a guided workflow, displays the
 implemented selections and defaults, and requires confirmation after a final

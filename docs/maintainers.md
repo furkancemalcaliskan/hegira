@@ -181,6 +181,9 @@ explicit-root inspection, output-schema-2 composition status, exact installed
 versions, stable graph diagnostics, mutation compatibility, redaction, and
 incompatible or unsupported application outcomes. Prompt tests inject
 deterministic input and capture output without relying on a host terminal.
+Doctor fixtures check default, minimal, and Identity-added applications,
+read-only outcomes, recovery and integration failures, deterministic redacted
+output, and missing local tools as warnings.
 
 SQLite and PostgreSQL requests have committed whole-tree fingerprints covering
 file paths and bytes, including binary assets, and are compared with equivalent

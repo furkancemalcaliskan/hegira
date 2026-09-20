@@ -32,10 +32,12 @@ use template_renderer::{
 
 mod application_context;
 mod component;
+mod doctor;
 mod identity_installation;
 mod mutation;
 
 use component::ComponentCommand;
+use doctor::DoctorCommand;
 
 pub use application_context::{
     ApplicationContext, ApplicationContextError, ApplicationContextErrorKind,
@@ -80,6 +82,8 @@ enum CliCommand {
     New(NewCommand),
     /// Inspect an existing Hegira application without modifying it.
     Inspect(InspectCommand),
+    /// Diagnose application composition and local prerequisites without modifying it.
+    Doctor(DoctorCommand),
     /// Manage bundled additive application components.
     Component(ComponentCommand),
     /// Generate application-owned source through validated change plans.
@@ -406,6 +410,13 @@ fn run_command(
             Err(diagnostic) => write_diagnostic(diagnostic, diagnostics),
         },
         CliCommand::Inspect(command) => inspect_application(
+            command,
+            repository_root,
+            working_directory,
+            output,
+            diagnostics,
+        ),
+        CliCommand::Doctor(command) => doctor::run(
             command,
             repository_root,
             working_directory,
