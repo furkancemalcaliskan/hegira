@@ -161,6 +161,15 @@ contracts together with deterministic existing-application change planning:
 sh scripts/cli-check.sh
 ```
 
+The complementary composition matrix can be run with
+`sh scripts/composition-matrix-check.sh`. It exercises the explicit minimal
+application and the minimal-to-Identity transition for SQLite and PostgreSQL,
+including read-only failure paths, selected migration and transport wiring,
+and locked native and hydration builds. The existing
+`generated-application-check.sh` remains the default Identity application's
+provider and production-container validation. The composition matrix is not
+yet part of the required CI quality gate.
+
 The CLI process tests use disposable working and home directories and an empty
 command search path rather than the maintainer's global configuration. They
 verify default and explicit application
