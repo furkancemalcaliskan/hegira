@@ -4,13 +4,84 @@ use std::{
     str::FromStr,
 };
 
-use application_manifest::{ApplicationManifest, ClientAdapter, DatabaseAdapter, ManifestError};
+use application_manifest::{
+    ApplicationCapability, ApplicationManifest, ClientAdapter, DatabaseAdapter, ManifestError,
+};
 use serde::Serialize;
 
 use crate::{ArtifactNamespace, LayeredArtifactNames, LayeredNamingInput, NamingError};
 
 pub const RESOURCE_SPECIFICATION_SCHEMA: u32 = 1;
+pub const RESOURCE_CAPABILITY_DIAGNOSTIC_SCHEMA: u32 = 1;
 const MAX_FIELDS: usize = 64;
+
+/// Security capabilities required by every generated resource use case.
+/// UI checks cannot substitute for application-layer authorization.
+pub struct ResourceCapabilityRequirements;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ResourceCapabilityStatus {
+    required: BTreeSet<ApplicationCapability>,
+    missing: BTreeSet<ApplicationCapability>,
+}
+
+impl ResourceCapabilityRequirements {
+    pub const REQUIRED: [ApplicationCapability; 2] = [
+        ApplicationCapability::Authentication,
+        ApplicationCapability::Authorization,
+    ];
+
+    pub fn evaluate(
+        manifest: &ApplicationManifest,
+    ) -> Result<ResourceCapabilityStatus, SpecificationError> {
+        manifest
+            .validate()
+            .map_err(SpecificationError::invalid_manifest)?;
+        let composition = manifest.composition.as_ref().ok_or_else(|| {
+            SpecificationError::new(
+                SpecificationErrorKind::InvalidManifest,
+                "resource generation requires current application composition state",
+            )
+        })?;
+        let required = Self::REQUIRED.into_iter().collect::<BTreeSet<_>>();
+        let missing = required
+            .difference(&composition.capabilities)
+            .copied()
+            .collect();
+        Ok(ResourceCapabilityStatus { required, missing })
+    }
+}
+
+impl ResourceCapabilityStatus {
+    pub fn required(&self) -> &BTreeSet<ApplicationCapability> {
+        &self.required
+    }
+
+    pub fn missing(&self) -> &BTreeSet<ApplicationCapability> {
+        &self.missing
+    }
+
+    pub fn ensure_supported(&self) -> Result<(), SpecificationError> {
+        if self.missing.is_empty() {
+            return Ok(());
+        }
+        let missing = self
+            .missing
+            .iter()
+            .map(|capability| match capability {
+                ApplicationCapability::Authentication => "authentication",
+                ApplicationCapability::Authorization => "authorization",
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
+        Err(SpecificationError::new(
+            SpecificationErrorKind::MissingCapability,
+            format!(
+                "resource generation requires authentication and authorization; missing: {missing}. Install the official Identity component with `hegira component add identity` before generating protected resources"
+            ),
+        ))
+    }
+}
 
 const RUST_FIELD_KEYWORDS: &[&str] = &[
     "as", "async", "await", "break", "const", "continue", "crate", "dyn", "else", "enum", "extern",
@@ -271,6 +342,7 @@ impl ResourceSpecification {
         namespace: &ArtifactNamespace,
         manifest: &ApplicationManifest,
     ) -> Result<Self, SpecificationError> {
+        ResourceCapabilityRequirements::evaluate(manifest)?.ensure_supported()?;
         let selection = ResourceSelection::resolve(manifest)?;
         let names = LayeredArtifactNames::resolve(input.naming, namespace)
             .map_err(SpecificationError::naming)?;
@@ -373,6 +445,7 @@ pub struct ResourceSpecificationSummary<'a> {
 pub enum SpecificationErrorKind {
     Naming,
     InvalidManifest,
+    MissingCapability,
     UnsupportedSelection,
     InvalidField,
     ReservedField,
@@ -466,8 +539,9 @@ mod tests {
     use application_manifest::{
         APPLICATION_MANIFEST_SCHEMA, ApplicationCapability, ApplicationComposition,
         ApplicationSelection, FrameworkContract, HEGIRA_COMPONENT_PACKAGE,
-        HEGIRA_FRAMEWORK_REPOSITORY, IDENTITY_MODULE, InstalledComponent, InstalledModule,
-        LAYERED_BASE_COMPONENT, LAYERED_LEPTOS_IDENTITY_COMPONENT, PackageIdentity,
+        HEGIRA_FRAMEWORK_REPOSITORY, IDENTITY_COMPONENT, IDENTITY_MODULE, InstalledComponent,
+        InstalledModule, LAYERED_BASE_COMPONENT, LAYERED_LEPTOS_IDENTITY_COMPONENT,
+        LAYERED_LEPTOS_MINIMAL_COMPONENT, PackageIdentity,
     };
 
     use super::*;
@@ -517,6 +591,81 @@ mod tests {
 
     fn input(fields: impl IntoIterator<Item = ResourceFieldInput>) -> ResourceSpecificationInput {
         ResourceSpecificationInput::new(LayeredNamingInput::new("OrderItem"), fields)
+    }
+
+    fn minimal_manifest(with_identity: bool) -> ApplicationManifest {
+        let mut manifest = manifest(DatabaseAdapter::Sqlite);
+        let composition = manifest.composition.as_mut().unwrap();
+        composition.components = [LAYERED_BASE_COMPONENT, LAYERED_LEPTOS_MINIMAL_COMPONENT]
+            .into_iter()
+            .chain(with_identity.then_some(IDENTITY_COMPONENT))
+            .map(|id| InstalledComponent {
+                id: id.to_owned(),
+                version: "v0.5.0".to_owned(),
+            })
+            .collect();
+        if !with_identity {
+            composition.modules.clear();
+            composition.capabilities.clear();
+        }
+        manifest
+    }
+
+    #[test]
+    fn resource_security_requirements_fail_closed_for_minimal_composition() {
+        let minimal = minimal_manifest(false);
+        let status = ResourceCapabilityRequirements::evaluate(&minimal).unwrap();
+        assert_eq!(
+            status.missing(),
+            &[
+                ApplicationCapability::Authentication,
+                ApplicationCapability::Authorization
+            ]
+            .into_iter()
+            .collect()
+        );
+        let error = status.ensure_supported().unwrap_err();
+        assert_eq!(error.kind(), SpecificationErrorKind::MissingCapability);
+        assert!(error.to_string().contains("authentication, authorization"));
+        assert!(error.to_string().contains("hegira component add identity"));
+        assert_eq!(
+            ResourceSpecification::resolve(
+                input([ResourceFieldInput::new("name", "string", false)]),
+                &namespace(),
+                &minimal,
+            )
+            .unwrap_err()
+            .kind(),
+            SpecificationErrorKind::MissingCapability
+        );
+    }
+
+    #[test]
+    fn installed_identity_satisfies_requirements_but_inconsistent_capabilities_do_not() {
+        let installed = minimal_manifest(true);
+        let status = ResourceCapabilityRequirements::evaluate(&installed).unwrap();
+        assert!(status.missing().is_empty());
+        status.ensure_supported().unwrap();
+        ResourceSpecification::resolve(
+            input([ResourceFieldInput::new("name", "string", false)]),
+            &namespace(),
+            &installed,
+        )
+        .unwrap();
+
+        let mut inconsistent = installed;
+        inconsistent
+            .composition
+            .as_mut()
+            .unwrap()
+            .capabilities
+            .remove(&ApplicationCapability::Authorization);
+        assert_eq!(
+            ResourceCapabilityRequirements::evaluate(&inconsistent)
+                .unwrap_err()
+                .kind(),
+            SpecificationErrorKind::InvalidManifest
+        );
     }
 
     #[test]

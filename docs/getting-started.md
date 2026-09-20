@@ -295,7 +295,12 @@ cargo run --locked --manifest-path /path/to/hegira/Cargo.toml \
 
 The supported scalar set is `string`, `bool`, `i64`, `uuid`, and `datetime`.
 Use `--plural <NAME>` for an irregular UpperCamelCase plural. The command reads
-the database, client, and components from `hegira.toml`, validates all names
+the database, client, components, and capabilities from `hegira.toml`. It
+requires both authentication and authorization before reading integration
+sources or constructing a change plan. A minimal application without those
+capabilities fails with exit code `3`, leaves its files unchanged, and points
+to `hegira component add identity`; with `--json`, the deterministic
+`missing-capabilities` diagnostic is written to stderr. The command validates all names
 and integration points, and publishes one atomic plan covering Domain,
 Application Contracts, Application, SQLx persistence and migration, Axum and
 OpenAPI, and the selected Leptos client. `--dry-run` previews the identical

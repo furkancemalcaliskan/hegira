@@ -387,6 +387,74 @@ fn complete_resource_dry_run_and_apply_share_one_atomic_plan() {
 }
 
 #[test]
+fn minimal_resource_generation_fails_before_writes_with_stable_capability_diagnostics() {
+    for database in ["sqlite", "postgres"] {
+        let output = TestDirectory::new(&format!("resource-capabilities-{database}"));
+        let application = output.path().join("application");
+        let created = hegira(&[
+            "new",
+            "resource-app",
+            "--destination",
+            path_argument(&application),
+            "--composition",
+            "minimal",
+            "--database",
+            database,
+        ]);
+        assert!(created.status.success(), "{:?}", created.stderr);
+        let before = output_tree(&application);
+
+        let human = hegira_at(
+            &application,
+            &[
+                "generate",
+                "resource",
+                "OrderItem",
+                "--field",
+                "name:string",
+            ],
+        );
+        assert_eq!(human.status.code(), Some(3));
+        assert!(human.stdout.is_empty());
+        let diagnostic = String::from_utf8(human.stderr).unwrap();
+        assert!(diagnostic.contains("missing: authentication, authorization"));
+        assert!(diagnostic.contains("hegira component add identity"));
+        assert_eq!(output_tree(&application), before);
+
+        let json_arguments = [
+            "generate",
+            "resource",
+            "OrderItem",
+            "--field",
+            "name:string",
+            "--dry-run",
+            "--json",
+        ];
+        let first = hegira_at(&application, &json_arguments);
+        let second = hegira_at(&application, &json_arguments);
+        assert_eq!(first.status.code(), Some(3));
+        assert_eq!(first.stdout, second.stdout);
+        assert!(first.stdout.is_empty());
+        assert_eq!(first.stderr, second.stderr);
+        let diagnostic: serde_json::Value = serde_json::from_slice(&first.stderr).unwrap();
+        assert_eq!(diagnostic["output_schema"], 1);
+        assert_eq!(diagnostic["code"], "missing-capabilities");
+        assert_eq!(
+            diagnostic["required"],
+            serde_json::json!(["authentication", "authorization"])
+        );
+        assert_eq!(diagnostic["missing"], diagnostic["required"]);
+        assert!(
+            diagnostic["hint"]
+                .as_str()
+                .unwrap()
+                .contains("hegira component add identity")
+        );
+        assert_eq!(output_tree(&application), before);
+    }
+}
+
+#[test]
 fn invalid_resource_fields_fail_before_application_writes() {
     let output = TestDirectory::new("invalid-resource-field");
     let application = output.path().join("application");

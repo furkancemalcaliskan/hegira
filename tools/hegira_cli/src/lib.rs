@@ -18,10 +18,11 @@ use resource_generator::{
     ArtifactNamespace, HttpLayerError, HttpLayerErrorKind, HttpLayerSources, InwardLayerError,
     InwardLayerErrorKind, InwardLayerSources, LayeredArtifactNames, LayeredNamingInput,
     MigrationError, MigrationErrorKind, MigrationIdentity, NamingErrorKind, PersistenceLayerError,
-    PersistenceLayerErrorKind, PersistenceLayerSources, ResourceFieldInput, ResourceSelection,
-    ResourceSpecification, ResourceSpecificationInput, WebLayerError, WebLayerErrorKind,
-    WebLayerSources, plan_application_migration, plan_inward_resource_layers, plan_resource_http,
-    plan_resource_persistence, plan_resource_web,
+    PersistenceLayerErrorKind, PersistenceLayerSources, RESOURCE_CAPABILITY_DIAGNOSTIC_SCHEMA,
+    ResourceCapabilityRequirements, ResourceCapabilityStatus, ResourceFieldInput,
+    ResourceSelection, ResourceSpecification, ResourceSpecificationInput, WebLayerError,
+    WebLayerErrorKind, WebLayerSources, plan_application_migration, plan_inward_resource_layers,
+    plan_resource_http, plan_resource_persistence, plan_resource_web,
 };
 use serde::Serialize;
 use template_renderer::{
@@ -445,6 +446,51 @@ const RESOURCE_SOURCE_PATHS: [&str; 11] = [
 const WEB_SIDEBAR_PATH: &str = "apps/web/src/app/sidebar.rs";
 const MAX_GENERATION_SOURCE_BYTES: u64 = 4 * 1024 * 1024;
 
+#[derive(Serialize)]
+struct ResourceCapabilityFailure<'a> {
+    output_schema: u32,
+    code: &'static str,
+    message: &'a str,
+    required: &'a BTreeSet<ApplicationCapability>,
+    missing: &'a BTreeSet<ApplicationCapability>,
+    hint: &'static str,
+}
+
+fn write_resource_capability_failure(
+    status: &ResourceCapabilityStatus,
+    json: bool,
+    diagnostics: &mut impl Write,
+) -> CliExit {
+    let error = status
+        .ensure_supported()
+        .expect_err("a capability failure must include missing requirements");
+    if !json {
+        return write_diagnostic(CliDiagnostic::validation(error.to_string()), diagnostics);
+    }
+    let rendered = match serde_json::to_string_pretty(&ResourceCapabilityFailure {
+        output_schema: RESOURCE_CAPABILITY_DIAGNOSTIC_SCHEMA,
+        code: "missing-capabilities",
+        message: &error.to_string(),
+        required: status.required(),
+        missing: status.missing(),
+        hint: "Run `hegira component add identity` in a compatible minimal application before generating protected resources.",
+    }) {
+        Ok(rendered) => rendered,
+        Err(error) => {
+            return write_diagnostic(
+                CliDiagnostic::internal(format!(
+                    "cannot serialize resource capability diagnostic: {error}"
+                )),
+                diagnostics,
+            );
+        }
+    };
+    if writeln!(diagnostics, "{rendered}").is_err() {
+        return CliExit::Internal;
+    }
+    CliExit::Validation
+}
+
 fn generate_resource(
     command: ResourceCommand,
     working_directory: PathBuf,
@@ -459,6 +505,19 @@ fn generate_resource(
         .manifest
         .as_ref()
         .expect("a compatible mutation context must contain a typed manifest");
+    let capabilities = match ResourceCapabilityRequirements::evaluate(manifest) {
+        Ok(capabilities) => capabilities,
+        Err(error) => {
+            return write_diagnostic(CliDiagnostic::validation(error.to_string()), diagnostics);
+        }
+    };
+    if !capabilities.missing().is_empty() {
+        return write_resource_capability_failure(
+            &capabilities,
+            command.mutation.json(),
+            diagnostics,
+        );
+    }
     let sources = match read_resource_sources(&context.root) {
         Ok(sources) => sources,
         Err(diagnostic) => return write_diagnostic(diagnostic, diagnostics),
