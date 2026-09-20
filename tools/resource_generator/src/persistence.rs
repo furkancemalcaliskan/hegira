@@ -489,15 +489,33 @@ mod tests {
     fn specification(database: &str) -> ResourceSpecification {
         let manifest = ApplicationManifest::from_toml(&format!(
             r#"
-schema = 1
+schema = 2
 application = "sample"
 [framework]
 repository = "https://example.invalid/hegira.git"
 version = "v0.5.0"
 [selection]
-components = ["layered-base", "layered-leptos-identity"]
 databases = ["{database}"]
 clients = ["leptos"]
+
+[composition]
+capabilities = ["authentication", "authorization"]
+
+[composition.package]
+id = "hegira-canonical"
+version = "v0.5.0"
+
+[[composition.components]]
+id = "layered-base"
+version = "v0.5.0"
+
+[[composition.components]]
+id = "layered-leptos-identity"
+version = "v0.5.0"
+
+[[composition.modules]]
+id = "identity"
+version = "v0.5.0"
 "#
         ))
         .unwrap();

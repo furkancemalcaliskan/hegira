@@ -394,7 +394,11 @@ preflight before database initialization. The command does not connect to a
 database, run migrations, regenerate the lockfile, or initialize providers that
 the minimal host has not composed; the maintainer performs those post-install
 steps explicitly. `hegira generate resource <name> --field <name:type>` uses
-this contract to compose the Domain, Application Contracts, Application,
+the recorded composition state to require authentication and authorization
+before it reads integration sources or plans any files. Missing capabilities
+fail closed with a stable human or JSON diagnostic; the generator specification
+enforces the same requirement for callers outside the CLI. The command uses
+the mutation contract to compose the Domain, Application Contracts, Application,
 selected SQLx, Axum/OpenAPI, and selected Leptos emitter plans into one atomic
 change. Chained edits preserve the first observed precondition and final
 content without publishing an intermediate state. `hegira generate migration

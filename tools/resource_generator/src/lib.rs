@@ -34,8 +34,9 @@ pub use source::{
     plan_inward_resource_layers,
 };
 pub use specification::{
-    RESOURCE_SPECIFICATION_SCHEMA, ResourceField, ResourceFieldInput, ResourceIdentifier,
-    ResourceSelection, ResourceSpecification, ResourceSpecificationInput,
+    RESOURCE_CAPABILITY_DIAGNOSTIC_SCHEMA, RESOURCE_SPECIFICATION_SCHEMA,
+    ResourceCapabilityRequirements, ResourceCapabilityStatus, ResourceField, ResourceFieldInput,
+    ResourceIdentifier, ResourceSelection, ResourceSpecification, ResourceSpecificationInput,
     ResourceSpecificationSummary, ScalarType, SelectedClient, SelectedDatabase, SpecificationError,
     SpecificationErrorKind,
 };
