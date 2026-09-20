@@ -917,6 +917,167 @@ fn inspect_reports_the_discovered_application_without_writing() {
 }
 
 #[test]
+fn doctor_reports_default_minimal_and_installed_identity_without_application_writes() {
+    for composition in ["identity", "minimal"] {
+        let root = TestDirectory::new(&format!("doctor-{composition}"));
+        let application = root.path().join("application");
+        let created = hegira(&[
+            "new",
+            "doctor-app",
+            "--destination",
+            path_argument(&application),
+            "--composition",
+            composition,
+        ]);
+        assert!(created.status.success(), "{:?}", created.stderr);
+        let before = output_tree(&application);
+
+        let first = hegira_at(&application, &["doctor", "--json"]);
+        let second = hegira_at(&application, &["doctor", "--json"]);
+        assert_eq!(first.status.code(), Some(0));
+        assert!(first.stderr.is_empty());
+        assert_eq!(first.stdout, second.stdout);
+        let report: serde_json::Value = serde_json::from_slice(&first.stdout).unwrap();
+        assert_eq!(report["output_schema"], 1);
+        assert_eq!(report["status"], "warning");
+        assert_eq!(report["checks"][0]["code"], "manifest");
+        assert_eq!(report["checks"][0]["status"], "pass");
+        assert_eq!(report["checks"][1]["code"], "composition");
+        assert_eq!(report["checks"][1]["status"], "pass");
+        assert_eq!(report["checks"][3]["code"], "managed-integrations");
+        assert_eq!(report["checks"][3]["status"], "pass");
+        assert_eq!(report["checks"][6]["code"], "cargo");
+        assert_eq!(report["checks"][6]["status"], "warning");
+        assert!(!String::from_utf8_lossy(&first.stdout).contains(path_argument(&application)));
+        assert_eq!(output_tree(&application), before);
+
+        let human = hegira_at(&application, &["doctor"]);
+        assert_eq!(human.status.code(), Some(0));
+        assert!(human.stderr.is_empty());
+        let human = String::from_utf8(human.stdout).unwrap();
+        assert!(human.contains("[PASS] managed-integrations"));
+        assert!(human.contains("[WARN] cargo-leptos"));
+        assert!(human.contains("Doctor status: warning"));
+        assert_eq!(output_tree(&application), before);
+
+        if composition == "minimal" {
+            let installed = hegira_at(&application, &["component", "add", "identity"]);
+            assert!(installed.status.success(), "{:?}", installed.stderr);
+            let installed_tree = output_tree(&application);
+            let report = hegira_at(&application, &["doctor", "--json"]);
+            assert_eq!(report.status.code(), Some(0));
+            let report: serde_json::Value = serde_json::from_slice(&report.stdout).unwrap();
+            assert_eq!(report["checks"][3]["status"], "pass");
+            assert_eq!(output_tree(&application), installed_tree);
+        }
+    }
+}
+
+#[test]
+fn doctor_reports_recovery_and_integration_failures_without_disclosing_source() {
+    let root = TestDirectory::new("doctor-failure");
+    let application = root.path().join("application");
+    assert!(
+        hegira(&[
+            "new",
+            "doctor-app",
+            "--destination",
+            path_argument(&application)
+        ])
+        .status
+        .success()
+    );
+
+    let server_path = application.join("apps/server/src/server.rs");
+    let server = fs::read_to_string(&server_path).unwrap();
+    let secret = "doctor-source-secret-must-not-appear";
+    fs::write(
+        &server_path,
+        server.replace("identity_http::bearer_api_routes", secret),
+    )
+    .unwrap();
+    fs::write(application.join(".hegira-mutation.lock"), secret).unwrap();
+    let before = output_tree(&application);
+
+    let result = hegira_at(&application, &["doctor", "--json"]);
+    assert_eq!(result.status.code(), Some(3));
+    assert!(result.stderr.is_empty());
+    let output = String::from_utf8(result.stdout).unwrap();
+    let report: serde_json::Value = serde_json::from_str(&output).unwrap();
+    assert_eq!(report["status"], "failure");
+    assert_eq!(report["checks"][2]["code"], "recovery-marker");
+    assert_eq!(report["checks"][2]["status"], "failure");
+    assert_eq!(report["checks"][3]["code"], "managed-integrations");
+    assert_eq!(report["checks"][3]["status"], "failure");
+    assert!(!output.contains(secret));
+    assert!(!output.contains(path_argument(&application)));
+    assert_eq!(output_tree(&application), before);
+}
+
+#[test]
+fn doctor_describes_postgres_without_probing_a_database() {
+    let root = TestDirectory::new("doctor-postgres");
+    let application = root.path().join("application");
+    let created = hegira(&[
+        "new",
+        "doctor-app",
+        "--destination",
+        path_argument(&application),
+        "--database",
+        "postgres",
+    ]);
+    assert!(created.status.success(), "{:?}", created.stderr);
+    let before = output_tree(&application);
+
+    let result = hegira_at(&application, &["doctor", "--json"]);
+    assert_eq!(result.status.code(), Some(0));
+    let report: serde_json::Value = serde_json::from_slice(&result.stdout).unwrap();
+    assert_eq!(report["checks"][4]["code"], "database-provider");
+    assert_eq!(report["checks"][4]["status"], "warning");
+    assert!(
+        report["checks"][4]["message"]
+            .as_str()
+            .unwrap()
+            .contains("not probed")
+    );
+    assert_eq!(output_tree(&application), before);
+}
+
+#[cfg(unix)]
+#[test]
+fn doctor_rejects_symlinked_managed_source_without_reading_its_target() {
+    use std::os::unix::fs::symlink;
+
+    let root = TestDirectory::new("doctor-symlink");
+    let application = root.path().join("application");
+    assert!(
+        hegira(&[
+            "new",
+            "doctor-app",
+            "--destination",
+            path_argument(&application)
+        ])
+        .status
+        .success()
+    );
+    let secret = "doctor-symlink-target-secret-must-not-appear";
+    let secret_path = root.path().join("secret.txt");
+    fs::write(&secret_path, secret).unwrap();
+    let routes = application.join("apps/web/src/routes.rs");
+    fs::remove_file(&routes).unwrap();
+    symlink(&secret_path, &routes).unwrap();
+
+    let result = hegira_at(&application, &["doctor", "--json"]);
+    assert_eq!(result.status.code(), Some(3));
+    let output = String::from_utf8(result.stdout).unwrap();
+    let report: serde_json::Value = serde_json::from_str(&output).unwrap();
+    assert_eq!(report["checks"][3]["status"], "failure");
+    assert!(!output.contains(secret));
+    assert!(!output.contains(path_argument(&secret_path)));
+    assert_eq!(fs::read_to_string(&secret_path).unwrap(), secret);
+}
+
+#[test]
 fn inspect_json_is_versioned_deterministic_and_matches_explicit_resolution() {
     let root = TestDirectory::new("inspect-json");
     let application = root.path().join("application");
