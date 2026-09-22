@@ -53,6 +53,7 @@ fn top_level_help_is_human_readable_output() {
     assert!(output.contains("Usage: hegira <COMMAND>"));
     assert!(output.contains("new"));
     assert!(output.contains("inspect"));
+    assert!(output.contains("doctor"));
     assert!(output.contains("component"));
     assert!(output.contains("generate"));
 }
@@ -1012,6 +1013,15 @@ fn doctor_reports_recovery_and_integration_failures_without_disclosing_source() 
     assert!(!output.contains(secret));
     assert!(!output.contains(path_argument(&application)));
     assert_eq!(output_tree(&application), before);
+
+    let human = hegira_at(&application, &["doctor"]);
+    assert_eq!(human.status.code(), Some(3));
+    let human = String::from_utf8(human.stdout).unwrap();
+    assert!(human.contains("[FAIL] recovery-marker:"));
+    assert!(human.contains("[FAIL] managed-integrations:"));
+    assert!(human.ends_with("Doctor status: failure\n"));
+    assert!(!human.contains(secret));
+    assert_eq!(output_tree(&application), before);
 }
 
 #[test]
@@ -1075,6 +1085,215 @@ fn doctor_rejects_symlinked_managed_source_without_reading_its_target() {
     assert!(!output.contains(secret));
     assert!(!output.contains(path_argument(&secret_path)));
     assert_eq!(fs::read_to_string(&secret_path).unwrap(), secret);
+}
+
+#[cfg(unix)]
+fn doctor_with_stubbed_tools(
+    fixture: &TestDirectory,
+    application: &Path,
+    wasm_installed: bool,
+    arguments: &[&str],
+) -> Output {
+    use std::os::unix::fs::PermissionsExt;
+
+    let tools = fixture.path().join("tools");
+    let home = fixture.path().join("home");
+    fs::create_dir_all(&tools).unwrap();
+    fs::create_dir_all(&home).unwrap();
+    for binary in ["rustc", "cargo", "cargo-leptos", "node", "npm"] {
+        let path = tools.join(binary);
+        fs::write(&path, "#!/bin/sh\nexit 0\n").unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
+    }
+    let rustup = tools.join("rustup");
+    let target = if wasm_installed {
+        "wasm32-unknown-unknown"
+    } else {
+        "x86_64-unknown-linux-gnu"
+    };
+    fs::write(
+        &rustup,
+        format!(
+            "#!/bin/sh\nif [ -n \"${{APP__SECURITY__JWT_SECRET:-}}\" ]; then exit 77; fi\nprintf '%s\\n' '{target}'\n"
+        ),
+    )
+    .unwrap();
+    fs::set_permissions(&rustup, fs::Permissions::from_mode(0o700)).unwrap();
+
+    let result = Command::new(env!("CARGO_BIN_EXE_hegira"))
+        .args(arguments)
+        .env_clear()
+        .env("HOME", &home)
+        .env("USERPROFILE", &home)
+        .env("XDG_CONFIG_HOME", &home)
+        .env("PATH", &tools)
+        .env(
+            "APP__SECURITY__JWT_SECRET",
+            "doctor-env-secret-must-not-appear",
+        )
+        .current_dir(application)
+        .output()
+        .expect("doctor should run with isolated tool fixtures");
+    assert_eq!(fs::read_dir(home).unwrap().count(), 0);
+    result
+}
+
+#[cfg(unix)]
+#[test]
+fn doctor_json_schema_order_and_success_are_stable_with_stubbed_prerequisites() {
+    let fixture = TestDirectory::new("doctor-contract-pass");
+    let application = fixture.path().join("application");
+    assert!(
+        hegira(&[
+            "new",
+            "doctor-app",
+            "--destination",
+            path_argument(&application),
+        ])
+        .status
+        .success()
+    );
+    let config = application.join("config/development.yaml");
+    let secret = "doctor-config-secret-must-not-appear";
+    fs::write(&config, secret).unwrap();
+    let before = output_tree(&application);
+
+    let first = doctor_with_stubbed_tools(&fixture, &application, true, &["doctor", "--json"]);
+    let second = doctor_with_stubbed_tools(&fixture, &application, true, &["doctor", "--json"]);
+    let explicit = doctor_with_stubbed_tools(
+        &fixture,
+        &application,
+        true,
+        &[
+            "doctor",
+            "--application-root",
+            path_argument(&application),
+            "--json",
+        ],
+    );
+    assert_eq!(first.status.code(), Some(0));
+    assert!(first.stderr.is_empty());
+    assert_eq!(first.stdout, second.stdout);
+    assert_eq!(first.stdout, explicit.stdout);
+    let output = String::from_utf8(first.stdout).unwrap();
+    assert!(
+        output
+            .starts_with("{\n  \"output_schema\": 1,\n  \"status\": \"pass\",\n  \"checks\": [\n")
+    );
+    let report: serde_json::Value = serde_json::from_str(&output).unwrap();
+    let codes: Vec<_> = report["checks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|check| check["code"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        codes,
+        [
+            "manifest",
+            "composition",
+            "recovery-marker",
+            "managed-integrations",
+            "database-provider",
+            "rust-toolchain",
+            "cargo",
+            "cargo-leptos",
+            "node",
+            "npm",
+            "wasm-target",
+        ]
+    );
+    assert!(
+        report["checks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|check| check["status"] == "pass")
+    );
+    let first_check = output.split("\"code\": \"manifest\"").nth(1).unwrap();
+    assert!(first_check.starts_with(",\n      \"status\": \"pass\",\n      \"message\": "));
+    assert!(first_check.contains("\"action\": null"));
+    for forbidden in [
+        secret,
+        "doctor-env-secret-must-not-appear",
+        path_argument(&application),
+    ] {
+        assert!(!output.contains(forbidden));
+    }
+
+    let human = doctor_with_stubbed_tools(&fixture, &application, true, &["doctor"]);
+    assert_eq!(human.status.code(), Some(0));
+    let human = String::from_utf8(human.stdout).unwrap();
+    assert!(human.starts_with("[PASS] manifest: Application manifest is valid"));
+    assert!(human.contains("[PASS] wasm-target:"));
+    assert!(human.ends_with("Doctor status: pass\n"));
+    assert_eq!(output_tree(&application), before);
+}
+
+#[cfg(unix)]
+#[test]
+fn doctor_warnings_remain_non_blocking_with_a_missing_wasm_target() {
+    let fixture = TestDirectory::new("doctor-contract-warning");
+    let application = fixture.path().join("application");
+    assert!(
+        hegira(&[
+            "new",
+            "doctor-app",
+            "--destination",
+            path_argument(&application),
+        ])
+        .status
+        .success()
+    );
+    let before = output_tree(&application);
+
+    let result = doctor_with_stubbed_tools(&fixture, &application, false, &["doctor", "--json"]);
+    assert_eq!(result.status.code(), Some(0));
+    assert!(result.stderr.is_empty());
+    let report: serde_json::Value = serde_json::from_slice(&result.stdout).unwrap();
+    assert_eq!(report["status"], "warning");
+    assert_eq!(report["checks"][10]["code"], "wasm-target");
+    assert_eq!(report["checks"][10]["status"], "warning");
+    assert!(
+        report["checks"].as_array().unwrap()[..10]
+            .iter()
+            .all(|check| check["status"] == "pass")
+    );
+    assert_eq!(output_tree(&application), before);
+}
+
+#[cfg(unix)]
+#[test]
+fn doctor_incompatible_manifest_is_a_redacted_blocking_json_result() {
+    let fixture = TestDirectory::new("doctor-contract-incompatible");
+    let application = fixture.path().join("application");
+    assert!(
+        hegira(&[
+            "new",
+            "doctor-app",
+            "--destination",
+            path_argument(&application),
+        ])
+        .status
+        .success()
+    );
+    let manifest_path = application.join("hegira.toml");
+    let manifest = fs::read_to_string(&manifest_path).unwrap();
+    fs::write(&manifest_path, manifest.replace("v0.5.0", "v9.9.9")).unwrap();
+    let before = output_tree(&application);
+
+    let first = doctor_with_stubbed_tools(&fixture, &application, true, &["doctor", "--json"]);
+    let second = doctor_with_stubbed_tools(&fixture, &application, true, &["doctor", "--json"]);
+    assert_eq!(first.status.code(), Some(3));
+    assert!(first.stderr.is_empty());
+    assert_eq!(first.stdout, second.stdout);
+    let output = String::from_utf8(first.stdout).unwrap();
+    let report: serde_json::Value = serde_json::from_str(&output).unwrap();
+    assert_eq!(report["status"], "failure");
+    assert_eq!(report["checks"][0]["status"], "failure");
+    assert_eq!(report["checks"][1]["status"], "failure");
+    assert!(!output.contains(path_argument(&application)));
+    assert_eq!(output_tree(&application), before);
 }
 
 #[test]

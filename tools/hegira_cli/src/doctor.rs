@@ -366,8 +366,20 @@ fn check_prerequisites(report: &mut DoctorReport) {
         );
         return;
     }
-    let target_installed = Command::new("rustup")
-        .args(["target", "list", "--installed"])
+    let mut probe = Command::new("rustup");
+    probe.env_clear().args(["target", "list", "--installed"]);
+    for variable in [
+        "PATH",
+        "HOME",
+        "USERPROFILE",
+        "RUSTUP_HOME",
+        "RUSTUP_TOOLCHAIN",
+    ] {
+        if let Some(value) = env::var_os(variable) {
+            probe.env(variable, value);
+        }
+    }
+    let target_installed = probe
         .output()
         .ok()
         .filter(|output| output.status.success())
