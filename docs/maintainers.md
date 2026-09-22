@@ -183,7 +183,9 @@ incompatible or unsupported application outcomes. Prompt tests inject
 deterministic input and capture output without relying on a host terminal.
 Doctor fixtures check default, minimal, and Identity-added applications,
 read-only outcomes, recovery and integration failures, deterministic redacted
-output, and missing local tools as warnings.
+output, and missing local tools as warnings. Additional isolated PATH and home
+fixtures pin JSON field and check order, success/warning/failure exit outcomes,
+and ensure the Rustup probe does not inherit application runtime secrets.
 
 SQLite and PostgreSQL requests have committed whole-tree fingerprints covering
 file paths and bytes, including binary assets, and are compared with equivalent

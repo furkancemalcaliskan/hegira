@@ -270,6 +270,8 @@ reports no source bodies, runtime configuration, environment values, credentials
 or machine-local paths. Integration-reference checks are diagnostics, not proof
 that the compiled HTTP policy is secure. It does not repair a failed check;
 review the reported action before attempting another mutation.
+The local `rustup` target probe receives only tool-discovery and Rustup-specific
+environment settings, not application runtime secrets.
 
 ## Compatibility And Mutation Safety
 
