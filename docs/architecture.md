@@ -259,6 +259,15 @@ registration conflicts fail before publication. Permission gates improve the
 presentation experience but do not replace authorization in the generated
 application service.
 
+The Identity-added minimal composition uses its smaller Leptos shell instead:
+the generator registers a native route and a permission-gated dashboard link,
+and emits local English labels and visible mutation feedback in the resource
+page. It does not assume the default shell's sidebar or localization files.
+The minimal host composes the same resource service through its Identity
+runtime and merges the resource OpenAPI document into the Identity document
+when OpenAPI is enabled. Both compositions retain application-layer
+authorization and keep Bearer routes separate from browser cookie policy.
+
 The package also plans application-owned migration scaffolds independently of
 the general resource specification. It resolves the selected SQLite or
 PostgreSQL adapter from the validated application manifest, observes only that

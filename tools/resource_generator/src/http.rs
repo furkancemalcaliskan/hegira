@@ -10,6 +10,7 @@ use crate::{LayerOwner, ResourceField, ResourceSpecification, ScalarType};
 const PRESENTATION_ROOT: &str = "crates/presentation/src/lib.rs";
 const INFRASTRUCTURE_SERVICES: &str = "crates/infrastructure/src/identity/services.rs";
 const SERVER_SOURCE: &str = "apps/server/src/server.rs";
+const IDENTITY_RUNTIME: &str = "apps/server/src/identity_runtime.rs";
 
 #[derive(Debug, Clone, Copy)]
 pub struct HttpLayerSources<'a> {
@@ -17,6 +18,12 @@ pub struct HttpLayerSources<'a> {
     pub infrastructure_resource: &'a [u8],
     pub infrastructure_services: &'a [u8],
     pub server_source: &'a [u8],
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct MinimalHttpLayerSources<'a> {
+    pub common: HttpLayerSources<'a>,
+    pub identity_runtime: &'a [u8],
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -72,6 +79,25 @@ pub fn plan_resource_http(
     specification: &ResourceSpecification,
     sources: HttpLayerSources<'_>,
 ) -> Result<PlannedResourceHttp, HttpLayerError> {
+    plan_resource_http_for_composition(specification, sources, None)
+}
+
+pub fn plan_resource_http_minimal(
+    specification: &ResourceSpecification,
+    sources: MinimalHttpLayerSources<'_>,
+) -> Result<PlannedResourceHttp, HttpLayerError> {
+    plan_resource_http_for_composition(
+        specification,
+        sources.common,
+        Some(sources.identity_runtime),
+    )
+}
+
+fn plan_resource_http_for_composition(
+    specification: &ResourceSpecification,
+    sources: HttpLayerSources<'_>,
+    minimal_runtime: Option<&[u8]>,
+) -> Result<PlannedResourceHttp, HttpLayerError> {
     let module = specification.names().rust_module();
     let registration = plan_rust_module(PRESENTATION_ROOT, sources.presentation_root, module)
         .map_err(structured_edit_error)?;
@@ -89,7 +115,7 @@ pub fn plan_resource_http(
         sources.infrastructure_resource,
         [(
             "resource-http-authorization",
-            authorization_source(specification),
+            authorization_source(specification, minimal_runtime.is_some()),
         )],
         module,
     )?;
@@ -105,18 +131,43 @@ pub fn plan_resource_http(
         ],
         module,
     )?;
-    let server_source = managed_file_edit(
-        SERVER_SOURCE,
-        sources.server_source,
-        [
-            ("resource-bearer-routes", route_registration(specification)),
-            (
-                "resource-openapi-documents",
-                openapi_registration(specification),
-            ),
-        ],
-        module,
-    )?;
+    let server_source = if minimal_runtime.is_some() {
+        managed_file_edit(
+            SERVER_SOURCE,
+            sources.server_source,
+            [(
+                "resource-bearer-routes",
+                minimal_route_registration(specification),
+            )],
+            module,
+        )?
+    } else {
+        managed_file_edit(
+            SERVER_SOURCE,
+            sources.server_source,
+            [
+                ("resource-bearer-routes", route_registration(specification)),
+                (
+                    "resource-openapi-documents",
+                    openapi_registration(specification),
+                ),
+            ],
+            module,
+        )?
+    };
+    let runtime_source = minimal_runtime
+        .map(|runtime| {
+            managed_file_edit(
+                IDENTITY_RUNTIME,
+                runtime,
+                [(
+                    "resource-openapi-documents",
+                    openapi_registration(specification),
+                )],
+                module,
+            )
+        })
+        .transpose()?;
 
     let presentation_path = specification
         .names()
@@ -132,14 +183,18 @@ pub fn plan_resource_http(
     .map(PlannedFileChange::from)
     .map_err(|error| HttpLayerError::new(HttpLayerErrorKind::Planning, error.to_string()))?;
 
-    let plan = ChangePlan::new([
+    let mut changes = vec![
         PlannedFileChange::from(server_source),
         PlannedFileChange::from(infrastructure_resource),
         PlannedFileChange::from(infrastructure_services),
         presentation,
         PlannedFileChange::from(presentation_root),
-    ])
-    .map_err(|error| HttpLayerError::new(HttpLayerErrorKind::Planning, error.to_string()))?;
+    ];
+    if let Some(runtime_source) = runtime_source {
+        changes.push(PlannedFileChange::from(runtime_source));
+    }
+    let plan = ChangePlan::new(changes)
+        .map_err(|error| HttpLayerError::new(HttpLayerErrorKind::Planning, error.to_string()))?;
     Ok(PlannedResourceHttp { plan })
 }
 
@@ -175,11 +230,12 @@ fn structured_edit_error(error: StructuredEditError) -> HttpLayerError {
     HttpLayerError::new(HttpLayerErrorKind::StructuredEdit, error.to_string())
 }
 
-fn authorization_source(specification: &ResourceSpecification) -> String {
+fn authorization_source(specification: &ResourceSpecification, minimal: bool) -> String {
     let names = specification.names();
     let entity = names.singular_type();
     let mut source = String::new();
-    writeln!(source, "use crate::config::AppConfig;").unwrap();
+    let config_module = if minimal { "identity_config" } else { "config" };
+    writeln!(source, "use crate::{config_module}::AppConfig;").unwrap();
     writeln!(
         source,
         "use crate::identity::{{IdentityRepositoryAdapter, authorization::RepositoryAuthorization, sessions::SessionRepositoryAdapter}};"
@@ -321,6 +377,13 @@ fn route_registration(specification: &ResourceSpecification) -> String {
     let module = specification.names().rust_module();
     format!(
         ".merge(app_presentation::{module}::bearer_api_routes(app_state.services.{module}.clone()))"
+    )
+}
+
+fn minimal_route_registration(specification: &ResourceSpecification) -> String {
+    let module = specification.names().rust_module();
+    format!(
+        ".merge(app_presentation::{module}::bearer_api_routes(identity_runtime.services().{module}.clone()))"
     )
 }
 

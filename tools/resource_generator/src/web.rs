@@ -12,6 +12,7 @@ const WEB_ROUTES: &str = "apps/web/src/routes.rs";
 const WEB_NAVIGATION: &str = "apps/web/src/app/navigation.rs";
 const WEB_I18N: &str = "apps/web/src/shared/i18n/mod.rs";
 const WEB_SIDEBAR: &str = "apps/web/src/app/sidebar.rs";
+const WEB_DASHBOARD: &str = "apps/web/src/dashboard.rs";
 const SERVER_SOURCE: &str = "apps/server/src/server.rs";
 
 #[derive(Debug, Clone, Copy)]
@@ -21,6 +22,14 @@ pub struct WebLayerSources<'a> {
     pub navigation: &'a [u8],
     pub i18n: &'a [u8],
     pub sidebar: &'a [u8],
+    pub server_source: &'a [u8],
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct MinimalWebLayerSources<'a> {
+    pub web_root: &'a [u8],
+    pub routes: &'a [u8],
+    pub dashboard: &'a [u8],
     pub server_source: &'a [u8],
 }
 
@@ -142,7 +151,10 @@ pub fn plan_resource_web(
     let server_source = managed_file_edit(
         SERVER_SOURCE,
         sources.server_source,
-        [("resource-leptos-contexts", server_context(specification))],
+        [(
+            "resource-leptos-contexts",
+            server_context(specification, false),
+        )],
         module,
     )?;
 
@@ -153,10 +165,12 @@ pub fn plan_resource_web(
         .find(|artifact| artifact.owner() == LayerOwner::Web)
         .expect("the validated resource has one Web artifact")
         .path();
-    let web_source =
-        FileCreation::new(web_path.as_str(), leptos_source(specification).into_bytes())
-            .map(PlannedFileChange::from)
-            .map_err(|error| WebLayerError::new(WebLayerErrorKind::Planning, error.to_string()))?;
+    let web_source = FileCreation::new(
+        web_path.as_str(),
+        leptos_source(specification, false).into_bytes(),
+    )
+    .map(PlannedFileChange::from)
+    .map_err(|error| WebLayerError::new(WebLayerErrorKind::Planning, error.to_string()))?;
 
     let plan = ChangePlan::new([
         PlannedFileChange::from(server_source),
@@ -169,6 +183,82 @@ pub fn plan_resource_web(
     ])
     .map_err(|error| WebLayerError::new(WebLayerErrorKind::Planning, error.to_string()))?;
     Ok(PlannedResourceWeb { plan })
+}
+
+pub fn plan_resource_web_minimal(
+    specification: &ResourceSpecification,
+    sources: MinimalWebLayerSources<'_>,
+) -> Result<PlannedResourceWeb, WebLayerError> {
+    if specification.selection().client() != SelectedClient::Leptos {
+        return Err(WebLayerError::new(
+            WebLayerErrorKind::UnsupportedClient,
+            "the selected client does not support Leptos resource generation",
+        ));
+    }
+    reject_route_conflicts(specification, sources.routes, sources.dashboard)?;
+    let module = specification.names().rust_module();
+    let web_root = match plan_rust_module(WEB_ROOT, sources.web_root, module)
+        .map_err(structured_edit_error)?
+    {
+        StructuredEditOutcome::Planned { edit, .. } => edit,
+        StructuredEditOutcome::AlreadyPresent { .. } => return Err(existing(module, WEB_ROOT)),
+    };
+    let routes = managed_file_edit(
+        WEB_ROUTES,
+        sources.routes,
+        [(
+            "resource-routes-native",
+            native_route_registration(specification),
+        )],
+        module,
+    )?;
+    let dashboard = managed_file_edit(
+        WEB_DASHBOARD,
+        sources.dashboard,
+        [("module-navigation", minimal_navigation_item(specification))],
+        module,
+    )?;
+    let server_source = managed_file_edit(
+        SERVER_SOURCE,
+        sources.server_source,
+        [(
+            "resource-leptos-contexts",
+            server_context(specification, true),
+        )],
+        module,
+    )?;
+    let web_path = specification
+        .names()
+        .artifacts()
+        .iter()
+        .find(|artifact| artifact.owner() == LayerOwner::Web)
+        .expect("the validated resource has one Web artifact")
+        .path();
+    let web_source = FileCreation::new(
+        web_path.as_str(),
+        leptos_source(specification, true).into_bytes(),
+    )
+    .map(PlannedFileChange::from)
+    .map_err(|error| WebLayerError::new(WebLayerErrorKind::Planning, error.to_string()))?;
+    let plan = ChangePlan::new([
+        PlannedFileChange::from(server_source),
+        PlannedFileChange::from(dashboard),
+        PlannedFileChange::from(routes),
+        web_source,
+        PlannedFileChange::from(web_root),
+    ])
+    .map_err(|error| WebLayerError::new(WebLayerErrorKind::Planning, error.to_string()))?;
+    Ok(PlannedResourceWeb { plan })
+}
+
+fn minimal_navigation_item(specification: &ResourceSpecification) -> String {
+    let names = specification.names();
+    format!(
+        "<identity_leptos::shared::authorization::PermissionGate permission=identity_leptos::identity_application_contracts::identity::permissions::PermissionName(app_application_contracts::{}::LIST_PERMISSION)>\n    <a href=\"/{}\">\"{}\"</a>\n</identity_leptos::shared::authorization::PermissionGate>",
+        names.rust_module(),
+        names.route_segment(),
+        humanize_type(names.plural_type()),
+    )
 }
 
 fn managed_file_edit<const N: usize>(
@@ -291,10 +381,15 @@ fn navigation_icon_view(specification: &ResourceSpecification) -> String {
     )
 }
 
-fn server_context(specification: &ResourceSpecification) -> String {
+fn server_context(specification: &ResourceSpecification, minimal: bool) -> String {
     let names = specification.names();
+    let services = if minimal {
+        "identity_web.services()"
+    } else {
+        "services"
+    };
     format!(
-        "provide_context(app_web::{}::{}LeptosServices::new(services.{}.clone()));",
+        "provide_context(app_web::{}::{}LeptosServices::new({services}.{}.clone()));",
         names.rust_module(),
         names.singular_type(),
         names.rust_module()
@@ -412,7 +507,7 @@ fn localization(specification: &ResourceSpecification, turkish: bool) -> String 
     lines.join("\n")
 }
 
-fn leptos_source(specification: &ResourceSpecification) -> String {
+fn leptos_source(specification: &ResourceSpecification, minimal: bool) -> String {
     let names = specification.names();
     let module = names.rust_module();
     let entity = names.singular_type();
@@ -456,14 +551,16 @@ fn leptos_source(specification: &ResourceSpecification) -> String {
         "use std::{{future::Future, pin::Pin, sync::Arc}};\n"
     )
     .unwrap();
-    writeln!(source, "use crate::{{").unwrap();
-    writeln!(source, "    app::{{layout::WorkspaceRouteLayout, page::{{PageHeaderKey, PageSection}}, protected::RequirePermission}},").unwrap();
-    writeln!(
-        source,
-        "    shared::{{feedback::toast::use_toast, i18n::{{T, use_i18n}}}},"
-    )
-    .unwrap();
-    writeln!(source, "}};").unwrap();
+    if !minimal {
+        writeln!(source, "use crate::{{").unwrap();
+        writeln!(source, "    app::{{layout::WorkspaceRouteLayout, page::{{PageHeaderKey, PageSection}}, protected::RequirePermission}},").unwrap();
+        writeln!(
+            source,
+            "    shared::{{feedback::toast::use_toast, i18n::{{T, use_i18n}}}},"
+        )
+        .unwrap();
+        writeln!(source, "}};").unwrap();
+    }
     writeln!(
         source,
         "use identity_leptos::shared::authorization::PermissionGate;"
@@ -475,8 +572,85 @@ fn leptos_source(specification: &ResourceSpecification) -> String {
     write_server_functions(&mut source, specification);
     write_form_parsers(&mut source, specification);
     write_form_values(&mut source, specification);
-    write_resource_page(&mut source, specification);
+    write_resource_page(&mut source, specification, minimal);
+    if minimal {
+        write_minimal_web_support(&mut source, specification);
+    }
     source
+}
+
+fn write_minimal_web_support(source: &mut String, specification: &ResourceSpecification) {
+    writeln!(source, "\n// Local presentation primitives keep the minimal shell independent of the full application UI.").unwrap();
+    writeln!(source, "#[derive(Clone, Copy)]\nenum T {{").unwrap();
+    for key in localization_key_names(specification) {
+        writeln!(source, "    {key},").unwrap();
+    }
+    writeln!(source, "    Cancel,\n}}").unwrap();
+    writeln!(source, "#[derive(Clone, Copy)]\nstruct MinimalI18n;").unwrap();
+    writeln!(source, "fn use_i18n() -> MinimalI18n {{ MinimalI18n }}").unwrap();
+    writeln!(source, "impl MinimalI18n {{").unwrap();
+    writeln!(
+        source,
+        "    fn t(self, key: T) -> &'static str {{ self.t_untracked(key) }}"
+    )
+    .unwrap();
+    writeln!(
+        source,
+        "    fn t_untracked(self, key: T) -> &'static str {{"
+    )
+    .unwrap();
+    writeln!(source, "        match key {{").unwrap();
+    for line in localization(specification, false).lines() {
+        let arm = line.replace("(Locale::En, ", "").replacen(") =>", " =>", 1);
+        writeln!(source, "            {arm}").unwrap();
+    }
+    writeln!(
+        source,
+        "            T::Cancel => \"Cancel\",\n        }}\n    }}\n}}"
+    )
+    .unwrap();
+    writeln!(
+        source,
+        "#[derive(Clone)]\nstruct MinimalToast {{ message: RwSignal<Option<String>> }}"
+    )
+    .unwrap();
+    writeln!(
+        source,
+        "fn use_toast() -> MinimalToast {{ MinimalToast {{ message: RwSignal::new(None) }} }}"
+    )
+    .unwrap();
+    writeln!(source, "impl MinimalToast {{").unwrap();
+    writeln!(source, "    fn success(&self, title: &str, detail: &str) {{ self.message.set(Some(format!(\"{{title}}: {{detail}}\"))); }}").unwrap();
+    writeln!(source, "    fn error(&self, title: &str, detail: String) {{ self.message.set(Some(format!(\"{{title}}: {{detail}}\"))); }}").unwrap();
+    writeln!(source, "}}").unwrap();
+    writeln!(source, "#[component]\nfn RequirePermission(permission: PermissionName, children: ChildrenFn) -> impl IntoView {{").unwrap();
+    writeln!(
+        source,
+        "    view! {{ <PermissionGate permission=permission>{{children()}}</PermissionGate> }}\n}}"
+    )
+    .unwrap();
+    writeln!(
+        source,
+        "#[component]\nfn WorkspaceRouteLayout(title: T, children: ChildrenFn) -> impl IntoView {{"
+    )
+    .unwrap();
+    writeln!(source, "    let _ = title;\n    view! {{ <section class=\"minimal-resource\">{{children()}}</section> }}\n}}").unwrap();
+    writeln!(
+        source,
+        "#[component]\nfn PageHeaderKey(title: T) -> impl IntoView {{"
+    )
+    .unwrap();
+    writeln!(
+        source,
+        "    view! {{ <h1>{{use_i18n().t(title)}}</h1> }}\n}}"
+    )
+    .unwrap();
+    writeln!(source, "#[component]\nfn PageSection(children: Children, #[prop(into, optional)] class: String) -> impl IntoView {{").unwrap();
+    writeln!(
+        source,
+        "    view! {{ <section class=class>{{children()}}</section> }}\n}}"
+    )
+    .unwrap();
 }
 
 fn write_form_values(source: &mut String, specification: &ResourceSpecification) {
@@ -695,7 +869,7 @@ fn write_server_functions(source: &mut String, specification: &ResourceSpecifica
     }
 }
 
-fn write_resource_page(source: &mut String, specification: &ResourceSpecification) {
+fn write_resource_page(source: &mut String, specification: &ResourceSpecification, minimal: bool) {
     let names = specification.names();
     let module = names.rust_module();
     let entity = names.singular_type();
@@ -828,6 +1002,15 @@ fn write_resource_page(source: &mut String, specification: &ResourceSpecificatio
     writeln!(source, "        <WorkspaceRouteLayout title=T::{plural}>").unwrap();
     writeln!(source, "            <div class=\"page-stack\">").unwrap();
     writeln!(source, "                <PageHeaderKey title=T::{plural}/>").unwrap();
+    if minimal {
+        writeln!(
+            source,
+            "                <Show when=move || toast.message.get().is_some()>"
+        )
+        .unwrap();
+        writeln!(source, "                    <p role=\"status\">{{move || toast.message.get().unwrap_or_default()}}</p>").unwrap();
+        writeln!(source, "                </Show>").unwrap();
+    }
     writeln!(
         source,
         "                <PermissionGate permission=PermissionName(CREATE_PERMISSION)>"

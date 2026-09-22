@@ -702,12 +702,21 @@ impl IdentityRuntime {
         provide_context(self.cookie);
     }
 
+    pub fn services(&self) -> &AppServices {
+        &self.services
+    }
+
     pub fn bearer_routes(&self) -> axum::Router<leptos::prelude::LeptosOptions> {
         let router = identity_http::bearer_api_routes(identity_http::state::IdentityHttpState::new(
             self.services.auth.clone(), self.services.oauth.clone(), self.services.users.clone(), self.services.permissions.clone(),
         )).with_state(());
         #[cfg(feature = "openapi")]
-        let router = if self.openapi { router.merge(identity_http::openapi::routes()) } else { router };
+        let router = if self.openapi {
+            let document = identity_http::openapi::document();
+            // hegira:resource-openapi-documents
+            // hegira:resource-openapi-documents:end
+            router.merge(identity_http::openapi::routes_with_document(document))
+        } else { router };
         let _ = self.openapi;
         router
     }
