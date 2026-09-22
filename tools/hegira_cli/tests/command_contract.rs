@@ -456,6 +456,112 @@ fn minimal_resource_generation_fails_before_writes_with_stable_capability_diagno
 }
 
 #[test]
+fn identity_added_minimal_resource_uses_its_own_web_shell_and_atomic_plan() {
+    for database in ["sqlite", "postgres"] {
+        let output = TestDirectory::new(&format!("minimal-resource-{database}"));
+        let application = output.path().join("application");
+        let created = hegira(&[
+            "new",
+            "resource-app",
+            "--destination",
+            path_argument(&application),
+            "--composition",
+            "minimal",
+            "--database",
+            database,
+        ]);
+        assert!(created.status.success(), "{:?}", created.stderr);
+        let installed = hegira_at(&application, &["component", "add", "identity"]);
+        assert!(installed.status.success(), "{:?}", installed.stderr);
+        let before = output_tree(&application);
+        let arguments = [
+            "generate",
+            "resource",
+            "OrderItem",
+            "--field",
+            "name:string",
+            "--json",
+        ];
+        let preview = hegira_at(
+            &application,
+            &[
+                "generate",
+                "resource",
+                "OrderItem",
+                "--field",
+                "name:string",
+                "--dry-run",
+                "--json",
+            ],
+        );
+        assert!(preview.status.success(), "{:?}", preview.stderr);
+        assert_eq!(output_tree(&application), before);
+        let applied = hegira_at(&application, &arguments);
+        assert!(applied.status.success(), "{:?}", applied.stderr);
+        let preview: serde_json::Value = serde_json::from_slice(&preview.stdout).unwrap();
+        let applied: serde_json::Value = serde_json::from_slice(&applied.stdout).unwrap();
+        assert_eq!(preview["plan"], applied["plan"]);
+        let web = fs::read_to_string(application.join("apps/web/src/order_item.rs")).unwrap();
+        assert!(web.contains("MinimalI18n"));
+        assert!(web.contains("<RequirePermission permission=PermissionName(LIST_PERMISSION)>"));
+        assert!(!web.contains("app::layout"));
+        let dashboard = fs::read_to_string(application.join("apps/web/src/dashboard.rs")).unwrap();
+        assert!(dashboard.contains("href=\"/order-items\""));
+        assert!(dashboard.contains("LIST_PERMISSION"));
+        let routes = fs::read_to_string(application.join("apps/web/src/routes.rs")).unwrap();
+        assert!(routes.contains("StaticSegment(\"order-items\")"));
+        let infrastructure_manifest =
+            fs::read_to_string(application.join("crates/infrastructure/Cargo.toml")).unwrap();
+        assert!(infrastructure_manifest.contains("app_application = { workspace = true }"));
+        assert!(infrastructure_manifest.contains("app_domain = { workspace = true }"));
+        let web_manifest = fs::read_to_string(application.join("apps/web/Cargo.toml")).unwrap();
+        assert!(web_manifest.contains("app_application_contracts = { workspace = true }"));
+        assert!(web_manifest.contains("leptos_support = { workspace = true }"));
+        let runtime =
+            fs::read_to_string(application.join("apps/server/src/identity_runtime.rs")).unwrap();
+        assert!(runtime.contains("pub fn services(&self) -> &AppServices"));
+        assert!(runtime.contains("app_presentation::order_item::openapi_document()"));
+        let after = output_tree(&application);
+        let repeated = hegira_at(&application, &arguments);
+        assert_eq!(repeated.status.code(), Some(4));
+        assert_eq!(output_tree(&application), after);
+    }
+}
+
+#[test]
+fn identity_added_minimal_resource_missing_integration_fails_without_partial_writes() {
+    let output = TestDirectory::new("minimal-resource-missing-integration");
+    let application = output.path().join("application");
+    let created = hegira(&[
+        "new",
+        "resource-app",
+        "--destination",
+        path_argument(&application),
+        "--composition",
+        "minimal",
+    ]);
+    assert!(created.status.success(), "{:?}", created.stderr);
+    let installed = hegira_at(&application, &["component", "add", "identity"]);
+    assert!(installed.status.success(), "{:?}", installed.stderr);
+    fs::remove_file(application.join("apps/web/src/dashboard.rs")).unwrap();
+    let before = output_tree(&application);
+    let result = hegira_at(
+        &application,
+        &[
+            "generate",
+            "resource",
+            "OrderItem",
+            "--field",
+            "name:string",
+        ],
+    );
+    assert_eq!(result.status.code(), Some(4));
+    assert!(result.stdout.is_empty());
+    assert!(String::from_utf8_lossy(&result.stderr).contains("apps/web/src/dashboard.rs"));
+    assert_eq!(output_tree(&application), before);
+}
+
+#[test]
 fn invalid_resource_fields_fail_before_application_writes() {
     let output = TestDirectory::new("invalid-resource-field");
     let application = output.path().join("application");

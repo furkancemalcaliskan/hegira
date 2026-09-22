@@ -204,6 +204,13 @@ intended database, and validate the application before deployment. A repeated
 add is a conflict and does not modify the application. Identity owns `/` after
 installation; the original dashboard remains at `/dashboard`.
 
+After Identity is installed, `generate resource` can add a protected resource
+to this minimal composition. Its generated page uses the minimal shell's
+dashboard navigation and local English labels, rather than the default
+application's sidebar and localization files. Preview with `--dry-run --json`
+before applying; generation creates source and a provider-specific migration
+but does not execute it.
+
 Successful creation and help use stdout; diagnostics use stderr. Exit codes
 are `0` (success, including guided cancellation), `1` (internal error),
 `2` (usage error), `3` (validation failure), and `4` (destination conflict).

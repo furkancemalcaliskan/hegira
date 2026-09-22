@@ -9,20 +9,26 @@ use std::{
 };
 
 use application_manifest::{
-    ApplicationCapability, ClientAdapter, DatabaseAdapter, InstalledModule, MutationCompatibility,
-    MutationCompatibilityPolicy, PackageIdentity,
+    ApplicationCapability, ClientAdapter, DatabaseAdapter, InstalledModule,
+    LAYERED_LEPTOS_MINIMAL_COMPONENT, MutationCompatibility, MutationCompatibilityPolicy,
+    PackageIdentity,
 };
-use application_mutator::{ChangePlan, PlannedFileChange};
+use application_mutator::{
+    CargoDependency, CargoDependencySection, ChangePlan, PlannedFileChange, StructuredEditOutcome,
+    StructuredFileEdit, plan_cargo_dependency, plan_toml_array_string,
+};
 use clap::{Args, Parser, Subcommand, ValueEnum, error::ErrorKind};
 use resource_generator::{
     ArtifactNamespace, HttpLayerError, HttpLayerErrorKind, HttpLayerSources, InwardLayerError,
     InwardLayerErrorKind, InwardLayerSources, LayeredArtifactNames, LayeredNamingInput,
-    MigrationError, MigrationErrorKind, MigrationIdentity, NamingErrorKind, PersistenceLayerError,
-    PersistenceLayerErrorKind, PersistenceLayerSources, RESOURCE_CAPABILITY_DIAGNOSTIC_SCHEMA,
-    ResourceCapabilityRequirements, ResourceCapabilityStatus, ResourceFieldInput,
-    ResourceSelection, ResourceSpecification, ResourceSpecificationInput, WebLayerError,
-    WebLayerErrorKind, WebLayerSources, plan_application_migration, plan_inward_resource_layers,
-    plan_resource_http, plan_resource_persistence, plan_resource_web,
+    MigrationError, MigrationErrorKind, MigrationIdentity, MinimalHttpLayerSources,
+    MinimalWebLayerSources, NamingErrorKind, PersistenceLayerError, PersistenceLayerErrorKind,
+    PersistenceLayerSources, RESOURCE_CAPABILITY_DIAGNOSTIC_SCHEMA, ResourceCapabilityRequirements,
+    ResourceCapabilityStatus, ResourceFieldInput, ResourceSelection, ResourceSpecification,
+    ResourceSpecificationInput, WebLayerError, WebLayerErrorKind, WebLayerSources,
+    plan_application_migration, plan_inward_resource_layers, plan_resource_http,
+    plan_resource_http_minimal, plan_resource_persistence, plan_resource_web,
+    plan_resource_web_minimal,
 };
 use serde::Serialize;
 use template_renderer::{
@@ -455,6 +461,10 @@ const RESOURCE_SOURCE_PATHS: [&str; 11] = [
     "apps/web/src/shared/i18n/mod.rs",
 ];
 const WEB_SIDEBAR_PATH: &str = "apps/web/src/app/sidebar.rs";
+const WEB_DASHBOARD_PATH: &str = "apps/web/src/dashboard.rs";
+const IDENTITY_RUNTIME_PATH: &str = "apps/server/src/identity_runtime.rs";
+const INFRASTRUCTURE_MANIFEST_PATH: &str = "crates/infrastructure/Cargo.toml";
+const WEB_MANIFEST_PATH: &str = "apps/web/Cargo.toml";
 const MAX_GENERATION_SOURCE_BYTES: u64 = 4 * 1024 * 1024;
 
 #[derive(Serialize)]
@@ -529,7 +539,10 @@ fn generate_resource(
             diagnostics,
         );
     }
-    let sources = match read_resource_sources(&context.root) {
+    let minimal_web = manifest
+        .installed_component_ids()
+        .contains(LAYERED_LEPTOS_MINIMAL_COMPONENT);
+    let sources = match read_resource_sources(&context.root, minimal_web) {
         Ok(sources) => sources,
         Err(diagnostic) => return write_diagnostic(diagnostic, diagnostics),
     };
@@ -574,7 +587,7 @@ fn generate_resource(
             return write_diagnostic(CliDiagnostic::validation(error.to_string()), diagnostics);
         }
     };
-    let plan = match plan_complete_resource(&context.root, &specification, &sources) {
+    let plan = match plan_complete_resource(&context.root, &specification, &sources, minimal_web) {
         Ok(plan) => plan,
         Err(diagnostic) => return write_diagnostic(diagnostic, diagnostics),
     };
@@ -607,9 +620,24 @@ impl ResourceSources {
     }
 }
 
-fn read_resource_sources(root: &Path) -> Result<ResourceSources, CliDiagnostic> {
+fn read_resource_sources(root: &Path, minimal_web: bool) -> Result<ResourceSources, CliDiagnostic> {
     let mut files = BTreeMap::new();
-    for path in RESOURCE_SOURCE_PATHS.into_iter().chain([WEB_SIDEBAR_PATH]) {
+    let common = &RESOURCE_SOURCE_PATHS[..9];
+    let web: &[&str] = if minimal_web {
+        &[
+            WEB_DASHBOARD_PATH,
+            IDENTITY_RUNTIME_PATH,
+            INFRASTRUCTURE_MANIFEST_PATH,
+            WEB_MANIFEST_PATH,
+        ]
+    } else {
+        &[
+            RESOURCE_SOURCE_PATHS[9],
+            RESOURCE_SOURCE_PATHS[10],
+            WEB_SIDEBAR_PATH,
+        ]
+    };
+    for &path in common.iter().chain(web.iter()) {
         files.insert(path, read_application_source(root, path)?);
     }
     Ok(ResourceSources { files })
@@ -726,6 +754,7 @@ fn plan_complete_resource(
     root: &Path,
     specification: &ResourceSpecification,
     sources: &ResourceSources,
+    minimal_web: bool,
 ) -> Result<ChangePlan, CliDiagnostic> {
     let inward = plan_inward_resource_layers(
         specification,
@@ -749,36 +778,118 @@ fn plan_complete_resource(
         specification.names().rust_module()
     );
     let infrastructure_resource = planned_content(persistence.plan(), &infrastructure_path)?;
-    let http = plan_resource_http(
-        specification,
-        HttpLayerSources {
-            presentation_root: sources.get("crates/presentation/src/lib.rs"),
-            infrastructure_resource,
-            infrastructure_services: sources.get("crates/infrastructure/src/identity/services.rs"),
-            server_source: sources.get("apps/server/src/server.rs"),
-        },
-    )
+    let http_sources = HttpLayerSources {
+        presentation_root: sources.get("crates/presentation/src/lib.rs"),
+        infrastructure_resource,
+        infrastructure_services: sources.get("crates/infrastructure/src/identity/services.rs"),
+        server_source: sources.get("apps/server/src/server.rs"),
+    };
+    let http = if minimal_web {
+        plan_resource_http_minimal(
+            specification,
+            MinimalHttpLayerSources {
+                common: http_sources,
+                identity_runtime: sources.get(IDENTITY_RUNTIME_PATH),
+            },
+        )
+    } else {
+        plan_resource_http(specification, http_sources)
+    }
     .map_err(http_layer_diagnostic)?;
     let server_source = planned_content(http.plan(), "apps/server/src/server.rs")?;
-    let web = plan_resource_web(
-        specification,
-        WebLayerSources {
-            web_root: sources.get("apps/web/src/lib.rs"),
-            routes: sources.get("apps/web/src/routes.rs"),
-            navigation: sources.get("apps/web/src/app/navigation.rs"),
-            i18n: sources.get("apps/web/src/shared/i18n/mod.rs"),
-            sidebar: sources.get(WEB_SIDEBAR_PATH),
-            server_source,
-        },
-    )
+    let web = if minimal_web {
+        plan_resource_web_minimal(
+            specification,
+            MinimalWebLayerSources {
+                web_root: sources.get("apps/web/src/lib.rs"),
+                routes: sources.get("apps/web/src/routes.rs"),
+                dashboard: sources.get(WEB_DASHBOARD_PATH),
+                server_source,
+            },
+        )
+    } else {
+        plan_resource_web(
+            specification,
+            WebLayerSources {
+                web_root: sources.get("apps/web/src/lib.rs"),
+                routes: sources.get("apps/web/src/routes.rs"),
+                navigation: sources.get("apps/web/src/app/navigation.rs"),
+                i18n: sources.get("apps/web/src/shared/i18n/mod.rs"),
+                sidebar: sources.get(WEB_SIDEBAR_PATH),
+                server_source,
+            },
+        )
+    }
     .map_err(web_layer_diagnostic)?;
-    ChangePlan::compose([
+    let dependencies = minimal_web
+        .then(|| plan_minimal_resource_dependencies(sources))
+        .transpose()?;
+    let mut plans = vec![
         inward.into_plan(),
         persistence.into_plan(),
         http.into_plan(),
         web.into_plan(),
-    ])
-    .map_err(change_plan_diagnostic)
+    ];
+    if let Some(dependencies) = dependencies {
+        plans.push(dependencies);
+    }
+    ChangePlan::compose(plans).map_err(change_plan_diagnostic)
+}
+
+fn plan_minimal_resource_dependencies(
+    sources: &ResourceSources,
+) -> Result<ChangePlan, CliDiagnostic> {
+    let mut changes = Vec::new();
+    for (path, names, features) in [
+        (
+            INFRASTRUCTURE_MANIFEST_PATH,
+            &["app_application", "app_application_contracts", "app_domain"][..],
+            &[][..],
+        ),
+        (
+            WEB_MANIFEST_PATH,
+            &[
+                "app_application_contracts",
+                "chrono",
+                "leptos_support",
+                "uuid",
+            ][..],
+            &[
+                ("hydrate", "leptos_support/hydrate"),
+                ("ssr", "leptos_support/ssr"),
+            ][..],
+        ),
+    ] {
+        let observed = sources.get(path);
+        let mut resulting = observed.to_vec();
+        for name in names {
+            if let StructuredEditOutcome::Planned { edit, .. } = plan_cargo_dependency(
+                path,
+                &resulting,
+                CargoDependencySection::Dependencies,
+                &CargoDependency::workspace(*name, false, std::iter::empty::<&str>()),
+            )
+            .map_err(|error| CliDiagnostic::conflict(error.to_string()))?
+            {
+                resulting = edit.resulting_content().to_vec();
+            }
+        }
+        for (feature, selection) in features {
+            if let StructuredEditOutcome::Planned { edit, .. } =
+                plan_toml_array_string(path, &resulting, &["features"], feature, selection)
+                    .map_err(|error| CliDiagnostic::conflict(error.to_string()))?
+            {
+                resulting = edit.resulting_content().to_vec();
+            }
+        }
+        if resulting != observed {
+            changes.push(PlannedFileChange::from(
+                StructuredFileEdit::new(path, observed, resulting)
+                    .map_err(|error| CliDiagnostic::internal(error.to_string()))?,
+            ));
+        }
+    }
+    ChangePlan::new(changes).map_err(change_plan_diagnostic)
 }
 
 fn planned_content<'a>(plan: &'a ChangePlan, path: &str) -> Result<&'a [u8], CliDiagnostic> {
