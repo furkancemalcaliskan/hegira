@@ -341,8 +341,8 @@ dependencies = [
 
 [[package]]
 name = "audit"
-version = "0.5.0"
-source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.5.0#775637611194ff079a004ea9330d2bdfc04283de"
+version = "0.6.0"
+source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.6.0#67d0708e135a233335969752890c23d5bb1fb3c6"
 dependencies = [
  "serde",
  "serde_json",
@@ -829,8 +829,8 @@ dependencies = [
 
 [[package]]
 name = "background_jobs"
-version = "0.5.0"
-source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.5.0#775637611194ff079a004ea9330d2bdfc04283de"
+version = "0.6.0"
+source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.6.0#67d0708e135a233335969752890c23d5bb1fb3c6"
 dependencies = [
  "chrono",
  "serde",
@@ -968,8 +968,8 @@ dependencies = [
 
 [[package]]
 name = "cache"
-version = "0.5.0"
-source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.5.0#775637611194ff079a004ea9330d2bdfc04283de"
+version = "0.6.0"
+source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.6.0#67d0708e135a233335969752890c23d5bb1fb3c6"
 dependencies = [
  "redis",
 ]
@@ -1115,8 +1115,8 @@ dependencies = [
 
 [[package]]
 name = "configuration"
-version = "0.5.0"
-source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.5.0#775637611194ff079a004ea9330d2bdfc04283de"
+version = "0.6.0"
+source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.6.0#67d0708e135a233335969752890c23d5bb1fb3c6"
 dependencies = [
  "config",
 ]
@@ -2064,8 +2064,8 @@ checksum = "9171a2ea8a68358193d15dd5d70c1c10a2afc3e7e4c5bc92bc9f025cebd7359c"
 
 [[package]]
 name = "http_support"
-version = "0.5.0"
-source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.5.0#775637611194ff079a004ea9330d2bdfc04283de"
+version = "0.6.0"
+source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.6.0#67d0708e135a233335969752890c23d5bb1fb3c6"
 dependencies = [
  "axum",
  "ipnet",
@@ -2316,8 +2316,8 @@ checksum = "b9e0384b61958566e926dc50660321d12159025e767c18e043daf26b70104c39"
 
 [[package]]
 name = "identity_application"
-version = "0.5.0"
-source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.5.0#775637611194ff079a004ea9330d2bdfc04283de"
+version = "0.6.0"
+source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.6.0#67d0708e135a233335969752890c23d5bb1fb3c6"
 dependencies = [
  "async-trait",
  "audit",
@@ -2339,8 +2339,8 @@ dependencies = [
 
 [[package]]
 name = "identity_application_contracts"
-version = "0.5.0"
-source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.5.0#775637611194ff079a004ea9330d2bdfc04283de"
+version = "0.6.0"
+source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.6.0#67d0708e135a233335969752890c23d5bb1fb3c6"
 dependencies = [
  "chrono",
  "identity_domain",
@@ -2352,8 +2352,8 @@ dependencies = [
 
 [[package]]
 name = "identity_domain"
-version = "0.5.0"
-source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.5.0#775637611194ff079a004ea9330d2bdfc04283de"
+version = "0.6.0"
+source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.6.0#67d0708e135a233335969752890c23d5bb1fb3c6"
 dependencies = [
  "chrono",
  "identity_domain_shared",
@@ -2362,13 +2362,13 @@ dependencies = [
 
 [[package]]
 name = "identity_domain_shared"
-version = "0.5.0"
-source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.5.0#775637611194ff079a004ea9330d2bdfc04283de"
+version = "0.6.0"
+source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.6.0#67d0708e135a233335969752890c23d5bb1fb3c6"
 
 [[package]]
 name = "identity_http"
-version = "0.5.0"
-source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.5.0#775637611194ff079a004ea9330d2bdfc04283de"
+version = "0.6.0"
+source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.6.0#67d0708e135a233335969752890c23d5bb1fb3c6"
 dependencies = [
  "axum",
  "http_support",
@@ -2384,8 +2384,8 @@ dependencies = [
 
 [[package]]
 name = "identity_leptos"
-version = "0.5.0"
-source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.5.0#775637611194ff079a004ea9330d2bdfc04283de"
+version = "0.6.0"
+source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.6.0#67d0708e135a233335969752890c23d5bb1fb3c6"
 dependencies = [
  "icons",
  "identity_application",
@@ -2401,8 +2401,8 @@ dependencies = [
 
 [[package]]
 name = "identity_sqlx"
-version = "0.5.0"
-source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.5.0#775637611194ff079a004ea9330d2bdfc04283de"
+version = "0.6.0"
+source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.6.0#67d0708e135a233335969752890c23d5bb1fb3c6"
 dependencies = [
  "background_jobs",
  "chrono",
@@ -2768,8 +2768,8 @@ dependencies = [
 
 [[package]]
 name = "leptos_support"
-version = "0.5.0"
-source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.5.0#775637611194ff079a004ea9330d2bdfc04283de"
+version = "0.6.0"
+source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.6.0#67d0708e135a233335969752890c23d5bb1fb3c6"
 dependencies = [
  "axum",
  "cookie",
@@ -2898,8 +2898,8 @@ checksum = "112b39cec0b298b6c1999fee3e31427f74f676e4cb9879ed1a121b43661a4154"
 
 [[package]]
 name = "mail"
-version = "0.5.0"
-source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.5.0#775637611194ff079a004ea9330d2bdfc04283de"
+version = "0.6.0"
+source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.6.0#67d0708e135a233335969752890c23d5bb1fb3c6"
 dependencies = [
  "background_jobs",
  "lettre",
@@ -3156,8 +3156,8 @@ dependencies = [
 
 [[package]]
 name = "observability"
-version = "0.5.0"
-source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.5.0#775637611194ff079a004ea9330d2bdfc04283de"
+version = "0.6.0"
+source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.6.0#67d0708e135a233335969752890c23d5bb1fb3c6"
 dependencies = [
  "axum",
  "background_jobs",
@@ -3362,8 +3362,8 @@ checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 
 [[package]]
 name = "persistence"
-version = "0.5.0"
-source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.5.0#775637611194ff079a004ea9330d2bdfc04283de"
+version = "0.6.0"
+source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.6.0#67d0708e135a233335969752890c23d5bb1fb3c6"
 dependencies = [
  "serde",
  "sqlx",
@@ -3478,8 +3478,8 @@ checksum = "b4596b6d070b27117e987119b4dac604f3c58cfb0b191112e24771b2faeac1a6"
 
 [[package]]
 name = "platform_core"
-version = "0.5.0"
-source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.5.0#775637611194ff079a004ea9330d2bdfc04283de"
+version = "0.6.0"
+source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.6.0#67d0708e135a233335969752890c23d5bb1fb3c6"
 
 [[package]]
 name = "portable-atomic"
@@ -4099,8 +4099,8 @@ dependencies = [
 
 [[package]]
 name = "runtime"
-version = "0.5.0"
-source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.5.0#775637611194ff079a004ea9330d2bdfc04283de"
+version = "0.6.0"
+source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.6.0#67d0708e135a233335969752890c23d5bb1fb3c6"
 dependencies = [
  "serde",
  "tokio",
@@ -4255,8 +4255,8 @@ checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 
 [[package]]
 name = "search"
-version = "0.5.0"
-source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.5.0#775637611194ff079a004ea9330d2bdfc04283de"
+version = "0.6.0"
+source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.6.0#67d0708e135a233335969752890c23d5bb1fb3c6"
 dependencies = [
  "background_jobs",
  "chrono",
@@ -4271,8 +4271,8 @@ dependencies = [
 
 [[package]]
 name = "security"
-version = "0.5.0"
-source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.5.0#775637611194ff079a004ea9330d2bdfc04283de"
+version = "0.6.0"
+source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.6.0#67d0708e135a233335969752890c23d5bb1fb3c6"
 dependencies = [
  "chrono",
 ]
@@ -4480,8 +4480,8 @@ dependencies = [
 
 [[package]]
 name = "settings"
-version = "0.5.0"
-source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.5.0#775637611194ff079a004ea9330d2bdfc04283de"
+version = "0.6.0"
+source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.6.0#67d0708e135a233335969752890c23d5bb1fb3c6"
 dependencies = [
  "serde",
  "serde_json",
@@ -4849,8 +4849,8 @@ checksum = "6ce2be8dc25455e1f91df71bfa12ad37d7af1092ae736f3a6cd0e37bc7810596"
 
 [[package]]
 name = "storage"
-version = "0.5.0"
-source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.5.0#775637611194ff079a004ea9330d2bdfc04283de"
+version = "0.6.0"
+source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.6.0#67d0708e135a233335969752890c23d5bb1fb3c6"
 dependencies = [
  "aws-config",
  "aws-sdk-s3",

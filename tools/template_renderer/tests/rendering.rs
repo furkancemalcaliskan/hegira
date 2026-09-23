@@ -230,7 +230,7 @@ fn canonical_package_resolves_the_versioned_component_module_and_capability_grap
 
     assert_eq!(graph.schema, 1);
     assert_eq!(graph.package.id, "hegira-canonical");
-    assert_eq!(graph.package.version, "v0.5.0");
+    assert_eq!(graph.package.version, "v0.6.0");
     assert_eq!(
         graph
             .components
@@ -241,7 +241,7 @@ fn canonical_package_resolves_the_versioned_component_module_and_capability_grap
     );
     assert_eq!(graph.modules.len(), 1);
     assert_eq!(graph.modules[0].id, "identity");
-    assert_eq!(graph.modules[0].version, "v0.5.0");
+    assert_eq!(graph.modules[0].version, "v0.6.0");
     assert_eq!(
         graph.capabilities,
         [
@@ -399,7 +399,7 @@ fn layered_template_renders_release_dependencies_and_binary_assets() {
     );
     let manifest = fs::read_to_string(output.join("Cargo.toml")).expect("manifest should exist");
     assert!(manifest.contains(
-        r#"identity_application = { git = "https://github.com/furkancemalcaliskan/hegira.git", tag = "v0.5.0", default-features = false }"#
+        r#"identity_application = { git = "https://github.com/furkancemalcaliskan/hegira.git", tag = "v0.6.0", default-features = false }"#
     ));
     for compatibility_dependency in [
         "application",
@@ -447,12 +447,12 @@ fn layered_template_renders_release_dependencies_and_binary_assets() {
     let application_manifest = ApplicationManifest::read(output.join("hegira.toml"))
         .expect("generated application manifest should be valid");
     assert_eq!(application_manifest.application, "application");
-    assert_eq!(application_manifest.framework.version, "v0.5.0");
+    assert_eq!(application_manifest.framework.version, "v0.6.0");
     let composition = application_manifest
         .composition
         .expect("generated application manifest should record composition state");
     assert_eq!(composition.package.id, "hegira-canonical");
-    assert_eq!(composition.package.version, "v0.5.0");
+    assert_eq!(composition.package.version, "v0.6.0");
     assert_eq!(composition.modules.len(), 1);
     assert_eq!(composition.modules[0].id, "identity");
     assert_eq!(

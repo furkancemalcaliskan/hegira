@@ -1,6 +1,6 @@
 schema = 3
 id = "layered-leptos-identity"
-version = "v0.5.0"
+version = "v0.6.0"
 source = "applications/layered"
 include = [
   ".env.example",

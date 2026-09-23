@@ -1112,14 +1112,14 @@ clients = ["leptos"]
 
     #[test]
     fn compatible_manifest_matches_the_explicit_mutation_policy() {
-        let policy = MutationCompatibilityPolicy::for_framework_version("v0.5.0").unwrap();
-        let source = mutable_manifest("v0.5.0");
+        let policy = MutationCompatibilityPolicy::for_framework_version("v0.6.0").unwrap();
+        let source = mutable_manifest("v0.6.0");
 
         assert_eq!(
             assess_mutation_compatibility(&source, &policy).unwrap(),
             MutationCompatibility::Compatible
         );
-        assert_eq!(policy.framework_version(), "v0.5.0");
+        assert_eq!(policy.framework_version(), "v0.6.0");
     }
 
     #[test]
@@ -1134,8 +1134,8 @@ clients = ["leptos"]
 
     #[test]
     fn unknown_schema_is_unsupported_without_relaxing_normal_parsing() {
-        let policy = MutationCompatibilityPolicy::for_framework_version("v0.5.0").unwrap();
-        let source = mutable_manifest("v0.5.0").replace("schema = 2", "schema = 3");
+        let policy = MutationCompatibilityPolicy::for_framework_version("v0.6.0").unwrap();
+        let source = mutable_manifest("v0.6.0").replace("schema = 2", "schema = 3");
 
         assert_eq!(
             assess_mutation_compatibility(&source, &policy).unwrap(),
@@ -1153,7 +1153,7 @@ clients = ["leptos"]
 
     #[test]
     fn legacy_v1_manifest_is_readable_but_never_writable() {
-        let policy = MutationCompatibilityPolicy::for_framework_version("v0.5.0").unwrap();
+        let policy = MutationCompatibilityPolicy::for_framework_version("v0.6.0").unwrap();
         let manifest = ApplicationManifest::from_toml(LEGACY_V1)
             .expect("legacy v0.5 manifest should remain readable");
 
@@ -1173,8 +1173,8 @@ clients = ["leptos"]
 
     #[test]
     fn different_framework_identity_is_incompatible() {
-        let policy = MutationCompatibilityPolicy::for_framework_version("v0.5.0").unwrap();
-        let source = mutable_manifest("v0.5.0").replace(
+        let policy = MutationCompatibilityPolicy::for_framework_version("v0.6.0").unwrap();
+        let source = mutable_manifest("v0.6.0").replace(
             HEGIRA_FRAMEWORK_REPOSITORY,
             "https://github.com/example/hegira.git",
         );
@@ -1191,10 +1191,10 @@ clients = ["leptos"]
 
     #[test]
     fn unsupported_components_name_the_conflicting_field() {
-        let policy = MutationCompatibilityPolicy::for_framework_version("v0.5.0").unwrap();
-        let source = mutable_manifest("v0.5.0").replace(
+        let policy = MutationCompatibilityPolicy::for_framework_version("v0.6.0").unwrap();
+        let source = mutable_manifest("v0.6.0").replace(
             "[[composition.modules]]",
-            "[[composition.components]]\nid = \"layered-future-client\"\nversion = \"v0.5.0\"\n\n[[composition.modules]]",
+            "[[composition.components]]\nid = \"layered-future-client\"\nversion = \"v0.6.0\"\n\n[[composition.modules]]",
         );
 
         let compatibility = assess_mutation_compatibility(&source, &policy).unwrap();
@@ -1207,13 +1207,13 @@ clients = ["leptos"]
 
     #[test]
     fn noncanonical_adapter_cardinality_names_each_selection_field() {
-        let policy = MutationCompatibilityPolicy::for_framework_version("v0.5.0").unwrap();
-        let multiple_databases = mutable_manifest("v0.5.0").replace(
+        let policy = MutationCompatibilityPolicy::for_framework_version("v0.6.0").unwrap();
+        let multiple_databases = mutable_manifest("v0.6.0").replace(
             "databases = [\"sqlite\"]",
             "databases = [\"postgres\", \"sqlite\"]",
         );
         let no_clients =
-            mutable_manifest("v0.5.0").replace("clients = [\"leptos\"]", "clients = []");
+            mutable_manifest("v0.6.0").replace("clients = [\"leptos\"]", "clients = []");
 
         let MutationCompatibility::Incompatible(database_issue) =
             assess_mutation_compatibility(&multiple_databases, &policy).unwrap()
@@ -1235,9 +1235,9 @@ clients = ["leptos"]
 
     #[test]
     fn malformed_current_schema_manifest_remains_invalid() {
-        let policy = MutationCompatibilityPolicy::for_framework_version("v0.5.0").unwrap();
+        let policy = MutationCompatibilityPolicy::for_framework_version("v0.6.0").unwrap();
         let invalid =
-            mutable_manifest("v0.5.0").replace(HEGIRA_FRAMEWORK_REPOSITORY, "file:///tmp/hegira");
+            mutable_manifest("v0.6.0").replace(HEGIRA_FRAMEWORK_REPOSITORY, "file:///tmp/hegira");
 
         assert!(matches!(
             assess_mutation_compatibility(&invalid, &policy),

@@ -552,7 +552,7 @@ mod tests {
             application: "my-application".to_owned(),
             framework: FrameworkContract {
                 repository: HEGIRA_FRAMEWORK_REPOSITORY.to_owned(),
-                version: "v0.5.0".to_owned(),
+                version: "v0.6.0".to_owned(),
             },
             selection: ApplicationSelection {
                 components: BTreeSet::new(),
@@ -562,18 +562,18 @@ mod tests {
             composition: Some(ApplicationComposition {
                 package: PackageIdentity {
                     id: HEGIRA_COMPONENT_PACKAGE.to_owned(),
-                    version: "v0.5.0".to_owned(),
+                    version: "v0.6.0".to_owned(),
                 },
                 components: [LAYERED_BASE_COMPONENT, LAYERED_LEPTOS_IDENTITY_COMPONENT]
                     .map(|id| InstalledComponent {
                         id: id.to_owned(),
-                        version: "v0.5.0".to_owned(),
+                        version: "v0.6.0".to_owned(),
                     })
                     .into_iter()
                     .collect(),
                 modules: vec![InstalledModule {
                     id: IDENTITY_MODULE.to_owned(),
-                    version: "v0.5.0".to_owned(),
+                    version: "v0.6.0".to_owned(),
                 }],
                 capabilities: [
                     ApplicationCapability::Authentication,
@@ -601,7 +601,7 @@ mod tests {
             .chain(with_identity.then_some(IDENTITY_COMPONENT))
             .map(|id| InstalledComponent {
                 id: id.to_owned(),
-                version: "v0.5.0".to_owned(),
+                version: "v0.6.0".to_owned(),
             })
             .collect();
         if !with_identity {
