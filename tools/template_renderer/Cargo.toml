@@ -10,7 +10,7 @@ rust-version = "1.96"
 [dependencies]
 application_manifest = { path = "../../crates/application_manifest" }
 serde = { version = "1.0.228", features = ["derive"] }
-sha2 = "0.10.9"
+sha2 = "0.11.0"
 toml = "1.1.2"
 
 [target.'cfg(unix)'.dependencies]

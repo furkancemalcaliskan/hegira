@@ -8,9 +8,9 @@ publish = false
 [dependencies]
 axum = "0.8.9"
 background_jobs = { path = "../background_jobs" }
-opentelemetry = { version = "0.32.0", optional = true }
-opentelemetry-otlp = { version = "0.32.0", default-features = false, features = ["trace", "grpc-tonic", "http-proto", "reqwest-blocking-client", "tls-ring", "tls-roots"], optional = true }
-opentelemetry_sdk = { version = "0.32.0", features = ["trace", "rt-tokio"], optional = true }
+opentelemetry = { version = "0.33.0", optional = true }
+opentelemetry-otlp = { version = "0.33.0", default-features = false, features = ["trace", "grpc-tonic", "http-proto", "reqwest-blocking-client", "tls-ring", "tls-roots"], optional = true }
+opentelemetry_sdk = { version = "0.33.0", features = ["trace", "rt-tokio"], optional = true }
 prometheus = { version = "0.14.0", optional = true }
 serde = { version = "1.0.228", features = ["derive"] }
 tokio = { version = "1.52.3", features = ["time"] }

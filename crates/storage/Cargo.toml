@@ -10,7 +10,7 @@ aws-config = { version = "1.8.18", default-features = false, features = ["behavi
 aws-sdk-s3 = { version = "1.144.0", default-features = false, features = ["default-https-client", "rt-tokio"], optional = true }
 # aws-smithy-json 0.63.0 is not source-compatible with aws-smithy-types 1.7.0.
 # Keep fresh validation locks on the release-verified Smithy API generation.
-aws-smithy-types = { version = "=1.6.3", optional = true }
+aws-smithy-types = { version = "=1.6.4", optional = true }
 tokio = { version = "1.52.3", features = ["fs"] }
 
 [features]
