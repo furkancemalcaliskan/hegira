@@ -7,8 +7,10 @@ import test from "node:test";
 import {
   currentReleaseRef,
   validateCanonicalApplicationLock,
+  validateReleaseCandidateMetadata,
   validateReleaseFiles,
   validateReleaseMetadata,
+  validateReleaseRepository,
   validateReleaseWorkflow,
 } from "./release-policy.mjs";
 
@@ -52,7 +54,7 @@ function releaseFixture() {
   );
   fs.writeFileSync(
     path.join(root, "templates", "applications", "layered", "Cargo.lock"),
-    'source = "git+https://github.com/example/hegira.git?tag=v0.2.0#0123456789abcdef0123456789abcdef01234567"\n',
+    '[[package]]\nname = "runtime"\nversion = "0.2.0"\nsource = "git+https://github.com/example/hegira.git?tag=v0.2.0#0123456789abcdef0123456789abcdef01234567"\n',
   );
   return root;
 }
@@ -105,6 +107,124 @@ test("accepts consistent workspace versions", () => {
 
 test("derives the release ref without a compatibility host package", () => {
   assert.equal(currentReleaseRef(metadata()), "v0.2.0");
+});
+
+test("accepts a newer issue-bound release candidate", () => {
+  const fixture = metadata({
+    metadata: {
+      hegira: {
+        release_candidate: {
+          base: "v0.1.2",
+          issue: 307,
+          target: "v0.2.0",
+        },
+      },
+    },
+  });
+  assert.deepEqual(validateReleaseCandidateMetadata(fixture, "v0.2.0"), []);
+});
+
+test("validates base release files during a candidate transition", (context) => {
+  const root = releaseFixture();
+  context.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.mkdirSync(path.join(root, ".github", "workflows"), { recursive: true });
+  fs.writeFileSync(
+    path.join(root, ".github", "workflows", "release.yml"),
+    validWorkflow,
+  );
+  const fixture = metadata({
+    metadata: {
+      hegira: {
+        release_candidate: {
+          base: "v0.2.0",
+          issue: 307,
+          target: "v0.3.0",
+        },
+      },
+    },
+  });
+  fixture.packages[0].version = "0.3.0";
+  assert.deepEqual(
+    validateReleaseRepository(root, "v0.3.0", fixture, {
+      allowCandidate: true,
+    }),
+    [],
+  );
+});
+
+test("rejects candidate versions outside canonical release-source packages", (context) => {
+  const root = releaseFixture();
+  context.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.mkdirSync(path.join(root, ".github", "workflows"), { recursive: true });
+  fs.writeFileSync(
+    path.join(root, ".github", "workflows", "release.yml"),
+    validWorkflow,
+  );
+  const fixture = metadata({
+    metadata: {
+      hegira: {
+        release_candidate: {
+          base: "v0.2.0",
+          issue: 307,
+          target: "v0.3.0",
+        },
+      },
+    },
+  });
+  for (const packageMetadata of fixture.packages) {
+    packageMetadata.version = "0.3.0";
+  }
+  const errors = validateReleaseRepository(root, "v0.3.0", fixture, {
+    allowCandidate: true,
+  });
+  assert.ok(
+    errors.some(
+      (error) =>
+        error.includes("repository-only package version mismatch") &&
+        error.includes("domain"),
+    ),
+  );
+});
+
+test("rejects malformed and non-increasing release candidates", () => {
+  const fixture = metadata({
+    metadata: {
+      hegira: {
+        release_candidate: {
+          base: "v0.2.0",
+          issue: 0,
+          target: "v0.2.0",
+          bypass: true,
+        },
+      },
+    },
+  });
+  const errors = validateReleaseCandidateMetadata(fixture, "v0.2.0");
+  assert.ok(
+    errors.some((error) => error.includes("only base, issue, and target")),
+  );
+  assert.ok(errors.some((error) => error.includes("must be newer")));
+  assert.ok(errors.some((error) => error.includes("positive integer")));
+});
+
+test("explicit release validation rejects candidate metadata", (context) => {
+  const root = releaseFixture();
+  context.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const fixture = metadata({
+    metadata: {
+      hegira: {
+        release_candidate: {
+          base: "v0.1.2",
+          issue: 307,
+          target: "v0.2.0",
+        },
+      },
+    },
+  });
+  const errors = validateReleaseRepository(root, "v0.2.0", fixture);
+  assert.ok(
+    errors.some((error) => error.includes("must be removed before explicit")),
+  );
 });
 
 test("rejects a non-stable release ref", () => {
