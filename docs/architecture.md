@@ -272,9 +272,11 @@ The package also plans application-owned migration scaffolds independently of
 the general resource specification. It resolves the selected SQLite or
 PostgreSQL adapter from the validated application manifest, observes only that
 provider's canonical migration filenames, and derives the next append-only
-numeric identity. Existing migration contents are neither read into plan output
-nor edited. Duplicate identities, malformed or symlinked histories, and stale
-publication preconditions are explicit conflicts.
+numeric identity. Generated application-owned migrations begin at version
+`1000000`, keeping their identities separate from the lower range used by
+official module migration history. Existing migration contents are neither read
+into plan output nor edited. Duplicate identities, malformed or symlinked
+histories, and stale publication preconditions are explicit conflicts.
 
 Each plan creates one provider-labelled SQL scaffold and creates or advances
 `crates/infrastructure/migrations/.hegira-generator.toml`. This private,

@@ -81,6 +81,9 @@ jobs:
   generated-application:
     steps:
       - run: sh scripts/generated-application-check.sh
+  component-lifecycle:
+    steps:
+      - run: sh scripts/generated-application-check.sh identity-added
   publish:
     if: github.event_name == 'push'
     needs:
@@ -89,6 +92,7 @@ jobs:
       - official-modules
       - tooling
       - generated-application
+      - component-lifecycle
     permissions:
       contents: write
     steps:
@@ -233,6 +237,18 @@ test("rejects a missing generated application gate", () => {
   );
   assert.ok(
     errors.some((error) => error.includes("generated application validation")),
+  );
+});
+
+test("rejects a missing component lifecycle gate", () => {
+  const errors = validateReleaseWorkflow(
+    validWorkflow.replace(
+      "sh scripts/generated-application-check.sh identity-added",
+      "true",
+    ),
+  );
+  assert.ok(
+    errors.some((error) => error.includes("component lifecycle validation")),
   );
 });
 
