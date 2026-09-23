@@ -109,7 +109,11 @@ The repository validation workflow separates these responsibilities:
 - `generated-application` validates untouched public CLI output, then mutates
   separate SQLite and PostgreSQL validation copies through the public resource
   command and exercises their locked dependency boundaries, supported v0.2.0
-  upgrades, generated HTTP contract, and rendered production container;
+  upgrades, generated HTTP contract, and rendered production container. A
+  second step in this same job creates explicit minimal applications, verifies
+  pre-install capability rejection, installs Identity through public dry-run
+  and apply, and repeats provider, hydration, production-container, and
+  authenticated CRUD coverage;
 - `quality` aggregates the four repository ownership gates under the existing
   required status context;
 - `supply-chain` runs dependency policy and vulnerability checks.

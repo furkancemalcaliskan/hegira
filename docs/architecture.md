@@ -74,6 +74,54 @@ Changing an existing application's framework version, module composition, or
 database requires coordinated source, dependency, configuration, and migration
 review; the current CLI does not perform those changes.
 
+## Components, Modules, And Composition
+
+Hegira keeps generation units separate from runtime ownership:
+
+| Term | Current contract |
+|---|---|
+| Component package | The release-aligned, digest-verified catalog described by `templates/package.toml` |
+| Component | A typed graph node that either contributes source during initial rendering or describes one additive installation unit |
+| Official module | Versioned layered framework packages under `modules/` that own a reusable capability and its adapters |
+| Capability | A machine-checked contract, such as `authentication` or `authorization`, derived from the resolved module graph |
+| Composition | The exact package, component, module, capability, database, and client state recorded in `hegira.toml` |
+
+A component is not a second name for an official module. The bundled
+`identity` component is inert installation metadata that owns the official
+Identity module contribution. Installing it adds release-pinned dependencies
+on the Identity packages and edits declared application-owned integration
+points; it does not copy `modules/identity/` into the application. For this
+reason the public mutation command is `hegira component add identity`; there is
+no generic module loader, runtime plugin mechanism, or module-management
+command.
+
+The recommended `identity` composition remains the creation default. It
+renders `layered-base` with `layered-leptos-identity` and records the official
+Identity module plus its authentication and authorization capabilities. The
+explicit `minimal` composition renders `layered-base` with
+`layered-leptos-minimal`; it retains the layered application, selected SQLx
+provider, Axum host, Leptos client, configuration, and deployment boundaries,
+but records no official module or authentication and authorization capability.
+It does not substitute anonymous or allow-all authorization.
+
+`hegira inspect` is the composition-status command: it resolves the recorded
+state against the bundled authenticated graph without modifying the
+application. `hegira doctor` additionally checks local prerequisites, recovery
+state, and bounded application integration points. Mutating commands require
+an exact compatible framework and package release, a supported composition,
+and the recorded database and client. Protected resource generation also
+requires authentication and authorization and therefore fails closed for a
+minimal application until Identity has been installed.
+
+Installation is additive only. Dry-run and apply consume the same typed,
+content-redacted plan; apply publishes manifest, dependency, configuration,
+migration-source, server, HTTP, OpenAPI, and Leptos contributions through the
+application mutation transaction. The CLI currently provides no removal,
+automatic framework or application upgrade, remote package source, migration
+execution, or rollback. The application owner must review configuration,
+regenerate `Cargo.lock`, apply the selected provider migrations, and validate
+the application after installation.
+
 ## Dependency Direction
 
 Framework packages cannot depend on official modules, generated applications,
