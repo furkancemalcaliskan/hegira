@@ -192,6 +192,36 @@ component installation, or additional client templates. Optional runtime
 providers are configured explicitly in the application; they are not extra
 `new` selections.
 
+## Install Identity In A Minimal Application
+
+The default application already contains the Identity composition and must not
+run this installation flow. For an explicitly created minimal application,
+`inspect` is the read-only composition-status command. From the application
+root, inspect and diagnose the starting state with the CLI source matching the
+application's recorded framework release:
+
+```sh
+cargo run --locked --manifest-path /path/to/hegira/Cargo.toml \
+  -p hegira_cli -- inspect
+cargo run --locked --manifest-path /path/to/hegira/Cargo.toml \
+  -p hegira_cli -- doctor
+```
+
+Review the exact content-redacted installation plan before applying it:
+
+```sh
+cargo run --locked --manifest-path /path/to/hegira/Cargo.toml \
+  -p hegira_cli -- component add identity --dry-run
+cargo run --locked --manifest-path /path/to/hegira/Cargo.toml \
+  -p hegira_cli -- component add identity
+```
+
+Add `--json` to inspection, doctor, dry-run, or apply when automation requires
+the corresponding versioned machine-readable contract. Dry-run performs no
+application write. Apply publishes the same validated plan atomically; a stale
+file, incompatible composition, occupied path, concurrent mutation, or unsafe
+recovery state fails instead of being overwritten.
+
 For a compatible minimal Leptos application, `component add identity` previews
 or applies the bundled Identity integration for its selected SQLite or
 PostgreSQL provider. Review first with `hegira component add identity --dry-run`
@@ -203,6 +233,20 @@ configuration, run `cargo generate-lockfile`, apply migrations against the
 intended database, and validate the application before deployment. A repeated
 add is a conflict and does not modify the application. Identity owns `/` after
 installation; the original dashboard remains at `/dashboard`.
+
+The required post-install work is deliberately explicit:
+
+1. Review the Identity and seed settings in the selected `config/{APP_ENV}.yaml`
+   profile; keep credentials in environment-backed secret configuration.
+2. Run `cargo generate-lockfile` and review the dependency change before
+   committing the regenerated application lockfile.
+3. Apply the selected provider's application-owned migration plan through the
+   application's deployment process. Hegira does not execute migrations for
+   `component add`.
+4. Run `cargo fmt --all` and the application checks appropriate to the selected
+   SQLite or PostgreSQL profile.
+5. Run `inspect` again to confirm the resolved Identity component, module, and
+   capabilities, then run `doctor` to check integration and local prerequisites.
 
 After Identity is installed, `generate resource` can add a protected resource
 to this minimal composition. Its generated page uses the minimal shell's
