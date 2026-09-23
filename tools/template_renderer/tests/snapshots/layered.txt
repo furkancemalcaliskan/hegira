@@ -1,12 +1,12 @@
-package=hegira-canonical@v0.5.0
-framework=https://github.com/furkancemalcaliskan/hegira.git#v0.5.0
-digest=sha256:8d497db9f7cb02547b10e22096b60ccdcc900bb6fbda2106ac9cd2fa4fffe836
+package=hegira-canonical@v0.6.0
+framework=https://github.com/furkancemalcaliskan/hegira.git#v0.6.0
+digest=sha256:cff6969dadc6e0155af7b944877dba5c61b6e0c4c3ea041d9a8a2665949c285e
 components=layered-base,layered-leptos-identity
 6986e1a96f1eaa98 .dockerignore
 4845a8e7ed4a8aa1 .env.example
 5993ab4d526be466 .gitignore
-634cd6b2e14eab64 Cargo.lock
-1aff236c827c875b Cargo.toml
+2a1d864019bcc81c Cargo.lock
+12538d0a22d55485 Cargo.toml
 db0ea2d9a05904a1 Dockerfile
 acb1f40708fef3bc apps/server/Cargo.toml
 3bde3764afe35806 apps/server/src/lib.rs
@@ -83,4 +83,4 @@ a5cee92157b6a0cb crates/infrastructure/src/operations.rs
 28acfa4312676a72 crates/presentation/src/http.rs
 d9d3e75ec6021d05 crates/presentation/src/lib.rs
 1309f45751c079e0 docker-compose.yml
-6e8192acecf27bc9 hegira.toml
+7493d2e7b37fd8f2 hegira.toml

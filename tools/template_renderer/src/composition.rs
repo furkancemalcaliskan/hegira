@@ -647,7 +647,7 @@ mod tests {
     fn framework() -> FrameworkContract {
         FrameworkContract {
             repository: "https://github.com/furkancemalcaliskan/hegira.git".to_owned(),
-            version: "v0.5.0".to_owned(),
+            version: "v0.6.0".to_owned(),
         }
     }
 
@@ -655,7 +655,7 @@ mod tests {
         ComponentPackageManifest {
             schema: 2,
             id: "hegira-canonical".to_owned(),
-            version: "v0.5.0".to_owned(),
+            version: "v0.6.0".to_owned(),
             framework: framework(),
             templates: vec!["layered".to_owned()],
             components: vec!["base".to_owned(), "identity".to_owned()],
@@ -668,7 +668,7 @@ mod tests {
         ComponentManifest {
             schema: 3,
             id: id.to_owned(),
-            version: Some("v0.5.0".to_owned()),
+            version: Some("v0.6.0".to_owned()),
             source: PathBuf::from("applications/layered"),
             include: vec![PathBuf::from(format!("{id}.txt"))],
             requires: Vec::new(),
@@ -703,7 +703,7 @@ mod tests {
             framework(),
             PackageIdentity {
                 id: "hegira-canonical".to_owned(),
-                version: "v0.5.0".to_owned(),
+                version: "v0.6.0".to_owned(),
             },
             roots.into_iter().map(str::to_owned),
         )
@@ -861,7 +861,7 @@ mod tests {
                     },
                     InstalledModule {
                         id: "unexpected".to_owned(),
-                        version: "v0.5.0".to_owned(),
+                        version: "v0.6.0".to_owned(),
                     },
                 ],
                 [ApplicationCapability::Authentication],

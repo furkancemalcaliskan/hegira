@@ -480,8 +480,8 @@ dependencies = [
 
 [[package]]
 name = "configuration"
-version = "0.5.0"
-source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.5.0#775637611194ff079a004ea9330d2bdfc04283de"
+version = "0.6.0"
+source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.6.0#67d0708e135a233335969752890c23d5bb1fb3c6"
 dependencies = [
  "config",
 ]
@@ -1198,8 +1198,8 @@ checksum = "9171a2ea8a68358193d15dd5d70c1c10a2afc3e7e4c5bc92bc9f025cebd7359c"
 
 [[package]]
 name = "http_support"
-version = "0.5.0"
-source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.5.0#775637611194ff079a004ea9330d2bdfc04283de"
+version = "0.6.0"
+source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.6.0#67d0708e135a233335969752890c23d5bb1fb3c6"
 dependencies = [
  "axum",
  "ipnet",
@@ -2038,8 +2038,8 @@ checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 
 [[package]]
 name = "persistence"
-version = "0.5.0"
-source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.5.0#775637611194ff079a004ea9330d2bdfc04283de"
+version = "0.6.0"
+source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.6.0#67d0708e135a233335969752890c23d5bb1fb3c6"
 dependencies = [
  "serde",
  "sqlx",
@@ -2148,8 +2148,8 @@ checksum = "b4596b6d070b27117e987119b4dac604f3c58cfb0b191112e24771b2faeac1a6"
 
 [[package]]
 name = "platform_core"
-version = "0.5.0"
-source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.5.0#775637611194ff079a004ea9330d2bdfc04283de"
+version = "0.6.0"
+source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.6.0#67d0708e135a233335969752890c23d5bb1fb3c6"
 
 [[package]]
 name = "potential_utf"
@@ -2502,8 +2502,8 @@ dependencies = [
 
 [[package]]
 name = "runtime"
-version = "0.5.0"
-source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.5.0#775637611194ff079a004ea9330d2bdfc04283de"
+version = "0.6.0"
+source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.6.0#67d0708e135a233335969752890c23d5bb1fb3c6"
 dependencies = [
  "serde",
  "tokio",

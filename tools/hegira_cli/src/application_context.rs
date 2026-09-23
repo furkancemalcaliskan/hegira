@@ -432,17 +432,17 @@ version = "{version}"
 
     #[test]
     fn discovered_and_explicit_roots_produce_the_same_context() {
-        let fixture = application("equivalent", "v0.5.0");
+        let fixture = application("equivalent", "v0.6.0");
         let nested = fixture.path.join("apps/web/src");
 
         let discovered = resolve_application_context(
             &ApplicationContextRequest::discover_from(&nested),
-            &policy("v0.5.0"),
+            &policy("v0.6.0"),
         )
         .unwrap();
         let explicit = resolve_application_context(
             &ApplicationContextRequest::explicit(&nested, &fixture.path),
-            &policy("v0.5.0"),
+            &policy("v0.6.0"),
         )
         .unwrap();
 
@@ -461,11 +461,11 @@ version = "{version}"
 
     #[test]
     fn relative_explicit_root_is_resolved_from_the_supplied_working_directory() {
-        let fixture = application("relative", "v0.5.0");
+        let fixture = application("relative", "v0.6.0");
         let working_directory = fixture.path.join("apps/web");
         let context = resolve_application_context(
             &ApplicationContextRequest::explicit(&working_directory, "../.."),
-            &policy("v0.5.0"),
+            &policy("v0.6.0"),
         )
         .unwrap();
         assert_eq!(context.root, fs::canonicalize(&fixture.path).unwrap());
@@ -476,7 +476,7 @@ version = "{version}"
         let fixture = application("unsupported", "v0.4.0");
         let context = resolve_application_context(
             &ApplicationContextRequest::discover_from(&fixture.path),
-            &policy("v0.5.0"),
+            &policy("v0.6.0"),
         )
         .unwrap();
         assert!(context.manifest.is_some());
@@ -491,21 +491,21 @@ version = "{version}"
         let missing = TestDirectory::new("missing");
         let error = resolve_application_context(
             &ApplicationContextRequest::discover_from(&missing.path),
-            &policy("v0.5.0"),
+            &policy("v0.6.0"),
         )
         .unwrap_err();
         assert_eq!(error.kind(), ApplicationContextErrorKind::Validation);
         assert!(error.to_string().contains("no hegira.toml"));
 
-        let outer = application("ambiguous", "v0.5.0");
+        let outer = application("ambiguous", "v0.6.0");
         let inner = outer.path.join("apps/nested");
         for directory in ["apps", "crates", "config", "work"] {
             fs::create_dir_all(inner.join(directory)).unwrap();
         }
-        fs::write(inner.join(MANIFEST_NAME), manifest("v0.5.0")).unwrap();
+        fs::write(inner.join(MANIFEST_NAME), manifest("v0.6.0")).unwrap();
         let error = resolve_application_context(
             &ApplicationContextRequest::discover_from(inner.join("work")),
-            &policy("v0.5.0"),
+            &policy("v0.6.0"),
         )
         .unwrap_err();
         assert_eq!(error.kind(), ApplicationContextErrorKind::Conflict);
@@ -514,11 +514,11 @@ version = "{version}"
 
     #[test]
     fn missing_owned_root_is_rejected() {
-        let fixture = application("missing-owned-root", "v0.5.0");
+        let fixture = application("missing-owned-root", "v0.6.0");
         fs::remove_dir(fixture.path.join("config")).unwrap();
         let error = resolve_application_context(
             &ApplicationContextRequest::discover_from(&fixture.path),
-            &policy("v0.5.0"),
+            &policy("v0.6.0"),
         )
         .unwrap_err();
         assert_eq!(error.kind(), ApplicationContextErrorKind::Validation);
@@ -530,12 +530,12 @@ version = "{version}"
     fn symlinked_roots_manifests_and_owned_roots_are_rejected() {
         use std::os::unix::fs::symlink;
 
-        let fixture = application("symlinks", "v0.5.0");
+        let fixture = application("symlinks", "v0.6.0");
         let alias = fixture.path.with_extension("alias");
         symlink(&fixture.path, &alias).unwrap();
         let error = resolve_application_context(
             &ApplicationContextRequest::explicit(&fixture.path, &alias),
-            &policy("v0.5.0"),
+            &policy("v0.6.0"),
         )
         .unwrap_err();
         assert_eq!(error.kind(), ApplicationContextErrorKind::Validation);
@@ -548,7 +548,7 @@ version = "{version}"
         assert!(
             resolve_application_context(
                 &ApplicationContextRequest::discover_from(&fixture.path),
-                &policy("v0.5.0")
+                &policy("v0.6.0")
             )
             .is_err()
         );
@@ -562,7 +562,7 @@ version = "{version}"
         assert!(
             resolve_application_context(
                 &ApplicationContextRequest::discover_from(&fixture.path),
-                &policy("v0.5.0")
+                &policy("v0.6.0")
             )
             .is_err()
         );

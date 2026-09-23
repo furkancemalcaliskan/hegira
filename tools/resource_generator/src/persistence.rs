@@ -493,7 +493,7 @@ schema = 2
 application = "sample"
 [framework]
 repository = "https://example.invalid/hegira.git"
-version = "v0.5.0"
+version = "v0.6.0"
 [selection]
 databases = ["{database}"]
 clients = ["leptos"]
@@ -503,19 +503,19 @@ capabilities = ["authentication", "authorization"]
 
 [composition.package]
 id = "hegira-canonical"
-version = "v0.5.0"
+version = "v0.6.0"
 
 [[composition.components]]
 id = "layered-base"
-version = "v0.5.0"
+version = "v0.6.0"
 
 [[composition.components]]
 id = "layered-leptos-identity"
-version = "v0.5.0"
+version = "v0.6.0"
 
 [[composition.modules]]
 id = "identity"
-version = "v0.5.0"
+version = "v0.6.0"
 "#
         ))
         .unwrap();
