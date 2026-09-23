@@ -140,25 +140,6 @@ jobs:
           cache-dependency-path: templates/applications/layered/apps/web/src/package-lock.json
       - name: Validate generated applications across development and production
         run: sh scripts/generated-application-check.sh
-
-  component-lifecycle:
-    name: component-lifecycle
-    runs-on: ubuntu-latest
-    timeout-minutes: 90
-    steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@1.96.1
-        with:
-          targets: wasm32-unknown-unknown
-      - uses: Swatinem/rust-cache@v2
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-leptos@0.3.7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: templates/applications/layered/apps/web/src/package-lock.json
       - name: Validate additive component lifecycle across development and production
         run: sh scripts/generated-application-check.sh identity-added
 
@@ -170,7 +151,6 @@ jobs:
       - official-modules
       - tooling
       - generated-application
-      - component-lifecycle
     runs-on: ubuntu-latest
     steps:
       - name: Require every repository ownership gate
@@ -179,13 +159,11 @@ jobs:
           MODULES_RESULT: ${{ needs.official-modules.result }}
           TOOLING_RESULT: ${{ needs.tooling.result }}
           GENERATED_APPLICATION_RESULT: ${{ needs.generated-application.result }}
-          COMPONENT_LIFECYCLE_RESULT: ${{ needs.component-lifecycle.result }}
         run: |
           test "$FRAMEWORK_RESULT" = success
           test "$MODULES_RESULT" = success
           test "$TOOLING_RESULT" = success
           test "$GENERATED_APPLICATION_RESULT" = success
-          test "$COMPONENT_LIFECYCLE_RESULT" = success
 
   supply-chain:
     runs-on: ubuntu-latest

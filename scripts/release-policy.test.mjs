@@ -81,8 +81,6 @@ jobs:
   generated-application:
     steps:
       - run: sh scripts/generated-application-check.sh
-  component-lifecycle:
-    steps:
       - run: sh scripts/generated-application-check.sh identity-added
   publish:
     if: github.event_name == 'push'
@@ -92,7 +90,6 @@ jobs:
       - official-modules
       - tooling
       - generated-application
-      - component-lifecycle
     permissions:
       contents: write
     steps:
@@ -249,6 +246,15 @@ test("rejects a missing component lifecycle gate", () => {
   );
   assert.ok(
     errors.some((error) => error.includes("component lifecycle validation")),
+  );
+});
+
+test("rejects a separate component lifecycle release job", () => {
+  const errors = validateReleaseWorkflow(
+    `${validWorkflow}\n  component-lifecycle:\n    steps:\n      - run: true\n`,
+  );
+  assert.ok(
+    errors.some((error) => error.includes("duplicate component lifecycle job")),
   );
 });
 
