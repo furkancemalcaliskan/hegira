@@ -13,7 +13,14 @@ const REQUIRED_WORKFLOW_CONTRACTS = [
   ["official module validation", "scripts/official-modules-check.sh"],
   ["tooling validation", "scripts/layered-template-check.sh"],
   ["CLI validation", "scripts/cli-check.sh"],
-  ["generated application validation", "scripts/generated-application-check.sh"],
+  [
+    "generated application validation",
+    "run: sh scripts/generated-application-check.sh\n",
+  ],
+  [
+    "component lifecycle validation",
+    "scripts/generated-application-check.sh identity-added",
+  ],
   ["source SBOM generation", "anchore/sbom-action@v0"],
   ["disabled implicit SBOM publication", "upload-release-assets: false"],
   [
@@ -292,6 +299,7 @@ export function validateReleaseWorkflow(workflow) {
       "official-modules",
       "tooling",
       "generated-application",
+      "component-lifecycle",
     ]) {
       if (!publishPreamble.includes(`- ${dependency}`)) {
         errors.push(

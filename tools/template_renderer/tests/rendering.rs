@@ -52,6 +52,30 @@ fn stages_verified_generated_bytes_without_mutating_release_source() {
 }
 
 #[test]
+fn identity_added_staging_rejects_an_unmodified_minimal_application() {
+    let repository = repository_root();
+    let parent = TestDirectory::new("identity-added-stage-requires-installation");
+    let source = parent.path().join("source");
+    let mut minimal = canonical_request(&repository, source.clone());
+    minimal.components = Some(vec!["layered-leptos-minimal".to_owned()]);
+    render(&minimal).unwrap();
+    let before = output_tree(&source);
+    let request = RepositoryValidationRequest {
+        render: RenderRequest {
+            output: parent.path().join("staged"),
+            ..minimal
+        },
+        framework_root: repository,
+        framework_path: Some(PathBuf::from(".hegira-validation/framework")),
+    };
+    let error = template_renderer::repository_validation::stage_identity_added(&request, &source)
+        .unwrap_err();
+    assert_eq!(error.kind(), RendererErrorKind::RepositoryValidation);
+    assert!(!request.render.output.exists());
+    assert_eq!(before, output_tree(&source));
+}
+
+#[test]
 fn staging_rejects_modified_missing_and_extra_generated_files_before_writes() {
     for mutation in ["modified", "missing", "extra", "empty-directory"] {
         let repository = repository_root();

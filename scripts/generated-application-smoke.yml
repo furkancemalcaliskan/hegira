@@ -17,9 +17,12 @@ services:
     image: ${GENERATED_APP_IMAGE:?required}
     environment:
       APP_ENV: production
+      APP__APPLICATION__PUBLIC_URL: ${GENERATED_APP_PUBLIC_URL:-https://example.com}
+      APP__SECURITY__CORS__ENABLED: ${GENERATED_APP_CORS_ENABLED:-true}
       APP__DATABASE__URL: postgres://generated_app:${GENERATED_APP_DB_PASSWORD}@postgres:5432/generated_app
       APP__SECURITY__JWT_SECRET: ${GENERATED_APP_JWT_SECRET:?required}
       APP__STARTUP__SEED_IDENTITY: "false"
+      APP__SEED__SEED_ADMIN: "false"
       APP__STARTUP__SCHEDULER: "false"
       APP__STARTUP__DURABLE_JOBS: "false"
     ports:

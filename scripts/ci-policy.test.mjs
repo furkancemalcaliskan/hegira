@@ -55,6 +55,9 @@ jobs:
   generated-application:
     steps:
       - run: sh scripts/generated-application-check.sh
+  component-lifecycle:
+    steps:
+      - run: sh scripts/generated-application-check.sh identity-added
   quality:
     if: always()
     needs:
@@ -62,17 +65,20 @@ jobs:
       - official-modules
       - tooling
       - generated-application
+      - component-lifecycle
     steps:
       - env:
           FRAMEWORK_RESULT: \${{ needs.framework.result }}
           MODULES_RESULT: \${{ needs.official-modules.result }}
           TOOLING_RESULT: \${{ needs.tooling.result }}
           GENERATED_APPLICATION_RESULT: \${{ needs.generated-application.result }}
+          COMPONENT_LIFECYCLE_RESULT: \${{ needs.component-lifecycle.result }}
         run: |
           test "$FRAMEWORK_RESULT" = success
           test "$MODULES_RESULT" = success
           test "$TOOLING_RESULT" = success
           test "$GENERATED_APPLICATION_RESULT" = success
+          test "$COMPONENT_LIFECYCLE_RESULT" = success
   supply-chain:
     steps:
       - uses: EmbarkStudios/cargo-deny-action@v2
@@ -90,7 +96,11 @@ APP_ENV=sqlite cargo leptos build -p app_server \
   --bin-features ssr,db-sqlite --lib-features hydrate \
   --bin-cargo-args=--locked --lib-cargo-args=--locked
 for database in sqlite postgres; do
-  renderer --generated-source "$staging_parent/$database-source"
+  renderer --generated-source "$source"
+  renderer --identity-added-source "$source"
+  hegira -- new minimal-application --composition minimal --database "$database"
+  hegira -- component add identity
+  stage_application "$staging_parent/$database-source"
   hegira -- generate resource --application-root "$validation_root" --dry-run --json
   hegira -- generate resource --application-root "$validation_root" --json
   test ! -e "$staging_parent/$database-source/$generated_resource_path"
@@ -119,6 +129,18 @@ test("rejects generated application validation outside the quality gate", () => 
   );
 });
 
+test("rejects a missing component lifecycle gate", () => {
+  const errors = validateRepositoryValidationWorkflow(
+    validWorkflow.replace(
+      "sh scripts/generated-application-check.sh identity-added",
+      "true",
+    ),
+  );
+  assert.ok(
+    errors.some((error) => error.includes("component lifecycle validation")),
+  );
+});
+
 test("rejects a quality gate that ignores generated application failure", () => {
   const errors = validateRepositoryValidationWorkflow(
     validWorkflow.replace(
@@ -137,6 +159,15 @@ test("accepts the generated and mutated application contract", () => {
   assert.deepEqual(
     validateGeneratedApplicationScript(validGeneratedApplicationScript),
     [],
+  );
+});
+
+test("rejects lifecycle validation without the installed Identity source", () => {
+  const errors = validateGeneratedApplicationScript(
+    validGeneratedApplicationScript.replace('--identity-added-source "$source"', ""),
+  );
+  assert.ok(
+    errors.some((error) => error.includes("installed Identity CLI source")),
   );
 });
 

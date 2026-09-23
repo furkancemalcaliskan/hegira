@@ -167,8 +167,18 @@ application and the minimal-to-Identity transition for SQLite and PostgreSQL,
 including read-only failure paths, selected migration and transport wiring,
 and locked native and hydration builds. The existing
 `generated-application-check.sh` remains the default Identity application's
-provider and production-container validation. The composition matrix is not
-yet part of the required CI quality gate.
+provider and production-container validation. Run
+`sh scripts/generated-application-check.sh identity-added` to exercise the
+minimal-to-Identity path through public CLI inspection, diagnosis, dry-run and
+apply, protected resource generation, provider builds, and production HTTP
+smoke. The repository-validation adapter stages the CLI-mutated application in
+a disposable copy and rewrites only declared framework dependencies to the
+current source tree. The default application's historical v0.2.0 upgrade test
+does not apply to the newly created minimal composition, whose migration
+history starts later. Repository validation and release validation run this
+lifecycle mode as a separate required job so the default and additive
+composition paths remain independently attributable and can execute in
+parallel.
 
 The CLI process tests use disposable working and home directories and an empty
 command search path rather than the maintainer's global configuration. They

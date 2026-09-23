@@ -702,6 +702,7 @@ impl IdentityRuntime {
         provide_context(self.cookie);
     }
 
+    #[allow(dead_code)] // Becomes active after the first application resource is generated.
     pub fn services(&self) -> &AppServices {
         &self.services
     }

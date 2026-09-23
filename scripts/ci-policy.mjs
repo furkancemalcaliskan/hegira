@@ -17,7 +17,14 @@ const REQUIRED_CONTRACTS = [
   ["official module validation", "sh scripts/official-modules-check.sh"],
   ["tooling validation", "sh scripts/layered-template-check.sh"],
   ["CLI validation", "sh scripts/cli-check.sh"],
-  ["generated application validation", "sh scripts/generated-application-check.sh"],
+  [
+    "generated application validation",
+    "run: sh scripts/generated-application-check.sh\n",
+  ],
+  [
+    "component lifecycle validation",
+    "sh scripts/generated-application-check.sh identity-added",
+  ],
   ["explicit disposable PostgreSQL authentication", "POSTGRES_HOST_AUTH_METHOD: trust"],
   ["dependency policy", "EmbarkStudios/cargo-deny-action@v2"],
   ["dependency audit", "cargo audit --file Cargo.lock"],
@@ -28,6 +35,7 @@ const QUALITY_DEPENDENCIES = [
   ["official-modules", "MODULES_RESULT"],
   ["tooling", "TOOLING_RESULT"],
   ["generated-application", "GENERATED_APPLICATION_RESULT"],
+  ["component-lifecycle", "COMPONENT_LIFECYCLE_RESULT"],
 ];
 
 const GENERATED_APPLICATION_CONTRACTS = [
@@ -39,7 +47,11 @@ const GENERATED_APPLICATION_CONTRACTS = [
     'cmp "$staging_parent/sqlite-source/Cargo.lock" "$staging_parent/postgres-source/Cargo.lock"',
   ],
   ["both selected database profiles", "for database in sqlite postgres; do"],
-  ["verified public CLI source", '--generated-source "$staging_parent/$database-source"'],
+  ["verified public CLI source", '--generated-source "$source"'],
+  ["installed Identity CLI source", '--identity-added-source "$source"'],
+  ["minimal application selection", '--composition minimal --database "$database"'],
+  ["public Identity installation", "-- component add identity"],
+  ["selected source staging", 'stage_application "$staging_parent/$database-source"'],
   ["public resource mutation", "-- generate resource"],
   ["resource dry-run", '--application-root "$validation_root" --dry-run --json'],
   ["resource apply", '--application-root "$validation_root" --json'],

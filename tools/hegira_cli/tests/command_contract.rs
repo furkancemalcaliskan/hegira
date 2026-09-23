@@ -359,7 +359,7 @@ fn complete_resource_dry_run_and_apply_share_one_atomic_plan() {
         "crates/infrastructure/src/order_item.rs",
         "crates/presentation/src/order_item.rs",
         "apps/web/src/order_item.rs",
-        "crates/infrastructure/migrations/sqlite/010_order_item.sql",
+        "crates/infrastructure/migrations/sqlite/1000000_order_item.sql",
     ] {
         assert!(application.join(path).is_file(), "missing {path}");
     }
@@ -641,7 +641,8 @@ fn sqlite_migration_dry_run_and_apply_share_one_append_only_plan() {
     assert_eq!(dry_run["mode"], "dry-run");
     assert_eq!(dry_run["outcome"], "planned");
     assert_eq!(dry_run["changed_files"], 2);
-    let migration = application.join("crates/infrastructure/migrations/sqlite/010_add_orders.sql");
+    let migration =
+        application.join("crates/infrastructure/migrations/sqlite/1000000_add_orders.sql");
     let state = application.join("crates/infrastructure/migrations/.hegira-generator.toml");
     assert!(!migration.exists());
     assert!(!state.exists());
@@ -671,7 +672,7 @@ fn sqlite_migration_dry_run_and_apply_share_one_append_only_plan() {
     assert!(
         String::from_utf8(repeated.stderr)
             .unwrap()
-            .contains("already exists at version 10")
+            .contains("already exists at version 1000000")
     );
 }
 
@@ -703,16 +704,16 @@ fn postgres_manifest_selects_only_the_postgres_migration_history() {
     assert!(result.status.success(), "{:?}", result.stderr);
     assert!(
         application
-            .join("crates/infrastructure/migrations/postgres/023_add_orders.sql")
+            .join("crates/infrastructure/migrations/postgres/1000000_add_orders.sql")
             .is_file()
     );
     assert!(
         !application
-            .join("crates/infrastructure/migrations/sqlite/010_add_orders.sql")
+            .join("crates/infrastructure/migrations/sqlite/1000000_add_orders.sql")
             .exists()
     );
     let source = fs::read_to_string(
-        application.join("crates/infrastructure/migrations/postgres/023_add_orders.sql"),
+        application.join("crates/infrastructure/migrations/postgres/1000000_add_orders.sql"),
     )
     .unwrap();
     assert!(source.contains("Application-owned PostgreSQL migration"));
