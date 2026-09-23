@@ -35,7 +35,6 @@ const QUALITY_DEPENDENCIES = [
   ["official-modules", "MODULES_RESULT"],
   ["tooling", "TOOLING_RESULT"],
   ["generated-application", "GENERATED_APPLICATION_RESULT"],
-  ["component-lifecycle", "COMPONENT_LIFECYCLE_RESULT"],
 ];
 
 const GENERATED_APPLICATION_CONTRACTS = [
@@ -94,6 +93,11 @@ export function validateRepositoryValidationWorkflow(workflow) {
   }
   if (workflow.includes("POSTGRES_PASSWORD")) {
     errors.push("disposable repository validation must not embed PostgreSQL passwords");
+  }
+  if (workflow.includes("\n  component-lifecycle:")) {
+    errors.push(
+      "component lifecycle validation must remain in the existing generated-application job",
+    );
   }
   if (!/pull_request:\s*\n    branches:\s*\n      - develop\s*\n      - main/m.test(workflow)) {
     errors.push("repository validation must run for pull requests to develop and main");

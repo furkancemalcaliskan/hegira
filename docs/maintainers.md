@@ -176,9 +176,10 @@ a disposable copy and rewrites only declared framework dependencies to the
 current source tree. The default application's historical v0.2.0 upgrade test
 does not apply to the newly created minimal composition, whose migration
 history starts later. Repository validation and release validation run this
-lifecycle mode as a separate required job so the default and additive
-composition paths remain independently attributable and can execute in
-parallel.
+lifecycle mode as an explicit step in the existing generated-application job.
+The stable `generated-application` ownership job and aggregated `quality`
+context therefore cover both paths without introducing another protected
+branch status context.
 
 The CLI process tests use disposable working and home directories and an empty
 command search path rather than the maintainer's global configuration. They

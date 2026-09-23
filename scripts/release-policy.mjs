@@ -46,6 +46,7 @@ const OBSOLETE_WORKFLOW_CONTRACTS = [
   ["crates.io publication", "crates.io"],
   ["registry write permission", "packages: write"],
   ["container registry publication", "docker push"],
+  ["duplicate component lifecycle job", "\n  component-lifecycle:"],
 ];
 
 function workspacePackages(metadata) {
@@ -299,7 +300,6 @@ export function validateReleaseWorkflow(workflow) {
       "official-modules",
       "tooling",
       "generated-application",
-      "component-lifecycle",
     ]) {
       if (!publishPreamble.includes(`- ${dependency}`)) {
         errors.push(

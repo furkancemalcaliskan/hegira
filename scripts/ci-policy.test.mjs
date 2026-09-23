@@ -55,8 +55,6 @@ jobs:
   generated-application:
     steps:
       - run: sh scripts/generated-application-check.sh
-  component-lifecycle:
-    steps:
       - run: sh scripts/generated-application-check.sh identity-added
   quality:
     if: always()
@@ -65,20 +63,17 @@ jobs:
       - official-modules
       - tooling
       - generated-application
-      - component-lifecycle
     steps:
       - env:
           FRAMEWORK_RESULT: \${{ needs.framework.result }}
           MODULES_RESULT: \${{ needs.official-modules.result }}
           TOOLING_RESULT: \${{ needs.tooling.result }}
           GENERATED_APPLICATION_RESULT: \${{ needs.generated-application.result }}
-          COMPONENT_LIFECYCLE_RESULT: \${{ needs.component-lifecycle.result }}
         run: |
           test "$FRAMEWORK_RESULT" = success
           test "$MODULES_RESULT" = success
           test "$TOOLING_RESULT" = success
           test "$GENERATED_APPLICATION_RESULT" = success
-          test "$COMPONENT_LIFECYCLE_RESULT" = success
   supply-chain:
     steps:
       - uses: EmbarkStudios/cargo-deny-action@v2
@@ -138,6 +133,15 @@ test("rejects a missing component lifecycle gate", () => {
   );
   assert.ok(
     errors.some((error) => error.includes("component lifecycle validation")),
+  );
+});
+
+test("rejects a separate component lifecycle status context", () => {
+  const errors = validateRepositoryValidationWorkflow(
+    `${validWorkflow}\n  component-lifecycle:\n    steps:\n      - run: true\n`,
+  );
+  assert.ok(
+    errors.some((error) => error.includes("existing generated-application job")),
   );
 });
 
