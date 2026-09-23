@@ -515,6 +515,21 @@ tag, verify:
 
 This manual run is release-candidate validation, not publication.
 
+When a canonical application lockfile must pin framework packages to a real
+revision of the version being prepared, use the two-step version transition
+recorded in the root workspace metadata. The prerequisite pull request may set
+`workspace.metadata.hegira.release_candidate` with only the previous stable
+`base` tag, the intended stable `target`, and its accepted `issue` number. The
+prerequisite advances exactly the framework and module packages consumed from
+the canonical lockfile's Hegira source; repository-only tooling remains at the
+base version. In that state, the normal repository policy derives both package
+groups from the base lockfile and validates their exact versions together with
+the complete base-release files. Explicit release-ref validation continues to
+fail. The final release-preparation pull request must pin the canonical
+lockfile to the merged candidate revision, advance all remaining workspace,
+package, and release files together, and remove the candidate metadata before
+promotion or tag validation.
+
 Create and verify a signed annotated tag only from the verified `main` release
 commit:
 

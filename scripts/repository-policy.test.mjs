@@ -27,6 +27,20 @@ test("accepts a valid ordinary issue pull request", () => {
   assert.deepEqual(validatePullRequest(ordinaryPullRequest()), []);
 });
 
+test("accepts a scoped ordinary release issue pull request", () => {
+  assert.deepEqual(
+    validatePullRequest(
+      ordinaryPullRequest({
+        title:
+          "release(candidate): establish a version-aligned v0.6.0 candidate revision",
+        body: "Closes #307",
+        head: "release/307-version-aligned-v0-6-0",
+      }),
+    ),
+    [],
+  );
+});
+
 test("rejects an issue-prefixed pull request title", () => {
   const errors = validatePullRequest(
     ordinaryPullRequest({
