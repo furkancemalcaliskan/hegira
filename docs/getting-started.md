@@ -18,6 +18,8 @@ cargo build --locked -p hegira_cli
 cargo run --locked -p hegira_cli -- --help
 cargo run --locked -p hegira_cli -- new --help
 cargo run --locked -p hegira_cli -- inspect --help
+cargo run --locked -p hegira_cli -- doctor --help
+cargo run --locked -p hegira_cli -- component add --help
 cargo run --locked -p hegira_cli -- generate resource --help
 cargo run --locked -p hegira_cli -- generate migration --help
 ```
@@ -102,12 +104,23 @@ Generated files and directories start with owner-only permissions (0600/0700).
 |---|---|---|
 | `--database` | `sqlite`, `postgres` | `sqlite` |
 | `--client` | `leptos` | `leptos` |
-| `--component` | `identity` | `identity` |
+| `--composition` (`--component` alias) | `identity`, `minimal` | `identity` |
 
 Each invocation selects one database. Identity resolves to `layered-base` and
-`layered-leptos-identity`; the CLI does not provide an empty or Identity-free
-composition. Database selection sets the generated default Cargo feature and
-recommended startup profile, not database credentials or provisioning.
+`layered-leptos-identity` through the bundled package's authenticated
+composition graph; that single resolved result controls both rendered files and
+the composition recorded in `hegira.toml`. The explicit `minimal` selection
+resolves to `layered-base` and `layered-leptos-minimal`. It preserves the
+Leptos client, server host, application-owned DDD layers, selected SQLx
+provider, configuration, and deployment source without installing an official
+module or recording authentication and authorization capabilities. The secure
+Identity composition remains the default.
+
+Minimal does not synthesize anonymous or allow-all authorization. Protected
+resource generation is unavailable until a compatible authorization-providing
+module has been installed. Database selection sets the generated default Cargo
+feature and recommended startup profile, not database credentials or
+provisioning.
 
 For an explicit PostgreSQL
 application, use:
@@ -117,11 +130,22 @@ cargo run --locked -p hegira_cli -- new my-application \
   --destination ../my-application \
   --database postgres \
   --client leptos \
-  --component identity
+  --composition identity
 ```
 
 This is an alternative to the SQLite example, not a second command to run
 against the same destination.
+
+Select the module-free starting point only when the application is intended to
+add its capabilities explicitly:
+
+```sh
+cargo run --locked -p hegira_cli -- new my-minimal-application \
+  --destination ../my-minimal-application \
+  --database sqlite \
+  --client leptos \
+  --composition minimal
+```
 
 ## Generated Ownership And `hegira.toml`
 
@@ -136,11 +160,14 @@ The generated root `hegira.toml` records generation state:
 
 | Field | Meaning |
 |---|---|
-| `schema` | Manifest format version, currently `1` |
+| `schema` | Manifest format version, currently `2` |
 | `application` | Validated project identity; does not rename the `app_*` crates |
 | `framework.repository` | Package-controlled HTTPS framework source |
 | `framework.version` | Package-controlled stable SemVer release tag |
-| `selection.components` | Resolved canonical component identities |
+| `composition.package` | Package-controlled component-package identity and version |
+| `composition.components` | Installed component identities and versions |
+| `composition.modules` | Installed official module identities and versions |
+| `composition.capabilities` | Capabilities provided by the installed composition |
 | `selection.databases` | Selected database adapter |
 | `selection.clients` | Selected client adapter |
 
@@ -151,12 +178,82 @@ Runtime settings belong in `config/{APP_ENV}.yaml` and environment overrides;
 credentials never belong in `hegira.toml`. See
 [Configuration](configuration.md) for the separate runtime contract.
 
-The CLI currently exposes application creation, read-only inspection, complete
-layered resource generation, and application-owned migration scaffold
-generation. It does not provide module management, migration execution or
-rollback, automatic upgrades, remote component installation, or additional
-client templates. Optional runtime providers are configured explicitly in the
-application; they are not extra `new` selections.
+The CLI currently exposes application creation, read-only inspection, a
+reviewable bundled-component addition boundary, complete layered resource
+generation, and application-owned migration scaffold generation. Component
+addition accepts one bundled component identity, resolves the authenticated
+package graph, and uses the shared `--dry-run` and `--json` mutation contract.
+An already installed component, an unknown component, or a component without a
+bundled additive contribution unit fails without changing the application. The
+command never downloads a package, executes component code, or interprets a
+remote coordinate. The CLI does not provide component removal, module
+management, migration execution or rollback, automatic upgrades, remote
+component installation, or additional client templates. Optional runtime
+providers are configured explicitly in the application; they are not extra
+`new` selections.
+
+## Install Identity In A Minimal Application
+
+The default application already contains the Identity composition and must not
+run this installation flow. For an explicitly created minimal application,
+`inspect` is the read-only composition-status command. From the application
+root, inspect and diagnose the starting state with the CLI source matching the
+application's recorded framework release:
+
+```sh
+cargo run --locked --manifest-path /path/to/hegira/Cargo.toml \
+  -p hegira_cli -- inspect
+cargo run --locked --manifest-path /path/to/hegira/Cargo.toml \
+  -p hegira_cli -- doctor
+```
+
+Review the exact content-redacted installation plan before applying it:
+
+```sh
+cargo run --locked --manifest-path /path/to/hegira/Cargo.toml \
+  -p hegira_cli -- component add identity --dry-run
+cargo run --locked --manifest-path /path/to/hegira/Cargo.toml \
+  -p hegira_cli -- component add identity
+```
+
+Add `--json` to inspection, doctor, dry-run, or apply when automation requires
+the corresponding versioned machine-readable contract. Dry-run performs no
+application write. Apply publishes the same validated plan atomically; a stale
+file, incompatible composition, occupied path, concurrent mutation, or unsafe
+recovery state fails instead of being overwritten.
+
+For a compatible minimal Leptos application, `component add identity` previews
+or applies the bundled Identity integration for its selected SQLite or
+PostgreSQL provider. Review first with `hegira component add identity --dry-run`
+from the application root. The apply plan updates `hegira.toml`, Cargo
+dependencies, application-owned Identity integration, provider migrations,
+Bearer API and cookie-BFF composition, and Leptos routes together. It does not
+run migrations or regenerate `Cargo.lock`; after applying, review runtime
+configuration, run `cargo generate-lockfile`, apply migrations against the
+intended database, and validate the application before deployment. A repeated
+add is a conflict and does not modify the application. Identity owns `/` after
+installation; the original dashboard remains at `/dashboard`.
+
+The required post-install work is deliberately explicit:
+
+1. Review the Identity and seed settings in the selected `config/{APP_ENV}.yaml`
+   profile; keep credentials in environment-backed secret configuration.
+2. Run `cargo generate-lockfile` and review the dependency change before
+   committing the regenerated application lockfile.
+3. Apply the selected provider's application-owned migration plan through the
+   application's deployment process. Hegira does not execute migrations for
+   `component add`.
+4. Run `cargo fmt --all` and the application checks appropriate to the selected
+   SQLite or PostgreSQL profile.
+5. Run `inspect` again to confirm the resolved Identity component, module, and
+   capabilities, then run `doctor` to check integration and local prerequisites.
+
+After Identity is installed, `generate resource` can add a protected resource
+to this minimal composition. Its generated page uses the minimal shell's
+dashboard navigation and local English labels, rather than the default
+application's sidebar and localization files. Preview with `--dry-run --json`
+before applying; generation creates source and a provider-specific migration
+but does not execute it.
 
 Successful creation and help use stdout; diagnostics use stderr. Exit codes
 are `0` (success, including guided cancellation), `1` (internal error),
@@ -182,27 +279,62 @@ cargo run --locked --manifest-path /path/to/hegira/Cargo.toml \
 ```
 
 Human output reports the application identity, resolved root, manifest schema,
-framework repository and version, selected components, database, client, and
-mutation compatibility. JSON output has `output_schema: 1` and exposes the
-same application root, typed manifest when the schema is understood, and a
-`mutation_compatibility` value of `compatible`, `incompatible`, or
-`unsupported` with the responsible manifest field.
+framework repository and version, installed package, versioned components and
+modules, capabilities, database, client, composition status, and mutation
+compatibility. Composition is `compatible` when the recorded state resolves
+against the bundled canonical graph, `unresolved` with sorted typed diagnostics
+when it does not, and `unavailable` for a legacy or unparsed manifest. JSON
+output has `output_schema: 2`; its `composition` object exposes the same status,
+recorded or resolved composition, adapters, and diagnostics in stable order.
+The typed manifest remains available when its schema is understood, and
+`mutation_compatibility` remains `compatible`, `incompatible`, or `unsupported`
+with the responsible manifest field.
 
 Inspection is read-only. It opens the manifest and required application-owned
 `apps/`, `crates/`, and `config/` roots without following symlinks. It does not
-read runtime configuration, environment values, user-home state, or secrets,
-and it does not write application files.
+read application source, runtime configuration, environment values, user-home
+state, or secrets; it exposes no machine-local framework path and does not
+write application files.
+
+## Diagnose An Existing Application
+
+From the application root, run the source-built CLI's read-only doctor:
+
+```sh
+cargo run --locked --manifest-path /path/to/hegira/Cargo.toml \
+  -p hegira_cli -- doctor
+```
+
+Use `--application-root /path/to/my-application` for an explicit root and
+`--json` for a versioned `output_schema: 1` report. Doctor checks manifest and
+component compatibility, the mutation recovery marker, selected Identity
+route/transport/migration integration points, the selected database's runtime
+requirements, and local Rust, WASM, cargo-leptos, Node.js, and npm prerequisites.
+It reports `PASS`, `WARN`, and `FAIL` in fixed order. Missing development tools
+and an unprobed PostgreSQL service are warnings; invalid composition, unsafe
+integration state, or a recovery marker is a validation failure (exit code `3`).
+Warnings alone return exit code `0`.
+
+Doctor neither changes application files nor connects to a database or external
+service. It reads only bounded, symlink-safe application integration sources and
+reports no source bodies, runtime configuration, environment values, credentials,
+or machine-local paths. Integration-reference checks are diagnostics, not proof
+that the compiled HTTP policy is secure. It does not repair a failed check;
+review the reported action before attempting another mutation.
+The local `rustup` target probe receives only tool-discovery and Rustup-specific
+environment settings, not application runtime secrets.
 
 ## Compatibility And Mutation Safety
 
 `inspect` can report an incompatible or unsupported application successfully,
-but `generate resource` and `generate migration` fail with conflict exit code
-`4` unless the application is compatible with the running CLI. The current
-mutation policy requires:
+but `component add`, `generate resource`, and `generate migration` fail with
+conflict exit code `4` unless the application is compatible with the running
+CLI. The current mutation policy requires:
 
-- manifest schema `1` and the canonical Hegira framework repository;
+- manifest schema `2` and the canonical Hegira framework repository;
 - the exact framework release version compiled into the CLI;
-- the `layered-base` and Leptos Identity component composition generated by
+- the canonical component package and supported installed component, module,
+  and capability composition generated by
   the current application template;
 - exactly one supported database (`sqlite` or `postgres`); and
 - exactly one supported client (`leptos`).
@@ -243,7 +375,12 @@ cargo run --locked --manifest-path /path/to/hegira/Cargo.toml \
 
 The supported scalar set is `string`, `bool`, `i64`, `uuid`, and `datetime`.
 Use `--plural <NAME>` for an irregular UpperCamelCase plural. The command reads
-the database, client, and components from `hegira.toml`, validates all names
+the database, client, components, and capabilities from `hegira.toml`. It
+requires both authentication and authorization before reading integration
+sources or constructing a change plan. A minimal application without those
+capabilities fails with exit code `3`, leaves its files unchanged, and points
+to `hegira component add identity`; with `--json`, the deterministic
+`missing-capabilities` diagnostic is written to stderr. The command validates all names
 and integration points, and publishes one atomic plan covering Domain,
 Application Contracts, Application, SQLx persistence and migration, Axum and
 OpenAPI, and the selected Leptos client. `--dry-run` previews the identical
@@ -313,11 +450,16 @@ conflicts instead of silently replacing migration history.
 
 ## Run With SQLite
 
+The generated `Cargo.lock` is part of the release-verified application source.
+Keep it in version control and use explicit `cargo update` operations when the
+application intentionally adopts a different dependency graph.
+
 ```sh
 cd ../my-application
 npm ci --prefix apps/web/src
 APP_ENV=sqlite cargo leptos watch -p app_server \
-  --bin-features ssr,db-sqlite --lib-features hydrate
+  --bin-features ssr,db-sqlite --lib-features hydrate \
+  --bin-cargo-args=--locked --lib-cargo-args=--locked
 ```
 
 Open `http://127.0.0.1:3000`. The SQLite development profile creates its local
@@ -336,7 +478,8 @@ POSTGRES_PASSWORD=local-development-only docker compose up -d database
 APP_ENV=development \
 APP__DATABASE__URL=postgres://postgres:local-development-only@localhost:5432/application \
 cargo leptos watch -p app_server \
-  --bin-features ssr,db-postgres --lib-features hydrate
+  --bin-features ssr,db-postgres --lib-features hydrate \
+  --bin-cargo-args=--locked --lib-cargo-args=--locked
 ```
 
 The development profile may run migrations and seed data automatically.

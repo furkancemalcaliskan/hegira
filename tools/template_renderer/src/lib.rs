@@ -1,12 +1,14 @@
+mod composition;
 mod destination;
 mod manifest;
+mod package_source;
 mod render;
 pub mod repository_validation;
 
 pub use destination::validate_destination;
 pub use manifest::{
-    ComponentManifest, ComponentPackageManifest, FrameworkDependency, ManifestCatalog,
-    TemplateManifest,
+    ComponentInstallationContribution, ComponentInstallationManifest, ComponentManifest,
+    ComponentPackageManifest, FrameworkDependency, ManifestCatalog, TemplateManifest,
 };
 pub use render::{RenderPlan, RenderRequest, RenderResult, plan, plan_snapshot, publish, render};
 
@@ -58,7 +60,9 @@ impl RendererError {
     }
 
     pub(crate) fn classified(mut self, kind: RendererErrorKind) -> Self {
-        self.kind = kind;
+        if self.kind == RendererErrorKind::Rendering {
+            self.kind = kind;
+        }
         self
     }
 
@@ -84,3 +88,7 @@ impl Display for RendererError {
 }
 
 impl std::error::Error for RendererError {}
+pub use composition::{
+    COMPOSITION_GRAPH_SCHEMA, CompositionDiagnostic, CompositionDiagnosticKind, CompositionError,
+    CompositionRequest, ResolvedComponent, ResolvedComposition,
+};

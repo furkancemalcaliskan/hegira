@@ -6,8 +6,11 @@ import test from "node:test";
 
 import {
   currentReleaseRef,
+  validateCanonicalApplicationLock,
+  validateReleaseCandidateMetadata,
   validateReleaseFiles,
   validateReleaseMetadata,
+  validateReleaseRepository,
   validateReleaseWorkflow,
 } from "./release-policy.mjs";
 
@@ -34,6 +37,9 @@ function metadata(overrides = {}) {
 function releaseFixture() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "hegira-release-"));
   fs.mkdirSync(path.join(root, "docs", "releases"), { recursive: true });
+  fs.mkdirSync(path.join(root, "templates", "applications", "layered"), {
+    recursive: true,
+  });
   fs.writeFileSync(
     path.join(root, "CHANGELOG.md"),
     "# Changelog\n\n## [0.2.0] - 2026-07-24\n",
@@ -41,6 +47,14 @@ function releaseFixture() {
   fs.writeFileSync(
     path.join(root, "docs", "releases", "v0.2.0.md"),
     "# Hegira v0.2.0\n",
+  );
+  fs.writeFileSync(
+    path.join(root, "templates", "package.toml"),
+    '[framework]\nrepository = "https://github.com/example/hegira.git"\nversion = "v0.2.0"\n',
+  );
+  fs.writeFileSync(
+    path.join(root, "templates", "applications", "layered", "Cargo.lock"),
+    '[[package]]\nname = "runtime"\nversion = "0.2.0"\nsource = "git+https://github.com/example/hegira.git?tag=v0.2.0#0123456789abcdef0123456789abcdef01234567"\n',
   );
   return root;
 }
@@ -69,6 +83,7 @@ jobs:
   generated-application:
     steps:
       - run: sh scripts/generated-application-check.sh
+      - run: sh scripts/generated-application-check.sh identity-added
   publish:
     if: github.event_name == 'push'
     needs:
@@ -92,6 +107,124 @@ test("accepts consistent workspace versions", () => {
 
 test("derives the release ref without a compatibility host package", () => {
   assert.equal(currentReleaseRef(metadata()), "v0.2.0");
+});
+
+test("accepts a newer issue-bound release candidate", () => {
+  const fixture = metadata({
+    metadata: {
+      hegira: {
+        release_candidate: {
+          base: "v0.1.2",
+          issue: 307,
+          target: "v0.2.0",
+        },
+      },
+    },
+  });
+  assert.deepEqual(validateReleaseCandidateMetadata(fixture, "v0.2.0"), []);
+});
+
+test("validates base release files during a candidate transition", (context) => {
+  const root = releaseFixture();
+  context.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.mkdirSync(path.join(root, ".github", "workflows"), { recursive: true });
+  fs.writeFileSync(
+    path.join(root, ".github", "workflows", "release.yml"),
+    validWorkflow,
+  );
+  const fixture = metadata({
+    metadata: {
+      hegira: {
+        release_candidate: {
+          base: "v0.2.0",
+          issue: 307,
+          target: "v0.3.0",
+        },
+      },
+    },
+  });
+  fixture.packages[0].version = "0.3.0";
+  assert.deepEqual(
+    validateReleaseRepository(root, "v0.3.0", fixture, {
+      allowCandidate: true,
+    }),
+    [],
+  );
+});
+
+test("rejects candidate versions outside canonical release-source packages", (context) => {
+  const root = releaseFixture();
+  context.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.mkdirSync(path.join(root, ".github", "workflows"), { recursive: true });
+  fs.writeFileSync(
+    path.join(root, ".github", "workflows", "release.yml"),
+    validWorkflow,
+  );
+  const fixture = metadata({
+    metadata: {
+      hegira: {
+        release_candidate: {
+          base: "v0.2.0",
+          issue: 307,
+          target: "v0.3.0",
+        },
+      },
+    },
+  });
+  for (const packageMetadata of fixture.packages) {
+    packageMetadata.version = "0.3.0";
+  }
+  const errors = validateReleaseRepository(root, "v0.3.0", fixture, {
+    allowCandidate: true,
+  });
+  assert.ok(
+    errors.some(
+      (error) =>
+        error.includes("repository-only package version mismatch") &&
+        error.includes("domain"),
+    ),
+  );
+});
+
+test("rejects malformed and non-increasing release candidates", () => {
+  const fixture = metadata({
+    metadata: {
+      hegira: {
+        release_candidate: {
+          base: "v0.2.0",
+          issue: 0,
+          target: "v0.2.0",
+          bypass: true,
+        },
+      },
+    },
+  });
+  const errors = validateReleaseCandidateMetadata(fixture, "v0.2.0");
+  assert.ok(
+    errors.some((error) => error.includes("only base, issue, and target")),
+  );
+  assert.ok(errors.some((error) => error.includes("must be newer")));
+  assert.ok(errors.some((error) => error.includes("positive integer")));
+});
+
+test("explicit release validation rejects candidate metadata", (context) => {
+  const root = releaseFixture();
+  context.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const fixture = metadata({
+    metadata: {
+      hegira: {
+        release_candidate: {
+          base: "v0.1.2",
+          issue: 307,
+          target: "v0.2.0",
+        },
+      },
+    },
+  });
+  const errors = validateReleaseRepository(root, "v0.2.0", fixture);
+  assert.ok(
+    errors.some((error) => error.includes("must be removed before explicit")),
+  );
 });
 
 test("rejects a non-stable release ref", () => {
@@ -125,6 +258,32 @@ test("accepts matching changelog and versioned release notes", (context) => {
   const root = releaseFixture();
   context.after(() => fs.rmSync(root, { recursive: true, force: true }));
   assert.deepEqual(validateReleaseFiles(root, "v0.2.0"), []);
+});
+
+test("accepts a canonical application lock resolved from one release revision", (context) => {
+  const root = releaseFixture();
+  context.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  assert.deepEqual(validateCanonicalApplicationLock(root, "v0.2.0"), []);
+});
+
+test("rejects a missing canonical application lock", (context) => {
+  const root = releaseFixture();
+  context.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.rmSync(path.join(root, "templates", "applications", "layered", "Cargo.lock"));
+  const errors = validateCanonicalApplicationLock(root, "v0.2.0");
+  assert.ok(errors.some((error) => error.includes("lockfile is missing")));
+});
+
+test("rejects a canonical application lock resolved outside the release tag", (context) => {
+  const root = releaseFixture();
+  context.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const lockPath = path.join(root, "templates", "applications", "layered", "Cargo.lock");
+  fs.writeFileSync(
+    lockPath,
+    fs.readFileSync(lockPath, "utf8").replace("?tag=v0.2.0", "?branch=main"),
+  );
+  const errors = validateCanonicalApplicationLock(root, "v0.2.0");
+  assert.ok(errors.some((error) => error.includes("outside the release tag")));
 });
 
 test("rejects a missing dated changelog release", (context) => {
@@ -195,6 +354,27 @@ test("rejects a missing generated application gate", () => {
   );
   assert.ok(
     errors.some((error) => error.includes("generated application validation")),
+  );
+});
+
+test("rejects a missing component lifecycle gate", () => {
+  const errors = validateReleaseWorkflow(
+    validWorkflow.replace(
+      "sh scripts/generated-application-check.sh identity-added",
+      "true",
+    ),
+  );
+  assert.ok(
+    errors.some((error) => error.includes("component lifecycle validation")),
+  );
+});
+
+test("rejects a separate component lifecycle release job", () => {
+  const errors = validateReleaseWorkflow(
+    `${validWorkflow}\n  component-lifecycle:\n    steps:\n      - run: true\n`,
+  );
+  assert.ok(
+    errors.some((error) => error.includes("duplicate component lifecycle job")),
   );
 });
 

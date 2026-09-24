@@ -1,0 +1,42 @@
+schema = 3
+id = "layered-leptos-minimal"
+version = "v0.6.0"
+source = "applications/layered-minimal"
+include = [
+  ".env.example",
+  "Cargo.lock",
+  "Cargo.toml",
+  "Dockerfile",
+  "apps",
+  "config",
+  "crates/infrastructure",
+  "crates/presentation",
+  "docker-compose.yml",
+]
+requires = ["layered-base"]
+
+[[framework_dependencies]]
+manifest = "Cargo.toml"
+name = "configuration"
+path = "crates/configuration"
+
+[[framework_dependencies]]
+manifest = "Cargo.toml"
+name = "http_support"
+path = "crates/http_support"
+
+[[framework_dependencies]]
+manifest = "Cargo.toml"
+name = "persistence"
+path = "crates/persistence"
+default_features = false
+
+[[framework_dependencies]]
+manifest = "Cargo.toml"
+name = "platform_core"
+path = "crates/platform_core"
+
+[[framework_dependencies]]
+manifest = "Cargo.toml"
+name = "runtime"
+path = "crates/runtime"

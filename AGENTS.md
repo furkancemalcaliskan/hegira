@@ -53,30 +53,53 @@ commands change. Never describe planned work as implemented.
   Its Infrastructure operation surface owns startup migration and Identity
   seed composition plus explicitly authorized disposable-database reset for
   validation; it does not use compatibility migration helpers or `db_migrator`.
+  `templates/applications/layered-minimal/` contains the explicit module-free
+  outward-layer variant. It preserves the server, Leptos client, selected SQLx
+  provider, configuration, and deployment boundaries while recording no
+  official module or authentication/authorization capabilities.
   Each render owns a validated `hegira.toml` containing only application
-  identity, framework source/version, selected components, and database/client
-  adapters. Runtime configuration and secrets do not belong in that manifest.
+  identity, framework source/version, installed component-package, component,
+  module and capability composition, and selected database/client adapters.
+  Runtime configuration and secrets do not belong in that manifest.
 - `templates/package.toml` identifies the versioned canonical, data-only
   component package, its compatible framework release source, contained
-  templates/components, and locked source digest. `templates/components/`
-  contains that package's typed component manifests. Package-controlled
+  templates/components and official modules, and locked source digest.
+  `templates/components/` contains that package's typed component manifests.
+  Their closed composition graph resolves exact package/framework versions,
+  required and optional dependencies, conflicts, capabilities, and official
+  module ownership deterministically before rendering. Schema-3 component
+  manifests also distinguish source-rendered components from source-free,
+  typed additive installation units. The bundled Identity installation unit
+  records its supported adapters, release-pinned dependencies, provider
+  migration sources, configuration, security transports, OpenAPI, and Leptos
+  contributions without executing code or vendoring module source.
+  Package-controlled
   framework source variables cannot be overridden by a normal render.
 - `tools/template_renderer/` contains the reusable deterministic and atomic
   render core plus an explicitly separate repository-validation adapter. The
   normal render contract preserves pinned release sources; only disposable
-  maintainer checks may select the adapter that rewrites them. It is not the
-  public Hegira CLI.
+  maintainer checks may select the adapter that rewrites them. Package loading
+  snapshots source through directory-anchored no-follow reads, authenticates
+  the bundled package and framework identity, rejects graph-undeclared files,
+  and renders only from the digest-verified snapshot. It is not the public
+  Hegira CLI.
 - `tools/application_mutator/` contains the deterministic, content-redacted
-  existing-application change-plan contract. It validates ordered relative
-  creates, digest-preconditioned edits, and conflict-aware managed Rust and
-  TOML integration points. Publication is serialized by an application-owned
-  recovery marker, anchored to opened directories, precondition-checked, and
-  rolled back on recoverable failures without following symlinks.
+  existing-application change-plan contract. Its additive component plan maps
+  canonically owned artifacts and integrations to ordered relative creates and
+  digest-preconditioned edits, rejects historical migration edits, and exposes
+  only versioned content-redacted summaries. Typed component editors constrain
+  Cargo dependencies, features, module roots, routes, provider migrations,
+  configuration, and client contributions to explicit managed points; chained
+  edits preserve their first observed digest. Publication is serialized by an
+  application-owned recovery marker, anchored to opened directories,
+  precondition-checked, and rolled back on recoverable failures without
+  following symlinks.
 - `tools/hegira_cli/` contains the source-runnable `hegira` command shell,
   deterministic interactive and non-interactive layered application creation,
   read-only existing-application inspection with human and versioned JSON
-  output, complete layered resource generation, application-owned migration
-  generation, and a shared dry-run/apply mutation contract.
+  composition status and sorted graph diagnostics, complete layered resource
+  generation, application-owned migration generation, and a shared
+  dry-run/apply mutation contract.
   Mutation output is deterministic, versioned, content-redacted, and derived
   from the same typed plan used for publication. The CLI also owns stable
   process outcomes and its user-facing diagnostic contract.
@@ -141,7 +164,8 @@ Start the current SQLite profile:
 
 ```sh
 APP_ENV=sqlite cargo leptos watch -p app_server \
-  --bin-features ssr,db-sqlite --lib-features hydrate
+  --bin-features ssr,db-sqlite --lib-features hydrate \
+  --bin-cargo-args=--locked --lib-cargo-args=--locked
 ```
 
 The application listens on `http://127.0.0.1:3000`. See

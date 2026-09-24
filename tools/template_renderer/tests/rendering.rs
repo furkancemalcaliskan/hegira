@@ -5,8 +5,11 @@ use std::{
     sync::atomic::{AtomicU64, Ordering},
 };
 
-use application_manifest::{ApplicationManifest, ClientAdapter, DatabaseAdapter};
+use application_manifest::{
+    ApplicationCapability, ApplicationManifest, ClientAdapter, DatabaseAdapter,
+};
 use template_renderer::{
+    ComponentInstallationContribution, CompositionDiagnosticKind, CompositionRequest,
     ManifestCatalog, RenderRequest, RendererErrorKind, plan, plan_snapshot, render,
     repository_validation::{RepositoryValidationRequest, render as render_for_validation},
 };
@@ -29,17 +32,15 @@ fn stages_verified_generated_bytes_without_mutating_release_source() {
     template_renderer::repository_validation::stage_generated(&request, &source).unwrap();
     assert_eq!(before, output_tree(&source));
     let staged = output_tree(&destination);
+    assert!(before.contains_key(Path::new("Cargo.lock")));
+    assert!(!staged.contains_key(Path::new("Cargo.lock")));
     assert!(
         fs::read_to_string(destination.join("Cargo.toml"))
             .unwrap()
             .contains("exclude = [\".hegira-validation/framework\"]")
     );
-    assert_eq!(
-        before.keys().collect::<Vec<_>>(),
-        staged.keys().collect::<Vec<_>>()
-    );
     for (path, bytes) in &before {
-        if path.file_name().unwrap() != "Cargo.toml" {
+        if path.file_name().unwrap() != "Cargo.toml" && path.file_name().unwrap() != "Cargo.lock" {
             assert_eq!(bytes, &staged[path], "{}", path.display());
         }
     }
@@ -48,6 +49,30 @@ fn stages_verified_generated_bytes_without_mutating_release_source() {
             .unwrap()
             .contains("path = \".hegira-validation/framework/")
     );
+}
+
+#[test]
+fn identity_added_staging_rejects_an_unmodified_minimal_application() {
+    let repository = repository_root();
+    let parent = TestDirectory::new("identity-added-stage-requires-installation");
+    let source = parent.path().join("source");
+    let mut minimal = canonical_request(&repository, source.clone());
+    minimal.components = Some(vec!["layered-leptos-minimal".to_owned()]);
+    render(&minimal).unwrap();
+    let before = output_tree(&source);
+    let request = RepositoryValidationRequest {
+        render: RenderRequest {
+            output: parent.path().join("staged"),
+            ..minimal
+        },
+        framework_root: repository,
+        framework_path: Some(PathBuf::from(".hegira-validation/framework")),
+    };
+    let error = template_renderer::repository_validation::stage_identity_added(&request, &source)
+        .unwrap_err();
+    assert_eq!(error.kind(), RendererErrorKind::RepositoryValidation);
+    assert!(!request.render.output.exists());
+    assert_eq!(before, output_tree(&source));
 }
 
 #[test]
@@ -145,6 +170,23 @@ fn identical_generation_inputs_render_byte_equivalent_output_trees() {
 }
 
 #[test]
+fn explicit_default_roots_match_the_template_default_byte_for_byte() {
+    let repository = repository_root();
+    let output_parent = TestDirectory::new("explicit-default-composition");
+    let default_output = output_parent.path().join("template-default");
+    let explicit_output = output_parent.path().join("explicit-default");
+    let default_request = canonical_request(&repository, default_output.clone());
+    let mut explicit_request = canonical_request(&repository, explicit_output.clone());
+    explicit_request.components = Some(vec!["layered-leptos-identity".to_owned()]);
+
+    let default_result = render(&default_request).expect("template default should render");
+    let explicit_result = render(&explicit_request).expect("explicit default should render");
+
+    assert_eq!(default_result.composition, explicit_result.composition);
+    assert_eq!(output_tree(&default_output), output_tree(&explicit_output));
+}
+
+#[test]
 fn reusable_plan_exposes_components_and_files_before_publication() {
     let repository = repository_root();
     let output_parent = TestDirectory::new("plan-contract");
@@ -163,8 +205,180 @@ fn reusable_plan_exposes_components_and_files_before_publication() {
         plan.components(),
         ["layered-base", "layered-leptos-identity"]
     );
+    let composition = plan
+        .composition()
+        .expect("canonical render should expose its resolved composition");
+    assert_eq!(
+        composition
+            .components
+            .iter()
+            .map(|component| component.id.as_str())
+            .collect::<Vec<_>>(),
+        plan.components()
+    );
     assert!(plan.files().any(|path| path == Path::new("hegira.toml")));
     assert!(!output.exists());
+}
+
+#[test]
+fn canonical_package_resolves_the_versioned_component_module_and_capability_graph() {
+    let repository = repository_root();
+    let catalog = ManifestCatalog::load(&repository, "layered").expect("catalog should load");
+    let graph = catalog
+        .resolve_template_composition()
+        .expect("canonical composition should resolve");
+
+    assert_eq!(graph.schema, 1);
+    assert_eq!(graph.package.id, "hegira-canonical");
+    assert_eq!(graph.package.version, "v0.6.0");
+    assert_eq!(
+        graph
+            .components
+            .iter()
+            .map(|component| component.id.as_str())
+            .collect::<Vec<_>>(),
+        ["layered-base", "layered-leptos-identity"]
+    );
+    assert_eq!(graph.modules.len(), 1);
+    assert_eq!(graph.modules[0].id, "identity");
+    assert_eq!(graph.modules[0].version, "v0.6.0");
+    assert_eq!(
+        graph.capabilities,
+        [
+            ApplicationCapability::Authentication,
+            ApplicationCapability::Authorization,
+        ]
+        .into_iter()
+        .collect()
+    );
+    let snapshot = graph.to_toml().expect("resolved graph should serialize");
+    assert!(!snapshot.contains(&repository.to_string_lossy().into_owned()));
+    assert!(!snapshot.contains("source"));
+}
+
+#[test]
+fn identity_installation_resolves_trusted_layered_contributions_without_vendored_source() {
+    let repository = repository_root();
+    let catalog = ManifestCatalog::load(&repository, "layered").expect("catalog should load");
+    let package = catalog.package().expect("canonical package should exist");
+    let graph = catalog
+        .resolve_composition(&CompositionRequest::new(
+            package.framework.clone(),
+            application_manifest::PackageIdentity {
+                id: package.id.clone(),
+                version: package.version.clone(),
+            },
+            ["identity".to_owned()],
+        ))
+        .expect("Identity installation composition should resolve");
+
+    assert_eq!(
+        graph
+            .components
+            .iter()
+            .map(|component| component.id.as_str())
+            .collect::<Vec<_>>(),
+        ["layered-base", "layered-leptos-minimal", "identity"]
+    );
+    let identity = graph.components.last().unwrap();
+    let installation = identity
+        .installation
+        .as_ref()
+        .expect("Identity should declare one installation unit");
+    assert_eq!(installation.module, "identity");
+    assert_eq!(
+        installation.databases,
+        [DatabaseAdapter::Postgres, DatabaseAdapter::Sqlite]
+    );
+    assert_eq!(installation.clients, [ClientAdapter::Leptos]);
+    assert_eq!(
+        installation.contributions,
+        [
+            ComponentInstallationContribution::AuthenticationSeed,
+            ComponentInstallationContribution::BackgroundJobs,
+            ComponentInstallationContribution::BearerApiRoutes,
+            ComponentInstallationContribution::CapabilityPreflight,
+            ComponentInstallationContribution::Configuration,
+            ComponentInstallationContribution::CookieBffRoutes,
+            ComponentInstallationContribution::LeptosNavigation,
+            ComponentInstallationContribution::LeptosRoutes,
+            ComponentInstallationContribution::Openapi,
+            ComponentInstallationContribution::PostgresMigrationSource,
+            ComponentInstallationContribution::SqliteMigrationSource,
+        ]
+    );
+    for dependency in installation
+        .framework_dependencies
+        .iter()
+        .filter(|dependency| dependency.name.starts_with("identity_"))
+    {
+        assert!(dependency.path.starts_with("modules/identity"));
+        assert_eq!(dependency.manifest, Path::new("Cargo.toml"));
+    }
+    assert_eq!(graph.modules.len(), 1);
+    assert_eq!(graph.modules[0].id, "identity");
+    assert_eq!(
+        graph.capabilities,
+        [
+            ApplicationCapability::Authentication,
+            ApplicationCapability::Authorization,
+        ]
+        .into_iter()
+        .collect()
+    );
+}
+
+#[test]
+fn installable_component_metadata_fails_closed_on_source_and_provider_ambiguity() {
+    let repository = repository_root();
+    for (name, from, to, expected) in [
+        (
+            "vendored-source",
+            "include = []",
+            "include = [\"Cargo.toml\"]",
+            "cannot render or vendor application source",
+        ),
+        (
+            "missing-provider-migration",
+            "databases = [\"postgres\", \"sqlite\"]",
+            "databases = [\"sqlite\"]",
+            "database adapters and migration-source contributions must match",
+        ),
+    ] {
+        let fixture = TestDirectory::new(name);
+        copy_directory(
+            &repository.join("templates"),
+            &fixture.path().join("templates"),
+        );
+        let identity_path = fixture.path().join("templates/components/identity.toml");
+        let source = fs::read_to_string(&identity_path).unwrap();
+        let modified = source.replacen(from, to, 1);
+        assert_ne!(source, modified);
+        fs::write(identity_path, modified).unwrap();
+
+        let error = ManifestCatalog::load(fixture.path(), "layered")
+            .expect_err("invalid installation metadata should fail before digest validation");
+        assert!(error.to_string().contains(expected), "{error}");
+    }
+}
+
+#[test]
+fn package_less_catalog_rejects_composition_with_a_typed_diagnostic() {
+    let fixture = Fixture::new("composition-package-unavailable");
+    fixture.write_template("components = [\"base\"]\n");
+    fixture.write_component("base", "", &[("base.txt", "base")]);
+    let catalog = ManifestCatalog::load(fixture.root.path(), "test")
+        .expect("legacy package-less catalog should load");
+
+    let error = catalog
+        .resolve_template_composition()
+        .expect_err("composition requires an explicit package identity");
+
+    assert_eq!(error.diagnostics().len(), 1);
+    assert_eq!(
+        error.diagnostics()[0].kind,
+        CompositionDiagnosticKind::PackageUnavailable
+    );
 }
 
 #[test]
@@ -185,7 +399,7 @@ fn layered_template_renders_release_dependencies_and_binary_assets() {
     );
     let manifest = fs::read_to_string(output.join("Cargo.toml")).expect("manifest should exist");
     assert!(manifest.contains(
-        r#"identity_application = { git = "https://github.com/furkancemalcaliskan/hegira.git", tag = "v0.5.0", default-features = false }"#
+        r#"identity_application = { git = "https://github.com/furkancemalcaliskan/hegira.git", tag = "v0.6.0", default-features = false }"#
     ));
     for compatibility_dependency in [
         "application",
@@ -222,10 +436,25 @@ fn layered_template_renders_release_dependencies_and_binary_assets() {
     assert!(!manifest.contains("{{"));
     assert!(!manifest.contains(&repository.to_string_lossy().into_owned()));
 
+    let lockfile = fs::read_to_string(output.join("Cargo.lock")).expect("lockfile should exist");
+    let framework_source = format!(
+        "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v{}#",
+        env!("CARGO_PKG_VERSION")
+    );
+    assert!(lockfile.contains(&framework_source));
+    assert!(!lockfile.contains("{{"));
+
     let application_manifest = ApplicationManifest::read(output.join("hegira.toml"))
         .expect("generated application manifest should be valid");
     assert_eq!(application_manifest.application, "application");
-    assert_eq!(application_manifest.framework.version, "v0.5.0");
+    assert_eq!(application_manifest.framework.version, "v0.6.0");
+    let composition = application_manifest
+        .composition
+        .expect("generated application manifest should record composition state");
+    assert_eq!(composition.package.id, "hegira-canonical");
+    assert_eq!(composition.package.version, "v0.6.0");
+    assert_eq!(composition.modules.len(), 1);
+    assert_eq!(composition.modules[0].id, "identity");
     assert_eq!(
         application_manifest.selection.databases,
         [DatabaseAdapter::Sqlite].into_iter().collect()
@@ -271,20 +500,142 @@ fn package_digest_rejects_untracked_component_content() {
 }
 
 #[test]
-fn package_framework_identity_cannot_be_overridden() {
+fn package_rejects_files_outside_the_declared_component_graph() {
     let repository = repository_root();
-    let output_parent = TestDirectory::new("package-framework-override");
-    let output = output_parent.path().join("application");
-    let mut request = canonical_request(&repository, output.clone());
-    request
-        .variables
-        .insert("framework_version".to_string(), "v9.9.9".to_string());
+    let fixture = TestDirectory::new("package-undeclared-file");
+    copy_directory(
+        &repository.join("templates"),
+        &fixture.path().join("templates"),
+    );
+    fs::write(
+        fixture.path().join("templates/undeclared.txt"),
+        "must not be consumed",
+    )
+    .expect("undeclared package entry should be written");
+    let output = fixture.path().join("application");
 
-    let error = render(&request).expect_err("package framework version should be immutable");
+    let error = render(&canonical_request(fixture.path(), output.clone()))
+        .expect_err("undeclared package content should fail");
 
-    assert_eq!(error.kind(), RendererErrorKind::Variables);
-    assert!(error.to_string().contains("not declared"));
+    assert_eq!(error.kind(), RendererErrorKind::Catalog);
+    assert!(error.to_string().contains("missing or undeclared files"));
+    assert!(!error.to_string().contains("must not be consumed"));
     assert!(!output.exists());
+}
+
+#[test]
+fn package_rejects_an_incomplete_declared_source_set() {
+    let repository = repository_root();
+    let fixture = TestDirectory::new("package-incomplete");
+    copy_directory(
+        &repository.join("templates"),
+        &fixture.path().join("templates"),
+    );
+    fs::remove_file(
+        fixture
+            .path()
+            .join("templates/applications/layered/config/development.yaml"),
+    )
+    .expect("declared package source should be removed");
+    let output = fixture.path().join("application");
+
+    let error = render(&canonical_request(fixture.path(), output.clone()))
+        .expect_err("incomplete package content should fail");
+
+    assert_eq!(error.kind(), RendererErrorKind::Catalog);
+    assert!(error.to_string().contains("content digest mismatch"));
+    assert!(!output.exists());
+}
+
+#[test]
+fn package_manifest_diagnostics_redact_credentials_and_source_content() {
+    let repository = repository_root();
+    let fixture = TestDirectory::new("package-diagnostic-redaction");
+    copy_directory(
+        &repository.join("templates"),
+        &fixture.path().join("templates"),
+    );
+    let secret = "not-a-real-secret-value";
+    let package_path = fixture.path().join("templates/package.toml");
+    let package = fs::read_to_string(&package_path)
+        .expect("component package manifest should be readable")
+        .replace(
+            "https://github.com/furkancemalcaliskan/hegira.git",
+            &format!("https://user:{secret}@github.com/furkancemalcaliskan/hegira.git"),
+        );
+    fs::write(package_path, package).expect("component package manifest should be updated");
+
+    let error = ManifestCatalog::load(fixture.path(), "layered")
+        .expect_err("credentialed package identity should fail");
+
+    assert!(error.to_string().contains("invalid framework repository"));
+    assert!(!error.to_string().contains(secret));
+    assert!(!error.to_string().contains("user:"));
+}
+
+#[test]
+fn package_identity_is_bound_to_the_bundled_release() {
+    let repository = repository_root();
+    let fixture = TestDirectory::new("package-identity");
+    copy_directory(
+        &repository.join("templates"),
+        &fixture.path().join("templates"),
+    );
+    let package_path = fixture.path().join("templates/package.toml");
+    let package = fs::read_to_string(&package_path)
+        .expect("component package manifest should be readable")
+        .replace("id = \"hegira-canonical\"", "id = \"other-package\"");
+    fs::write(package_path, package).expect("component package manifest should be updated");
+
+    let error = ManifestCatalog::load(fixture.path(), "layered")
+        .expect_err("unexpected package identity should fail");
+
+    assert!(error.to_string().contains("bundled package"));
+}
+
+#[cfg(unix)]
+#[test]
+fn package_root_must_not_be_a_symbolic_link() {
+    use std::os::unix::fs::symlink;
+
+    let repository = repository_root();
+    let fixture = TestDirectory::new("package-root-symlink");
+    let real = fixture.path().join("real-templates");
+    copy_directory(&repository.join("templates"), &real);
+    symlink(&real, fixture.path().join("templates"))
+        .expect("package root symlink should be created");
+    let output = fixture.path().join("application");
+
+    let error = render(&canonical_request(fixture.path(), output.clone()))
+        .expect_err("symlinked package root should fail");
+
+    assert_eq!(error.kind(), RendererErrorKind::Safety);
+    assert!(error.to_string().contains("without symlinks"));
+    assert!(!output.exists());
+}
+
+#[test]
+fn package_identity_cannot_be_overridden() {
+    let repository = repository_root();
+    let output_parent = TestDirectory::new("package-identity-override");
+    for (variable, value) in [
+        ("framework_repository", "https://example.com/framework.git"),
+        ("framework_version", "v9.9.9"),
+        ("package_id", "untrusted-package"),
+        ("package_version", "v9.9.9"),
+    ] {
+        let output = output_parent.path().join(variable);
+        let mut request = canonical_request(&repository, output.clone());
+        request
+            .variables
+            .insert(variable.to_owned(), value.to_owned());
+
+        let error = render(&request).expect_err("package identity should be immutable");
+
+        assert_eq!(error.kind(), RendererErrorKind::Variables);
+        assert!(error.to_string().contains("not declared"));
+        assert!(!output.exists());
+    }
 }
 
 #[test]
@@ -381,6 +732,7 @@ fn repository_validation_can_patch_framework_dependencies_locally() {
     render_for_validation(&request).expect("locally patched render should succeed");
 
     let manifest = fs::read_to_string(output.join("Cargo.toml")).expect("manifest should exist");
+    assert!(!output.join("Cargo.lock").exists());
     let application_path = repository.join("modules/identity/application");
     assert!(manifest.contains(&format!(
         "identity_application = {{ path = {:?}, default-features = false }}",
@@ -589,8 +941,8 @@ fn symbolic_links_in_component_content_fail_before_creating_output() {
 
     let error = render(&fixture.request(output.clone())).expect_err("source symlink should fail");
 
-    assert_eq!(error.kind(), RendererErrorKind::Rendering);
-    assert!(error.to_string().contains("may not be a symbolic link"));
+    assert_eq!(error.kind(), RendererErrorKind::Safety);
+    assert!(error.to_string().contains("must not be symbolic links"));
     assert!(!output.exists());
 }
 
@@ -651,6 +1003,7 @@ fn canonical_request(repository: &Path, output: PathBuf) -> RenderRequest {
         repository_root: repository.to_path_buf(),
         template: "layered".to_string(),
         output,
+        components: None,
         variables: BTreeMap::new(),
     }
 }
@@ -735,6 +1088,7 @@ impl Fixture {
             repository_root: self.root.path().to_path_buf(),
             template: "test".to_string(),
             output,
+            components: None,
             variables: BTreeMap::new(),
         }
     }

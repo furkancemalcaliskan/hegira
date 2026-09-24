@@ -1,8 +1,21 @@
-schema = 1
+schema = 3
 id = "layered-leptos-identity"
+version = "v0.6.0"
 source = "applications/layered"
-include = ["Cargo.toml", "Dockerfile", "apps"]
+include = [
+  ".env.example",
+  "Cargo.lock",
+  "Cargo.toml",
+  "Dockerfile",
+  "apps",
+  "config",
+  "crates/infrastructure",
+  "crates/presentation",
+  "docker-compose.yml",
+]
 requires = ["layered-base"]
+modules = ["identity"]
+provides_capabilities = ["authentication", "authorization"]
 
 [[framework_dependencies]]
 manifest = "Cargo.toml"

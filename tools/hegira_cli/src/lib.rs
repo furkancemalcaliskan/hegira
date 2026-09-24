@@ -1,5 +1,5 @@
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     ffi::OsString,
     fmt::Write as _,
     fs,
@@ -9,24 +9,41 @@ use std::{
 };
 
 use application_manifest::{
-    ClientAdapter, DatabaseAdapter, MutationCompatibility, MutationCompatibilityPolicy,
+    ApplicationCapability, ClientAdapter, DatabaseAdapter, InstalledModule,
+    LAYERED_LEPTOS_MINIMAL_COMPONENT, MutationCompatibility, MutationCompatibilityPolicy,
+    PackageIdentity,
 };
-use application_mutator::{ChangePlan, PlannedFileChange};
+use application_mutator::{
+    CargoDependency, CargoDependencySection, ChangePlan, PlannedFileChange, StructuredEditOutcome,
+    StructuredFileEdit, plan_cargo_dependency, plan_toml_array_string,
+};
 use clap::{Args, Parser, Subcommand, ValueEnum, error::ErrorKind};
 use resource_generator::{
     ArtifactNamespace, HttpLayerError, HttpLayerErrorKind, HttpLayerSources, InwardLayerError,
     InwardLayerErrorKind, InwardLayerSources, LayeredArtifactNames, LayeredNamingInput,
-    MigrationError, MigrationErrorKind, MigrationIdentity, NamingErrorKind, PersistenceLayerError,
-    PersistenceLayerErrorKind, PersistenceLayerSources, ResourceFieldInput, ResourceSelection,
-    ResourceSpecification, ResourceSpecificationInput, WebLayerError, WebLayerErrorKind,
-    WebLayerSources, plan_application_migration, plan_inward_resource_layers, plan_resource_http,
-    plan_resource_persistence, plan_resource_web,
+    MigrationError, MigrationErrorKind, MigrationIdentity, MinimalHttpLayerSources,
+    MinimalWebLayerSources, NamingErrorKind, PersistenceLayerError, PersistenceLayerErrorKind,
+    PersistenceLayerSources, RESOURCE_CAPABILITY_DIAGNOSTIC_SCHEMA, ResourceCapabilityRequirements,
+    ResourceCapabilityStatus, ResourceFieldInput, ResourceSelection, ResourceSpecification,
+    ResourceSpecificationInput, WebLayerError, WebLayerErrorKind, WebLayerSources,
+    plan_application_migration, plan_inward_resource_layers, plan_resource_http,
+    plan_resource_http_minimal, plan_resource_persistence, plan_resource_web,
+    plan_resource_web_minimal,
 };
 use serde::Serialize;
-use template_renderer::{RenderRequest, RendererError, RendererErrorKind, render};
+use template_renderer::{
+    CompositionDiagnostic, CompositionRequest, ManifestCatalog, RenderRequest, RendererError,
+    RendererErrorKind, render,
+};
 
 mod application_context;
+mod component;
+mod doctor;
+mod identity_installation;
 mod mutation;
+
+use component::ComponentCommand;
+use doctor::DoctorCommand;
 
 pub use application_context::{
     ApplicationContext, ApplicationContextError, ApplicationContextErrorKind,
@@ -71,6 +88,10 @@ enum CliCommand {
     New(NewCommand),
     /// Inspect an existing Hegira application without modifying it.
     Inspect(InspectCommand),
+    /// Diagnose application composition and local prerequisites without modifying it.
+    Doctor(DoctorCommand),
+    /// Manage bundled additive application components.
+    Component(ComponentCommand),
     /// Generate application-owned source through validated change plans.
     Generate(GenerateCommand),
 }
@@ -172,8 +193,8 @@ struct NewCommand {
     #[arg(long, value_enum)]
     client: Option<ClientChoice>,
 
-    /// Official application component.
-    #[arg(long, value_enum)]
+    /// Initial application composition.
+    #[arg(long = "composition", visible_alias = "component", value_enum)]
     component: Option<ComponentChoice>,
 }
 
@@ -242,18 +263,21 @@ impl ClientChoice {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 enum ComponentChoice {
     Identity,
+    Minimal,
 }
 
 impl ComponentChoice {
     const fn id(self) -> &'static str {
         match self {
             Self::Identity => "layered-leptos-identity",
+            Self::Minimal => "layered-leptos-minimal",
         }
     }
 
     const fn name(self) -> &'static str {
         match self {
             Self::Identity => "identity",
+            Self::Minimal => "minimal",
         }
     }
 }
@@ -391,9 +415,27 @@ fn run_command(
             Ok(None) => CliExit::Success,
             Err(diagnostic) => write_diagnostic(diagnostic, diagnostics),
         },
-        CliCommand::Inspect(command) => {
-            inspect_application(command, working_directory, output, diagnostics)
-        }
+        CliCommand::Inspect(command) => inspect_application(
+            command,
+            repository_root,
+            working_directory,
+            output,
+            diagnostics,
+        ),
+        CliCommand::Doctor(command) => doctor::run(
+            command,
+            repository_root,
+            working_directory,
+            output,
+            diagnostics,
+        ),
+        CliCommand::Component(command) => component::run(
+            command,
+            repository_root,
+            working_directory,
+            output,
+            diagnostics,
+        ),
         CliCommand::Generate(command) => match command.command {
             GeneratorCommand::Resource(command) => {
                 generate_resource(command, working_directory, output, diagnostics)
@@ -419,7 +461,56 @@ const RESOURCE_SOURCE_PATHS: [&str; 11] = [
     "apps/web/src/shared/i18n/mod.rs",
 ];
 const WEB_SIDEBAR_PATH: &str = "apps/web/src/app/sidebar.rs";
+const WEB_DASHBOARD_PATH: &str = "apps/web/src/dashboard.rs";
+const IDENTITY_RUNTIME_PATH: &str = "apps/server/src/identity_runtime.rs";
+const INFRASTRUCTURE_MANIFEST_PATH: &str = "crates/infrastructure/Cargo.toml";
+const WEB_MANIFEST_PATH: &str = "apps/web/Cargo.toml";
 const MAX_GENERATION_SOURCE_BYTES: u64 = 4 * 1024 * 1024;
+
+#[derive(Serialize)]
+struct ResourceCapabilityFailure<'a> {
+    output_schema: u32,
+    code: &'static str,
+    message: &'a str,
+    required: &'a BTreeSet<ApplicationCapability>,
+    missing: &'a BTreeSet<ApplicationCapability>,
+    hint: &'static str,
+}
+
+fn write_resource_capability_failure(
+    status: &ResourceCapabilityStatus,
+    json: bool,
+    diagnostics: &mut impl Write,
+) -> CliExit {
+    let error = status
+        .ensure_supported()
+        .expect_err("a capability failure must include missing requirements");
+    if !json {
+        return write_diagnostic(CliDiagnostic::validation(error.to_string()), diagnostics);
+    }
+    let rendered = match serde_json::to_string_pretty(&ResourceCapabilityFailure {
+        output_schema: RESOURCE_CAPABILITY_DIAGNOSTIC_SCHEMA,
+        code: "missing-capabilities",
+        message: &error.to_string(),
+        required: status.required(),
+        missing: status.missing(),
+        hint: "Run `hegira component add identity` in a compatible minimal application before generating protected resources.",
+    }) {
+        Ok(rendered) => rendered,
+        Err(error) => {
+            return write_diagnostic(
+                CliDiagnostic::internal(format!(
+                    "cannot serialize resource capability diagnostic: {error}"
+                )),
+                diagnostics,
+            );
+        }
+    };
+    if writeln!(diagnostics, "{rendered}").is_err() {
+        return CliExit::Internal;
+    }
+    CliExit::Validation
+}
 
 fn generate_resource(
     command: ResourceCommand,
@@ -435,7 +526,23 @@ fn generate_resource(
         .manifest
         .as_ref()
         .expect("a compatible mutation context must contain a typed manifest");
-    let sources = match read_resource_sources(&context.root) {
+    let capabilities = match ResourceCapabilityRequirements::evaluate(manifest) {
+        Ok(capabilities) => capabilities,
+        Err(error) => {
+            return write_diagnostic(CliDiagnostic::validation(error.to_string()), diagnostics);
+        }
+    };
+    if !capabilities.missing().is_empty() {
+        return write_resource_capability_failure(
+            &capabilities,
+            command.mutation.json(),
+            diagnostics,
+        );
+    }
+    let minimal_web = manifest
+        .installed_component_ids()
+        .contains(LAYERED_LEPTOS_MINIMAL_COMPONENT);
+    let sources = match read_resource_sources(&context.root, minimal_web) {
         Ok(sources) => sources,
         Err(diagnostic) => return write_diagnostic(diagnostic, diagnostics),
     };
@@ -443,9 +550,10 @@ fn generate_resource(
         Ok(names) => names,
         Err(diagnostic) => return write_diagnostic(diagnostic, diagnostics),
     };
+    let installed_components = manifest.installed_component_ids();
     let namespace = match ArtifactNamespace::new(
         &manifest.application,
-        manifest.selection.components.iter(),
+        installed_components.iter(),
         source_names.iter(),
     ) {
         Ok(namespace) => namespace,
@@ -479,7 +587,7 @@ fn generate_resource(
             return write_diagnostic(CliDiagnostic::validation(error.to_string()), diagnostics);
         }
     };
-    let plan = match plan_complete_resource(&context.root, &specification, &sources) {
+    let plan = match plan_complete_resource(&context.root, &specification, &sources, minimal_web) {
         Ok(plan) => plan,
         Err(diagnostic) => return write_diagnostic(diagnostic, diagnostics),
     };
@@ -512,9 +620,24 @@ impl ResourceSources {
     }
 }
 
-fn read_resource_sources(root: &Path) -> Result<ResourceSources, CliDiagnostic> {
+fn read_resource_sources(root: &Path, minimal_web: bool) -> Result<ResourceSources, CliDiagnostic> {
     let mut files = BTreeMap::new();
-    for path in RESOURCE_SOURCE_PATHS.into_iter().chain([WEB_SIDEBAR_PATH]) {
+    let common = &RESOURCE_SOURCE_PATHS[..9];
+    let web: &[&str] = if minimal_web {
+        &[
+            WEB_DASHBOARD_PATH,
+            IDENTITY_RUNTIME_PATH,
+            INFRASTRUCTURE_MANIFEST_PATH,
+            WEB_MANIFEST_PATH,
+        ]
+    } else {
+        &[
+            RESOURCE_SOURCE_PATHS[9],
+            RESOURCE_SOURCE_PATHS[10],
+            WEB_SIDEBAR_PATH,
+        ]
+    };
+    for &path in common.iter().chain(web.iter()) {
         files.insert(path, read_application_source(root, path)?);
     }
     Ok(ResourceSources { files })
@@ -631,6 +754,7 @@ fn plan_complete_resource(
     root: &Path,
     specification: &ResourceSpecification,
     sources: &ResourceSources,
+    minimal_web: bool,
 ) -> Result<ChangePlan, CliDiagnostic> {
     let inward = plan_inward_resource_layers(
         specification,
@@ -654,36 +778,118 @@ fn plan_complete_resource(
         specification.names().rust_module()
     );
     let infrastructure_resource = planned_content(persistence.plan(), &infrastructure_path)?;
-    let http = plan_resource_http(
-        specification,
-        HttpLayerSources {
-            presentation_root: sources.get("crates/presentation/src/lib.rs"),
-            infrastructure_resource,
-            infrastructure_services: sources.get("crates/infrastructure/src/identity/services.rs"),
-            server_source: sources.get("apps/server/src/server.rs"),
-        },
-    )
+    let http_sources = HttpLayerSources {
+        presentation_root: sources.get("crates/presentation/src/lib.rs"),
+        infrastructure_resource,
+        infrastructure_services: sources.get("crates/infrastructure/src/identity/services.rs"),
+        server_source: sources.get("apps/server/src/server.rs"),
+    };
+    let http = if minimal_web {
+        plan_resource_http_minimal(
+            specification,
+            MinimalHttpLayerSources {
+                common: http_sources,
+                identity_runtime: sources.get(IDENTITY_RUNTIME_PATH),
+            },
+        )
+    } else {
+        plan_resource_http(specification, http_sources)
+    }
     .map_err(http_layer_diagnostic)?;
     let server_source = planned_content(http.plan(), "apps/server/src/server.rs")?;
-    let web = plan_resource_web(
-        specification,
-        WebLayerSources {
-            web_root: sources.get("apps/web/src/lib.rs"),
-            routes: sources.get("apps/web/src/routes.rs"),
-            navigation: sources.get("apps/web/src/app/navigation.rs"),
-            i18n: sources.get("apps/web/src/shared/i18n/mod.rs"),
-            sidebar: sources.get(WEB_SIDEBAR_PATH),
-            server_source,
-        },
-    )
+    let web = if minimal_web {
+        plan_resource_web_minimal(
+            specification,
+            MinimalWebLayerSources {
+                web_root: sources.get("apps/web/src/lib.rs"),
+                routes: sources.get("apps/web/src/routes.rs"),
+                dashboard: sources.get(WEB_DASHBOARD_PATH),
+                server_source,
+            },
+        )
+    } else {
+        plan_resource_web(
+            specification,
+            WebLayerSources {
+                web_root: sources.get("apps/web/src/lib.rs"),
+                routes: sources.get("apps/web/src/routes.rs"),
+                navigation: sources.get("apps/web/src/app/navigation.rs"),
+                i18n: sources.get("apps/web/src/shared/i18n/mod.rs"),
+                sidebar: sources.get(WEB_SIDEBAR_PATH),
+                server_source,
+            },
+        )
+    }
     .map_err(web_layer_diagnostic)?;
-    ChangePlan::compose([
+    let dependencies = minimal_web
+        .then(|| plan_minimal_resource_dependencies(sources))
+        .transpose()?;
+    let mut plans = vec![
         inward.into_plan(),
         persistence.into_plan(),
         http.into_plan(),
         web.into_plan(),
-    ])
-    .map_err(change_plan_diagnostic)
+    ];
+    if let Some(dependencies) = dependencies {
+        plans.push(dependencies);
+    }
+    ChangePlan::compose(plans).map_err(change_plan_diagnostic)
+}
+
+fn plan_minimal_resource_dependencies(
+    sources: &ResourceSources,
+) -> Result<ChangePlan, CliDiagnostic> {
+    let mut changes = Vec::new();
+    for (path, names, features) in [
+        (
+            INFRASTRUCTURE_MANIFEST_PATH,
+            &["app_application", "app_application_contracts", "app_domain"][..],
+            &[][..],
+        ),
+        (
+            WEB_MANIFEST_PATH,
+            &[
+                "app_application_contracts",
+                "chrono",
+                "leptos_support",
+                "uuid",
+            ][..],
+            &[
+                ("hydrate", "leptos_support/hydrate"),
+                ("ssr", "leptos_support/ssr"),
+            ][..],
+        ),
+    ] {
+        let observed = sources.get(path);
+        let mut resulting = observed.to_vec();
+        for name in names {
+            if let StructuredEditOutcome::Planned { edit, .. } = plan_cargo_dependency(
+                path,
+                &resulting,
+                CargoDependencySection::Dependencies,
+                &CargoDependency::workspace(*name, false, std::iter::empty::<&str>()),
+            )
+            .map_err(|error| CliDiagnostic::conflict(error.to_string()))?
+            {
+                resulting = edit.resulting_content().to_vec();
+            }
+        }
+        for (feature, selection) in features {
+            if let StructuredEditOutcome::Planned { edit, .. } =
+                plan_toml_array_string(path, &resulting, &["features"], feature, selection)
+                    .map_err(|error| CliDiagnostic::conflict(error.to_string()))?
+            {
+                resulting = edit.resulting_content().to_vec();
+            }
+        }
+        if resulting != observed {
+            changes.push(PlannedFileChange::from(
+                StructuredFileEdit::new(path, observed, resulting)
+                    .map_err(|error| CliDiagnostic::internal(error.to_string()))?,
+            ));
+        }
+    }
+    ChangePlan::new(changes).map_err(change_plan_diagnostic)
 }
 
 fn planned_content<'a>(plan: &'a ChangePlan, path: &str) -> Result<&'a [u8], CliDiagnostic> {
@@ -836,11 +1042,39 @@ struct InspectionOutput<'a> {
     output_schema: u32,
     application_root: &'a str,
     manifest: Option<&'a application_manifest::ApplicationManifest>,
+    composition: &'a CompositionInspection,
     mutation_compatibility: &'a MutationCompatibility,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+enum CompositionInspectionStatus {
+    Compatible,
+    Unresolved,
+    Unavailable,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct InspectedComponent {
+    id: String,
+    version: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct CompositionInspection {
+    status: CompositionInspectionStatus,
+    package: Option<PackageIdentity>,
+    components: Vec<InspectedComponent>,
+    modules: Vec<InstalledModule>,
+    capabilities: BTreeSet<ApplicationCapability>,
+    databases: BTreeSet<DatabaseAdapter>,
+    clients: BTreeSet<ClientAdapter>,
+    diagnostics: Vec<CompositionDiagnostic>,
 }
 
 fn inspect_application(
     command: InspectCommand,
+    repository_root: PathBuf,
     working_directory: PathBuf,
     output: &mut impl Write,
     diagnostics: &mut impl Write,
@@ -872,6 +1106,10 @@ fn inspect_application(
             return write_diagnostic(diagnostic, diagnostics);
         }
     };
+    let composition = match inspect_composition(&repository_root, &context) {
+        Ok(composition) => composition,
+        Err(diagnostic) => return write_diagnostic(diagnostic, diagnostics),
+    };
 
     let rendered = if command.json {
         let root = context
@@ -879,16 +1117,17 @@ fn inspect_application(
             .to_str()
             .expect("application context paths are validated as UTF-8");
         serde_json::to_string_pretty(&InspectionOutput {
-            output_schema: 1,
+            output_schema: 2,
             application_root: root,
             manifest: context.manifest.as_ref(),
+            composition: &composition,
             mutation_compatibility: &context.compatibility,
         })
         .map_err(|error| {
             CliDiagnostic::internal(format!("cannot serialize application inspection: {error}"))
         })
     } else {
-        Ok(render_human_inspection(&context))
+        Ok(render_human_inspection(&context, &composition))
     };
     let rendered = match rendered {
         Ok(rendered) => rendered,
@@ -900,35 +1139,104 @@ fn inspect_application(
     CliExit::Success
 }
 
-fn render_human_inspection(context: &ApplicationContext) -> String {
-    let mut output = String::new();
-    if let Some(manifest) = &context.manifest {
-        let components = manifest
-            .selection
+fn inspect_composition(
+    repository_root: &Path,
+    context: &ApplicationContext,
+) -> Result<CompositionInspection, CliDiagnostic> {
+    let Some(manifest) = &context.manifest else {
+        return Ok(CompositionInspection {
+            status: CompositionInspectionStatus::Unavailable,
+            package: None,
+            components: Vec::new(),
+            modules: Vec::new(),
+            capabilities: BTreeSet::new(),
+            databases: BTreeSet::new(),
+            clients: BTreeSet::new(),
+            diagnostics: Vec::new(),
+        });
+    };
+
+    let databases = manifest.selection.databases.clone();
+    let clients = manifest.selection.clients.clone();
+    let Some(recorded) = &manifest.composition else {
+        return Ok(CompositionInspection {
+            status: CompositionInspectionStatus::Unavailable,
+            package: None,
+            components: manifest
+                .installed_component_ids()
+                .into_iter()
+                .map(|id| InspectedComponent { id, version: None })
+                .collect(),
+            modules: Vec::new(),
+            capabilities: BTreeSet::new(),
+            databases,
+            clients,
+            diagnostics: Vec::new(),
+        });
+    };
+
+    let catalog = ManifestCatalog::load(repository_root, "layered").map_err(|_| {
+        CliDiagnostic::internal("cannot load the bundled component package for inspection")
+    })?;
+    let request = CompositionRequest::new(
+        manifest.framework.clone(),
+        recorded.package.clone(),
+        recorded
             .components
             .iter()
-            .map(String::as_str)
-            .collect::<Vec<_>>()
-            .join(", ");
-        let databases = manifest
-            .selection
-            .databases
-            .iter()
-            .map(|database| match database {
-                DatabaseAdapter::Postgres => "postgres",
-                DatabaseAdapter::Sqlite => "sqlite",
+            .map(|component| component.id.clone()),
+    )
+    .with_recorded_state(
+        recorded.modules.clone(),
+        recorded.capabilities.iter().copied(),
+    );
+
+    match catalog.resolve_composition(&request) {
+        Ok(resolved) => {
+            let components = resolved
+                .installed_components()
+                .map(|component| InspectedComponent {
+                    id: component.id,
+                    version: Some(component.version),
+                })
+                .collect();
+            Ok(CompositionInspection {
+                status: CompositionInspectionStatus::Compatible,
+                package: Some(resolved.package),
+                components,
+                modules: resolved.modules,
+                capabilities: resolved.capabilities,
+                databases,
+                clients,
+                diagnostics: Vec::new(),
             })
-            .collect::<Vec<_>>()
-            .join(", ");
-        let clients = manifest
-            .selection
-            .clients
-            .iter()
-            .map(|client| match client {
-                ClientAdapter::Leptos => "leptos",
-            })
-            .collect::<Vec<_>>()
-            .join(", ");
+        }
+        Err(error) => Ok(CompositionInspection {
+            status: CompositionInspectionStatus::Unresolved,
+            package: Some(recorded.package.clone()),
+            components: recorded
+                .components
+                .iter()
+                .map(|component| InspectedComponent {
+                    id: component.id.clone(),
+                    version: Some(component.version.clone()),
+                })
+                .collect(),
+            modules: recorded.modules.clone(),
+            capabilities: recorded.capabilities.clone(),
+            databases,
+            clients,
+            diagnostics: error.diagnostics().to_vec(),
+        }),
+    }
+}
+
+fn render_human_inspection(
+    context: &ApplicationContext,
+    composition: &CompositionInspection,
+) -> String {
+    let mut output = String::new();
+    if let Some(manifest) = &context.manifest {
         writeln!(output, "Application: {}", manifest.application).unwrap();
         writeln!(output, "Root: {}", context.root.display()).unwrap();
         writeln!(output, "Manifest schema: {}", manifest.schema).unwrap();
@@ -938,12 +1246,55 @@ fn render_human_inspection(context: &ApplicationContext) -> String {
             manifest.framework.repository, manifest.framework.version
         )
         .unwrap();
-        writeln!(output, "Components: {components}").unwrap();
-        writeln!(output, "Databases: {databases}").unwrap();
-        writeln!(output, "Clients: {clients}").unwrap();
+        writeln!(
+            output,
+            "Composition status: {}",
+            composition_status_name(composition.status)
+        )
+        .unwrap();
+        if let Some(package) = &composition.package {
+            writeln!(
+                output,
+                "Component package: {} @ {}",
+                package.id, package.version
+            )
+            .unwrap();
+        }
+        writeln!(
+            output,
+            "Components: {}",
+            format_inspected_components(&composition.components)
+        )
+        .unwrap();
+        writeln!(
+            output,
+            "Modules: {}",
+            format_installed_modules(&composition.modules)
+        )
+        .unwrap();
+        writeln!(
+            output,
+            "Capabilities: {}",
+            format_capabilities(&composition.capabilities)
+        )
+        .unwrap();
+        writeln!(
+            output,
+            "Databases: {}",
+            format_databases(&composition.databases)
+        )
+        .unwrap();
+        writeln!(output, "Clients: {}", format_clients(&composition.clients)).unwrap();
+        if !composition.diagnostics.is_empty() {
+            writeln!(output, "Composition diagnostics:").unwrap();
+            for diagnostic in &composition.diagnostics {
+                writeln!(output, "  - {diagnostic}").unwrap();
+            }
+        }
     } else {
         writeln!(output, "Root: {}", context.root.display()).unwrap();
         writeln!(output, "Manifest: unsupported by the current parser").unwrap();
+        writeln!(output, "Composition status: unavailable").unwrap();
     }
     match &context.compatibility {
         MutationCompatibility::Compatible => {
@@ -957,6 +1308,76 @@ fn render_human_inspection(context: &ApplicationContext) -> String {
         }
     }
     output
+}
+
+fn composition_status_name(status: CompositionInspectionStatus) -> &'static str {
+    match status {
+        CompositionInspectionStatus::Compatible => "compatible",
+        CompositionInspectionStatus::Unresolved => "unresolved",
+        CompositionInspectionStatus::Unavailable => "unavailable",
+    }
+}
+
+fn format_inspected_components(components: &[InspectedComponent]) -> String {
+    format_named_versions(
+        components
+            .iter()
+            .map(|component| (component.id.as_str(), component.version.as_deref())),
+    )
+}
+
+fn format_installed_modules(modules: &[InstalledModule]) -> String {
+    format_named_versions(
+        modules
+            .iter()
+            .map(|module| (module.id.as_str(), Some(module.version.as_str()))),
+    )
+}
+
+fn format_named_versions<'a>(
+    values: impl IntoIterator<Item = (&'a str, Option<&'a str>)>,
+) -> String {
+    let values = values
+        .into_iter()
+        .map(|(id, version)| match version {
+            Some(version) => format!("{id} @ {version}"),
+            None => id.to_owned(),
+        })
+        .collect::<Vec<_>>();
+    if values.is_empty() {
+        "none".to_owned()
+    } else {
+        values.join(", ")
+    }
+}
+
+fn format_capabilities(capabilities: &BTreeSet<ApplicationCapability>) -> String {
+    format_names(capabilities.iter().map(|capability| match capability {
+        ApplicationCapability::Authentication => "authentication",
+        ApplicationCapability::Authorization => "authorization",
+    }))
+}
+
+fn format_databases(databases: &BTreeSet<DatabaseAdapter>) -> String {
+    format_names(databases.iter().map(|database| match database {
+        DatabaseAdapter::Postgres => "postgres",
+        DatabaseAdapter::Sqlite => "sqlite",
+    }))
+}
+
+fn format_clients(clients: &BTreeSet<ClientAdapter>) -> String {
+    format_names(clients.iter().map(|client| match client {
+        ClientAdapter::Leptos => "leptos",
+    }))
+}
+
+fn format_names<'a>(values: impl IntoIterator<Item = &'a str>) -> String {
+    let values = values.into_iter().collect::<Vec<_>>();
+    if values.is_empty() {
+        "none".to_owned()
+    } else {
+        values.join(", ")
+    }
 }
 
 fn resolve_new_command(
@@ -1007,7 +1428,7 @@ fn resolve_new_command(
         .and_then(|()| writeln!(output, "  Destination: {}", destination.display()))
         .and_then(|()| writeln!(output, "  Database: {}", database.adapter()))
         .and_then(|()| writeln!(output, "  Client: {}", client.adapter()))
-        .and_then(|()| writeln!(output, "  Component: {}", component.name()))
+        .and_then(|()| writeln!(output, "  Composition: {}", component.name()))
         .map_err(output_diagnostic)?;
 
     match confirm(input, output)? {
@@ -1110,12 +1531,14 @@ fn resolve_component(
         return Ok(value);
     }
     loop {
-        let Some(value) = prompt(input, output, "Component [identity]: ")? else {
+        let Some(value) = prompt(input, output, "Composition [identity] (identity/minimal): ")?
+        else {
             return Ok(None);
         };
         match value.to_ascii_lowercase().as_str() {
             "" | "identity" => return Ok(Some(ComponentChoice::Identity)),
-            _ => writeln!(output, "The currently supported component is `identity`.")
+            "minimal" => return Ok(Some(ComponentChoice::Minimal)),
+            _ => writeln!(output, "Please choose `identity` or `minimal`.")
                 .map_err(output_diagnostic)?,
         }
     }
@@ -1183,10 +1606,6 @@ fn create_application(
         command.client.adapter().to_string(),
     );
     variables.insert(
-        "component_id".to_string(),
-        command.component.id().to_string(),
-    );
-    variables.insert(
         "database_adapter".to_string(),
         command.database.adapter().to_string(),
     );
@@ -1199,6 +1618,7 @@ fn create_application(
         repository_root,
         template: "layered".to_string(),
         output: command.destination.clone(),
+        components: Some(vec![command.component.id().to_string()]),
         variables,
     };
     if let Err(error) = render(&request) {
@@ -1216,8 +1636,18 @@ fn create_application(
         || writeln!(output, "  npm ci --prefix apps/web/src").is_err()
         || writeln!(
             output,
-            "  APP_ENV={database} cargo leptos watch -p app_server --bin-features ssr,{} --lib-features hydrate",
+            "  APP_ENV={database} cargo leptos watch -p app_server --bin-features ssr,{} --lib-features hydrate --bin-cargo-args=--locked --lib-cargo-args=--locked",
             command.database.feature()
+        )
+        .is_err()
+    {
+        return CliExit::Internal;
+    }
+
+    if command.component == ComponentChoice::Minimal
+        && writeln!(
+            output,
+            "  Note: the minimal composition has no authentication or authorization capability; protected resource generation remains unavailable until a compatible module is installed."
         )
         .is_err()
     {

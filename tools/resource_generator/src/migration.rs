@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use crate::SelectedDatabase;
 
 pub const MIGRATION_STATE_SCHEMA: u32 = 1;
+pub const APPLICATION_MIGRATION_VERSION_FLOOR: i64 = 1_000_000;
 const MIGRATION_ROOT: &str = "crates/infrastructure/migrations";
 const MIGRATION_STATE: &str = "crates/infrastructure/migrations/.hegira-generator.toml";
 const MAX_IDENTITY_BYTES: usize = 64;
@@ -188,14 +189,18 @@ pub(crate) fn plan_application_migration_with_source(
     }
     let state_next = observed_state
         .as_ref()
-        .map_or(1, |state| state.next_version);
+        .map_or(APPLICATION_MIGRATION_VERSION_FLOOR, |state| {
+            state.next_version
+        });
     let history_next = history.highest_version.checked_add(1).ok_or_else(|| {
         MigrationError::new(
             MigrationErrorKind::VersionExhausted,
             "migration version space is exhausted",
         )
     })?;
-    let version = state_next.max(history_next);
+    let version = state_next
+        .max(history_next)
+        .max(APPLICATION_MIGRATION_VERSION_FLOOR);
     if version <= 0 {
         return Err(MigrationError::new(
             MigrationErrorKind::InvalidState,
@@ -569,10 +574,10 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(first.version(), 10);
+        assert_eq!(first.version(), APPLICATION_MIGRATION_VERSION_FLOOR);
         assert_eq!(
             first.path(),
-            "crates/infrastructure/migrations/sqlite/010_add_orders.sql"
+            "crates/infrastructure/migrations/sqlite/1000000_add_orders.sql"
         );
         assert_eq!(first.plan().summary(), second.plan().summary());
         assert_eq!(
@@ -592,10 +597,10 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(migration.version(), 23);
+        assert_eq!(migration.version(), APPLICATION_MIGRATION_VERSION_FLOOR);
         assert_eq!(
             migration.path(),
-            "crates/infrastructure/migrations/postgres/023_add_orders.sql"
+            "crates/infrastructure/migrations/postgres/1000000_add_orders.sql"
         );
         let source =
             std::str::from_utf8(planned_source(migration.plan(), migration.path())).unwrap();
@@ -681,10 +686,10 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(second.version(), 11);
+        assert_eq!(second.version(), APPLICATION_MIGRATION_VERSION_FLOOR + 1);
         let state = planned_source(second.plan(), MIGRATION_STATE);
         let state = std::str::from_utf8(state).unwrap();
-        assert!(state.contains("next_version = 12"));
+        assert!(state.contains("next_version = 1000002"));
         assert!(!state.contains("DATABASE_URL"));
         assert!(!state.to_ascii_lowercase().contains("password"));
         let source = std::str::from_utf8(planned_source(second.plan(), second.path())).unwrap();

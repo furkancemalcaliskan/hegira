@@ -17,7 +17,14 @@ const REQUIRED_CONTRACTS = [
   ["official module validation", "sh scripts/official-modules-check.sh"],
   ["tooling validation", "sh scripts/layered-template-check.sh"],
   ["CLI validation", "sh scripts/cli-check.sh"],
-  ["generated application validation", "sh scripts/generated-application-check.sh"],
+  [
+    "generated application validation",
+    "run: sh scripts/generated-application-check.sh\n",
+  ],
+  [
+    "component lifecycle validation",
+    "sh scripts/generated-application-check.sh identity-added",
+  ],
   ["explicit disposable PostgreSQL authentication", "POSTGRES_HOST_AUTH_METHOD: trust"],
   ["dependency policy", "EmbarkStudios/cargo-deny-action@v2"],
   ["dependency audit", "cargo audit --file Cargo.lock"],
@@ -33,12 +40,26 @@ const QUALITY_DEPENDENCIES = [
 const GENERATED_APPLICATION_CONTRACTS = [
   ["public SQLite application creation", "-- new sqlite-application"],
   ["public PostgreSQL application creation", "-- new postgres-application"],
+  ["canonical application lockfile", 'test -f "$staging_parent/sqlite-source/Cargo.lock"'],
+  [
+    "byte-identical provider lockfiles",
+    'cmp "$staging_parent/sqlite-source/Cargo.lock" "$staging_parent/postgres-source/Cargo.lock"',
+  ],
   ["both selected database profiles", "for database in sqlite postgres; do"],
-  ["verified public CLI source", '--generated-source "$staging_parent/$database-source"'],
+  ["verified public CLI source", '--generated-source "$source"'],
+  ["installed Identity CLI source", '--identity-added-source "$source"'],
+  ["minimal application selection", '--composition minimal --database "$database"'],
+  ["public Identity installation", "-- component add identity"],
+  ["selected source staging", 'stage_application "$staging_parent/$database-source"'],
   ["public resource mutation", "-- generate resource"],
   ["resource dry-run", '--application-root "$validation_root" --dry-run --json'],
   ["resource apply", '--application-root "$validation_root" --json'],
   ["pristine public output check", 'test ! -e "$staging_parent/$database-source/$generated_resource_path"'],
+  ["disposable development validation", 'development_root="$staging_parent/sqlite-development-validation"'],
+  ["documented development build", "APP_ENV=sqlite cargo leptos build -p app_server"],
+  ["documented development features", "--bin-features ssr,db-sqlite --lib-features hydrate"],
+  ["locked Cargo Leptos server build", "--bin-cargo-args=--locked"],
+  ["locked Cargo Leptos client build", "--lib-cargo-args=--locked"],
   ["locked generated workspace tests", "cargo test --locked --workspace"],
   ["generated hydration build", "--features hydrate"],
   ["production container build", 'docker build --tag "$GENERATED_APP_IMAGE" "$generated_root"'],
@@ -72,6 +93,11 @@ export function validateRepositoryValidationWorkflow(workflow) {
   }
   if (workflow.includes("POSTGRES_PASSWORD")) {
     errors.push("disposable repository validation must not embed PostgreSQL passwords");
+  }
+  if (workflow.includes("\n  component-lifecycle:")) {
+    errors.push(
+      "component lifecycle validation must remain in the existing generated-application job",
+    );
   }
   if (!/pull_request:\s*\n    branches:\s*\n      - develop\s*\n      - main/m.test(workflow)) {
     errors.push("repository validation must run for pull requests to develop and main");
@@ -136,6 +162,14 @@ export function validateGeneratedApplicationScript(script) {
         `generated application validation is missing ${description}: ${contract}`,
       );
     }
+  }
+  const developmentBuild = script.match(
+    /APP_ENV=sqlite cargo leptos build[\s\S]*?--lib-features hydrate/,
+  )?.[0];
+  if (developmentBuild?.includes("--release")) {
+    errors.push(
+      "generated application validation must exercise the non-release development build",
+    );
   }
   for (const secretReference of ["${{ secrets.", "GH_TOKEN", "GITHUB_TOKEN"]) {
     if (script.includes(secretReference)) {

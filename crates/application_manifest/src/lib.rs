@@ -15,12 +15,22 @@ use semver::Version;
 use serde::{Deserialize, Serialize};
 use url::{Host, Url};
 
-pub const APPLICATION_MANIFEST_SCHEMA: u32 = 1;
+pub const APPLICATION_MANIFEST_SCHEMA: u32 = 2;
+pub const LEGACY_APPLICATION_MANIFEST_SCHEMA: u32 = 1;
 pub const HEGIRA_FRAMEWORK_REPOSITORY: &str = "https://github.com/furkancemalcaliskan/hegira.git";
+pub const HEGIRA_COMPONENT_PACKAGE: &str = "hegira-canonical";
 pub const LAYERED_BASE_COMPONENT: &str = "layered-base";
 pub const LAYERED_LEPTOS_IDENTITY_COMPONENT: &str = "layered-leptos-identity";
+pub const LAYERED_LEPTOS_MINIMAL_COMPONENT: &str = "layered-leptos-minimal";
+pub const IDENTITY_COMPONENT: &str = "identity";
+pub const IDENTITY_MODULE: &str = "identity";
 
-const SUPPORTED_COMPONENTS: [&str; 2] = [LAYERED_BASE_COMPONENT, LAYERED_LEPTOS_IDENTITY_COMPONENT];
+const SUPPORTED_COMPONENTS: [&str; 4] = [
+    LAYERED_BASE_COMPONENT,
+    LAYERED_LEPTOS_IDENTITY_COMPONENT,
+    LAYERED_LEPTOS_MINIMAL_COMPONENT,
+    IDENTITY_COMPONENT,
+];
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -29,6 +39,8 @@ pub struct ApplicationManifest {
     pub application: String,
     pub framework: FrameworkContract,
     pub selection: ApplicationSelection,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub composition: Option<ApplicationComposition>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -47,9 +59,49 @@ impl FrameworkContract {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ApplicationSelection {
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     pub components: BTreeSet<String>,
     pub databases: BTreeSet<DatabaseAdapter>,
     pub clients: BTreeSet<ClientAdapter>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ApplicationComposition {
+    pub package: PackageIdentity,
+    pub components: Vec<InstalledComponent>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub modules: Vec<InstalledModule>,
+    #[serde(default)]
+    pub capabilities: BTreeSet<ApplicationCapability>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PackageIdentity {
+    pub id: String,
+    pub version: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct InstalledComponent {
+    pub id: String,
+    pub version: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct InstalledModule {
+    pub id: String,
+    pub version: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ApplicationCapability {
+    Authentication,
+    Authorization,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -69,7 +121,10 @@ pub enum ClientAdapter {
 pub struct MutationCompatibilityPolicy {
     schema: u32,
     framework: FrameworkContract,
+    package: PackageIdentity,
     components: BTreeSet<String>,
+    modules: BTreeSet<String>,
+    capabilities: BTreeSet<ApplicationCapability>,
     databases: BTreeSet<DatabaseAdapter>,
     clients: BTreeSet<ClientAdapter>,
 }
@@ -80,19 +135,31 @@ impl MutationCompatibilityPolicy {
     }
 
     pub fn for_framework_version(version: impl Into<String>) -> Result<Self, ManifestError> {
+        let version = version.into();
         let framework = FrameworkContract {
             repository: HEGIRA_FRAMEWORK_REPOSITORY.to_owned(),
-            version: version.into(),
+            version: version.clone(),
         };
         framework.validate()?;
 
         Ok(Self {
             schema: APPLICATION_MANIFEST_SCHEMA,
             framework,
+            package: PackageIdentity {
+                id: HEGIRA_COMPONENT_PACKAGE.to_owned(),
+                version,
+            },
             components: SUPPORTED_COMPONENTS
                 .map(str::to_owned)
                 .into_iter()
                 .collect(),
+            modules: [IDENTITY_MODULE.to_owned()].into_iter().collect(),
+            capabilities: [
+                ApplicationCapability::Authentication,
+                ApplicationCapability::Authorization,
+            ]
+            .into_iter()
+            .collect(),
             databases: [DatabaseAdapter::Postgres, DatabaseAdapter::Sqlite]
                 .into_iter()
                 .collect(),
@@ -111,6 +178,10 @@ pub enum MutationManifestField {
     Schema,
     FrameworkRepository,
     FrameworkVersion,
+    CompositionPackage,
+    CompositionComponents,
+    CompositionModules,
+    CompositionCapabilities,
     SelectionComponents,
     SelectionDatabases,
     SelectionClients,
@@ -122,6 +193,10 @@ impl Display for MutationManifestField {
             Self::Schema => "schema",
             Self::FrameworkRepository => "framework.repository",
             Self::FrameworkVersion => "framework.version",
+            Self::CompositionPackage => "composition.package",
+            Self::CompositionComponents => "composition.components",
+            Self::CompositionModules => "composition.modules",
+            Self::CompositionCapabilities => "composition.capabilities",
             Self::SelectionComponents => "selection.components",
             Self::SelectionDatabases => "selection.databases",
             Self::SelectionClients => "selection.clients",
@@ -189,7 +264,15 @@ pub enum ManifestError {
     InvalidFrameworkRepository(String),
     InvalidFrameworkVersion(String),
     InvalidComponent(String),
+    InvalidModule(String),
+    InvalidPackage(String),
     UnsupportedComponent(String),
+    MissingComposition,
+    LegacyManifestReadOnly,
+    DuplicateIdentity {
+        kind: &'static str,
+        identity: String,
+    },
     EmptyDatabaseSelection,
     EmptyClientSelection,
     IncompatibleSelection(String),
@@ -197,7 +280,8 @@ pub enum ManifestError {
 
 impl ApplicationManifest {
     pub fn from_toml(source: &str) -> Result<Self, ManifestError> {
-        let manifest: Self = toml::from_str(source).map_err(ManifestError::Parse)?;
+        let mut manifest: Self = toml::from_str(source).map_err(ManifestError::Parse)?;
+        manifest.normalize();
         manifest.validate()?;
         Ok(manifest)
     }
@@ -208,8 +292,13 @@ impl ApplicationManifest {
     }
 
     pub fn to_toml(&self) -> Result<String, ManifestError> {
-        self.validate()?;
-        let mut serialized = toml::to_string(self).map_err(ManifestError::Serialize)?;
+        if self.schema == LEGACY_APPLICATION_MANIFEST_SCHEMA {
+            return Err(ManifestError::LegacyManifestReadOnly);
+        }
+        let mut manifest = self.clone();
+        manifest.normalize();
+        manifest.validate()?;
+        let mut serialized = toml::to_string(&manifest).map_err(ManifestError::Serialize)?;
         if !serialized.ends_with('\n') {
             serialized.push('\n');
         }
@@ -217,12 +306,45 @@ impl ApplicationManifest {
     }
 
     pub fn validate(&self) -> Result<(), ManifestError> {
-        if self.schema != APPLICATION_MANIFEST_SCHEMA {
-            return Err(ManifestError::UnsupportedSchema(self.schema));
-        }
         validate_application_name(&self.application)?;
         validate_framework_contract(&self.framework)?;
-        validate_selection(&self.selection)
+        match self.schema {
+            LEGACY_APPLICATION_MANIFEST_SCHEMA => {
+                if self.composition.is_some() {
+                    return Err(ManifestError::IncompatibleSelection(
+                        "legacy manifests cannot contain composition state".to_owned(),
+                    ));
+                }
+                validate_legacy_selection(&self.selection)
+            }
+            APPLICATION_MANIFEST_SCHEMA => {
+                if !self.selection.components.is_empty() {
+                    return Err(ManifestError::IncompatibleSelection(
+                        "current manifests record components only in composition.components"
+                            .to_owned(),
+                    ));
+                }
+                validate_current_selection(&self.selection)?;
+                validate_composition(
+                    self.composition
+                        .as_ref()
+                        .ok_or(ManifestError::MissingComposition)?,
+                    &self.framework,
+                )
+            }
+            schema => Err(ManifestError::UnsupportedSchema(schema)),
+        }
+    }
+
+    pub fn installed_component_ids(&self) -> BTreeSet<String> {
+        match &self.composition {
+            Some(composition) => composition
+                .components
+                .iter()
+                .map(|component| component.id.clone())
+                .collect(),
+            None => self.selection.components.clone(),
+        }
     }
 
     pub fn validate_rendered_components<'a>(
@@ -233,13 +355,25 @@ impl ApplicationManifest {
             .into_iter()
             .map(str::to_owned)
             .collect::<BTreeSet<_>>();
-        if rendered != self.selection.components {
+        let installed = self.installed_component_ids();
+        if rendered != installed {
             return Err(ManifestError::IncompatibleSelection(format!(
                 "manifest components {:?} do not match rendered components {:?}",
-                self.selection.components, rendered
+                installed, rendered
             )));
         }
         Ok(())
+    }
+
+    fn normalize(&mut self) {
+        if let Some(composition) = &mut self.composition {
+            composition
+                .components
+                .sort_by(|left, right| left.id.cmp(&right.id));
+            composition
+                .modules
+                .sort_by(|left, right| left.id.cmp(&right.id));
+        }
     }
 
     pub fn mutation_compatibility(
@@ -258,6 +392,17 @@ impl ApplicationManifest {
 
         validate_application_name(&self.application)?;
         validate_framework_contract(&self.framework)?;
+        if !self.selection.components.is_empty() {
+            return Err(ManifestError::IncompatibleSelection(
+                "current manifests record components only in composition.components".to_owned(),
+            ));
+        }
+        validate_composition(
+            self.composition
+                .as_ref()
+                .ok_or(ManifestError::MissingComposition)?,
+            &self.framework,
+        )?;
 
         if self.framework.repository != policy.framework.repository {
             return Ok(MutationCompatibility::Incompatible(
@@ -278,35 +423,53 @@ impl ApplicationManifest {
             ));
         }
 
-        for component in &self.selection.components {
-            validate_component_identifier(component)?;
-            if !policy.components.contains(component) {
+        let composition = self
+            .composition
+            .as_ref()
+            .ok_or(ManifestError::MissingComposition)?;
+        if composition.package != policy.package {
+            return Ok(MutationCompatibility::Unsupported(
+                MutationCompatibilityIssue {
+                    field: MutationManifestField::CompositionPackage,
+                    actual: format!("{}@{}", composition.package.id, composition.package.version),
+                    expected: format!("{}@{}", policy.package.id, policy.package.version),
+                },
+            ));
+        }
+
+        for component in &composition.components {
+            if !policy.components.contains(&component.id) {
                 return Ok(MutationCompatibility::Unsupported(
                     MutationCompatibilityIssue {
-                        field: MutationManifestField::SelectionComponents,
-                        actual: component.clone(),
+                        field: MutationManifestField::CompositionComponents,
+                        actual: component.id.clone(),
                         expected: format_string_set(&policy.components),
                     },
                 ));
             }
         }
-        if !self.selection.components.contains(LAYERED_BASE_COMPONENT) {
-            return Ok(incompatible_selection(
-                MutationManifestField::SelectionComponents,
-                format_string_set(&self.selection.components),
-                format!("a selection containing {LAYERED_BASE_COMPONENT}"),
-            ));
+        for module in &composition.modules {
+            if !policy.modules.contains(&module.id) {
+                return Ok(MutationCompatibility::Unsupported(
+                    MutationCompatibilityIssue {
+                        field: MutationManifestField::CompositionModules,
+                        actual: module.id.clone(),
+                        expected: format_string_set(&policy.modules),
+                    },
+                ));
+            }
         }
-        if self.selection.clients.contains(&ClientAdapter::Leptos)
-            && !self
-                .selection
-                .components
-                .contains(LAYERED_LEPTOS_IDENTITY_COMPONENT)
+        if let Some(capability) = composition
+            .capabilities
+            .iter()
+            .find(|capability| !policy.capabilities.contains(capability))
         {
-            return Ok(incompatible_selection(
-                MutationManifestField::SelectionComponents,
-                format_string_set(&self.selection.components),
-                format!("a selection containing {LAYERED_LEPTOS_IDENTITY_COMPONENT}"),
+            return Ok(MutationCompatibility::Unsupported(
+                MutationCompatibilityIssue {
+                    field: MutationManifestField::CompositionCapabilities,
+                    actual: capability_name(*capability).to_owned(),
+                    expected: format_capability_set(&policy.capabilities),
+                },
             ));
         }
 
@@ -405,6 +568,17 @@ fn format_client_set(values: &BTreeSet<ClientAdapter>) -> String {
     )
 }
 
+fn format_capability_set(values: &BTreeSet<ApplicationCapability>) -> String {
+    format!(
+        "[{}]",
+        values
+            .iter()
+            .map(|capability| capability_name(*capability))
+            .collect::<Vec<_>>()
+            .join(", ")
+    )
+}
+
 fn database_name(adapter: DatabaseAdapter) -> &'static str {
     match adapter {
         DatabaseAdapter::Postgres => "postgres",
@@ -415,6 +589,13 @@ fn database_name(adapter: DatabaseAdapter) -> &'static str {
 fn client_name(adapter: ClientAdapter) -> &'static str {
     match adapter {
         ClientAdapter::Leptos => "leptos",
+    }
+}
+
+fn capability_name(capability: ApplicationCapability) -> &'static str {
+    match capability {
+        ApplicationCapability::Authentication => "authentication",
+        ApplicationCapability::Authorization => "authorization",
     }
 }
 
@@ -525,21 +706,20 @@ fn validate_framework_contract(contract: &FrameworkContract) -> Result<(), Manif
         ));
     }
 
-    let version = contract
-        .version
-        .strip_prefix('v')
-        .ok_or_else(|| ManifestError::InvalidFrameworkVersion(contract.version.clone()))?;
-    let version = Version::parse(version)
-        .map_err(|_| ManifestError::InvalidFrameworkVersion(contract.version.clone()))?;
+    validate_release_version(&contract.version)
+        .map_err(|_| ManifestError::InvalidFrameworkVersion(contract.version.clone()))
+}
+
+fn validate_release_version(version: &str) -> Result<(), ()> {
+    let version = version.strip_prefix('v').ok_or(())?;
+    let version = Version::parse(version).map_err(|_| ())?;
     if !version.pre.is_empty() || !version.build.is_empty() {
-        return Err(ManifestError::InvalidFrameworkVersion(
-            contract.version.clone(),
-        ));
+        return Err(());
     }
     Ok(())
 }
 
-fn validate_selection(selection: &ApplicationSelection) -> Result<(), ManifestError> {
+fn validate_legacy_selection(selection: &ApplicationSelection) -> Result<(), ManifestError> {
     if selection.databases.is_empty() {
         return Err(ManifestError::EmptyDatabaseSelection);
     }
@@ -567,6 +747,126 @@ fn validate_selection(selection: &ApplicationSelection) -> Result<(), ManifestEr
         )));
     }
     Ok(())
+}
+
+fn validate_current_selection(selection: &ApplicationSelection) -> Result<(), ManifestError> {
+    if selection.databases.len() != 1 {
+        return Err(ManifestError::IncompatibleSelection(
+            "current manifests must select exactly one database adapter".to_owned(),
+        ));
+    }
+    if selection.clients.len() != 1 {
+        return Err(ManifestError::IncompatibleSelection(
+            "current manifests must select exactly one client adapter".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_composition(
+    composition: &ApplicationComposition,
+    framework: &FrameworkContract,
+) -> Result<(), ManifestError> {
+    validate_component_identifier(&composition.package.id)
+        .map_err(|_| ManifestError::InvalidPackage(composition.package.id.clone()))?;
+    if composition.package.id != HEGIRA_COMPONENT_PACKAGE {
+        return Err(ManifestError::InvalidPackage(
+            composition.package.id.clone(),
+        ));
+    }
+    validate_release_version(&composition.package.version)
+        .map_err(|_| ManifestError::InvalidPackage(composition.package.version.clone()))?;
+    if composition.package.version != framework.version {
+        return Err(ManifestError::IncompatibleSelection(format!(
+            "component package version {} does not match framework version {}",
+            composition.package.version, framework.version
+        )));
+    }
+
+    let mut component_ids = BTreeSet::new();
+    for component in &composition.components {
+        validate_component_identifier(&component.id)?;
+        if !component_ids.insert(component.id.clone()) {
+            return Err(ManifestError::DuplicateIdentity {
+                kind: "component",
+                identity: component.id.clone(),
+            });
+        }
+        validate_release_version(&component.version).map_err(|_| {
+            ManifestError::IncompatibleSelection(format!(
+                "component {} has invalid version {}",
+                component.id, component.version
+            ))
+        })?;
+        if component.version != composition.package.version {
+            return Err(ManifestError::IncompatibleSelection(format!(
+                "component {} version {} does not match package version {}",
+                component.id, component.version, composition.package.version
+            )));
+        }
+    }
+    if !component_ids.contains(LAYERED_BASE_COMPONENT) {
+        return Err(ManifestError::IncompatibleSelection(format!(
+            "every layered application requires {LAYERED_BASE_COMPONENT}"
+        )));
+    }
+
+    let mut module_ids = BTreeSet::new();
+    for module in &composition.modules {
+        validate_module_identifier(&module.id)?;
+        if !module_ids.insert(module.id.clone()) {
+            return Err(ManifestError::DuplicateIdentity {
+                kind: "module",
+                identity: module.id.clone(),
+            });
+        }
+        validate_release_version(&module.version).map_err(|_| {
+            ManifestError::IncompatibleSelection(format!(
+                "module {} has invalid version {}",
+                module.id, module.version
+            ))
+        })?;
+        if module.version != composition.package.version {
+            return Err(ManifestError::IncompatibleSelection(format!(
+                "module {} version {} does not match package version {}",
+                module.id, module.version, composition.package.version
+            )));
+        }
+    }
+
+    let identity_component = component_ids.contains(LAYERED_LEPTOS_IDENTITY_COMPONENT)
+        || component_ids.contains(IDENTITY_COMPONENT);
+    let identity_module = module_ids.contains(IDENTITY_MODULE);
+    if identity_component != identity_module {
+        return Err(ManifestError::IncompatibleSelection(
+            "the Identity component and module must be installed together".to_owned(),
+        ));
+    }
+    let identity_capabilities = [
+        ApplicationCapability::Authentication,
+        ApplicationCapability::Authorization,
+    ]
+    .into_iter()
+    .collect::<BTreeSet<_>>();
+    let expected_capabilities = if identity_module {
+        identity_capabilities
+    } else {
+        BTreeSet::new()
+    };
+    if composition.capabilities != expected_capabilities {
+        return Err(ManifestError::IncompatibleSelection(format!(
+            "composition capabilities {} do not match installed modules {}",
+            format_capability_set(&composition.capabilities),
+            format_string_set(&module_ids)
+        )));
+    }
+
+    Ok(())
+}
+
+fn validate_module_identifier(module: &str) -> Result<(), ManifestError> {
+    validate_component_identifier(module)
+        .map_err(|_| ManifestError::InvalidModule(module.to_owned()))
 }
 
 fn validate_component_identifier(component: &str) -> Result<(), ManifestError> {
@@ -619,8 +919,23 @@ impl Display for ManifestError {
             Self::InvalidComponent(component) => {
                 write!(formatter, "invalid component identifier: {component}")
             }
+            Self::InvalidModule(module) => {
+                write!(formatter, "invalid module identifier: {module}")
+            }
+            Self::InvalidPackage(package) => {
+                write!(formatter, "invalid component package identity: {package}")
+            }
             Self::UnsupportedComponent(component) => {
                 write!(formatter, "unsupported application component: {component}")
+            }
+            Self::MissingComposition => {
+                formatter.write_str("current application manifest has no composition state")
+            }
+            Self::LegacyManifestReadOnly => formatter.write_str(
+                "legacy application manifests are readable but cannot be serialized for mutation",
+            ),
+            Self::DuplicateIdentity { kind, identity } => {
+                write!(formatter, "duplicate {kind} identity: {identity}")
             }
             Self::EmptyDatabaseSelection => {
                 formatter.write_str("application manifest selects no database adapter")
@@ -641,7 +956,7 @@ impl std::error::Error for ManifestError {}
 mod tests {
     use super::*;
 
-    const CANONICAL: &str = r#"schema = 1
+    const CANONICAL: &str = r#"schema = 2
 application = "application"
 
 [framework]
@@ -649,16 +964,44 @@ repository = "https://github.com/furkancemalcaliskan/hegira.git"
 version = "v0.3.0"
 
 [selection]
+databases = ["sqlite"]
+clients = ["leptos"]
+
+[composition]
+capabilities = ["authentication", "authorization"]
+
+[composition.package]
+id = "hegira-canonical"
+version = "v0.3.0"
+
+[[composition.components]]
+id = "layered-leptos-identity"
+version = "v0.3.0"
+
+[[composition.components]]
+id = "layered-base"
+version = "v0.3.0"
+
+[[composition.modules]]
+id = "identity"
+version = "v0.3.0"
+"#;
+
+    const LEGACY_V1: &str = r#"schema = 1
+application = "application"
+
+[framework]
+repository = "https://github.com/furkancemalcaliskan/hegira.git"
+version = "v0.5.0"
+
+[selection]
 components = ["layered-base", "layered-leptos-identity"]
-databases = ["postgres", "sqlite"]
+databases = ["sqlite"]
 clients = ["leptos"]
 "#;
 
     fn mutable_manifest(version: &str) -> String {
-        CANONICAL.replace("v0.3.0", version).replace(
-            "databases = [\"postgres\", \"sqlite\"]",
-            "databases = [\"sqlite\"]",
-        )
+        CANONICAL.replace("v0.3.0", version)
     }
 
     #[test]
@@ -670,7 +1013,9 @@ clients = ["leptos"]
 
         assert_eq!(parsed, reparsed);
         assert_eq!(first, second);
-        assert!(first.find("postgres").unwrap() < first.find("sqlite").unwrap());
+        assert!(
+            first.find("layered-base").unwrap() < first.find("layered-leptos-identity").unwrap()
+        );
     }
 
     #[test]
@@ -694,7 +1039,7 @@ clients = ["leptos"]
     #[test]
     fn rejects_invalid_identity_framework_and_schema_values() {
         for invalid in [
-            CANONICAL.replace("schema = 1", "schema = 2"),
+            CANONICAL.replace("schema = 2", "schema = 3"),
             CANONICAL.replace("application = \"application\"", "application = \"../app\""),
             CANONICAL.replace(
                 "https://github.com/furkancemalcaliskan/hegira.git",
@@ -707,49 +1052,74 @@ clients = ["leptos"]
     }
 
     #[test]
-    fn rejects_unknown_and_incompatible_components() {
-        let unknown = CANONICAL.replace("layered-leptos-identity", "unknown-component");
-        assert!(matches!(
-            ApplicationManifest::from_toml(&unknown),
-            Err(ManifestError::UnsupportedComponent(_))
-        ));
-
+    fn rejects_inconsistent_component_module_and_capability_state() {
         let incompatible = CANONICAL.replace(
-            "components = [\"layered-base\", \"layered-leptos-identity\"]",
-            "components = [\"layered-base\"]",
+            "[[composition.modules]]\nid = \"identity\"\nversion = \"v0.3.0\"\n",
+            "",
         );
         assert!(matches!(
             ApplicationManifest::from_toml(&incompatible),
             Err(ManifestError::IncompatibleSelection(_))
         ));
+
+        let missing_capability = CANONICAL.replace(
+            "capabilities = [\"authentication\", \"authorization\"]",
+            "capabilities = [\"authentication\"]",
+        );
+        assert!(matches!(
+            ApplicationManifest::from_toml(&missing_capability),
+            Err(ManifestError::IncompatibleSelection(_))
+        ));
+    }
+
+    #[test]
+    fn rejects_duplicate_component_and_module_identities() {
+        let duplicate_component = CANONICAL.replace(
+            "[[composition.modules]]",
+            "[[composition.components]]\nid = \"layered-base\"\nversion = \"v0.3.0\"\n\n[[composition.modules]]",
+        );
+        assert!(matches!(
+            ApplicationManifest::from_toml(&duplicate_component),
+            Err(ManifestError::DuplicateIdentity {
+                kind: "component",
+                ..
+            })
+        ));
+
+        let duplicate_module = format!(
+            "{CANONICAL}\n[[composition.modules]]\nid = \"identity\"\nversion = \"v0.3.0\"\n"
+        );
+        assert!(matches!(
+            ApplicationManifest::from_toml(&duplicate_module),
+            Err(ManifestError::DuplicateIdentity { kind: "module", .. })
+        ));
     }
 
     #[test]
     fn rejects_empty_provider_and_client_selections() {
-        let no_database =
-            CANONICAL.replace("databases = [\"postgres\", \"sqlite\"]", "databases = []");
+        let no_database = CANONICAL.replace("databases = [\"sqlite\"]", "databases = []");
         assert!(matches!(
             ApplicationManifest::from_toml(&no_database),
-            Err(ManifestError::EmptyDatabaseSelection)
+            Err(ManifestError::IncompatibleSelection(_))
         ));
 
         let no_client = CANONICAL.replace("clients = [\"leptos\"]", "clients = []");
         assert!(matches!(
             ApplicationManifest::from_toml(&no_client),
-            Err(ManifestError::EmptyClientSelection)
+            Err(ManifestError::IncompatibleSelection(_))
         ));
     }
 
     #[test]
     fn compatible_manifest_matches_the_explicit_mutation_policy() {
-        let policy = MutationCompatibilityPolicy::for_framework_version("v0.5.0").unwrap();
-        let source = mutable_manifest("v0.5.0");
+        let policy = MutationCompatibilityPolicy::for_framework_version("v0.6.0").unwrap();
+        let source = mutable_manifest("v0.6.0");
 
         assert_eq!(
             assess_mutation_compatibility(&source, &policy).unwrap(),
             MutationCompatibility::Compatible
         );
-        assert_eq!(policy.framework_version(), "v0.5.0");
+        assert_eq!(policy.framework_version(), "v0.6.0");
     }
 
     #[test]
@@ -764,43 +1134,47 @@ clients = ["leptos"]
 
     #[test]
     fn unknown_schema_is_unsupported_without_relaxing_normal_parsing() {
-        let policy = MutationCompatibilityPolicy::for_framework_version("v0.5.0").unwrap();
-        let source = mutable_manifest("v0.5.0").replace("schema = 1", "schema = 2");
+        let policy = MutationCompatibilityPolicy::for_framework_version("v0.6.0").unwrap();
+        let source = mutable_manifest("v0.6.0").replace("schema = 2", "schema = 3");
 
         assert_eq!(
             assess_mutation_compatibility(&source, &policy).unwrap(),
             MutationCompatibility::Unsupported(MutationCompatibilityIssue {
                 field: MutationManifestField::Schema,
-                actual: "2".to_owned(),
-                expected: "1".to_owned(),
+                actual: "3".to_owned(),
+                expected: "2".to_owned(),
             })
         );
         assert!(matches!(
             ApplicationManifest::from_toml(&source),
-            Err(ManifestError::UnsupportedSchema(2))
+            Err(ManifestError::UnsupportedSchema(3))
         ));
     }
 
     #[test]
-    fn older_manifest_still_parses_but_is_not_mutation_compatible() {
-        let policy = MutationCompatibilityPolicy::for_framework_version("v0.5.0").unwrap();
-        let source = mutable_manifest("v0.4.0");
+    fn legacy_v1_manifest_is_readable_but_never_writable() {
+        let policy = MutationCompatibilityPolicy::for_framework_version("v0.6.0").unwrap();
+        let manifest = ApplicationManifest::from_toml(LEGACY_V1)
+            .expect("legacy v0.5 manifest should remain readable");
 
-        ApplicationManifest::from_toml(&source).expect("v0.4 manifest should still parse");
         assert_eq!(
-            assess_mutation_compatibility(&source, &policy).unwrap(),
+            assess_mutation_compatibility(LEGACY_V1, &policy).unwrap(),
             MutationCompatibility::Unsupported(MutationCompatibilityIssue {
-                field: MutationManifestField::FrameworkVersion,
-                actual: "v0.4.0".to_owned(),
-                expected: "v0.5.0".to_owned(),
+                field: MutationManifestField::Schema,
+                actual: "1".to_owned(),
+                expected: "2".to_owned(),
             })
         );
+        assert!(matches!(
+            manifest.to_toml(),
+            Err(ManifestError::LegacyManifestReadOnly)
+        ));
     }
 
     #[test]
     fn different_framework_identity_is_incompatible() {
-        let policy = MutationCompatibilityPolicy::for_framework_version("v0.5.0").unwrap();
-        let source = mutable_manifest("v0.5.0").replace(
+        let policy = MutationCompatibilityPolicy::for_framework_version("v0.6.0").unwrap();
+        let source = mutable_manifest("v0.6.0").replace(
             HEGIRA_FRAMEWORK_REPOSITORY,
             "https://github.com/example/hegira.git",
         );
@@ -817,27 +1191,29 @@ clients = ["leptos"]
 
     #[test]
     fn unsupported_components_name_the_conflicting_field() {
-        let policy = MutationCompatibilityPolicy::for_framework_version("v0.5.0").unwrap();
-        let source =
-            mutable_manifest("v0.5.0").replace("layered-leptos-identity", "layered-future-client");
+        let policy = MutationCompatibilityPolicy::for_framework_version("v0.6.0").unwrap();
+        let source = mutable_manifest("v0.6.0").replace(
+            "[[composition.modules]]",
+            "[[composition.components]]\nid = \"layered-future-client\"\nversion = \"v0.6.0\"\n\n[[composition.modules]]",
+        );
 
         let compatibility = assess_mutation_compatibility(&source, &policy).unwrap();
         let MutationCompatibility::Unsupported(issue) = compatibility else {
             panic!("unknown components must be unsupported");
         };
-        assert_eq!(issue.field, MutationManifestField::SelectionComponents);
+        assert_eq!(issue.field, MutationManifestField::CompositionComponents);
         assert_eq!(issue.actual, "layered-future-client");
     }
 
     #[test]
     fn noncanonical_adapter_cardinality_names_each_selection_field() {
-        let policy = MutationCompatibilityPolicy::for_framework_version("v0.5.0").unwrap();
-        let multiple_databases = mutable_manifest("v0.5.0").replace(
+        let policy = MutationCompatibilityPolicy::for_framework_version("v0.6.0").unwrap();
+        let multiple_databases = mutable_manifest("v0.6.0").replace(
             "databases = [\"sqlite\"]",
             "databases = [\"postgres\", \"sqlite\"]",
         );
         let no_clients =
-            mutable_manifest("v0.5.0").replace("clients = [\"leptos\"]", "clients = []");
+            mutable_manifest("v0.6.0").replace("clients = [\"leptos\"]", "clients = []");
 
         let MutationCompatibility::Incompatible(database_issue) =
             assess_mutation_compatibility(&multiple_databases, &policy).unwrap()
@@ -859,9 +1235,9 @@ clients = ["leptos"]
 
     #[test]
     fn malformed_current_schema_manifest_remains_invalid() {
-        let policy = MutationCompatibilityPolicy::for_framework_version("v0.5.0").unwrap();
+        let policy = MutationCompatibilityPolicy::for_framework_version("v0.6.0").unwrap();
         let invalid =
-            mutable_manifest("v0.5.0").replace(HEGIRA_FRAMEWORK_REPOSITORY, "file:///tmp/hegira");
+            mutable_manifest("v0.6.0").replace(HEGIRA_FRAMEWORK_REPOSITORY, "file:///tmp/hegira");
 
         assert!(matches!(
             assess_mutation_compatibility(&invalid, &policy),

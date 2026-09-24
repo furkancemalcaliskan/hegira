@@ -1,12 +1,13 @@
-package=hegira-canonical@v0.5.0
-framework=https://github.com/furkancemalcaliskan/hegira.git#v0.5.0
-digest=sha256:9450e008943a70d2b0ba1a22d89cb59e83509d492845b5f33115a6577e5c8914
+package=hegira-canonical@v0.6.0
+framework=https://github.com/furkancemalcaliskan/hegira.git#v0.6.0
+digest=sha256:cff6969dadc6e0155af7b944877dba5c61b6e0c4c3ea041d9a8a2665949c285e
 components=layered-base,layered-leptos-identity
 6986e1a96f1eaa98 .dockerignore
 4845a8e7ed4a8aa1 .env.example
 5993ab4d526be466 .gitignore
-1aff236c827c875b Cargo.toml
-2a1866fde05d96cd Dockerfile
+2a1d864019bcc81c Cargo.lock
+12538d0a22d55485 Cargo.toml
+db0ea2d9a05904a1 Dockerfile
 acb1f40708fef3bc apps/server/Cargo.toml
 3bde3764afe35806 apps/server/src/lib.rs
 9ea27e2845c55bb5 apps/server/src/main.rs
@@ -62,7 +63,7 @@ fba197e4c0ea8f58 crates/infrastructure/migrations/postgres/007_app_settings.sql
 f3ba72816961bb19 crates/infrastructure/migrations/sqlite/008_catalog_products.sql
 e4f90a35c538e114 crates/infrastructure/migrations/sqlite/009_retire_catalog_persistence.sql
 c7fcf44104381606 crates/infrastructure/src/audit/mod.rs
-e7dfb3ecc0d37529 crates/infrastructure/src/config.rs
+b3bd5ad804b3b836 crates/infrastructure/src/config.rs
 963ba6d322a3632c crates/infrastructure/src/database.rs
 9f4566e08ef15f01 crates/infrastructure/src/identity/authorization/mod.rs
 ed912714d31a65c0 crates/infrastructure/src/identity/authorization/service.rs
@@ -73,7 +74,7 @@ cf1381fa5f66e850 crates/infrastructure/src/identity/oauth/mod.rs
 2c4d87b9763b4f68 crates/infrastructure/src/identity/sessions/mod.rs
 4f0c462e9fee0d87 crates/infrastructure/src/identity/sessions/redis_session.rs
 a9ff15cbbfb6a6a4 crates/infrastructure/src/lib.rs
-c4723abea8cac667 crates/infrastructure/src/operations.rs
+a5cee92157b6a0cb crates/infrastructure/src/operations.rs
 7cb7827bbd706f3b crates/infrastructure/src/security/mod.rs
 0ed16015226b6cba crates/infrastructure/src/security/password_hasher.rs
 102d00dfca4c5e89 crates/infrastructure/src/security/token_service.rs
@@ -82,4 +83,4 @@ c4723abea8cac667 crates/infrastructure/src/operations.rs
 28acfa4312676a72 crates/presentation/src/http.rs
 d9d3e75ec6021d05 crates/presentation/src/lib.rs
 1309f45751c079e0 docker-compose.yml
-2602710aeabd1a4f hegira.toml
+7493d2e7b37fd8f2 hegira.toml

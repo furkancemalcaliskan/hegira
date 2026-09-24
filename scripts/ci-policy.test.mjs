@@ -55,6 +55,7 @@ jobs:
   generated-application:
     steps:
       - run: sh scripts/generated-application-check.sh
+      - run: sh scripts/generated-application-check.sh identity-added
   quality:
     if: always()
     needs:
@@ -83,8 +84,18 @@ const validGeneratedApplicationScript = `#!/usr/bin/env sh
 set -eu
 cargo run --locked --quiet -p hegira_cli -- new sqlite-application
 cargo run --locked --quiet -p hegira_cli -- new postgres-application
+test -f "$staging_parent/sqlite-source/Cargo.lock"
+cmp "$staging_parent/sqlite-source/Cargo.lock" "$staging_parent/postgres-source/Cargo.lock"
+development_root="$staging_parent/sqlite-development-validation"
+APP_ENV=sqlite cargo leptos build -p app_server \
+  --bin-features ssr,db-sqlite --lib-features hydrate \
+  --bin-cargo-args=--locked --lib-cargo-args=--locked
 for database in sqlite postgres; do
-  renderer --generated-source "$staging_parent/$database-source"
+  renderer --generated-source "$source"
+  renderer --identity-added-source "$source"
+  hegira -- new minimal-application --composition minimal --database "$database"
+  hegira -- component add identity
+  stage_application "$staging_parent/$database-source"
   hegira -- generate resource --application-root "$validation_root" --dry-run --json
   hegira -- generate resource --application-root "$validation_root" --json
   test ! -e "$staging_parent/$database-source/$generated_resource_path"
@@ -113,6 +124,27 @@ test("rejects generated application validation outside the quality gate", () => 
   );
 });
 
+test("rejects a missing component lifecycle gate", () => {
+  const errors = validateRepositoryValidationWorkflow(
+    validWorkflow.replace(
+      "sh scripts/generated-application-check.sh identity-added",
+      "true",
+    ),
+  );
+  assert.ok(
+    errors.some((error) => error.includes("component lifecycle validation")),
+  );
+});
+
+test("rejects a separate component lifecycle status context", () => {
+  const errors = validateRepositoryValidationWorkflow(
+    `${validWorkflow}\n  component-lifecycle:\n    steps:\n      - run: true\n`,
+  );
+  assert.ok(
+    errors.some((error) => error.includes("existing generated-application job")),
+  );
+});
+
 test("rejects a quality gate that ignores generated application failure", () => {
   const errors = validateRepositoryValidationWorkflow(
     validWorkflow.replace(
@@ -131,6 +163,75 @@ test("accepts the generated and mutated application contract", () => {
   assert.deepEqual(
     validateGeneratedApplicationScript(validGeneratedApplicationScript),
     [],
+  );
+});
+
+test("rejects lifecycle validation without the installed Identity source", () => {
+  const errors = validateGeneratedApplicationScript(
+    validGeneratedApplicationScript.replace('--identity-added-source "$source"', ""),
+  );
+  assert.ok(
+    errors.some((error) => error.includes("installed Identity CLI source")),
+  );
+});
+
+test("rejects a missing documented development build", () => {
+  const errors = validateGeneratedApplicationScript(
+    validGeneratedApplicationScript.replace(
+      "APP_ENV=sqlite cargo leptos build -p app_server",
+      "true",
+    ),
+  );
+  assert.ok(
+    errors.some((error) => error.includes("documented development build")),
+  );
+});
+
+test("rejects replacing the development build with a release build", () => {
+  const errors = validateGeneratedApplicationScript(
+    validGeneratedApplicationScript.replace(
+      "cargo leptos build -p app_server",
+      "cargo leptos build --release -p app_server",
+    ),
+  );
+  assert.ok(
+    errors.some((error) => error.includes("non-release development build")),
+  );
+});
+
+test("rejects generated applications without the canonical Cargo lock", () => {
+  const errors = validateGeneratedApplicationScript(
+    validGeneratedApplicationScript.replace(
+      'test -f "$staging_parent/sqlite-source/Cargo.lock"',
+      "true",
+    ),
+  );
+  assert.ok(
+    errors.some((error) => error.includes("canonical application lockfile")),
+  );
+});
+
+test("rejects generated applications without byte-identical provider locks", () => {
+  const errors = validateGeneratedApplicationScript(
+    validGeneratedApplicationScript.replace(
+      'cmp "$staging_parent/sqlite-source/Cargo.lock" "$staging_parent/postgres-source/Cargo.lock"',
+      "true",
+    ),
+  );
+  assert.ok(
+    errors.some((error) => error.includes("byte-identical provider lockfiles")),
+  );
+});
+
+test("rejects unlocked Cargo Leptos builds", () => {
+  const errors = validateGeneratedApplicationScript(
+    validGeneratedApplicationScript.replace(
+      "--bin-cargo-args=--locked --lib-cargo-args=--locked",
+      "",
+    ),
+  );
+  assert.ok(
+    errors.some((error) => error.includes("locked Cargo Leptos")),
   );
 });
 

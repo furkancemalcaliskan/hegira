@@ -489,15 +489,33 @@ mod tests {
     fn specification(database: &str) -> ResourceSpecification {
         let manifest = ApplicationManifest::from_toml(&format!(
             r#"
-schema = 1
+schema = 2
 application = "sample"
 [framework]
 repository = "https://example.invalid/hegira.git"
-version = "v0.5.0"
+version = "v0.6.0"
 [selection]
-components = ["layered-base", "layered-leptos-identity"]
 databases = ["{database}"]
 clients = ["leptos"]
+
+[composition]
+capabilities = ["authentication", "authorization"]
+
+[composition.package]
+id = "hegira-canonical"
+version = "v0.6.0"
+
+[[composition.components]]
+id = "layered-base"
+version = "v0.6.0"
+
+[[composition.components]]
+id = "layered-leptos-identity"
+version = "v0.6.0"
+
+[[composition.modules]]
+id = "identity"
+version = "v0.6.0"
 "#
         ))
         .unwrap();
@@ -536,13 +554,13 @@ clients = ["leptos"]
             },
         )
         .unwrap();
-        assert_eq!(planned.migration_version(), 1);
+        assert_eq!(planned.migration_version(), 1_000_000);
         assert_eq!(
             planned.migration_path(),
-            "crates/infrastructure/migrations/sqlite/001_order_item.sql"
+            "crates/infrastructure/migrations/sqlite/1000000_order_item.sql"
         );
         assert_eq!(planned.plan().changes().len(), 4);
-        let migration = content(planned.plan(), "001_order_item.sql");
+        let migration = content(planned.plan(), "1000000_order_item.sql");
         assert!(migration.contains("id BLOB PRIMARY KEY"));
         assert!(migration.contains("active INTEGER NOT NULL CHECK (active IN (0, 1))"));
         assert!(migration.contains("('order-items.create')"));
@@ -574,7 +592,7 @@ clients = ["leptos"]
             },
         )
         .unwrap();
-        let migration = content(planned.plan(), "001_order_item.sql");
+        let migration = content(planned.plan(), "1000000_order_item.sql");
         assert!(migration.contains("id UUID PRIMARY KEY"));
         assert!(migration.contains("published_at TIMESTAMPTZ"));
         let source = content(planned.plan(), "src/order_item.rs");
@@ -621,7 +639,7 @@ clients = ["leptos"]
             },
         )
         .unwrap();
-        assert_eq!(planned.migration_version(), 5);
+        assert_eq!(planned.migration_version(), 1_000_000);
         assert!(planned.plan().changes().iter().all(|change| {
             change.operation() != ChangeOperation::Edit || !change.path().as_str().ends_with(".sql")
         }));

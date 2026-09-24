@@ -5,6 +5,5 @@ components = ["layered-leptos-identity"]
 [variables]
 application_name = "application"
 client_adapter = "leptos"
-component_id = "layered-leptos-identity"
 database_adapter = "sqlite"
 database_feature = "db-sqlite"

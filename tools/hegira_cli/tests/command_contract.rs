@@ -53,7 +53,223 @@ fn top_level_help_is_human_readable_output() {
     assert!(output.contains("Usage: hegira <COMMAND>"));
     assert!(output.contains("new"));
     assert!(output.contains("inspect"));
+    assert!(output.contains("doctor"));
+    assert!(output.contains("component"));
     assert!(output.contains("generate"));
+}
+
+#[test]
+fn component_add_help_exposes_reviewable_mutation_options() {
+    let result = hegira(&["component", "add", "--help"]);
+
+    assert!(result.status.success());
+    assert!(result.stderr.is_empty());
+    let output = String::from_utf8(result.stdout).expect("help should be UTF-8");
+    assert!(output.contains("Usage: hegira component add"));
+    assert!(output.contains("<COMPONENT>"));
+    assert!(output.contains("--application-root"));
+    assert!(output.contains("--dry-run"));
+    assert!(output.contains("--json"));
+}
+
+#[test]
+fn repeated_component_add_is_a_stable_non_destructive_conflict() {
+    let output = TestDirectory::new("component-already-installed");
+    let application = output.path().join("application");
+    let created = hegira(&[
+        "new",
+        "component-app",
+        "--destination",
+        path_argument(&application),
+    ]);
+    assert!(created.status.success(), "{:?}", created.stderr);
+    let before = output_tree(&application);
+
+    let result = hegira_at(
+        &application,
+        &["component", "add", "layered-leptos-identity"],
+    );
+
+    assert_eq!(result.status.code(), Some(4));
+    assert!(result.stdout.is_empty());
+    assert!(String::from_utf8_lossy(&result.stderr).contains("already installed"));
+    assert_eq!(output_tree(&application), before);
+}
+
+#[test]
+fn identity_installation_is_reviewable_atomic_and_repeated_add_is_safe() {
+    for database in ["sqlite", "postgres"] {
+        let output = TestDirectory::new(&format!("identity-install-{database}"));
+        let application = output.path().join("application");
+        let created = hegira(&[
+            "new",
+            "component-app",
+            "--destination",
+            path_argument(&application),
+            "--composition",
+            "minimal",
+            "--database",
+            database,
+        ]);
+        assert!(created.status.success(), "{:?}", created.stderr);
+        let before = output_tree(&application);
+
+        let dry_run = hegira_at(
+            &application,
+            &["component", "add", "identity", "--dry-run", "--json"],
+        );
+        assert!(dry_run.status.success(), "{:?}", dry_run.stderr);
+        let dry_run: serde_json::Value = serde_json::from_slice(&dry_run.stdout).unwrap();
+        assert_eq!(dry_run["mode"], "dry-run");
+        assert_eq!(dry_run["outcome"], "planned");
+        assert_eq!(output_tree(&application), before);
+
+        let applied = hegira_at(&application, &["component", "add", "identity", "--json"]);
+        assert!(applied.status.success(), "{:?}", applied.stderr);
+        let applied: serde_json::Value = serde_json::from_slice(&applied.stdout).unwrap();
+        assert_eq!(applied["outcome"], "applied");
+        assert_eq!(dry_run["plan"], applied["plan"]);
+
+        let manifest = fs::read_to_string(application.join("hegira.toml")).unwrap();
+        assert!(manifest.contains("id = \"identity\""));
+        assert!(manifest.contains("\"authentication\""));
+        assert!(manifest.contains("\"authorization\""));
+        let operations =
+            fs::read_to_string(application.join("crates/infrastructure/src/operations.rs"))
+                .unwrap();
+        assert!(operations.contains(&format!(
+            "identity_sqlx::identity::migrations::{database}_migration_source()"
+        )));
+        let routes = fs::read_to_string(application.join("apps/web/src/routes.rs")).unwrap();
+        assert!(routes.contains("<identity_leptos::identity::routes::IdentityRoutes/>"));
+        assert!(!routes.contains("<Route path=StaticSegment(\"\") view=DashboardRoute/>"));
+
+        let after = output_tree(&application);
+        let repeated = hegira_at(&application, &["component", "add", "identity"]);
+        assert_eq!(repeated.status.code(), Some(4));
+        assert!(String::from_utf8_lossy(&repeated.stderr).contains("already installed"));
+        assert_eq!(output_tree(&application), after);
+    }
+}
+
+#[test]
+fn identity_installation_preserves_an_occupied_application_artifact() {
+    let output = TestDirectory::new("identity-install-occupied");
+    let application = output.path().join("application");
+    let created = hegira(&[
+        "new",
+        "component-app",
+        "--destination",
+        path_argument(&application),
+        "--composition",
+        "minimal",
+    ]);
+    assert!(created.status.success(), "{:?}", created.stderr);
+    fs::write(
+        application.join("apps/server/src/identity_runtime.rs"),
+        "// owned by app\n",
+    )
+    .unwrap();
+    let before = output_tree(&application);
+
+    let result = hegira_at(&application, &["component", "add", "identity"]);
+    assert_eq!(result.status.code(), Some(4));
+    assert!(String::from_utf8_lossy(&result.stderr).contains("identity_runtime.rs"));
+    assert_eq!(output_tree(&application), before);
+}
+
+#[test]
+fn unknown_component_fails_validation_without_application_writes() {
+    let output = TestDirectory::new("component-unknown");
+    let application = output.path().join("application");
+    let created = hegira(&[
+        "new",
+        "component-app",
+        "--destination",
+        path_argument(&application),
+    ]);
+    assert!(created.status.success(), "{:?}", created.stderr);
+    let before = output_tree(&application);
+
+    let result = hegira_at(
+        &application,
+        &[
+            "component",
+            "add",
+            "unknown-component",
+            "--dry-run",
+            "--json",
+        ],
+    );
+
+    assert_eq!(result.status.code(), Some(3));
+    assert!(result.stdout.is_empty());
+    assert!(String::from_utf8_lossy(&result.stderr).contains("missing-component"));
+    assert_eq!(output_tree(&application), before);
+}
+
+#[test]
+fn component_without_bundled_contributions_cannot_publish_partial_state() {
+    let output = TestDirectory::new("component-without-contributions");
+    let application = output.path().join("application");
+    let created = hegira(&[
+        "new",
+        "component-app",
+        "--destination",
+        path_argument(&application),
+    ]);
+    assert!(created.status.success(), "{:?}", created.stderr);
+    let version = format!("v{}", env!("CARGO_PKG_VERSION"));
+    fs::write(
+        application.join("hegira.toml"),
+        format!(
+            r#"schema = 2
+application = "component-app"
+
+[framework]
+repository = "https://github.com/furkancemalcaliskan/hegira.git"
+version = "{version}"
+
+[selection]
+databases = ["sqlite"]
+clients = ["leptos"]
+
+[composition]
+capabilities = []
+
+[composition.package]
+id = "hegira-canonical"
+version = "{version}"
+
+[[composition.components]]
+id = "layered-base"
+version = "{version}"
+"#
+        ),
+    )
+    .unwrap();
+    let before = output_tree(&application);
+
+    let result = hegira_at(
+        output.path(),
+        &[
+            "component",
+            "add",
+            "layered-leptos-identity",
+            "--application-root",
+            path_argument(&application),
+            "--dry-run",
+            "--json",
+        ],
+    );
+
+    assert_eq!(result.status.code(), Some(3));
+    assert!(result.stdout.is_empty());
+    assert!(
+        String::from_utf8_lossy(&result.stderr)
+            .contains("does not declare additive installation contributions")
+    );
+    assert_eq!(output_tree(&application), before);
 }
 
 #[test]
@@ -143,7 +359,7 @@ fn complete_resource_dry_run_and_apply_share_one_atomic_plan() {
         "crates/infrastructure/src/order_item.rs",
         "crates/presentation/src/order_item.rs",
         "apps/web/src/order_item.rs",
-        "crates/infrastructure/migrations/sqlite/010_order_item.sql",
+        "crates/infrastructure/migrations/sqlite/1000000_order_item.sql",
     ] {
         assert!(application.join(path).is_file(), "missing {path}");
     }
@@ -169,6 +385,180 @@ fn complete_resource_dry_run_and_apply_share_one_atomic_plan() {
     assert!(repeated.stdout.is_empty());
     assert!(String::from_utf8_lossy(&repeated.stderr).contains("collides"));
     assert_eq!(output_tree(&application), after);
+}
+
+#[test]
+fn minimal_resource_generation_fails_before_writes_with_stable_capability_diagnostics() {
+    for database in ["sqlite", "postgres"] {
+        let output = TestDirectory::new(&format!("resource-capabilities-{database}"));
+        let application = output.path().join("application");
+        let created = hegira(&[
+            "new",
+            "resource-app",
+            "--destination",
+            path_argument(&application),
+            "--composition",
+            "minimal",
+            "--database",
+            database,
+        ]);
+        assert!(created.status.success(), "{:?}", created.stderr);
+        let before = output_tree(&application);
+
+        let human = hegira_at(
+            &application,
+            &[
+                "generate",
+                "resource",
+                "OrderItem",
+                "--field",
+                "name:string",
+            ],
+        );
+        assert_eq!(human.status.code(), Some(3));
+        assert!(human.stdout.is_empty());
+        let diagnostic = String::from_utf8(human.stderr).unwrap();
+        assert!(diagnostic.contains("missing: authentication, authorization"));
+        assert!(diagnostic.contains("hegira component add identity"));
+        assert_eq!(output_tree(&application), before);
+
+        let json_arguments = [
+            "generate",
+            "resource",
+            "OrderItem",
+            "--field",
+            "name:string",
+            "--dry-run",
+            "--json",
+        ];
+        let first = hegira_at(&application, &json_arguments);
+        let second = hegira_at(&application, &json_arguments);
+        assert_eq!(first.status.code(), Some(3));
+        assert_eq!(first.stdout, second.stdout);
+        assert!(first.stdout.is_empty());
+        assert_eq!(first.stderr, second.stderr);
+        let diagnostic: serde_json::Value = serde_json::from_slice(&first.stderr).unwrap();
+        assert_eq!(diagnostic["output_schema"], 1);
+        assert_eq!(diagnostic["code"], "missing-capabilities");
+        assert_eq!(
+            diagnostic["required"],
+            serde_json::json!(["authentication", "authorization"])
+        );
+        assert_eq!(diagnostic["missing"], diagnostic["required"]);
+        assert!(
+            diagnostic["hint"]
+                .as_str()
+                .unwrap()
+                .contains("hegira component add identity")
+        );
+        assert_eq!(output_tree(&application), before);
+    }
+}
+
+#[test]
+fn identity_added_minimal_resource_uses_its_own_web_shell_and_atomic_plan() {
+    for database in ["sqlite", "postgres"] {
+        let output = TestDirectory::new(&format!("minimal-resource-{database}"));
+        let application = output.path().join("application");
+        let created = hegira(&[
+            "new",
+            "resource-app",
+            "--destination",
+            path_argument(&application),
+            "--composition",
+            "minimal",
+            "--database",
+            database,
+        ]);
+        assert!(created.status.success(), "{:?}", created.stderr);
+        let installed = hegira_at(&application, &["component", "add", "identity"]);
+        assert!(installed.status.success(), "{:?}", installed.stderr);
+        let before = output_tree(&application);
+        let arguments = [
+            "generate",
+            "resource",
+            "OrderItem",
+            "--field",
+            "name:string",
+            "--json",
+        ];
+        let preview = hegira_at(
+            &application,
+            &[
+                "generate",
+                "resource",
+                "OrderItem",
+                "--field",
+                "name:string",
+                "--dry-run",
+                "--json",
+            ],
+        );
+        assert!(preview.status.success(), "{:?}", preview.stderr);
+        assert_eq!(output_tree(&application), before);
+        let applied = hegira_at(&application, &arguments);
+        assert!(applied.status.success(), "{:?}", applied.stderr);
+        let preview: serde_json::Value = serde_json::from_slice(&preview.stdout).unwrap();
+        let applied: serde_json::Value = serde_json::from_slice(&applied.stdout).unwrap();
+        assert_eq!(preview["plan"], applied["plan"]);
+        let web = fs::read_to_string(application.join("apps/web/src/order_item.rs")).unwrap();
+        assert!(web.contains("MinimalI18n"));
+        assert!(web.contains("<RequirePermission permission=PermissionName(LIST_PERMISSION)>"));
+        assert!(!web.contains("app::layout"));
+        let dashboard = fs::read_to_string(application.join("apps/web/src/dashboard.rs")).unwrap();
+        assert!(dashboard.contains("href=\"/order-items\""));
+        assert!(dashboard.contains("LIST_PERMISSION"));
+        let routes = fs::read_to_string(application.join("apps/web/src/routes.rs")).unwrap();
+        assert!(routes.contains("StaticSegment(\"order-items\")"));
+        let infrastructure_manifest =
+            fs::read_to_string(application.join("crates/infrastructure/Cargo.toml")).unwrap();
+        assert!(infrastructure_manifest.contains("app_application = { workspace = true }"));
+        assert!(infrastructure_manifest.contains("app_domain = { workspace = true }"));
+        let web_manifest = fs::read_to_string(application.join("apps/web/Cargo.toml")).unwrap();
+        assert!(web_manifest.contains("app_application_contracts = { workspace = true }"));
+        assert!(web_manifest.contains("leptos_support = { workspace = true }"));
+        let runtime =
+            fs::read_to_string(application.join("apps/server/src/identity_runtime.rs")).unwrap();
+        assert!(runtime.contains("pub fn services(&self) -> &AppServices"));
+        assert!(runtime.contains("app_presentation::order_item::openapi_document()"));
+        let after = output_tree(&application);
+        let repeated = hegira_at(&application, &arguments);
+        assert_eq!(repeated.status.code(), Some(4));
+        assert_eq!(output_tree(&application), after);
+    }
+}
+
+#[test]
+fn identity_added_minimal_resource_missing_integration_fails_without_partial_writes() {
+    let output = TestDirectory::new("minimal-resource-missing-integration");
+    let application = output.path().join("application");
+    let created = hegira(&[
+        "new",
+        "resource-app",
+        "--destination",
+        path_argument(&application),
+        "--composition",
+        "minimal",
+    ]);
+    assert!(created.status.success(), "{:?}", created.stderr);
+    let installed = hegira_at(&application, &["component", "add", "identity"]);
+    assert!(installed.status.success(), "{:?}", installed.stderr);
+    fs::remove_file(application.join("apps/web/src/dashboard.rs")).unwrap();
+    let before = output_tree(&application);
+    let result = hegira_at(
+        &application,
+        &[
+            "generate",
+            "resource",
+            "OrderItem",
+            "--field",
+            "name:string",
+        ],
+    );
+    assert_eq!(result.status.code(), Some(4));
+    assert!(result.stdout.is_empty());
+    assert!(String::from_utf8_lossy(&result.stderr).contains("apps/web/src/dashboard.rs"));
+    assert_eq!(output_tree(&application), before);
 }
 
 #[test]
@@ -251,7 +641,8 @@ fn sqlite_migration_dry_run_and_apply_share_one_append_only_plan() {
     assert_eq!(dry_run["mode"], "dry-run");
     assert_eq!(dry_run["outcome"], "planned");
     assert_eq!(dry_run["changed_files"], 2);
-    let migration = application.join("crates/infrastructure/migrations/sqlite/010_add_orders.sql");
+    let migration =
+        application.join("crates/infrastructure/migrations/sqlite/1000000_add_orders.sql");
     let state = application.join("crates/infrastructure/migrations/.hegira-generator.toml");
     assert!(!migration.exists());
     assert!(!state.exists());
@@ -281,7 +672,7 @@ fn sqlite_migration_dry_run_and_apply_share_one_append_only_plan() {
     assert!(
         String::from_utf8(repeated.stderr)
             .unwrap()
-            .contains("already exists at version 10")
+            .contains("already exists at version 1000000")
     );
 }
 
@@ -313,16 +704,16 @@ fn postgres_manifest_selects_only_the_postgres_migration_history() {
     assert!(result.status.success(), "{:?}", result.stderr);
     assert!(
         application
-            .join("crates/infrastructure/migrations/postgres/023_add_orders.sql")
+            .join("crates/infrastructure/migrations/postgres/1000000_add_orders.sql")
             .is_file()
     );
     assert!(
         !application
-            .join("crates/infrastructure/migrations/sqlite/010_add_orders.sql")
+            .join("crates/infrastructure/migrations/sqlite/1000000_add_orders.sql")
             .exists()
     );
     let source = fs::read_to_string(
-        application.join("crates/infrastructure/migrations/postgres/023_add_orders.sql"),
+        application.join("crates/infrastructure/migrations/postgres/1000000_add_orders.sql"),
     )
     .unwrap();
     assert!(source.contains("Application-owned PostgreSQL migration"));
@@ -439,7 +830,7 @@ fn interactive_selection_reprompts_and_maps_to_supported_values() {
     assert!(diagnostics.is_empty());
     assert!(stdout.contains("Please choose `sqlite` or `postgres`."));
     assert!(stdout.contains("The currently supported client is `leptos`."));
-    assert!(stdout.contains("The currently supported component is `identity`."));
+    assert!(stdout.contains("Please choose `identity` or `minimal`."));
     assert!(stdout.contains("Destination: "));
     assert!(stdout.contains("Database: postgres"));
     let manifest = fs::read_to_string(destination.join("hegira.toml"))
@@ -488,6 +879,7 @@ fn new_generates_the_default_layered_application_without_prompts() {
     let stdout = String::from_utf8(result.stdout).expect("output should be UTF-8");
     assert!(stdout.contains("Created my-application"));
     assert!(stdout.contains("APP_ENV=sqlite cargo leptos watch"));
+    assert!(stdout.contains("--bin-cargo-args=--locked --lib-cargo-args=--locked"));
 
     let manifest = fs::read_to_string(destination.join("hegira.toml"))
         .expect("application manifest should exist");
@@ -502,8 +894,11 @@ fn new_generates_the_default_layered_application_without_prompts() {
         .expect("workspace manifest should exist");
     assert!(server_manifest.contains("default = [\"db-sqlite\"]"));
     assert!(workspace_manifest.contains("git = \"https://github.com/"));
-    assert!(workspace_manifest.contains("tag = \"v0.5.0\""));
+    assert!(workspace_manifest.contains("tag = \"v0.6.0\""));
     assert!(!workspace_manifest.contains(repository_root().to_string_lossy().as_ref()));
+    let lockfile = fs::read_to_string(destination.join("Cargo.lock"))
+        .expect("application lockfile should exist");
+    assert!(lockfile.contains("?tag=v0.6.0#"));
 }
 
 #[test]
@@ -528,6 +923,7 @@ fn new_represents_an_explicit_postgres_selection_consistently() {
     let stdout = String::from_utf8(result.stdout).expect("output should be UTF-8");
     assert!(stdout.contains("APP_ENV=development cargo leptos watch"));
     assert!(stdout.contains("--bin-features ssr,db-postgres"));
+    assert!(stdout.contains("--bin-cargo-args=--locked --lib-cargo-args=--locked"));
 
     let manifest = fs::read_to_string(destination.join("hegira.toml"))
         .expect("application manifest should exist");
@@ -593,6 +989,12 @@ fn inspect_reports_the_discovered_application_without_writing() {
         path_argument(&application),
     ]);
     assert!(created.status.success(), "{:?}", created.stderr);
+    let runtime_secret = "inspection-runtime-secret-must-not-appear";
+    fs::write(
+        application.join("config/development.yaml"),
+        format!("private_value: {runtime_secret}\n"),
+    )
+    .unwrap();
     let before = output_tree(&application);
 
     let result = hegira_at(&application.join("apps/web/src"), &["inspect"]);
@@ -605,12 +1007,399 @@ fn inspect_reports_the_discovered_application_without_writing() {
         "Root: {}\n",
         fs::canonicalize(&application).unwrap().display()
     )));
-    assert!(output.contains("Manifest schema: 1\n"));
+    assert!(output.contains("Manifest schema: 2\n"));
     assert!(output.contains("Framework: https://github.com/furkancemalcaliskan/hegira.git"));
-    assert!(output.contains("Components: layered-base, layered-leptos-identity\n"));
+    assert!(output.contains("Composition status: compatible\n"));
+    assert!(output.contains("Component package: hegira-canonical @ v0.6.0\n"));
+    assert!(
+        output.contains("Components: layered-base @ v0.6.0, layered-leptos-identity @ v0.6.0\n")
+    );
+    assert!(output.contains("Modules: identity @ v0.6.0\n"));
+    assert!(output.contains("Capabilities: authentication, authorization\n"));
     assert!(output.contains("Databases: sqlite\n"));
     assert!(output.contains("Clients: leptos\n"));
     assert!(output.ends_with("Mutation compatibility: compatible\n"));
+    assert!(!output.contains(runtime_secret));
+    assert!(!output.contains(repository_root().to_string_lossy().as_ref()));
+    assert_eq!(output_tree(&application), before);
+}
+
+#[test]
+fn doctor_reports_default_minimal_and_installed_identity_without_application_writes() {
+    for composition in ["identity", "minimal"] {
+        let root = TestDirectory::new(&format!("doctor-{composition}"));
+        let application = root.path().join("application");
+        let created = hegira(&[
+            "new",
+            "doctor-app",
+            "--destination",
+            path_argument(&application),
+            "--composition",
+            composition,
+        ]);
+        assert!(created.status.success(), "{:?}", created.stderr);
+        let before = output_tree(&application);
+
+        let first = hegira_at(&application, &["doctor", "--json"]);
+        let second = hegira_at(&application, &["doctor", "--json"]);
+        assert_eq!(first.status.code(), Some(0));
+        assert!(first.stderr.is_empty());
+        assert_eq!(first.stdout, second.stdout);
+        let report: serde_json::Value = serde_json::from_slice(&first.stdout).unwrap();
+        assert_eq!(report["output_schema"], 1);
+        assert_eq!(report["status"], "warning");
+        assert_eq!(report["checks"][0]["code"], "manifest");
+        assert_eq!(report["checks"][0]["status"], "pass");
+        assert_eq!(report["checks"][1]["code"], "composition");
+        assert_eq!(report["checks"][1]["status"], "pass");
+        assert_eq!(report["checks"][3]["code"], "managed-integrations");
+        assert_eq!(report["checks"][3]["status"], "pass");
+        assert_eq!(report["checks"][6]["code"], "cargo");
+        assert_eq!(report["checks"][6]["status"], "warning");
+        assert!(!String::from_utf8_lossy(&first.stdout).contains(path_argument(&application)));
+        assert_eq!(output_tree(&application), before);
+
+        let human = hegira_at(&application, &["doctor"]);
+        assert_eq!(human.status.code(), Some(0));
+        assert!(human.stderr.is_empty());
+        let human = String::from_utf8(human.stdout).unwrap();
+        assert!(human.contains("[PASS] managed-integrations"));
+        assert!(human.contains("[WARN] cargo-leptos"));
+        assert!(human.contains("Doctor status: warning"));
+        assert_eq!(output_tree(&application), before);
+
+        if composition == "minimal" {
+            let installed = hegira_at(&application, &["component", "add", "identity"]);
+            assert!(installed.status.success(), "{:?}", installed.stderr);
+            let installed_tree = output_tree(&application);
+            let report = hegira_at(&application, &["doctor", "--json"]);
+            assert_eq!(report.status.code(), Some(0));
+            let report: serde_json::Value = serde_json::from_slice(&report.stdout).unwrap();
+            assert_eq!(report["checks"][3]["status"], "pass");
+            assert_eq!(output_tree(&application), installed_tree);
+        }
+    }
+}
+
+#[test]
+fn doctor_reports_recovery_and_integration_failures_without_disclosing_source() {
+    let root = TestDirectory::new("doctor-failure");
+    let application = root.path().join("application");
+    assert!(
+        hegira(&[
+            "new",
+            "doctor-app",
+            "--destination",
+            path_argument(&application)
+        ])
+        .status
+        .success()
+    );
+
+    let server_path = application.join("apps/server/src/server.rs");
+    let server = fs::read_to_string(&server_path).unwrap();
+    let secret = "doctor-source-secret-must-not-appear";
+    fs::write(
+        &server_path,
+        server.replace("identity_http::bearer_api_routes", secret),
+    )
+    .unwrap();
+    fs::write(application.join(".hegira-mutation.lock"), secret).unwrap();
+    let before = output_tree(&application);
+
+    let result = hegira_at(&application, &["doctor", "--json"]);
+    assert_eq!(result.status.code(), Some(3));
+    assert!(result.stderr.is_empty());
+    let output = String::from_utf8(result.stdout).unwrap();
+    let report: serde_json::Value = serde_json::from_str(&output).unwrap();
+    assert_eq!(report["status"], "failure");
+    assert_eq!(report["checks"][2]["code"], "recovery-marker");
+    assert_eq!(report["checks"][2]["status"], "failure");
+    assert_eq!(report["checks"][3]["code"], "managed-integrations");
+    assert_eq!(report["checks"][3]["status"], "failure");
+    assert!(!output.contains(secret));
+    assert!(!output.contains(path_argument(&application)));
+    assert_eq!(output_tree(&application), before);
+
+    let human = hegira_at(&application, &["doctor"]);
+    assert_eq!(human.status.code(), Some(3));
+    let human = String::from_utf8(human.stdout).unwrap();
+    assert!(human.contains("[FAIL] recovery-marker:"));
+    assert!(human.contains("[FAIL] managed-integrations:"));
+    assert!(human.ends_with("Doctor status: failure\n"));
+    assert!(!human.contains(secret));
+    assert_eq!(output_tree(&application), before);
+}
+
+#[test]
+fn doctor_describes_postgres_without_probing_a_database() {
+    let root = TestDirectory::new("doctor-postgres");
+    let application = root.path().join("application");
+    let created = hegira(&[
+        "new",
+        "doctor-app",
+        "--destination",
+        path_argument(&application),
+        "--database",
+        "postgres",
+    ]);
+    assert!(created.status.success(), "{:?}", created.stderr);
+    let before = output_tree(&application);
+
+    let result = hegira_at(&application, &["doctor", "--json"]);
+    assert_eq!(result.status.code(), Some(0));
+    let report: serde_json::Value = serde_json::from_slice(&result.stdout).unwrap();
+    assert_eq!(report["checks"][4]["code"], "database-provider");
+    assert_eq!(report["checks"][4]["status"], "warning");
+    assert!(
+        report["checks"][4]["message"]
+            .as_str()
+            .unwrap()
+            .contains("not probed")
+    );
+    assert_eq!(output_tree(&application), before);
+}
+
+#[cfg(unix)]
+#[test]
+fn doctor_rejects_symlinked_managed_source_without_reading_its_target() {
+    use std::os::unix::fs::symlink;
+
+    let root = TestDirectory::new("doctor-symlink");
+    let application = root.path().join("application");
+    assert!(
+        hegira(&[
+            "new",
+            "doctor-app",
+            "--destination",
+            path_argument(&application)
+        ])
+        .status
+        .success()
+    );
+    let secret = "doctor-symlink-target-secret-must-not-appear";
+    let secret_path = root.path().join("secret.txt");
+    fs::write(&secret_path, secret).unwrap();
+    let routes = application.join("apps/web/src/routes.rs");
+    fs::remove_file(&routes).unwrap();
+    symlink(&secret_path, &routes).unwrap();
+
+    let result = hegira_at(&application, &["doctor", "--json"]);
+    assert_eq!(result.status.code(), Some(3));
+    let output = String::from_utf8(result.stdout).unwrap();
+    let report: serde_json::Value = serde_json::from_str(&output).unwrap();
+    assert_eq!(report["checks"][3]["status"], "failure");
+    assert!(!output.contains(secret));
+    assert!(!output.contains(path_argument(&secret_path)));
+    assert_eq!(fs::read_to_string(&secret_path).unwrap(), secret);
+}
+
+#[cfg(unix)]
+fn doctor_with_stubbed_tools(
+    fixture: &TestDirectory,
+    application: &Path,
+    wasm_installed: bool,
+    arguments: &[&str],
+) -> Output {
+    use std::os::unix::fs::PermissionsExt;
+
+    let tools = fixture.path().join("tools");
+    let home = fixture.path().join("home");
+    fs::create_dir_all(&tools).unwrap();
+    fs::create_dir_all(&home).unwrap();
+    for binary in ["rustc", "cargo", "cargo-leptos", "node", "npm"] {
+        let path = tools.join(binary);
+        fs::write(&path, "#!/bin/sh\nexit 0\n").unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
+    }
+    let rustup = tools.join("rustup");
+    let target = if wasm_installed {
+        "wasm32-unknown-unknown"
+    } else {
+        "x86_64-unknown-linux-gnu"
+    };
+    fs::write(
+        &rustup,
+        format!(
+            "#!/bin/sh\nif [ -n \"${{APP__SECURITY__JWT_SECRET:-}}\" ]; then exit 77; fi\nprintf '%s\\n' '{target}'\n"
+        ),
+    )
+    .unwrap();
+    fs::set_permissions(&rustup, fs::Permissions::from_mode(0o700)).unwrap();
+
+    let result = Command::new(env!("CARGO_BIN_EXE_hegira"))
+        .args(arguments)
+        .env_clear()
+        .env("HOME", &home)
+        .env("USERPROFILE", &home)
+        .env("XDG_CONFIG_HOME", &home)
+        .env("PATH", &tools)
+        .env(
+            "APP__SECURITY__JWT_SECRET",
+            "doctor-env-secret-must-not-appear",
+        )
+        .current_dir(application)
+        .output()
+        .expect("doctor should run with isolated tool fixtures");
+    assert_eq!(fs::read_dir(home).unwrap().count(), 0);
+    result
+}
+
+#[cfg(unix)]
+#[test]
+fn doctor_json_schema_order_and_success_are_stable_with_stubbed_prerequisites() {
+    let fixture = TestDirectory::new("doctor-contract-pass");
+    let application = fixture.path().join("application");
+    assert!(
+        hegira(&[
+            "new",
+            "doctor-app",
+            "--destination",
+            path_argument(&application),
+        ])
+        .status
+        .success()
+    );
+    let config = application.join("config/development.yaml");
+    let secret = "doctor-config-secret-must-not-appear";
+    fs::write(&config, secret).unwrap();
+    let before = output_tree(&application);
+
+    let first = doctor_with_stubbed_tools(&fixture, &application, true, &["doctor", "--json"]);
+    let second = doctor_with_stubbed_tools(&fixture, &application, true, &["doctor", "--json"]);
+    let explicit = doctor_with_stubbed_tools(
+        &fixture,
+        &application,
+        true,
+        &[
+            "doctor",
+            "--application-root",
+            path_argument(&application),
+            "--json",
+        ],
+    );
+    assert_eq!(first.status.code(), Some(0));
+    assert!(first.stderr.is_empty());
+    assert_eq!(first.stdout, second.stdout);
+    assert_eq!(first.stdout, explicit.stdout);
+    let output = String::from_utf8(first.stdout).unwrap();
+    assert!(
+        output
+            .starts_with("{\n  \"output_schema\": 1,\n  \"status\": \"pass\",\n  \"checks\": [\n")
+    );
+    let report: serde_json::Value = serde_json::from_str(&output).unwrap();
+    let codes: Vec<_> = report["checks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|check| check["code"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        codes,
+        [
+            "manifest",
+            "composition",
+            "recovery-marker",
+            "managed-integrations",
+            "database-provider",
+            "rust-toolchain",
+            "cargo",
+            "cargo-leptos",
+            "node",
+            "npm",
+            "wasm-target",
+        ]
+    );
+    assert!(
+        report["checks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|check| check["status"] == "pass")
+    );
+    let first_check = output.split("\"code\": \"manifest\"").nth(1).unwrap();
+    assert!(first_check.starts_with(",\n      \"status\": \"pass\",\n      \"message\": "));
+    assert!(first_check.contains("\"action\": null"));
+    for forbidden in [
+        secret,
+        "doctor-env-secret-must-not-appear",
+        path_argument(&application),
+    ] {
+        assert!(!output.contains(forbidden));
+    }
+
+    let human = doctor_with_stubbed_tools(&fixture, &application, true, &["doctor"]);
+    assert_eq!(human.status.code(), Some(0));
+    let human = String::from_utf8(human.stdout).unwrap();
+    assert!(human.starts_with("[PASS] manifest: Application manifest is valid"));
+    assert!(human.contains("[PASS] wasm-target:"));
+    assert!(human.ends_with("Doctor status: pass\n"));
+    assert_eq!(output_tree(&application), before);
+}
+
+#[cfg(unix)]
+#[test]
+fn doctor_warnings_remain_non_blocking_with_a_missing_wasm_target() {
+    let fixture = TestDirectory::new("doctor-contract-warning");
+    let application = fixture.path().join("application");
+    assert!(
+        hegira(&[
+            "new",
+            "doctor-app",
+            "--destination",
+            path_argument(&application),
+        ])
+        .status
+        .success()
+    );
+    let before = output_tree(&application);
+
+    let result = doctor_with_stubbed_tools(&fixture, &application, false, &["doctor", "--json"]);
+    assert_eq!(result.status.code(), Some(0));
+    assert!(result.stderr.is_empty());
+    let report: serde_json::Value = serde_json::from_slice(&result.stdout).unwrap();
+    assert_eq!(report["status"], "warning");
+    assert_eq!(report["checks"][10]["code"], "wasm-target");
+    assert_eq!(report["checks"][10]["status"], "warning");
+    assert!(
+        report["checks"].as_array().unwrap()[..10]
+            .iter()
+            .all(|check| check["status"] == "pass")
+    );
+    assert_eq!(output_tree(&application), before);
+}
+
+#[cfg(unix)]
+#[test]
+fn doctor_incompatible_manifest_is_a_redacted_blocking_json_result() {
+    let fixture = TestDirectory::new("doctor-contract-incompatible");
+    let application = fixture.path().join("application");
+    assert!(
+        hegira(&[
+            "new",
+            "doctor-app",
+            "--destination",
+            path_argument(&application),
+        ])
+        .status
+        .success()
+    );
+    let manifest_path = application.join("hegira.toml");
+    let manifest = fs::read_to_string(&manifest_path).unwrap();
+    fs::write(&manifest_path, manifest.replace("v0.6.0", "v9.9.9")).unwrap();
+    let before = output_tree(&application);
+
+    let first = doctor_with_stubbed_tools(&fixture, &application, true, &["doctor", "--json"]);
+    let second = doctor_with_stubbed_tools(&fixture, &application, true, &["doctor", "--json"]);
+    assert_eq!(first.status.code(), Some(3));
+    assert!(first.stderr.is_empty());
+    assert_eq!(first.stdout, second.stdout);
+    let output = String::from_utf8(first.stdout).unwrap();
+    let report: serde_json::Value = serde_json::from_str(&output).unwrap();
+    assert_eq!(report["status"], "failure");
+    assert_eq!(report["checks"][0]["status"], "failure");
+    assert_eq!(report["checks"][1]["status"], "failure");
+    assert!(!output.contains(path_argument(&application)));
     assert_eq!(output_tree(&application), before);
 }
 
@@ -646,12 +1435,85 @@ fn inspect_json_is_versioned_deterministic_and_matches_explicit_resolution() {
     assert_eq!(discovered.stdout, explicit.stdout);
     let document: serde_json::Value =
         serde_json::from_slice(&discovered.stdout).expect("inspection JSON should parse");
-    assert_eq!(document["output_schema"], 1);
+    assert_eq!(document["output_schema"], 2);
     assert_eq!(document["manifest"]["application"], "json-app");
-    assert_eq!(document["manifest"]["schema"], 1);
+    assert_eq!(document["manifest"]["schema"], 2);
+    assert_eq!(
+        document["manifest"]["composition"]["package"]["id"],
+        "hegira-canonical"
+    );
+    assert_eq!(
+        document["manifest"]["composition"]["modules"][0]["id"],
+        "identity"
+    );
     assert_eq!(document["manifest"]["selection"]["databases"][0], "sqlite");
     assert_eq!(document["manifest"]["selection"]["clients"][0], "leptos");
+    assert_eq!(document["composition"]["status"], "compatible");
+    assert_eq!(
+        document["composition"]["components"][0]["id"],
+        "layered-base"
+    );
+    assert_eq!(
+        document["composition"]["components"][0]["version"],
+        "v0.6.0"
+    );
+    assert_eq!(document["composition"]["modules"][0]["id"], "identity");
+    assert_eq!(document["composition"]["databases"][0], "sqlite");
+    assert_eq!(document["composition"]["clients"][0], "leptos");
+    assert_eq!(
+        document["composition"]["capabilities"],
+        serde_json::json!(["authentication", "authorization"])
+    );
+    assert_eq!(
+        document["composition"]["diagnostics"],
+        serde_json::json!([])
+    );
     assert_eq!(document["mutation_compatibility"]["status"], "compatible");
+    assert_eq!(output_tree(&application), before);
+}
+
+#[test]
+fn inspect_reports_unresolved_composition_without_mutating_the_application() {
+    let root = TestDirectory::new("inspect-composition-conflict");
+    let application = root.path().join("application");
+    assert!(
+        hegira(&[
+            "new",
+            "conflict-app",
+            "--destination",
+            path_argument(&application),
+        ])
+        .status
+        .success()
+    );
+    let manifest_path = application.join("hegira.toml");
+    let manifest = fs::read_to_string(&manifest_path).unwrap();
+    let version = format!("v{}", env!("CARGO_PKG_VERSION"));
+    fs::write(
+        &manifest_path,
+        format!(
+            "{manifest}\n[[composition.components]]\nid = \"unavailable-component\"\nversion = \"{version}\"\n"
+        ),
+    )
+    .unwrap();
+    let before = output_tree(&application);
+
+    let human = hegira_at(&application, &["inspect"]);
+    let json = hegira_at(&application, &["inspect", "--json"]);
+
+    assert!(human.status.success(), "{:?}", human.stderr);
+    assert!(json.status.success(), "{:?}", json.stderr);
+    let human = String::from_utf8(human.stdout).unwrap();
+    assert!(human.contains("Composition status: unresolved\n"));
+    assert!(human.contains("Composition diagnostics:\n"));
+    assert!(human.contains("missing-component: unavailable-component"));
+    let document: serde_json::Value = serde_json::from_slice(&json.stdout).unwrap();
+    assert_eq!(document["composition"]["status"], "unresolved");
+    assert_eq!(
+        document["composition"]["diagnostics"][0]["kind"],
+        "missing-component"
+    );
+    assert_eq!(document["mutation_compatibility"]["status"], "unsupported");
     assert_eq!(output_tree(&application), before);
 }
 
@@ -679,10 +1541,10 @@ fn inspect_reports_unsupported_releases_without_mutating_or_failing() {
 
     assert!(result.status.success(), "{:?}", result.stderr);
     assert!(result.stderr.is_empty());
-    assert!(
-        String::from_utf8_lossy(&result.stdout)
-            .contains("Mutation compatibility: unsupported (framework.version is v0.1.0")
-    );
+    let output = String::from_utf8_lossy(&result.stdout);
+    assert!(output.contains("Composition status: unresolved\n"));
+    assert!(output.contains("framework-version-mismatch: framework.version"));
+    assert!(output.contains("Mutation compatibility: unsupported (framework.version is v0.1.0"));
     assert_eq!(output_tree(&application), before);
 }
 
@@ -818,8 +1680,8 @@ fn explicit_sibling_destination_still_works() {
 #[test]
 fn provider_snapshots_and_interactive_requests_match() {
     for (database, expected) in [
-        ("sqlite", 16165926348028193469_u64),
-        ("postgres", 6271968349784276084_u64),
+        ("sqlite", 14256640123236086436_u64),
+        ("postgres", 3411737363188212639_u64),
     ] {
         let root = TestDirectory::new(database);
         let explicit = root.path().join("explicit");
@@ -851,7 +1713,7 @@ fn provider_snapshots_and_interactive_requests_match() {
         assert!(manifest.contains("clients = [\"leptos\"]"));
         assert!(manifest.contains("\"layered-leptos-identity\""));
         let workspace = fs::read_to_string(explicit.join("Cargo.toml")).unwrap();
-        assert!(workspace.contains("tag = \"v0.5.0\""));
+        assert!(workspace.contains("tag = \"v0.6.0\""));
         assert!(!workspace.contains(repository_root().to_str().unwrap()));
         assert!(!explicit.join(".git").exists());
         assert!(!explicit.join("target").exists());
@@ -870,6 +1732,44 @@ fn provider_snapshots_and_interactive_requests_match() {
             "review {database} output before updating its snapshot"
         );
     }
+}
+
+#[test]
+fn explicit_minimal_composition_is_module_free_and_deterministic() {
+    let root = TestDirectory::new("minimal-composition");
+    let destination = root.path().join("application");
+    let result = hegira(&[
+        "new",
+        "minimal-app",
+        "--destination",
+        path_argument(&destination),
+        "--database",
+        "sqlite",
+        "--client",
+        "leptos",
+        "--composition",
+        "minimal",
+    ]);
+    assert!(result.status.success(), "{:?}", result.stderr);
+    assert!(
+        String::from_utf8_lossy(&result.stdout)
+            .contains("no authentication or authorization capability")
+    );
+
+    let manifest = fs::read_to_string(destination.join("hegira.toml")).unwrap();
+    assert!(manifest.contains("id = \"layered-base\""));
+    assert!(manifest.contains("id = \"layered-leptos-minimal\""));
+    assert!(!manifest.contains("id = \"identity\""));
+    let manifest = application_manifest::ApplicationManifest::from_toml(&manifest).unwrap();
+    let composition = manifest.composition.unwrap();
+    assert!(composition.modules.is_empty());
+    assert!(composition.capabilities.is_empty());
+
+    let workspace = fs::read_to_string(destination.join("Cargo.toml")).unwrap();
+    assert!(!workspace.contains("identity_"));
+    let server = fs::read_to_string(destination.join("apps/server/src/server.rs")).unwrap();
+    assert!(!server.contains("identity_"));
+    assert!(!server.contains("/api/auth"));
 }
 
 #[test]

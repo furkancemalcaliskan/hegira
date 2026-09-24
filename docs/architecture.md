@@ -33,7 +33,8 @@ automatic module discovery, application upgrades, or registry distribution.
 ├── templates/
 │   ├── package.toml         versioned canonical package contract
 │   ├── applications/
-│   │   └── layered/         independent full-stack application source
+│   │   ├── layered/         recommended Identity-enabled application source
+│   │   └── layered-minimal/ explicit module-free outward-layer variant
 │   └── components/          typed application-component manifests
 ├── tools/
 │   ├── application_mutator/ existing-application change-plan core
@@ -46,11 +47,22 @@ automatic module discovery, application upgrades, or registry distribution.
 └── Cargo.lock               locked framework dependency graph
 ```
 
-`templates/applications/layered/` is deliberately excluded from the root Cargo
-workspace. A rendered application owns its server, web client, DDD layers,
+The application sources under `templates/applications/` are deliberately
+excluded from the root Cargo workspace. Their canonical `Cargo.lock` files
+record the registry checksums and exact framework git revision verified for the
+package release. Every normal render receives the selected composition's bytes
+unchanged. Both supported compositions resolve the common `layered-base` DDD
+source. The recommended default adds `layered-leptos-identity`; the explicit
+minimal selection adds `layered-leptos-minimal` and records no official module,
+authentication capability, or authorization capability. Both retain a Leptos
+client, server host, selected SQLx provider, configuration, and deployment
+source.
+
+The generated application then owns its server, web client, DDD layers,
 configuration, migrations, deployment files, dependency lock, and future
 product changes. The framework repository does not own an application runtime
-configuration or production image.
+configuration or production image. Application owners may update dependencies
+intentionally; generation never performs an implicit dependency upgrade.
 
 Template changes affect subsequent generation, not existing applications.
 Generated files are application-owned source, not a synchronized view of the
@@ -61,6 +73,54 @@ DDD layers, while server and web composition explicitly select adapters.
 Changing an existing application's framework version, module composition, or
 database requires coordinated source, dependency, configuration, and migration
 review; the current CLI does not perform those changes.
+
+## Components, Modules, And Composition
+
+Hegira keeps generation units separate from runtime ownership:
+
+| Term | Current contract |
+|---|---|
+| Component package | The release-aligned, digest-verified catalog described by `templates/package.toml` |
+| Component | A typed graph node that either contributes source during initial rendering or describes one additive installation unit |
+| Official module | Versioned layered framework packages under `modules/` that own a reusable capability and its adapters |
+| Capability | A machine-checked contract, such as `authentication` or `authorization`, derived from the resolved module graph |
+| Composition | The exact package, component, module, capability, database, and client state recorded in `hegira.toml` |
+
+A component is not a second name for an official module. The bundled
+`identity` component is inert installation metadata that owns the official
+Identity module contribution. Installing it adds release-pinned dependencies
+on the Identity packages and edits declared application-owned integration
+points; it does not copy `modules/identity/` into the application. For this
+reason the public mutation command is `hegira component add identity`; there is
+no generic module loader, runtime plugin mechanism, or module-management
+command.
+
+The recommended `identity` composition remains the creation default. It
+renders `layered-base` with `layered-leptos-identity` and records the official
+Identity module plus its authentication and authorization capabilities. The
+explicit `minimal` composition renders `layered-base` with
+`layered-leptos-minimal`; it retains the layered application, selected SQLx
+provider, Axum host, Leptos client, configuration, and deployment boundaries,
+but records no official module or authentication and authorization capability.
+It does not substitute anonymous or allow-all authorization.
+
+`hegira inspect` is the composition-status command: it resolves the recorded
+state against the bundled authenticated graph without modifying the
+application. `hegira doctor` additionally checks local prerequisites, recovery
+state, and bounded application integration points. Mutating commands require
+an exact compatible framework and package release, a supported composition,
+and the recorded database and client. Protected resource generation also
+requires authentication and authorization and therefore fails closed for a
+minimal application until Identity has been installed.
+
+Installation is additive only. Dry-run and apply consume the same typed,
+content-redacted plan; apply publishes manifest, dependency, configuration,
+migration-source, server, HTTP, OpenAPI, and Leptos contributions through the
+application mutation transaction. The CLI currently provides no removal,
+automatic framework or application upgrade, remote package source, migration
+execution, or rollback. The application owner must review configuration,
+regenerate `Cargo.lock`, apply the selected provider migrations, and validate
+the application after installation.
 
 ## Dependency Direction
 
@@ -247,13 +307,24 @@ registration conflicts fail before publication. Permission gates improve the
 presentation experience but do not replace authorization in the generated
 application service.
 
+The Identity-added minimal composition uses its smaller Leptos shell instead:
+the generator registers a native route and a permission-gated dashboard link,
+and emits local English labels and visible mutation feedback in the resource
+page. It does not assume the default shell's sidebar or localization files.
+The minimal host composes the same resource service through its Identity
+runtime and merges the resource OpenAPI document into the Identity document
+when OpenAPI is enabled. Both compositions retain application-layer
+authorization and keep Bearer routes separate from browser cookie policy.
+
 The package also plans application-owned migration scaffolds independently of
 the general resource specification. It resolves the selected SQLite or
 PostgreSQL adapter from the validated application manifest, observes only that
 provider's canonical migration filenames, and derives the next append-only
-numeric identity. Existing migration contents are neither read into plan output
-nor edited. Duplicate identities, malformed or symlinked histories, and stale
-publication preconditions are explicit conflicts.
+numeric identity. Generated application-owned migrations begin at version
+`1000000`, keeping their identities separate from the lower range used by
+official module migration history. Existing migration contents are neither read
+into plan output nor edited. Duplicate identities, malformed or symlinked
+histories, and stale publication preconditions are explicit conflicts.
 
 Each plan creates one provider-labelled SQL scaffold and creates or advances
 `crates/infrastructure/migrations/.hegira-generator.toml`. This private,
@@ -278,6 +349,18 @@ and digests. They never expose source or resulting file content. The crate does
 not execute generated code or provide the repository-validation dependency
 rewriting available to maintainer tooling.
 
+Additive component installation has a separate typed plan over the same change
+contract. A request names one not-yet-installed component and supplies only
+application-owned artifacts or digest-preconditioned integrations. The closed
+owner set covers the workspace and application manifests, configuration, both
+application hosts, and each canonical layered package; a contribution outside
+its declared owner is rejected. Component artifacts always become absent-file
+creations. Integrations always remain digest-preconditioned edits, and existing
+application migration files cannot be edited. Empty, duplicate, already
+installed, invalidly named, cross-owner, and path-conflicting requests fail
+before publication. The versioned installation summary adds component and
+owner identities to the underlying content-redacted operation metadata.
+
 Structured editors operate only on declared integration points. Canonical Rust
 layer roots contain an explicit generated-module block; registrations inside
 that block must be unique and deterministically ordered, while matching
@@ -287,6 +370,21 @@ document model so unrelated keys, ordering, and comments remain owned by the
 application. Repeated edits return an explicit already-present result. Missing,
 duplicated, reordered, or type-incompatible integration points fail with typed
 diagnostics before a plan is produced.
+
+Component edit operations further close the available destinations to typed
+layer module roots, package manifests, application capability configuration,
+server and Leptos contribution blocks, Infrastructure configuration fields,
+and provider-specific module migration lists. Cargo dependency declarations
+can only consume an existing workspace dependency or declare a credential-free
+HTTPS framework repository at a stable SemVer tag in the root workspace;
+package paths, branches, revisions, registries, and command-shaped sources are
+not represented. Feature entries and managed Rust entries use the same
+lossless, conflict-aware editors. Sequential operations against one file must
+form an unbroken result-digest chain and collapse into one owner-preserving
+edit before entering the installation plan. The canonical application exposes
+managed PostgreSQL and SQLite module-migration blocks and an Infrastructure
+module-configuration field block; these markers do not execute migrations or
+change runtime configuration by themselves.
 
 Failure-safe publication is a separate stage over the validated plan. The
 publisher opens the real application root and every change parent without
@@ -327,8 +425,11 @@ invalid usage, `3` for validation failure, and `4` for a destination or state
 conflict. `hegira new <name> --destination <path>` renders the canonical
 layered application with SQLite, Leptos, and Identity defaults. The database,
 client, and component selections can also be stated explicitly. Generation
-writes the destination atomically and never executes generated or external
-commands.
+maps the component selection to package roots and hands those roots to the
+renderer. The renderer resolves them through the authenticated package graph;
+the CLI does not maintain a second file, module, or capability composition.
+Generation writes the destination atomically and never executes generated or
+external commands.
 
 The CLI library provides common `--dry-run` and `--json` options for mutation
 commands. A command constructs and validates one typed `ChangePlan`, then hands
@@ -339,8 +440,24 @@ explicitly versioned, and includes the content-redacted plan summary rather
 than file bodies, runtime configuration, credentials, environment values, or
 machine-local framework paths. Empty plans are successful no-ops, planning and
 state conflicts retain the conflict process outcome, and invalid plans retain a
-validation outcome. `hegira generate resource <name> --field <name:type>` uses
-this contract to compose the Domain, Application Contracts, Application,
+validation outcome. `hegira component add <component>` first validates the
+application mutation contract, authenticates the bundled package, and resolves
+the requested target graph. It rejects installed, unknown, conflicting, or
+non-additive components before publication and never executes component code or
+accepts a remote package coordinate. A resolved additive unit is converted to
+one `ComponentInstallationPlan` and handed to the same mutation executor.
+The bundled Identity unit composes into a compatible minimal Leptos application
+for the selected SQLite or PostgreSQL provider. It updates the application
+manifest and source in one preconditioned publication, with configuration
+preflight before database initialization. The command does not connect to a
+database, run migrations, regenerate the lockfile, or initialize providers that
+the minimal host has not composed; the maintainer performs those post-install
+steps explicitly. `hegira generate resource <name> --field <name:type>` uses
+the recorded composition state to require authentication and authorization
+before it reads integration sources or plans any files. Missing capabilities
+fail closed with a stable human or JSON diagnostic; the generator specification
+enforces the same requirement for callers outside the CLI. The command uses
+the mutation contract to compose the Domain, Application Contracts, Application,
 selected SQLx, Axum/OpenAPI, and selected Leptos emitter plans into one atomic
 change. Chained edits preserve the first observed precondition and final
 content without publishing an intermediate state. `hegira generate migration
@@ -351,9 +468,14 @@ builds.
 
 The CLI library also owns a read-only existing-application context resolver.
 `hegira inspect` uses it to provide concise human-readable application identity,
-framework, selection, and mutation-compatibility information. `--json` exposes
-the same state through an explicitly versioned deterministic output contract,
-and `--application-root <path>` selects a root for automation. Otherwise the
+framework, adapters, mutation compatibility, and component-composition status.
+For a current manifest, inspection resolves its recorded package, components,
+modules, and capabilities against the bundled canonical graph. Compatible
+state includes exact versions; unresolved state includes every sorted typed
+graph diagnostic without blocking inspection. Legacy or unparsed manifests
+report composition as unavailable rather than inventing state. `--json`
+exposes the same information through output schema 2, and
+`--application-root <path>` selects a root for automation. Otherwise the
 resolver discovers `hegira.toml` from a real working directory and its real
 ancestors. Discovery rejects multiple candidate manifests as ambiguous rather
 than selecting one implicitly. Directory-relative, no-follow reads anchor the
@@ -361,8 +483,14 @@ manifest and the required application-owned `apps/`, `crates/`, and `config/`
 roots to the opened application root. The resolver returns the typed manifest
 when the current parser supports it and always returns the mutation
 compatibility assessment when one can be determined. Inspection reads no
-runtime configuration, environment value, user-home state, or secret, and it
-performs no writes.
+runtime configuration, environment value, user-home state, application source,
+or secret, exposes no machine-local framework path, and performs no writes.
+
+The `doctor` command reuses that resolver and the bundled composition graph. It
+checks the recovery marker and bounded, no-follow application integration
+sources without reading runtime configuration or connecting to a provider.
+Its local tool checks and selected-provider requirements are diagnostics, not
+startup preflight or application mutation.
 
 When an application name or destination is omitted in an interactive terminal,
 the same command gathers missing values through a guided workflow, displays the
@@ -461,26 +589,68 @@ authorization token and is never part of normal startup.
 Component manifests select the layered base and the Leptos Identity adapter.
 `templates/package.toml` gives this data-only graph a release-aligned package
 identity, declares its compatible HTTPS framework source and stable SemVer
-tag, enumerates the contained template and components, and locks every
-manifest and included source path with a deterministic SHA-256 digest. Package
-loading rejects unknown or unsorted identities, source-tree changes, local or
-credentialed framework locations, mismatched versions, and undeclared
-component manifests before planning output. Component manifests cannot define
-execution hooks.
+tag, enumerates the contained template, components and official modules, and
+locks every manifest and included source path with a deterministic SHA-256
+digest. Package loading rejects unknown or unsorted identities, source-tree
+changes, local or credentialed framework locations, mismatched versions, and
+undeclared component manifests before planning output. Component manifests
+cannot define execution hooks.
 
-The reusable renderer exposes typed request, plan, publication-result, and
-error-category contracts. It resolves requirements and conflicts, substitutes
-declared variables, detects output collisions, rejects symbolic links and path
-traversal, constructs the entire output plan before writing, and atomically
-publishes into a previously absent destination. It has no network, process, or
-repository-event dependency and does not execute component scripts.
+The package source is opened below a directory descriptor without following
+symlinks. Every descendant must be a regular file or real directory and is
+bounded by per-file, total-byte, and file-count limits. The loader rechecks the
+opened package-root identity after traversal, rejects replacement races, and
+retains one immutable byte snapshot for manifest parsing, digest verification,
+and rendering. The observed file set must equal the manifests' declared
+template, component, and included-source graph; missing and graph-undeclared
+files fail before destination publication. Invalid manifests and path failures
+produce content-redacted diagnostics, and package loading performs no network
+or process execution. Safe package-source access currently fails closed outside
+Linux and Apple platforms.
+
+The schema-2 package manifest and schema-3 component manifests form a closed
+composition graph. Schema-3 distinguishes rendered components from additive
+installation units. An installation unit cannot include or vendor source; it
+declares exactly one owned module, compatible database and client adapters,
+typed contribution kinds, and sorted release-pinned framework dependencies.
+The bundled `identity` unit requires the minimal Leptos composition and records
+its configuration, seed, background work, provider migration sources, separate
+cookie-BFF and Bearer API routes, OpenAPI, Leptos routes and navigation, and
+capability-preflight contributions. This metadata is inert package data; it
+does not execute code, migrations, or installation by itself.
+
+Resolution accepts an explicit framework/package identity and component root
+set, then produces a canonical topological component order, exact component
+and module versions, and the accumulated capability set. Required dependencies
+join the graph automatically; optional dependencies are validated but join it
+only when explicitly selected. Cycles, missing dependencies, selected
+conflicts, missing capabilities, duplicate module ownership, and incompatible
+framework, package, module, or recorded capability state return sorted typed
+diagnostics. Resolution reads data already loaded into the catalog and performs
+no write, process execution, network access, source resolution, or runtime
+configuration lookup.
+
+The reusable renderer exposes typed composition request/result/diagnostic,
+render request, plan, publication-result, and error-category contracts. A
+render request may choose component roots, but the loaded package exclusively
+supplies the framework and package identities. The renderer resolves those
+roots once and uses that same result to select component files and serialize
+the component, module, and capability state in `hegira.toml`; template source
+does not maintain a duplicate composition list. It consumes the same verified
+package snapshot, substitutes declared variables, detects output collisions,
+rejects symbolic links and path traversal, constructs the entire output plan
+before writing, and atomically publishes into a previously absent destination.
+It has no network, process, or repository-event dependency and does not execute
+component scripts.
 
 Normal renders retain pinned release-source dependencies. Repository
 validation selects a separate adapter that rewrites only a disposable render
 to consume a staged, credential-free view of the current framework source.
 The generated-application gate first invokes the public CLI for SQLite and
 PostgreSQL. Its staging adapter verifies the CLI output paths and bytes against
-the canonical request, then patches declared dependencies in a separate copy.
+the canonical request, uses the render plan's resolved component graph when
+selecting declared dependency rewrites, then patches those dependencies in a
+separate copy.
 An in-tree framework copy is excluded from automatic Cargo workspace membership
 so application checks cannot enable framework/module defaults accidentally.
 Native tests, hydration, release builds, upgrades, and production-container
@@ -495,25 +665,29 @@ verify this same canonical package contract.
 
 Every render includes schema-versioned `hegira.toml`. It records the
 application identifier, HTTPS framework repository and stable SemVer tag,
-resolved component set, and selected database and client adapters. The parser
-rejects unknown fields, unsupported values, invalid component combinations,
-credentials, local framework paths, and mismatches between the recorded and
-actually rendered component sets. Deterministic serialization records the
-validated generation contract; it is not a runtime configuration or secret
-store. Editing it does not trigger regeneration or upgrades. The field-level
-contract is documented in
+installed component-package, component and module identities with their
+versions, provided capabilities, and selected database and client adapters.
+The parser rejects unknown fields, duplicate identities, unsupported values,
+inconsistent composition state, credentials, local framework paths, and
+mismatches between the recorded and actually rendered component sets.
+Deterministic serialization records the validated generation contract; it is
+not a runtime configuration or secret store. Editing it does not trigger
+regeneration or upgrades. Schema-1 manifests remain readable for inspection,
+but cannot be serialized or mutated as schema 2 without an explicit upgrade.
+The field-level contract is documented in
 [Getting started](getting-started.md#generated-ownership-and-hegiratoml).
 
 The application-manifest package also exposes a pure, fail-closed mutation
 compatibility assessment. A manifest is compatible only when its schema,
-framework repository and exact release, component set, and single selected
+framework repository and exact release, component-package identity, installed
+component/module composition, capability set, and single selected
 database/client adapters match the caller's supported policy. A valid manifest
-from another release or with an unknown supported-shape capability is reported
-as unsupported; a current-shape manifest that conflicts with canonical
-selection or framework identity is reported as incompatible with the exact
-field identified. Normal parsing remains separate, so older valid manifests
-can still be read without becoming writable. This assessment performs no file
-write, network access, source mutation, dependency change, or upgrade.
+from another release or with an unknown supported-shape composition member is
+reported as unsupported; a current-shape manifest that conflicts with
+canonical selection or framework identity is reported as incompatible with the
+exact field identified. Normal parsing remains separate, so older valid
+manifests can still be read without becoming writable. This assessment performs
+no file write, network access, source mutation, dependency change, or upgrade.
 
 Use these focused gates:
 

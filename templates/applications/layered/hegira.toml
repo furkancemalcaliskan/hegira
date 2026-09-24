@@ -1,4 +1,4 @@
-schema = 1
+schema = 2
 application = "{{application_name}}"
 
 [framework]
@@ -6,6 +6,12 @@ repository = "{{framework_repository}}"
 version = "{{framework_version}}"
 
 [selection]
-components = ["layered-base", "{{component_id}}"]
 databases = ["{{database_adapter}}"]
 clients = ["{{client_adapter}}"]
+
+[composition]
+components = []
+
+[composition.package]
+id = "{{package_id}}"
+version = "{{package_version}}"

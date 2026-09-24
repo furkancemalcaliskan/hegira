@@ -109,7 +109,11 @@ The repository validation workflow separates these responsibilities:
 - `generated-application` validates untouched public CLI output, then mutates
   separate SQLite and PostgreSQL validation copies through the public resource
   command and exercises their locked dependency boundaries, supported v0.2.0
-  upgrades, generated HTTP contract, and rendered production container;
+  upgrades, generated HTTP contract, and rendered production container. A
+  second step in this same job creates explicit minimal applications, verifies
+  pre-install capability rejection, installs Identity through public dry-run
+  and apply, and repeats provider, hydration, production-container, and
+  authenticated CRUD coverage;
 - `quality` aggregates the four repository ownership gates under the existing
   required status context;
 - `supply-chain` runs dependency policy and vulnerability checks.
@@ -161,6 +165,26 @@ contracts together with deterministic existing-application change planning:
 sh scripts/cli-check.sh
 ```
 
+The complementary composition matrix can be run with
+`sh scripts/composition-matrix-check.sh`. It exercises the explicit minimal
+application and the minimal-to-Identity transition for SQLite and PostgreSQL,
+including read-only failure paths, selected migration and transport wiring,
+and locked native and hydration builds. The existing
+`generated-application-check.sh` remains the default Identity application's
+provider and production-container validation. Run
+`sh scripts/generated-application-check.sh identity-added` to exercise the
+minimal-to-Identity path through public CLI inspection, diagnosis, dry-run and
+apply, protected resource generation, provider builds, and production HTTP
+smoke. The repository-validation adapter stages the CLI-mutated application in
+a disposable copy and rewrites only declared framework dependencies to the
+current source tree. The default application's historical v0.2.0 upgrade test
+does not apply to the newly created minimal composition, whose migration
+history starts later. Repository validation and release validation run this
+lifecycle mode as an explicit step in the existing generated-application job.
+The stable `generated-application` ownership job and aggregated `quality`
+context therefore cover both paths without introducing another protected
+branch status context.
+
 The CLI process tests use disposable working and home directories and an empty
 command search path rather than the maintainer's global configuration. They
 verify default and explicit application
@@ -168,9 +192,15 @@ selections, independent release-source dependencies, deterministic output,
 destination conflicts, interactive default equivalence, supported-choice
 mapping, cancellation, non-TTY behavior, and the absence of global
 configuration requirements. They also verify read-only application discovery,
-explicit-root inspection, versioned inspection output, mutation compatibility,
-and incompatible or unsupported application outcomes. Prompt tests inject
+explicit-root inspection, output-schema-2 composition status, exact installed
+versions, stable graph diagnostics, mutation compatibility, redaction, and
+incompatible or unsupported application outcomes. Prompt tests inject
 deterministic input and capture output without relying on a host terminal.
+Doctor fixtures check default, minimal, and Identity-added applications,
+read-only outcomes, recovery and integration failures, deterministic redacted
+output, and missing local tools as warnings. Additional isolated PATH and home
+fixtures pin JSON field and check order, success/warning/failure exit outcomes,
+and ensure the Rustup probe does not inherit application runtime secrets.
 
 SQLite and PostgreSQL requests have committed whole-tree fingerprints covering
 file paths and bytes, including binary assets, and are compared with equivalent
@@ -184,8 +214,11 @@ tests neither build generated applications nor require network access.
 
 The same gate validates `application_mutator` plan ordering, explicit absent and
 content-digest preconditions, duplicate and conflicting path diagnostics,
-canonical relative-path enforcement, content-redacted summaries, managed Rust
-module registration, and lossless TOML integration edits. Fixtures cover
+canonical relative-path enforcement, content-redacted summaries, additive
+component identities, canonical file ownership, cross-owner rejection,
+append-only migration history, closed Cargo dependency sources, feature
+composition, same-file digest chaining, managed Rust module registration, and
+lossless TOML integration edits. Fixtures cover
 customized surrounding source, already-present results, and missing, duplicate,
 reordered, or incompatible integration points. The canonical layered
 application's declared integration points are exercised without publishing a
@@ -249,10 +282,15 @@ sh scripts/layered-template-check.sh
 ```
 
 The check works on a disposable copy. The reusable render core preserves pinned
-release-style dependencies and does not write maintainer paths into template
-source files. Repository checks explicitly select the separate validation
-adapter, which patches declared framework dependencies only in the disposable
-output. These local-source options are absent from the normal renderer command.
+release-style dependencies and the canonical application lockfile without
+writing maintainer paths into template source files. Repository checks
+explicitly select the separate validation adapter, which patches declared
+framework dependencies only in the disposable output. Because that copy uses
+local path dependencies, the adapter removes its incompatible release lockfile
+and the owning validation script regenerates a disposable lock before invoking
+locked Cargo commands. Normal render output and CLI-created applications retain
+the package lockfile unchanged. These local-source options are absent from the
+normal renderer command.
 Before either path plans output, it verifies the canonical package identity,
 framework compatibility, declared component set, and locked source digest.
 After an intentional package-source change, calculate the replacement digest
@@ -265,11 +303,11 @@ cargo run --locked -p template_renderer --example package_digest -- \
 
 Review the complete package diff before replacing `content_digest` in
 `templates/package.toml`.
-The check runs
-the renderer snapshot and failure-path tests, installs the client package lock,
-validates the rendered workspace's direct application and Hegira dependencies,
-validates native workspace targets and tests, compiles the hydration target,
-and produces the full-stack Cargo Leptos release output.
+The check runs the renderer snapshot and failure-path tests, installs the client
+package lock, regenerates only the disposable local-source Cargo lock, validates
+the rendered workspace's direct application and Hegira dependencies through
+locked commands, validates native workspace targets and tests, compiles the
+hydration target, and produces the full-stack Cargo Leptos release output.
 
 The generated-application gate first creates pristine SQLite and PostgreSQL
 applications through public `hegira new` commands and verifies that output
@@ -294,9 +332,16 @@ cargo run --locked -p template_renderer -- render \
   --output /tmp/hegira-layered
 ```
 
-The destination must not already exist. Component manifests declare their
-requirements, conflicts, source inputs, and repository-validation dependency
-patches. They cannot execute shell commands.
+The destination must not already exist. Schema-2 component manifests declare
+exact package-aligned versions, required and optional dependencies, conflicts,
+capabilities, official modules, source inputs, and repository-validation
+dependency patches. The renderer resolves their closed graph deterministically
+before component source becomes render input. Package traversal uses anchored
+no-follow reads and one immutable snapshot for manifests, the locked digest,
+and rendered bytes. Symlinks, special files, root replacement, undeclared or
+missing paths, and package or framework identity mismatches fail before output;
+diagnostics do not expose package content or credentials. They cannot execute
+shell commands or access the network.
 
 Destination parents must already exist and must not contain symlinks. Publication
 uses the same no-overwrite policy for normal rendering and repository validation.
@@ -311,12 +356,16 @@ sh scripts/generated-application-check.sh
 ```
 
 The check invokes the public `hegira new` command for default SQLite and explicit
-PostgreSQL applications. The normal CLI output retains pinned release sources.
+PostgreSQL applications. The normal CLI output retains pinned release sources
+and the byte-identical canonical Cargo lockfile.
 The repository-only adapter verifies every generated file against the requested
 canonical output before publishing a separate validation copy with local framework
 dependencies and an explicit workspace exclusion for that staged framework.
-The CLI outputs are never rewritten. Each provider copy runs native
-workspace checks and tests, WASM hydration checks, and a Cargo-Leptos release build.
+The CLI outputs are never rewritten. A dedicated disposable copy of the
+pristine SQLite output runs the documented non-release Cargo Leptos development
+build without starting a persistent watcher or server. Each provider copy then
+runs native workspace checks and tests, WASM hydration checks, and a Cargo-Leptos
+release build.
 This requires Node/npm, `cargo-leptos`, and the `wasm32-unknown-unknown` target;
 the generated-application CI jobs install these prerequisites explicitly.
 
@@ -341,8 +390,8 @@ Failures in this job are owned by the contract boundary named in the output:
   and template-package contract;
 - dry-run, apply, conflict, or pristine-output failures belong to the CLI,
   application mutator, or resource generator;
-- native, hydration, or dependency-boundary failures belong to the generated
-  source or its selected provider composition;
+- development, native, hydration, or dependency-boundary failures belong to
+  the generated source or its selected provider composition;
 - fresh-install or upgrade failures belong to application migration and
   provider persistence composition;
 - readiness, asset, security-header, authentication, authorization, or CRUD
@@ -459,10 +508,27 @@ tag, verify:
 - `develop` has been promoted to `main` through a pull request;
 - `CHANGELOG.md`, every workspace package version, and affected documentation
   are current;
+- the canonical application `Cargo.lock` resolves framework packages from the
+  release tag to one reviewed commit revision;
 - `docs/releases/vX.Y.Z.md` is ready;
 - a manual release workflow run on the intended `main` commit succeeds.
 
 This manual run is release-candidate validation, not publication.
+
+When a canonical application lockfile must pin framework packages to a real
+revision of the version being prepared, use the two-step version transition
+recorded in the root workspace metadata. The prerequisite pull request may set
+`workspace.metadata.hegira.release_candidate` with only the previous stable
+`base` tag, the intended stable `target`, and its accepted `issue` number. The
+prerequisite advances exactly the framework and module packages consumed from
+the canonical lockfile's Hegira source; repository-only tooling remains at the
+base version. In that state, the normal repository policy derives both package
+groups from the base lockfile and validates their exact versions together with
+the complete base-release files. Explicit release-ref validation continues to
+fail. The final release-preparation pull request must pin the canonical
+lockfile to the merged candidate revision, advance all remaining workspace,
+package, and release files together, and remove the candidate metadata before
+promotion or tag validation.
 
 Create and verify a signed annotated tag only from the verified `main` release
 commit:

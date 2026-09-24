@@ -19,7 +19,8 @@ mod specification;
 mod web;
 
 pub use http::{
-    HttpLayerError, HttpLayerErrorKind, HttpLayerSources, PlannedResourceHttp, plan_resource_http,
+    HttpLayerError, HttpLayerErrorKind, HttpLayerSources, MinimalHttpLayerSources,
+    PlannedResourceHttp, plan_resource_http, plan_resource_http_minimal,
 };
 pub use migration::{
     MIGRATION_STATE_SCHEMA, MigrationError, MigrationErrorKind, MigrationIdentity,
@@ -34,13 +35,15 @@ pub use source::{
     plan_inward_resource_layers,
 };
 pub use specification::{
-    RESOURCE_SPECIFICATION_SCHEMA, ResourceField, ResourceFieldInput, ResourceIdentifier,
-    ResourceSelection, ResourceSpecification, ResourceSpecificationInput,
+    RESOURCE_CAPABILITY_DIAGNOSTIC_SCHEMA, RESOURCE_SPECIFICATION_SCHEMA,
+    ResourceCapabilityRequirements, ResourceCapabilityStatus, ResourceField, ResourceFieldInput,
+    ResourceIdentifier, ResourceSelection, ResourceSpecification, ResourceSpecificationInput,
     ResourceSpecificationSummary, ScalarType, SelectedClient, SelectedDatabase, SpecificationError,
     SpecificationErrorKind,
 };
 pub use web::{
-    PlannedResourceWeb, WebLayerError, WebLayerErrorKind, WebLayerSources, plan_resource_web,
+    MinimalWebLayerSources, PlannedResourceWeb, WebLayerError, WebLayerErrorKind, WebLayerSources,
+    plan_resource_web, plan_resource_web_minimal,
 };
 
 const MAX_IDENTITY_BYTES: usize = 64;

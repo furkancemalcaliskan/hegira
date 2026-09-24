@@ -1,0 +1,119 @@
+schema = 3
+id = "identity"
+version = "v0.6.0"
+source = "applications/layered-minimal"
+include = []
+requires = ["layered-leptos-minimal"]
+conflicts = ["layered-leptos-identity"]
+modules = ["identity"]
+provides_capabilities = ["authentication", "authorization"]
+
+[installation]
+module = "identity"
+databases = ["postgres", "sqlite"]
+clients = ["leptos"]
+contributions = [
+  "authentication-seed",
+  "background-jobs",
+  "bearer-api-routes",
+  "capability-preflight",
+  "configuration",
+  "cookie-bff-routes",
+  "leptos-navigation",
+  "leptos-routes",
+  "openapi",
+  "postgres-migration-source",
+  "sqlite-migration-source",
+]
+
+[[installation.framework_dependencies]]
+manifest = "Cargo.toml"
+name = "audit"
+path = "crates/audit"
+
+[[installation.framework_dependencies]]
+manifest = "Cargo.toml"
+name = "background_jobs"
+path = "crates/background_jobs"
+
+[[installation.framework_dependencies]]
+manifest = "Cargo.toml"
+name = "cache"
+path = "crates/cache"
+
+[[installation.framework_dependencies]]
+manifest = "Cargo.toml"
+name = "identity_application"
+path = "modules/identity/application"
+default_features = false
+
+[[installation.framework_dependencies]]
+manifest = "Cargo.toml"
+name = "identity_application_contracts"
+path = "modules/identity/application_contracts"
+
+[[installation.framework_dependencies]]
+manifest = "Cargo.toml"
+name = "identity_domain"
+path = "modules/identity/domain"
+
+[[installation.framework_dependencies]]
+manifest = "Cargo.toml"
+name = "identity_domain_shared"
+path = "modules/identity/domain_shared"
+
+[[installation.framework_dependencies]]
+manifest = "Cargo.toml"
+name = "identity_http"
+path = "modules/identity/http"
+default_features = false
+
+[[installation.framework_dependencies]]
+manifest = "Cargo.toml"
+name = "identity_leptos"
+path = "modules/identity/leptos"
+default_features = false
+
+[[installation.framework_dependencies]]
+manifest = "Cargo.toml"
+name = "identity_sqlx"
+path = "modules/identity/sqlx"
+default_features = false
+
+[[installation.framework_dependencies]]
+manifest = "Cargo.toml"
+name = "leptos_support"
+path = "crates/leptos_support"
+default_features = false
+
+[[installation.framework_dependencies]]
+manifest = "Cargo.toml"
+name = "mail"
+path = "crates/mail"
+
+[[installation.framework_dependencies]]
+manifest = "Cargo.toml"
+name = "observability"
+path = "crates/observability"
+
+[[installation.framework_dependencies]]
+manifest = "Cargo.toml"
+name = "search"
+path = "crates/search"
+default_features = false
+
+[[installation.framework_dependencies]]
+manifest = "Cargo.toml"
+name = "security"
+path = "crates/security"
+
+[[installation.framework_dependencies]]
+manifest = "Cargo.toml"
+name = "settings"
+path = "crates/settings"
+
+[[installation.framework_dependencies]]
+manifest = "Cargo.toml"
+name = "storage"
+path = "crates/storage"
+default_features = false

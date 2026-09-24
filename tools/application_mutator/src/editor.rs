@@ -4,7 +4,9 @@ use std::{
     path::Path,
 };
 
-use toml_edit::{DocumentMut, Item, TableLike, value};
+use toml_edit::{
+    Array, ArrayOfTables, DocumentMut, InlineTable, Item, Table, TableLike, Value, value,
+};
 
 use crate::{ChangePath, ChangePlanError, StructuredFileEdit};
 
@@ -15,8 +17,112 @@ pub const RUST_MODULES_END: &str = "// hegira:generated-modules:end";
 pub enum StructuredEditKind {
     RustModule,
     RustManagedEntry,
+    CargoDependency,
     TomlArrayString,
+    TomlArrayTable,
     TomlTableString,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CargoDependencySection {
+    WorkspaceDependencies,
+    Dependencies,
+    DevDependencies,
+    BuildDependencies,
+}
+
+impl CargoDependencySection {
+    fn table_path(self) -> &'static [&'static str] {
+        match self {
+            Self::WorkspaceDependencies => &["workspace", "dependencies"],
+            Self::Dependencies => &["dependencies"],
+            Self::DevDependencies => &["dev-dependencies"],
+            Self::BuildDependencies => &["build-dependencies"],
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CargoDependencySource {
+    Workspace,
+    Registry {
+        version: String,
+    },
+    FrameworkRelease {
+        repository: String,
+        version: String,
+        default_features: bool,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CargoDependency {
+    name: String,
+    source: CargoDependencySource,
+    optional: bool,
+    features: BTreeSet<String>,
+}
+
+impl CargoDependency {
+    pub fn workspace<N, F>(name: N, optional: bool, features: impl IntoIterator<Item = F>) -> Self
+    where
+        N: Into<String>,
+        F: Into<String>,
+    {
+        Self {
+            name: name.into(),
+            source: CargoDependencySource::Workspace,
+            optional,
+            features: features.into_iter().map(Into::into).collect(),
+        }
+    }
+
+    pub fn framework_release<N, R, V, F>(
+        name: N,
+        repository: R,
+        version: V,
+        default_features: bool,
+        optional: bool,
+        features: impl IntoIterator<Item = F>,
+    ) -> Self
+    where
+        N: Into<String>,
+        R: Into<String>,
+        V: Into<String>,
+        F: Into<String>,
+    {
+        Self {
+            name: name.into(),
+            source: CargoDependencySource::FrameworkRelease {
+                repository: repository.into(),
+                version: version.into(),
+                default_features,
+            },
+            optional,
+            features: features.into_iter().map(Into::into).collect(),
+        }
+    }
+
+    pub fn registry<N, V, F>(
+        name: N,
+        version: V,
+        optional: bool,
+        features: impl IntoIterator<Item = F>,
+    ) -> Self
+    where
+        N: Into<String>,
+        V: Into<String>,
+        F: Into<String>,
+    {
+        Self {
+            name: name.into(),
+            source: CargoDependencySource::Registry {
+                version: version.into(),
+            },
+            optional,
+            features: features.into_iter().map(Into::into).collect(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -403,6 +509,277 @@ pub fn plan_rust_managed_entry(
     )
 }
 
+/// Adds one dependency through Cargo's typed inline-table forms.
+///
+/// Application package manifests may consume a root workspace dependency.
+/// The virtual workspace manifest may declare only an immutable HTTPS
+/// framework release dependency. Path, registry, branch, revision, and command
+/// shaped dependency sources are intentionally not represented.
+pub fn plan_cargo_dependency(
+    path: impl AsRef<Path>,
+    observed_source: &[u8],
+    section: CargoDependencySection,
+    dependency: &CargoDependency,
+) -> Result<StructuredEditOutcome, StructuredEditError> {
+    let path = ChangePath::new(path)?;
+    validate_cargo_dependency(section, dependency, &path)?;
+    let source = std::str::from_utf8(observed_source).map_err(|_| {
+        StructuredEditError::at_path(
+            StructuredEditErrorKind::InvalidSource,
+            &path,
+            "Cargo integration source must be UTF-8",
+        )
+    })?;
+    let mut document = parse_toml(source, &path)?;
+    let table = find_table(&mut document, section.table_path(), &path)?;
+    let expected = cargo_dependency_value(dependency);
+    if let Some(existing) = table.get(&dependency.name) {
+        if cargo_dependency_matches(existing, dependency) {
+            return Ok(StructuredEditOutcome::AlreadyPresent {
+                kind: StructuredEditKind::CargoDependency,
+                path,
+            });
+        }
+        return Err(StructuredEditError::at_path(
+            StructuredEditErrorKind::TomlConflict,
+            &path,
+            "Cargo dependency already exists with a different declaration",
+        ));
+    }
+    table.insert(&dependency.name, Item::Value(expected));
+    planned(
+        StructuredEditKind::CargoDependency,
+        path,
+        observed_source,
+        document.to_string().into_bytes(),
+    )
+}
+
+fn cargo_dependency_matches(existing: &Item, dependency: &CargoDependency) -> bool {
+    let Some(declaration) = existing.as_table_like() else {
+        return false;
+    };
+    let allowed = [
+        "workspace",
+        "git",
+        "tag",
+        "version",
+        "default-features",
+        "optional",
+        "features",
+    ];
+    if declaration.iter().any(|(key, _)| !allowed.contains(&key)) {
+        return false;
+    }
+
+    let source_matches = match &dependency.source {
+        CargoDependencySource::Workspace => {
+            declaration.get("workspace").and_then(Item::as_bool) == Some(true)
+                && declaration.get("git").is_none()
+                && declaration.get("tag").is_none()
+                && declaration.get("default-features").is_none()
+        }
+        CargoDependencySource::Registry { version } => {
+            declaration.get("workspace").is_none()
+                && declaration.get("git").is_none()
+                && declaration.get("tag").is_none()
+                && declaration.get("version").and_then(Item::as_str) == Some(version)
+                && declaration.get("default-features").is_none()
+        }
+        CargoDependencySource::FrameworkRelease {
+            repository,
+            version,
+            default_features,
+        } => {
+            declaration.get("workspace").is_none()
+                && declaration.get("git").and_then(Item::as_str) == Some(repository)
+                && declaration.get("tag").and_then(Item::as_str) == Some(version)
+                && match declaration.get("default-features").and_then(Item::as_bool) {
+                    Some(value) => value == *default_features,
+                    None => *default_features,
+                }
+        }
+    };
+    let optional_matches = match declaration.get("optional").and_then(Item::as_bool) {
+        Some(value) => value == dependency.optional,
+        None => !dependency.optional,
+    };
+    let features_match = match declaration.get("features").and_then(Item::as_array) {
+        Some(features) => {
+            let entries = features
+                .iter()
+                .map(Value::as_str)
+                .collect::<Option<Vec<_>>>();
+            entries.is_some_and(|entries| {
+                entries.len() == dependency.features.len()
+                    && entries.into_iter().collect::<BTreeSet<_>>()
+                        == dependency.features.iter().map(String::as_str).collect()
+            })
+        }
+        None => declaration.get("features").is_none() && dependency.features.is_empty(),
+    };
+    source_matches && optional_matches && features_match
+}
+
+fn cargo_dependency_value(dependency: &CargoDependency) -> Value {
+    let mut declaration = InlineTable::new();
+    match &dependency.source {
+        CargoDependencySource::Workspace => {
+            declaration.insert("workspace", Value::from(true));
+        }
+        CargoDependencySource::Registry { version } => {
+            declaration.insert("version", Value::from(version.as_str()));
+        }
+        CargoDependencySource::FrameworkRelease {
+            repository,
+            version,
+            default_features,
+        } => {
+            declaration.insert("git", Value::from(repository.as_str()));
+            declaration.insert("tag", Value::from(version.as_str()));
+            if !default_features {
+                declaration.insert("default-features", Value::from(false));
+            }
+        }
+    }
+    if dependency.optional {
+        declaration.insert("optional", Value::from(true));
+    }
+    if !dependency.features.is_empty() {
+        let mut features = Array::new();
+        for feature in &dependency.features {
+            features.push(feature.as_str());
+        }
+        declaration.insert("features", Value::Array(features));
+    }
+    Value::InlineTable(declaration)
+}
+
+fn validate_cargo_dependency(
+    section: CargoDependencySection,
+    dependency: &CargoDependency,
+    path: &ChangePath,
+) -> Result<(), StructuredEditError> {
+    if !valid_cargo_name(&dependency.name)
+        || dependency
+            .features
+            .iter()
+            .any(|feature| !valid_cargo_feature(feature))
+    {
+        return Err(StructuredEditError::at_path(
+            StructuredEditErrorKind::InvalidInput,
+            path,
+            "Cargo dependency names and feature selections must use validated Cargo identifiers",
+        ));
+    }
+    match (&dependency.source, section) {
+        (
+            CargoDependencySource::FrameworkRelease {
+                repository,
+                version,
+                ..
+            },
+            CargoDependencySection::WorkspaceDependencies,
+        ) if !dependency.optional
+            && valid_https_repository(repository)
+            && valid_release_version(version) =>
+        {
+            Ok(())
+        }
+        (
+            CargoDependencySource::FrameworkRelease { .. },
+            CargoDependencySection::WorkspaceDependencies,
+        ) => Err(StructuredEditError::at_path(
+            StructuredEditErrorKind::InvalidInput,
+            path,
+            "framework dependencies require a credential-free HTTPS repository and stable SemVer tag",
+        )),
+        (CargoDependencySource::Workspace, CargoDependencySection::WorkspaceDependencies) => {
+            Err(StructuredEditError::at_path(
+                StructuredEditErrorKind::InvalidInput,
+                path,
+                "workspace dependency declarations require an immutable framework release source",
+            ))
+        }
+        (
+            CargoDependencySource::Registry { version },
+            CargoDependencySection::WorkspaceDependencies,
+        ) if !dependency.optional && valid_registry_version(version) => Ok(()),
+        (CargoDependencySource::Registry { .. }, CargoDependencySection::WorkspaceDependencies) => {
+            Err(StructuredEditError::at_path(
+                StructuredEditErrorKind::InvalidInput,
+                path,
+                "registry workspace dependencies require an exact stable SemVer version",
+            ))
+        }
+        (CargoDependencySource::Workspace, _) => Ok(()),
+        (CargoDependencySource::Registry { .. }, _) => Err(StructuredEditError::at_path(
+            StructuredEditErrorKind::InvalidInput,
+            path,
+            "application package dependencies must consume the workspace declaration",
+        )),
+        (CargoDependencySource::FrameworkRelease { .. }, _) => Err(StructuredEditError::at_path(
+            StructuredEditErrorKind::InvalidInput,
+            path,
+            "application package dependencies must consume the workspace declaration",
+        )),
+    }
+}
+
+fn valid_cargo_name(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 128
+        && value.bytes().enumerate().all(|(index, byte)| {
+            byte.is_ascii_lowercase()
+                || byte.is_ascii_digit()
+                || (index > 0 && matches!(byte, b'-' | b'_'))
+        })
+}
+
+fn valid_cargo_feature(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 256
+        && !value.chars().any(char::is_whitespace)
+        && value.bytes().all(|byte| {
+            byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b':' | b'/' | b'?' | b'.')
+        })
+}
+
+fn valid_https_repository(value: &str) -> bool {
+    let Some(location) = value.strip_prefix("https://") else {
+        return false;
+    };
+    !location.is_empty()
+        && location.contains('/')
+        && !location
+            .bytes()
+            .any(|byte| byte.is_ascii_whitespace() || byte.is_ascii_control())
+        && !location.contains(['@', '?', '#', '\\'])
+}
+
+fn valid_release_version(value: &str) -> bool {
+    let Some(version) = value.strip_prefix('v') else {
+        return false;
+    };
+    let parts = version.split('.').collect::<Vec<_>>();
+    parts.len() == 3
+        && parts.iter().all(|part| {
+            !part.is_empty()
+                && part.bytes().all(|byte| byte.is_ascii_digit())
+                && (part == &"0" || !part.starts_with('0'))
+        })
+}
+
+fn valid_registry_version(value: &str) -> bool {
+    let parts = value.split('.').collect::<Vec<_>>();
+    parts.len() == 3
+        && parts.iter().all(|part| {
+            !part.is_empty()
+                && part.bytes().all(|byte| byte.is_ascii_digit())
+                && (part == &"0" || !part.starts_with('0'))
+        })
+}
+
 pub fn plan_toml_array_string(
     path: impl AsRef<Path>,
     observed_source: &[u8],
@@ -459,6 +836,108 @@ pub fn plan_toml_array_string(
     array.push(entry);
     planned(
         StructuredEditKind::TomlArrayString,
+        path,
+        observed_source,
+        document.to_string().into_bytes(),
+    )
+}
+
+/// Adds one `{ id, version }` entry to a TOML array of tables while preserving
+/// the surrounding application manifest. Entries are ordered by identifier so
+/// repeated planning is deterministic.
+pub fn plan_toml_identity_entry(
+    path: impl AsRef<Path>,
+    observed_source: &[u8],
+    table_path: &[&str],
+    key: &str,
+    id: &str,
+    version: &str,
+) -> Result<StructuredEditOutcome, StructuredEditError> {
+    let path = ChangePath::new(path)?;
+    if table_path.is_empty()
+        || table_path.iter().any(|part| !valid_toml_key(part))
+        || !valid_toml_key(key)
+        || !valid_marker_identifier(id)
+        || !valid_release_version(version)
+    {
+        return Err(StructuredEditError::at_path(
+            StructuredEditErrorKind::InvalidInput,
+            &path,
+            "TOML identity entries require validated table, key, id, and release version values",
+        ));
+    }
+    let source = std::str::from_utf8(observed_source).map_err(|_| {
+        StructuredEditError::at_path(
+            StructuredEditErrorKind::InvalidSource,
+            &path,
+            "TOML integration source must be UTF-8",
+        )
+    })?;
+    let mut document = parse_toml(source, &path)?;
+    let table = find_table(&mut document, table_path, &path)?;
+    if table.get(key).is_none() {
+        table.insert(key, Item::ArrayOfTables(ArrayOfTables::new()));
+    }
+    let entries = table
+        .get_mut(key)
+        .and_then(Item::as_array_of_tables_mut)
+        .ok_or_else(|| {
+            StructuredEditError::at_path(
+                StructuredEditErrorKind::MissingIntegrationPoint,
+                &path,
+                "declared TOML array-of-tables integration point has another type",
+            )
+        })?;
+
+    let mut identities = Vec::new();
+    for entry in entries.iter() {
+        let entry_id = entry.get("id").and_then(Item::as_str).ok_or_else(|| {
+            StructuredEditError::at_path(
+                StructuredEditErrorKind::TomlConflict,
+                &path,
+                "TOML identity entry has no string `id`",
+            )
+        })?;
+        let entry_version = entry.get("version").and_then(Item::as_str).ok_or_else(|| {
+            StructuredEditError::at_path(
+                StructuredEditErrorKind::TomlConflict,
+                &path,
+                "TOML identity entry has no string `version`",
+            )
+        })?;
+        if entry_id == id {
+            return if entry_version == version {
+                Ok(StructuredEditOutcome::AlreadyPresent {
+                    kind: StructuredEditKind::TomlArrayTable,
+                    path,
+                })
+            } else {
+                Err(StructuredEditError::at_path(
+                    StructuredEditErrorKind::TomlConflict,
+                    &path,
+                    format!("TOML identity `{id}` already uses version `{entry_version}`"),
+                ))
+            };
+        }
+        identities.push(entry_id.to_owned());
+    }
+    if !identities.iter().is_sorted()
+        || identities.iter().collect::<BTreeSet<_>>().len() != identities.len()
+    {
+        return Err(StructuredEditError::at_path(
+            StructuredEditErrorKind::TomlConflict,
+            &path,
+            "TOML identity entries must be unique and sorted by id",
+        ));
+    }
+
+    let mut entry = Table::new();
+    entry.insert("id", value(id));
+    entry.insert("version", value(version));
+    let position = identities.partition_point(|existing| existing.as_str() < id);
+    entries.insert(position, entry);
+    planned(
+        StructuredEditKind::TomlArrayTable,
         path,
         observed_source,
         document.to_string().into_bytes(),
@@ -879,6 +1358,136 @@ mod tests {
         assert!(
             result
                 .contains("members = [\"apps/server\", \"crates/domain\", \"crates/application\"]")
+        );
+    }
+
+    #[test]
+    fn cargo_dependencies_use_closed_deterministic_source_forms() {
+        let source = b"# retained\n[workspace.dependencies]\nserde = \"1\"\n";
+        let dependency = CargoDependency::framework_release(
+            "identity_http",
+            "https://github.com/example/framework",
+            "v0.6.0",
+            false,
+            false,
+            ["openapi", "db-sqlite"],
+        );
+        let edit = planned(
+            plan_cargo_dependency(
+                "Cargo.toml",
+                source,
+                CargoDependencySection::WorkspaceDependencies,
+                &dependency,
+            )
+            .unwrap(),
+        );
+        let result = std::str::from_utf8(edit.resulting_content()).unwrap();
+        assert!(result.starts_with("# retained\n"));
+        assert!(result.contains("serde = \"1\""));
+        assert!(result.contains(
+            "identity_http = { git = \"https://github.com/example/framework\", tag = \"v0.6.0\", default-features = false, features = [\"db-sqlite\", \"openapi\"] }"
+        ));
+        assert!(matches!(
+            plan_cargo_dependency(
+                "Cargo.toml",
+                edit.resulting_content(),
+                CargoDependencySection::WorkspaceDependencies,
+                &dependency,
+            )
+            .unwrap(),
+            StructuredEditOutcome::AlreadyPresent {
+                kind: StructuredEditKind::CargoDependency,
+                ..
+            }
+        ));
+
+        let package = b"[dependencies]\n# retained\nserde.workspace = true\n";
+        let workspace = CargoDependency::workspace("identity_domain", true, ["testing"]);
+        let edit = planned(
+            plan_cargo_dependency(
+                "crates/domain/Cargo.toml",
+                package,
+                CargoDependencySection::Dependencies,
+                &workspace,
+            )
+            .unwrap(),
+        );
+        let result = std::str::from_utf8(edit.resulting_content()).unwrap();
+        assert!(result.contains("# retained"));
+        assert!(result.contains(
+            "identity_domain = { workspace = true, optional = true, features = [\"testing\"] }"
+        ));
+    }
+
+    #[test]
+    fn cargo_dependency_conflicts_and_unsafe_sources_fail_closed() {
+        let source = b"[workspace.dependencies]\nidentity_http = { git = \"https://github.com/example/framework\", tag = \"v0.5.0\" }\n";
+        let changed = CargoDependency::framework_release(
+            "identity_http",
+            "https://github.com/example/framework",
+            "v0.6.0",
+            true,
+            false,
+            std::iter::empty::<&str>(),
+        );
+        assert_eq!(
+            plan_cargo_dependency(
+                "Cargo.toml",
+                source,
+                CargoDependencySection::WorkspaceDependencies,
+                &changed,
+            )
+            .unwrap_err()
+            .kind(),
+            StructuredEditErrorKind::TomlConflict
+        );
+
+        for (repository, version) in [
+            ("http://github.com/example/framework", "v0.6.0"),
+            ("https://user@example.com/framework", "v0.6.0"),
+            ("https://github.com/example/framework?token=x", "v0.6.0"),
+            ("https://github.com/example/framework", "develop"),
+            ("https://github.com/example/framework", "v0.06.0"),
+        ] {
+            let dependency = CargoDependency::framework_release(
+                "identity_http",
+                repository,
+                version,
+                true,
+                false,
+                std::iter::empty::<&str>(),
+            );
+            assert_eq!(
+                plan_cargo_dependency(
+                    "Cargo.toml",
+                    b"[workspace.dependencies]\n",
+                    CargoDependencySection::WorkspaceDependencies,
+                    &dependency,
+                )
+                .unwrap_err()
+                .kind(),
+                StructuredEditErrorKind::InvalidInput
+            );
+        }
+
+        let optional_workspace_dependency = CargoDependency::framework_release(
+            "identity_http",
+            "https://github.com/example/framework",
+            "v0.6.0",
+            true,
+            true,
+            std::iter::empty::<&str>(),
+        );
+        assert_eq!(
+            plan_cargo_dependency(
+                "Cargo.toml",
+                b"[workspace.dependencies]\n",
+                CargoDependencySection::WorkspaceDependencies,
+                &optional_workspace_dependency,
+            )
+            .unwrap_err()
+            .kind(),
+            StructuredEditErrorKind::InvalidInput
         );
     }
 

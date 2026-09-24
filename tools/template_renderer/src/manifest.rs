@@ -1,16 +1,21 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
-    fs,
     path::{Component, Path, PathBuf},
 };
 
-use application_manifest::FrameworkContract;
-use serde::Deserialize;
+use application_manifest::{
+    ApplicationCapability, ClientAdapter, DatabaseAdapter, FrameworkContract,
+    HEGIRA_COMPONENT_PACKAGE, HEGIRA_FRAMEWORK_REPOSITORY, PackageIdentity,
+};
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::{RendererError, Result};
+use crate::{RendererError, Result, package_source::PackageSource};
 
-const MANIFEST_SCHEMA: u32 = 1;
+const TEMPLATE_MANIFEST_SCHEMA: u32 = 1;
+const COMPONENT_PACKAGE_MANIFEST_SCHEMA: u32 = 2;
+const COMPONENT_MANIFEST_SCHEMA: u32 = 3;
+const LEGACY_COMPONENT_MANIFEST_SCHEMA: u32 = 1;
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -31,6 +36,7 @@ pub struct ComponentPackageManifest {
     pub framework: FrameworkContract,
     pub templates: Vec<String>,
     pub components: Vec<String>,
+    pub modules: Vec<String>,
     pub content_digest: String,
 }
 
@@ -39,19 +45,32 @@ pub struct ComponentPackageManifest {
 pub struct ComponentManifest {
     pub schema: u32,
     pub id: String,
+    #[serde(default)]
+    pub version: Option<String>,
     pub source: PathBuf,
+    #[serde(default)]
     pub include: Vec<PathBuf>,
     #[serde(default)]
     pub requires: Vec<String>,
     #[serde(default)]
     pub conflicts: Vec<String>,
     #[serde(default)]
+    pub optional_dependencies: Vec<String>,
+    #[serde(default)]
+    pub modules: Vec<String>,
+    #[serde(default)]
+    pub provides_capabilities: Vec<ApplicationCapability>,
+    #[serde(default)]
+    pub requires_capabilities: Vec<ApplicationCapability>,
+    #[serde(default)]
     pub framework_dependencies: Vec<FrameworkDependency>,
+    #[serde(default)]
+    pub installation: Option<ComponentInstallationManifest>,
     #[serde(skip)]
     pub(crate) manifest_path: PathBuf,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct FrameworkDependency {
     pub manifest: PathBuf,
@@ -61,10 +80,37 @@ pub struct FrameworkDependency {
     pub default_features: Option<bool>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ComponentInstallationManifest {
+    pub module: String,
+    pub databases: Vec<DatabaseAdapter>,
+    pub clients: Vec<ClientAdapter>,
+    pub contributions: Vec<ComponentInstallationContribution>,
+    pub framework_dependencies: Vec<FrameworkDependency>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ComponentInstallationContribution {
+    AuthenticationSeed,
+    BackgroundJobs,
+    BearerApiRoutes,
+    CapabilityPreflight,
+    Configuration,
+    CookieBffRoutes,
+    LeptosNavigation,
+    LeptosRoutes,
+    Openapi,
+    PostgresMigrationSource,
+    SqliteMigrationSource,
+}
+
 #[derive(Debug)]
 pub struct ManifestCatalog {
     repository_root: PathBuf,
     templates_root: PathBuf,
+    source: PackageSource,
     template: TemplateManifest,
     components: BTreeMap<String, ComponentManifest>,
     package: Option<ComponentPackageManifest>,
@@ -93,13 +139,12 @@ impl ManifestCatalog {
         validate_identifier(template_id, "template")?;
 
         let repository_root = canonical_directory(repository_root, "repository root")?;
-        let templates_root =
-            canonical_directory(&repository_root.join("templates"), "templates root")?;
-        let package_path = templates_root.join("package.toml");
-        let package = if package_path.is_file() {
-            let package: ComponentPackageManifest =
-                read_manifest(&package_path, "component package")?;
-            validate_package(&package, &package_path)?;
+        let templates_root = repository_root.join("templates");
+        let source = PackageSource::open(&templates_root)?;
+        let package_path = Path::new("package.toml");
+        let package = if let Some(bytes) = source.file(package_path) {
+            let package: ComponentPackageManifest = read_manifest(bytes, "component package")?;
+            validate_package(&package, package_path)?;
             if !package
                 .templates
                 .iter()
@@ -113,12 +158,12 @@ impl ManifestCatalog {
         } else {
             None
         };
-        let template_path = templates_root
-            .join("applications")
+        let template_path = PathBuf::from("applications")
             .join(template_id)
             .join("template.toml");
-        let template: TemplateManifest = read_manifest(&template_path, "template")?;
-        validate_schema(template.schema, &template_path)?;
+        let template: TemplateManifest =
+            read_required_manifest(&source, &template_path, "template")?;
+        validate_schema(template.schema, TEMPLATE_MANIFEST_SCHEMA, &template_path)?;
         validate_identifier(&template.id, "template")?;
         if template.id != template_id {
             return Err(RendererError::new(format!(
@@ -140,48 +185,34 @@ impl ManifestCatalog {
             validate_variable(variable)?;
         }
 
-        let components_directory = templates_root.join("components");
-        let mut component_paths = fs::read_dir(&components_directory)
-            .map_err(|error| {
-                RendererError::new(format!(
-                    "failed to read component manifests from {}: {error}",
-                    components_directory.display()
-                ))
-            })?
-            .map(|entry| {
-                entry.map(|entry| entry.path()).map_err(|error| {
-                    RendererError::new(format!("failed to read component manifest entry: {error}"))
-                })
-            })
-            .collect::<Result<Vec<_>>>()?;
+        let mut component_paths = source
+            .files_below(Path::new("components"))
+            .map(|(path, _)| path.to_path_buf())
+            .collect::<Vec<_>>();
         component_paths.sort();
 
         let mut components = BTreeMap::new();
         for component_path in component_paths {
-            let metadata = fs::symlink_metadata(&component_path).map_err(|error| {
-                RendererError::new(format!(
-                    "failed to inspect component manifest {}: {error}",
-                    component_path.display()
-                ))
-            })?;
-            if metadata.file_type().is_symlink() {
-                return Err(RendererError::new(format!(
-                    "component manifest may not be a symbolic link: {}",
-                    component_path.display()
-                )));
-            }
-            if !metadata.is_file()
+            if component_path.parent() != Some(Path::new("components"))
                 || component_path
                     .extension()
                     .and_then(|extension| extension.to_str())
                     != Some("toml")
             {
-                continue;
+                return Err(RendererError::new(
+                    "component package contains an undeclared component manifest entry",
+                ));
             }
 
-            let mut component: ComponentManifest = read_manifest(&component_path, "component")?;
-            validate_schema(component.schema, &component_path)?;
-            validate_component(&component)?;
+            let mut component: ComponentManifest =
+                read_required_manifest(&source, &component_path, "component")?;
+            let expected_schema = if package.is_some() {
+                COMPONENT_MANIFEST_SCHEMA
+            } else {
+                LEGACY_COMPONENT_MANIFEST_SCHEMA
+            };
+            validate_schema(component.schema, expected_schema, &component_path)?;
+            validate_component(&component, package.as_ref())?;
             component.manifest_path = component_path.clone();
             if components.insert(component.id.clone(), component).is_some() {
                 return Err(RendererError::new(format!(
@@ -204,10 +235,12 @@ impl ManifestCatalog {
         let catalog = Self {
             repository_root,
             templates_root,
+            source,
             template,
             components,
             package,
         };
+        catalog.validate_declared_package_files()?;
         if validate_content_digest {
             catalog.validate_package_content()?;
         }
@@ -251,40 +284,36 @@ impl ManifestCatalog {
             return Ok(None);
         }
         let mut entries = BTreeMap::new();
-        let template_path = self
-            .templates_root
-            .join("applications")
-            .join(&self.template.id)
-            .join("template.toml");
-        insert_package_entry(
-            &mut entries,
-            format!("applications/{}/template.toml", self.template.id),
-            fs::read(&template_path).map_err(|error| {
-                RendererError::new(format!(
-                    "failed to read packaged template manifest: {error}"
-                ))
-            })?,
-        )?;
+        let package = self.package.as_ref().expect("package presence was checked");
+        for template in &package.templates {
+            let path = PathBuf::from("applications")
+                .join(template)
+                .join("template.toml");
+            insert_package_entry(
+                &mut entries,
+                path_to_package_key(&path)?,
+                self.required_file(&path, "packaged template manifest")?
+                    .to_vec(),
+            )?;
+        }
 
         for component in self.components.values() {
+            let manifest_path = PathBuf::from("components").join(format!("{}.toml", component.id));
             insert_package_entry(
                 &mut entries,
                 format!("components/{}.toml", component.id),
-                fs::read(&component.manifest_path).map_err(|error| {
-                    RendererError::new(format!(
-                        "failed to read packaged component manifest: {error}"
-                    ))
-                })?,
+                self.required_file(&manifest_path, "packaged component manifest")?
+                    .to_vec(),
             )?;
-            let source_root = component.source_root(&self.templates_root)?;
-            let mut includes = component.include.clone();
-            includes.sort();
-            for include in includes {
-                collect_package_entries(
-                    component,
-                    &source_root,
-                    &source_root.join(include),
+            for (relative, bytes) in self.component_files(component)? {
+                insert_package_entry(
                     &mut entries,
+                    format!(
+                        "sources/{}/{}",
+                        component.id,
+                        path_to_package_key(&relative)?
+                    ),
+                    bytes.to_vec(),
                 )?;
             }
         }
@@ -292,7 +321,148 @@ impl ManifestCatalog {
         Ok(Some(content_digest(&entries)))
     }
 
+    fn required_file(&self, path: &Path, kind: &str) -> Result<&[u8]> {
+        self.source.file(path).ok_or_else(|| {
+            RendererError::new(format!("component package is missing the declared {kind}"))
+        })
+    }
+
+    pub(crate) fn component_files<'a>(
+        &'a self,
+        component: &ComponentManifest,
+    ) -> Result<Vec<(PathBuf, &'a [u8])>> {
+        let source_root = &component.source;
+        let mut selected = BTreeMap::<PathBuf, &'a [u8]>::new();
+        for include in &component.include {
+            let declared = source_root.join(include);
+            if let Some(bytes) = self.source.file(&declared) {
+                let relative = declared.strip_prefix(source_root).map_err(|_| {
+                    RendererError::new("component source declaration escapes its source root")
+                })?;
+                selected.insert(relative.to_path_buf(), bytes);
+                continue;
+            }
+            let descendants = self
+                .source
+                .files_below(&declared)
+                .filter(|(path, _)| *path != declared)
+                .collect::<Vec<_>>();
+            if descendants.is_empty() {
+                return Err(RendererError::new(
+                    "component include does not identify a declared package file or directory",
+                ));
+            }
+            for (path, bytes) in descendants {
+                let relative = path.strip_prefix(source_root).map_err(|_| {
+                    RendererError::new("component source declaration escapes its source root")
+                })?;
+                selected.insert(relative.to_path_buf(), bytes);
+            }
+        }
+        Ok(selected.into_iter().collect())
+    }
+
+    fn validate_declared_package_files(&self) -> Result<()> {
+        let Some(package) = &self.package else {
+            return Ok(());
+        };
+        let mut declared = BTreeSet::from([PathBuf::from("package.toml")]);
+        for template in &package.templates {
+            declared.insert(
+                PathBuf::from("applications")
+                    .join(template)
+                    .join("template.toml"),
+            );
+        }
+        for component in self.components.values() {
+            declared.insert(PathBuf::from("components").join(format!("{}.toml", component.id)));
+            let source_root = &component.source;
+            for (relative, _) in self.component_files(component)? {
+                declared.insert(source_root.join(relative));
+            }
+        }
+        let observed = self
+            .source
+            .files()
+            .map(|(path, _)| path.to_path_buf())
+            .collect::<BTreeSet<_>>();
+        if declared != observed {
+            return Err(RendererError::new(
+                "component package contains missing or undeclared files",
+            ));
+        }
+        Ok(())
+    }
+
     pub fn resolve_components(&self) -> Result<Vec<&ComponentManifest>> {
+        if self.package.is_some() {
+            let graph = self
+                .resolve_component_roots(None)
+                .map_err(|error| RendererError::new(error.to_string()))?;
+            return self.components_for(&graph);
+        }
+
+        self.resolve_legacy_components()
+    }
+
+    pub fn resolve_composition(
+        &self,
+        request: &crate::CompositionRequest,
+    ) -> std::result::Result<crate::ResolvedComposition, crate::CompositionError> {
+        let Some(package) = &self.package else {
+            return Err(crate::CompositionError::missing_package());
+        };
+        crate::composition::resolve(package, &self.components, request)
+    }
+
+    pub fn resolve_template_composition(
+        &self,
+    ) -> std::result::Result<crate::ResolvedComposition, crate::CompositionError> {
+        self.resolve_component_roots(None)
+    }
+
+    /// Resolve caller-selected component roots against the package identity
+    /// authenticated by this catalog. Callers may select composition roots,
+    /// but cannot substitute the package or framework source contract.
+    pub fn resolve_component_roots(
+        &self,
+        roots: Option<&[String]>,
+    ) -> std::result::Result<crate::ResolvedComposition, crate::CompositionError> {
+        let Some(package) = &self.package else {
+            return Err(crate::CompositionError::missing_package());
+        };
+        let request = crate::CompositionRequest::new(
+            package.framework.clone(),
+            PackageIdentity {
+                id: package.id.clone(),
+                version: package.version.clone(),
+            },
+            roots
+                .map(<[String]>::to_vec)
+                .unwrap_or_else(|| self.template.components.clone()),
+        );
+        crate::composition::resolve(package, &self.components, &request)
+    }
+
+    pub(crate) fn components_for(
+        &self,
+        graph: &crate::ResolvedComposition,
+    ) -> Result<Vec<&ComponentManifest>> {
+        graph
+            .components
+            .iter()
+            .map(|component| {
+                self.components.get(&component.id).ok_or_else(|| {
+                    RendererError::new(format!(
+                        "resolved component does not exist: {}",
+                        component.id
+                    ))
+                })
+            })
+            .collect()
+    }
+
+    fn resolve_legacy_components(&self) -> Result<Vec<&ComponentManifest>> {
         let mut selected = BTreeSet::new();
         let mut temporary = BTreeSet::new();
         let mut resolved = Vec::new();
@@ -351,50 +521,8 @@ impl ManifestCatalog {
     }
 }
 
-fn collect_package_entries(
-    component: &ComponentManifest,
-    source_root: &Path,
-    candidate: &Path,
-    entries: &mut BTreeMap<String, Vec<u8>>,
-) -> Result<()> {
-    let metadata = fs::symlink_metadata(candidate).map_err(|error| {
-        RendererError::new(format!(
-            "failed to inspect packaged component input: {error}"
-        ))
-    })?;
-    if metadata.file_type().is_symlink() {
-        return Err(RendererError::new(
-            "packaged component input may not be a symbolic link",
-        ));
-    }
-    if metadata.is_dir() {
-        let mut children = fs::read_dir(candidate)
-            .map_err(|error| {
-                RendererError::new(format!(
-                    "failed to read packaged component directory: {error}"
-                ))
-            })?
-            .map(|entry| {
-                entry.map(|entry| entry.path()).map_err(|error| {
-                    RendererError::new(format!("failed to read packaged component entry: {error}"))
-                })
-            })
-            .collect::<Result<Vec<_>>>()?;
-        children.sort();
-        for child in children {
-            collect_package_entries(component, source_root, &child, entries)?;
-        }
-        return Ok(());
-    }
-    if !metadata.is_file() {
-        return Err(RendererError::new(
-            "packaged component input is not a regular file or directory",
-        ));
-    }
-    let relative = candidate
-        .strip_prefix(source_root)
-        .map_err(|_| RendererError::new("packaged component input escapes its source root"))?;
-    let relative = relative
+fn path_to_package_key(path: &Path) -> Result<String> {
+    let parts = path
         .components()
         .map(|component| match component {
             Component::Normal(value) => Ok(value.to_string_lossy()),
@@ -402,13 +530,8 @@ fn collect_package_entries(
                 "packaged component input contains an invalid path component",
             )),
         })
-        .collect::<Result<Vec<_>>>()?
-        .join("/");
-    let package_path = format!("sources/{}/{relative}", component.id);
-    let bytes = fs::read(candidate).map_err(|error| {
-        RendererError::new(format!("failed to read packaged component input: {error}"))
-    })?;
-    insert_package_entry(entries, package_path, bytes)
+        .collect::<Result<Vec<_>>>()?;
+    Ok(parts.join("/"))
 }
 
 fn insert_package_entry(
@@ -437,19 +560,36 @@ fn content_digest(entries: &BTreeMap<String, Vec<u8>>) -> String {
 }
 
 fn validate_package(package: &ComponentPackageManifest, path: &Path) -> Result<()> {
-    validate_schema(package.schema, path)?;
+    validate_schema(package.schema, COMPONENT_PACKAGE_MANIFEST_SCHEMA, path)?;
     validate_identifier(&package.id, "component package")?;
-    package.framework.validate().map_err(|error| {
-        RendererError::new(format!("invalid component package framework: {error}"))
-    })?;
-    if package.version != package.framework.version {
-        return Err(RendererError::new(format!(
-            "component package version {} does not match framework version {}",
-            package.version, package.framework.version
-        )));
+    if package.id != HEGIRA_COMPONENT_PACKAGE {
+        return Err(RendererError::new(
+            "component package identity does not match the bundled package",
+        ));
     }
-    validate_sorted_identifiers(&package.templates, "package template")?;
-    validate_sorted_identifiers(&package.components, "package component")?;
+    package
+        .framework
+        .validate()
+        .map_err(|_| RendererError::new("invalid framework repository in component package"))?;
+    if package.framework.repository != HEGIRA_FRAMEWORK_REPOSITORY {
+        return Err(RendererError::new(
+            "component package framework source does not match the bundled release source",
+        ));
+    }
+    if package.version != package.framework.version {
+        return Err(RendererError::new(
+            "component package version does not match framework version",
+        ));
+    }
+    let bundled_version = format!("v{}", env!("CARGO_PKG_VERSION"));
+    if package.version != bundled_version {
+        return Err(RendererError::new(
+            "component package version does not match the bundled framework release",
+        ));
+    }
+    validate_sorted_identifiers(&package.templates, "package template", false)?;
+    validate_sorted_identifiers(&package.components, "package component", false)?;
+    validate_sorted_identifiers(&package.modules, "package module", true)?;
     let digest = package
         .content_digest
         .strip_prefix("sha256:")
@@ -466,8 +606,8 @@ fn validate_package(package: &ComponentPackageManifest, path: &Path) -> Result<(
     Ok(())
 }
 
-fn validate_sorted_identifiers(values: &[String], kind: &str) -> Result<()> {
-    if values.is_empty() {
+fn validate_sorted_identifiers(values: &[String], kind: &str, allow_empty: bool) -> Result<()> {
+    if values.is_empty() && !allow_empty {
         return Err(RendererError::new(format!(
             "component package declares no {kind}s"
         )));
@@ -483,63 +623,229 @@ fn validate_sorted_identifiers(values: &[String], kind: &str) -> Result<()> {
     Ok(())
 }
 
-impl ComponentManifest {
-    pub(crate) fn source_root(&self, templates_root: &Path) -> Result<PathBuf> {
-        let source = canonical_directory(&templates_root.join(&self.source), "component source")?;
-        ensure_inside(templates_root, &source, "component source")?;
-        Ok(source)
-    }
-}
-
-fn read_manifest<T>(path: &Path, kind: &str) -> Result<T>
+fn read_required_manifest<'a, T>(source: &'a PackageSource, path: &Path, kind: &str) -> Result<T>
 where
     T: for<'de> Deserialize<'de>,
 {
-    let source = fs::read_to_string(path).map_err(|error| {
-        RendererError::new(format!(
-            "failed to read {kind} manifest {}: {error}",
-            path.display()
-        ))
+    let bytes = source.file(path).ok_or_else(|| {
+        RendererError::new(format!("component package is missing the {kind} manifest"))
     })?;
-    toml::from_str(&source).map_err(|error| {
-        RendererError::new(format!(
-            "invalid {kind} manifest {}: {error}",
-            path.display()
-        ))
+    read_manifest(bytes, kind)
+}
+
+fn read_manifest<T>(bytes: &[u8], kind: &str) -> Result<T>
+where
+    T: for<'de> Deserialize<'de>,
+{
+    let source = std::str::from_utf8(bytes)
+        .map_err(|_| RendererError::new(format!("invalid {kind} manifest encoding")))?;
+    toml::from_str(source).map_err(|error| {
+        let reason = if error.to_string().contains("unknown field") {
+            ": unknown field"
+        } else {
+            ""
+        };
+        RendererError::new(format!("invalid {kind} manifest{reason}"))
     })
 }
 
-fn validate_component(component: &ComponentManifest) -> Result<()> {
+fn validate_component(
+    component: &ComponentManifest,
+    package: Option<&ComponentPackageManifest>,
+) -> Result<()> {
     validate_identifier(&component.id, "component")?;
+    match (package, &component.version) {
+        (Some(_), Some(_)) => {}
+        (Some(_), None) => {
+            return Err(RendererError::new(format!(
+                "packaged component {} declares no version",
+                component.id
+            )));
+        }
+        (None, None) => {}
+        (None, Some(_)) => {
+            return Err(RendererError::new(format!(
+                "unpackaged legacy component {} cannot declare a version",
+                component.id
+            )));
+        }
+    }
     validate_relative_path(&component.source, "component source")?;
-    if component.include.is_empty() {
+    if component.include.is_empty() && component.installation.is_none() {
         return Err(RendererError::new(format!(
-            "component {} includes no files",
+            "rendered component {} includes no files",
             component.id
         )));
     }
     for include in &component.include {
         validate_relative_path(include, "component include")?;
     }
-    for requirement in &component.requires {
-        validate_identifier(requirement, "component requirement")?;
+    validate_sorted_identifiers(&component.requires, "component requirement", true)?;
+    validate_sorted_identifiers(&component.conflicts, "component conflict", true)?;
+    validate_sorted_identifiers(
+        &component.optional_dependencies,
+        "component optional dependency",
+        true,
+    )?;
+    validate_sorted_identifiers(&component.modules, "component module", true)?;
+    validate_sorted_capabilities(
+        &component.provides_capabilities,
+        "provided component capability",
+    )?;
+    validate_sorted_capabilities(
+        &component.requires_capabilities,
+        "required component capability",
+    )?;
+    for relation in component
+        .requires
+        .iter()
+        .chain(&component.optional_dependencies)
+        .chain(&component.conflicts)
+    {
+        if relation == &component.id {
+            return Err(RendererError::new(format!(
+                "component {} cannot reference itself",
+                component.id
+            )));
+        }
     }
-    for conflict in &component.conflicts {
-        validate_identifier(conflict, "component conflict")?;
+    if component
+        .requires
+        .iter()
+        .chain(&component.optional_dependencies)
+        .any(|dependency| component.conflicts.contains(dependency))
+    {
+        return Err(RendererError::new(format!(
+            "component {} cannot both depend on and conflict with the same component",
+            component.id
+        )));
     }
     for dependency in &component.framework_dependencies {
         validate_identifier(&dependency.name, "framework dependency")?;
         validate_relative_path(&dependency.manifest, "framework dependency manifest")?;
         validate_relative_path(&dependency.path, "framework dependency path")?;
     }
+    if let Some(installation) = &component.installation {
+        validate_installation(component, installation)?;
+    }
     Ok(())
 }
 
-fn validate_schema(schema: u32, path: &Path) -> Result<()> {
-    if schema != MANIFEST_SCHEMA {
+fn validate_installation(
+    component: &ComponentManifest,
+    installation: &ComponentInstallationManifest,
+) -> Result<()> {
+    validate_identifier(&installation.module, "installation module")?;
+    if component.modules.as_slice() != [installation.module.as_str()] {
         return Err(RendererError::new(format!(
-            "unsupported manifest schema {schema} in {}; expected {MANIFEST_SCHEMA}",
+            "installable component {} must own exactly its declared module",
+            component.id
+        )));
+    }
+    if !component.include.is_empty() {
+        return Err(RendererError::new(format!(
+            "installable component {} cannot render or vendor application source",
+            component.id
+        )));
+    }
+    if component.requires.is_empty() {
+        return Err(RendererError::new(format!(
+            "installable component {} declares no compatible application base",
+            component.id
+        )));
+    }
+    validate_sorted_values(&installation.databases, "installation database adapter")?;
+    validate_sorted_values(&installation.clients, "installation client adapter")?;
+    validate_sorted_values(&installation.contributions, "installation contribution")?;
+    if installation.framework_dependencies.is_empty() {
+        return Err(RendererError::new(format!(
+            "installable component {} declares no framework dependencies",
+            component.id
+        )));
+    }
+    for dependency in &installation.framework_dependencies {
+        validate_identifier(&dependency.name, "installation framework dependency")?;
+        validate_relative_path(
+            &dependency.manifest,
+            "installation framework dependency manifest",
+        )?;
+        validate_relative_path(&dependency.path, "installation framework dependency path")?;
+    }
+    if installation
+        .framework_dependencies
+        .windows(2)
+        .any(|pair| pair[0].name >= pair[1].name)
+    {
+        return Err(RendererError::new(
+            "installation framework dependencies must be sorted and unique",
+        ));
+    }
+    if installation
+        .framework_dependencies
+        .iter()
+        .any(|dependency| dependency.manifest != Path::new("Cargo.toml"))
+    {
+        return Err(RendererError::new(
+            "installation framework dependencies must target the workspace manifest",
+        ));
+    }
+    let dependency_paths = installation
+        .framework_dependencies
+        .iter()
+        .map(|dependency| &dependency.path)
+        .collect::<BTreeSet<_>>();
+    if dependency_paths.len() != installation.framework_dependencies.len() {
+        return Err(RendererError::new(
+            "installation framework dependency paths must be unique",
+        ));
+    }
+    for (database, contribution) in [
+        (
+            DatabaseAdapter::Postgres,
+            ComponentInstallationContribution::PostgresMigrationSource,
+        ),
+        (
+            DatabaseAdapter::Sqlite,
+            ComponentInstallationContribution::SqliteMigrationSource,
+        ),
+    ] {
+        if installation.databases.contains(&database)
+            != installation.contributions.contains(&contribution)
+        {
+            return Err(RendererError::new(
+                "installation database adapters and migration-source contributions must match",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_sorted_values<T: Ord>(values: &[T], kind: &str) -> Result<()> {
+    if values.is_empty() {
+        return Err(RendererError::new(format!("component declares no {kind}s")));
+    }
+    if values.windows(2).any(|pair| pair[0] >= pair[1]) {
+        return Err(RendererError::new(format!(
+            "component {kind}s must be sorted and unique"
+        )));
+    }
+    Ok(())
+}
+
+fn validate_schema(schema: u32, expected: u32, path: &Path) -> Result<()> {
+    if schema != expected {
+        return Err(RendererError::new(format!(
+            "unsupported manifest schema {schema} in {}; expected {expected}",
             path.display()
+        )));
+    }
+    Ok(())
+}
+
+fn validate_sorted_capabilities(values: &[ApplicationCapability], kind: &str) -> Result<()> {
+    if values.windows(2).any(|pair| pair[0] >= pair[1]) {
+        return Err(RendererError::new(format!(
+            "component {kind}s must be sorted and unique"
         )));
     }
     Ok(())
@@ -583,19 +889,8 @@ pub(crate) fn validate_relative_path(path: &Path, kind: &str) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn ensure_inside(parent: &Path, candidate: &Path, kind: &str) -> Result<()> {
-    if !candidate.starts_with(parent) {
-        return Err(RendererError::new(format!(
-            "{kind} escapes {}: {}",
-            parent.display(),
-            candidate.display()
-        )));
-    }
-    Ok(())
-}
-
 fn canonical_directory(path: &Path, kind: &str) -> Result<PathBuf> {
-    let canonical = fs::canonicalize(path).map_err(|error| {
+    let canonical = std::fs::canonicalize(path).map_err(|error| {
         RendererError::new(format!(
             "failed to resolve {kind} {}: {error}",
             path.display()

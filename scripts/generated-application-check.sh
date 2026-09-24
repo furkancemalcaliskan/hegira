@@ -4,20 +4,34 @@ set -eu
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 compose_file="$repo_root/scripts/generated-application-smoke.yml"
 . "$repo_root/scripts/validation-cache.sh"
-validation_cache_prepare "$repo_root" generated-application-check
+mode="${1:-default}"
+case "$mode" in
+  default) check_name=generated-application-check ;;
+  identity-added) check_name=identity-added-application-check ;;
+  *) echo "usage: sh scripts/generated-application-check.sh [default|identity-added]" >&2; exit 2 ;;
+esac
+if [ "$#" -gt 1 ]; then
+  echo "usage: sh scripts/generated-application-check.sh [default|identity-added]" >&2
+  exit 2
+fi
+validation_cache_prepare "$repo_root" "$check_name"
 staging_parent="$HEGIRA_VALIDATION_WORKSPACE"
 generated_root="$staging_parent/postgres-validation"
 artifacts_dir="$staging_parent/artifacts"
 export CARGO_TARGET_DIR="$HEGIRA_VALIDATION_TARGET"
 
-export COMPOSE_PROJECT_NAME="hegira-generated-${GITHUB_RUN_ID:-local}-$$"
-export GENERATED_APP_IMAGE="hegira-generated:${GITHUB_RUN_ID:-local}-$$"
+export COMPOSE_PROJECT_NAME="hegira-generated-$mode-${GITHUB_RUN_ID:-local}-$$"
+export GENERATED_APP_IMAGE="hegira-generated-$mode:${GITHUB_RUN_ID:-local}-$$"
 image_built=false
 export GENERATED_APP_HTTP_PORT="${GENERATED_APP_HTTP_PORT:-38081}"
 export GENERATED_APP_POSTGRES_PORT="${GENERATED_APP_POSTGRES_PORT:-35432}"
 export GENERATED_APP_DB_PASSWORD="generated-${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-0}-$$"
 export GENERATED_APP_JWT_SECRET="generated-jwt-${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-0}-$$-ephemeral"
 export GENERATED_APP_TEST_USERNAME="resource-validation-${GITHUB_RUN_ID:-local}-$$@example.test"
+if [ "$mode" = identity-added ]; then
+  export GENERATED_APP_PUBLIC_URL=https://example.test
+  export GENERATED_APP_CORS_ENABLED=false
+fi
 
 compose() {
   docker compose --file "$compose_file" "$@"
@@ -30,6 +44,23 @@ application_fingerprint() {
   )
 }
 
+stage_framework_source() (
+  validation_root="$1"
+  framework_root="$validation_root/.hegira-validation/framework"
+  mkdir -p "$framework_root"
+  tar -C "$repo_root" \
+    --exclude='.git' \
+    --exclude='.env' \
+    --exclude='node_modules' \
+    --exclude='target' \
+    --exclude='*.sqlite3' \
+    --exclude='*.sqlite3-shm' \
+    --exclude='*.sqlite3-wal' \
+    -cf - \
+    Cargo.toml Cargo.lock rust-toolchain.toml .cargo crates modules tools |
+    tar -xf - -C "$framework_root"
+)
+
 expect_exit() {
   expected="$1"
   shift
@@ -41,6 +72,26 @@ expect_exit() {
     echo "expected exit $expected but command returned $actual" >&2
     exit 1
   fi
+}
+
+stage_application() {
+  source="$1"
+  output="$2"
+  database="$3"
+  if [ "$mode" = identity-added ]; then
+    set -- --identity-added-source "$source" \
+      --component layered-base --component layered-leptos-minimal
+  else
+    set -- --generated-source "$source"
+  fi
+  cargo run --locked --quiet -p template_renderer \
+    --example repository_validation_renderer -- render \
+    --repository-root "$repo_root" --template layered \
+    "$@" --output "$output" --framework-root "$repo_root" \
+    --framework-path .hegira-validation/framework \
+    --set "application_name=$database-application" \
+    --set "database_adapter=$database" --set "database_feature=db-$database" \
+    --set client_adapter=leptos
 }
 
 cleanup() {
@@ -61,11 +112,63 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 # Exercise the real public command without any repository-local source options.
-cargo run --locked --quiet -p hegira_cli -- new sqlite-application \
-  --destination "$staging_parent/sqlite-source"
-cargo run --locked --quiet -p hegira_cli -- new postgres-application \
-  --destination "$staging_parent/postgres-source" \
-  --database postgres --client leptos --component identity
+for database in sqlite postgres; do
+  source="$staging_parent/$database-source"
+  if [ "$mode" = identity-added ]; then
+    cargo run --locked --quiet -p hegira_cli -- new "$database-application" \
+      --destination "$source" --composition minimal --database "$database"
+    application_fingerprint "$source" >"$staging_parent/$database-before-install.sha256"
+    expect_exit 3 cargo run --locked --quiet -p hegira_cli -- generate resource \
+      ValidationRecord --field name:string --application-root "$source" \
+      --dry-run --json >"$staging_parent/$database-preinstall.stdout" \
+      2>"$staging_parent/$database-preinstall.json"
+    node -e '
+      const fs = require("fs");
+      const diagnostic = JSON.parse(fs.readFileSync(process.argv[1]));
+      if (diagnostic.code !== "missing-capabilities" ||
+          JSON.stringify(diagnostic.missing) !== JSON.stringify(["authentication", "authorization"]))
+        process.exit(1);
+    ' "$staging_parent/$database-preinstall.json"
+    cargo run --locked --quiet -p hegira_cli -- component add identity \
+      --application-root "$source" --dry-run --json \
+      >"$staging_parent/$database-install-preview.json"
+    application_fingerprint "$source" >"$staging_parent/$database-after-preview.sha256"
+    cmp "$staging_parent/$database-before-install.sha256" \
+      "$staging_parent/$database-after-preview.sha256"
+    cargo run --locked --quiet -p hegira_cli -- component add identity \
+      --application-root "$source" --json \
+      >"$staging_parent/$database-install-apply.json"
+    node -e '
+      const fs = require("fs");
+      const preview = JSON.parse(fs.readFileSync(process.argv[1]));
+      const applied = JSON.parse(fs.readFileSync(process.argv[2]));
+      if (JSON.stringify(preview.plan) !== JSON.stringify(applied.plan)) process.exit(1);
+    ' "$staging_parent/$database-install-preview.json" \
+      "$staging_parent/$database-install-apply.json"
+    cargo run --locked --quiet -p hegira_cli -- inspect \
+      --application-root "$source" --json >"$staging_parent/$database-inspect.json"
+    cargo run --locked --quiet -p hegira_cli -- doctor \
+      --application-root "$source" --json >"$staging_parent/$database-doctor.json"
+    node -e '
+      const fs = require("fs");
+      const inspect = JSON.parse(fs.readFileSync(process.argv[1]));
+      const doctor = JSON.parse(fs.readFileSync(process.argv[2]));
+      if (inspect.composition?.status !== "compatible" ||
+          JSON.stringify(inspect.composition.modules.map(module => module.id)) !== JSON.stringify(["identity"]) ||
+          JSON.stringify(inspect.composition.capabilities) !== JSON.stringify(["authentication", "authorization"]) ||
+          doctor.status === "failure") process.exit(1);
+    ' "$staging_parent/$database-inspect.json" "$staging_parent/$database-doctor.json"
+  elif [ "$database" = sqlite ]; then
+    cargo run --locked --quiet -p hegira_cli -- new sqlite-application \
+      --destination "$source"
+  else
+    cargo run --locked --quiet -p hegira_cli -- new postgres-application \
+      --destination "$source" --database postgres --client leptos --component identity
+  fi
+done
+test -f "$staging_parent/sqlite-source/Cargo.lock"
+test -f "$staging_parent/postgres-source/Cargo.lock"
+cmp "$staging_parent/sqlite-source/Cargo.lock" "$staging_parent/postgres-source/Cargo.lock"
 
 if find "$repo_root/.cargo" "$repo_root/crates" \
   "$repo_root/modules" "$repo_root/tools" \
@@ -74,31 +177,49 @@ if find "$repo_root/.cargo" "$repo_root/crates" \
   exit 1
 fi
 
+development_root="$staging_parent/sqlite-development-validation"
+stage_application "$staging_parent/sqlite-source" "$development_root" sqlite
+stage_framework_source "$development_root"
+
+(
+  cd "$development_root"
+  cargo generate-lockfile
+  npm ci --prefix apps/web/src
+  PATH="$development_root/apps/web/src/node_modules/.bin:$PATH"
+  export PATH
+  APP_ENV=sqlite cargo leptos build -p app_server \
+    --bin-features ssr,db-sqlite --lib-features hydrate \
+    --bin-cargo-args=--locked --lib-cargo-args=--locked
+)
+
 for database in sqlite postgres; do
   validation_root="$staging_parent/$database-validation"
-  framework_root="$validation_root/.hegira-validation/framework"
   migration_artifacts="$staging_parent/$database-migration-artifacts"
   mkdir -p "$migration_artifacts"
-  cargo run --locked --quiet -p template_renderer \
-    --example repository_validation_renderer -- render \
-    --repository-root "$repo_root" --template layered \
-    --generated-source "$staging_parent/$database-source" \
-    --output "$validation_root" --framework-root "$repo_root" \
-    --framework-path .hegira-validation/framework \
-    --set "application_name=$database-application" \
-    --set "database_adapter=$database" --set "database_feature=db-$database" \
-    --set client_adapter=leptos --set component_id=layered-leptos-identity
+  stage_application "$staging_parent/$database-source" "$validation_root" "$database"
 
   case "$database" in
     sqlite)
-      generated_migration_version=10
-      generated_migration_path="crates/infrastructure/migrations/sqlite/010_validation_record.sql"
-      other_migration_path="crates/infrastructure/migrations/postgres/023_validation_record.sql"
+      if [ "$mode" = identity-added ]; then
+        generated_migration_version=1000001
+        generated_migration_path="crates/infrastructure/migrations/sqlite/1000001_validation_record.sql"
+        other_migration_path="crates/infrastructure/migrations/postgres/1000001_validation_record.sql"
+      else
+        generated_migration_version=1000000
+        generated_migration_path="crates/infrastructure/migrations/sqlite/1000000_validation_record.sql"
+        other_migration_path="crates/infrastructure/migrations/postgres/1000000_validation_record.sql"
+      fi
       ;;
     postgres)
-      generated_migration_version=23
-      generated_migration_path="crates/infrastructure/migrations/postgres/023_validation_record.sql"
-      other_migration_path="crates/infrastructure/migrations/sqlite/010_validation_record.sql"
+      if [ "$mode" = identity-added ]; then
+        generated_migration_version=1000001
+        generated_migration_path="crates/infrastructure/migrations/postgres/1000001_validation_record.sql"
+        other_migration_path="crates/infrastructure/migrations/sqlite/1000001_validation_record.sql"
+      else
+        generated_migration_version=1000000
+        generated_migration_path="crates/infrastructure/migrations/postgres/1000000_validation_record.sql"
+        other_migration_path="crates/infrastructure/migrations/sqlite/1000000_validation_record.sql"
+      fi
       ;;
   esac
 
@@ -160,18 +281,7 @@ for database in sqlite postgres; do
   application_fingerprint "$validation_root" >"$migration_artifacts/after-duplicate.sha256"
   cmp "$migration_artifacts/before-duplicate.sha256" "$migration_artifacts/after-duplicate.sha256"
 
-  mkdir -p "$framework_root"
-  tar -C "$repo_root" \
-    --exclude='.git' \
-    --exclude='.env' \
-    --exclude='node_modules' \
-    --exclude='target' \
-    --exclude='*.sqlite3' \
-    --exclude='*.sqlite3-shm' \
-    --exclude='*.sqlite3-wal' \
-    -cf - \
-    Cargo.toml Cargo.lock rust-toolchain.toml .cargo crates modules tools |
-    tar -xf - -C "$framework_root"
+  stage_framework_source "$validation_root"
 
   (
     cd "$validation_root"
@@ -191,24 +301,25 @@ for database in sqlite postgres; do
     PATH="$validation_root/apps/web/src/node_modules/.bin:$PATH"
     export PATH
     cargo leptos build -p app_server --release \
-      --bin-features "ssr,db-$database" --lib-features hydrate
+      --bin-features "ssr,db-$database" --lib-features hydrate \
+      --bin-cargo-args=--locked --lib-cargo-args=--locked
   )
 done
 
 compose up --detach postgres
 
-(
+if [ "$mode" = default ]; then (
   cd "$generated_root"
   ALLOW_GENERATED_APP_DB_RESET=true \
   GENERATED_APP_DATABASE_URL="postgres://generated_app:$GENERATED_APP_DB_PASSWORD@127.0.0.1:$GENERATED_APP_POSTGRES_PORT/generated_app" \
-  HEGIRA_TEST_GENERATED_MIGRATION_VERSION=23 \
+  HEGIRA_TEST_GENERATED_MIGRATION_VERSION=1000000 \
   HEGIRA_TEST_GENERATED_MIGRATION_DESCRIPTION="validation record" \
   HEGIRA_TEST_GENERATED_RESOURCE_TABLE="validation_records" \
   HEGIRA_TEST_GENERATED_PERMISSION_PREFIX="validation-records" \
     cargo test --locked -p app_server --no-default-features --features ssr,db-postgres \
       --test database_contracts postgres_fresh_install_and_v020_upgrade_pass -- \
       --ignored --test-threads=1
-)
+); fi
 
 docker build --tag "$GENERATED_APP_IMAGE" "$generated_root"
 image_built=true
@@ -216,12 +327,24 @@ compose up --detach web
 
 base_url="http://127.0.0.1:$GENERATED_APP_HTTP_PORT"
 mkdir -p "$artifacts_dir"
-curl --fail --silent \
-  --retry 60 --retry-all-errors --retry-delay 1 \
-  "$base_url/healthz" | grep -q '"status":"ok"'
-curl --fail --silent \
-  --retry 60 --retry-all-errors --retry-delay 1 \
-  "$base_url/readyz" | grep -q '"status":"ok"'
+echo "==> Production health"
+if [ "$mode" = identity-added ]; then
+  curl --fail --silent \
+    --retry 60 --retry-all-errors --retry-delay 1 \
+    "$base_url/healthz" --output "$artifacts_dir/healthz"
+  test -s "$artifacts_dir/healthz"
+  curl --fail --silent \
+    --retry 60 --retry-all-errors --retry-delay 1 \
+    "$base_url/readyz" >/dev/null
+else
+  curl --fail --silent \
+    --retry 60 --retry-all-errors --retry-delay 1 \
+    "$base_url/healthz" | grep -q '"status":"ok"'
+  curl --fail --silent \
+    --retry 60 --retry-all-errors --retry-delay 1 \
+    "$base_url/readyz" | grep -q '"status":"ok"'
+fi
+echo "==> Production web assets"
 curl --fail --silent --show-error \
   --dump-header "$artifacts_dir/headers" \
   "$base_url/" --output "$artifacts_dir/index.html"
@@ -243,12 +366,14 @@ cmp \
   "$artifacts_dir/hegira-logo.png" \
   "$generated_root/apps/web/src/public/assets/branding/hegira-logo.png"
 
+echo "==> Production security headers"
 grep -Eqi '^x-content-type-options:[[:space:]]*nosniff' "$artifacts_dir/headers"
 grep -Eqi '^x-frame-options:[[:space:]]*DENY' "$artifacts_dir/headers"
 grep -Eqi '^content-security-policy:' "$artifacts_dir/headers"
 grep -Eqi '^strict-transport-security:' "$artifacts_dir/headers"
 grep -Eqi '^x-request-id:' "$artifacts_dir/headers"
 
+echo "==> Production authorization boundaries"
 unauthorized_status=$(curl --silent --show-error --output "$artifacts_dir/unauthorized.json" \
   --write-out '%{http_code}' "$base_url/api/identity/users")
 test "$unauthorized_status" = "401"
@@ -269,6 +394,7 @@ resource_unauthorized_status=$(curl --silent --show-error --output "$artifacts_d
 test "$resource_unauthorized_status" = "401"
 grep -Fq 'auth:missing_bearer_token' "$artifacts_dir/resource-unauthorized.json"
 
+echo "==> Production authorized principal"
 resource_token=$(node -e '
   const crypto = require("crypto");
   const now = Math.floor(Date.now() / 1000);
@@ -289,6 +415,7 @@ compose exec --no-TTY postgres psql --username generated_app --dbname generated_
   --set ON_ERROR_STOP=1 \
   --command "INSERT INTO users (username, password_hash, email_verified_at) VALUES ('$GENERATED_APP_TEST_USERNAME', '', NOW()); INSERT INTO user_roles (user_id, role_name) SELECT id, 'admin' FROM users WHERE username = '$GENERATED_APP_TEST_USERNAME'; INSERT INTO sessions (token, user_id, expires_at, max_expires_at) SELECT '$resource_token', id, NOW() + INTERVAL '1 hour', NOW() + INTERVAL '1 hour' FROM users WHERE username = '$GENERATED_APP_TEST_USERNAME';"
 
+echo "==> Production authorized CRUD"
 create_status=$(curl --silent --show-error --output "$artifacts_dir/resource-created.json" \
   --write-out '%{http_code}' \
   --header "authorization: Bearer $resource_token" \
@@ -334,4 +461,4 @@ deleted_status=$(curl --silent --show-error --output "$artifacts_dir/resource-de
   "$base_url/api/validation-records/$resource_id")
 test "$deleted_status" = "404"
 
-echo "CLI-generated application validation passed for generated resources, SQLite, PostgreSQL, v0.2.0 upgrades, authorized HTTP CRUD, and the production container"
+echo "CLI-generated $mode application validation passed for development builds, generated resources, SQLite, PostgreSQL, authorized HTTP CRUD, and the production container"

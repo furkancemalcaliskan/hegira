@@ -1,7 +1,10 @@
 use leptos::prelude::*;
 #[cfg(feature = "wasm-split")]
 use leptos_router::{Lazy, LazyRoute, lazy_route};
-use leptos_router::{MatchNestedRoutes, NestedRoute, ParamSegment, StaticSegment};
+use leptos_router::{
+    MatchNestedRoutes, NestedRoute, ParamSegment, StaticSegment,
+    any_nested_route::IntoAnyNestedRoute,
+};
 
 use crate::{
     app::protected::RequirePermission,
@@ -28,7 +31,7 @@ pub const ROUTE_PATHS: &[&str] = &[
 #[component(transparent)]
 #[allow(non_snake_case)]
 pub fn IdentityRoutes() -> impl MatchNestedRoutes + Clone + Send + 'static {
-    routes()
+    routes().into_any_nested_route()
 }
 
 #[cfg(not(feature = "wasm-split"))]

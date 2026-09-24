@@ -68,19 +68,22 @@ ownership:
 |---|---|
 | `crates/` | Application-independent framework primitives, application-manifest contract, providers, and runtime support |
 | `modules/identity/` | Canonical source for the official layered Identity module and its SQLx, Axum, and Leptos adapters |
-| `templates/applications/layered/` | Workspace-external, brand-neutral layered application base with application-owned server, web, configuration, migration composition, and deployment files |
+| `templates/applications/layered/` | Workspace-external recommended Identity-enabled layered application source |
+| `templates/applications/layered-minimal/` | Explicit module-free server, Leptos, provider, configuration, and deployment variant built on the same layered base |
 | `templates/package.toml` | Versioned canonical component-package identity, framework compatibility, component graph, and source digest |
-| `templates/components/` | Typed data-only component manifests that define the canonical application composition |
-| `tools/application_mutator/` | Typed change plans, conflict-aware Rust and TOML editors, and failure-safe publication for coordinated existing-application changes |
+| `templates/components/` | Typed data-only manifests for canonical rendering and trusted additive component contributions |
+| `tools/application_mutator/` | Typed additive component and general change plans, canonical file ownership, controlled Cargo/Rust/TOML integration, and failure-safe publication for coordinated existing-application changes |
 | `tools/hegira_cli/` | Source-runnable application creation and inspection plus reviewable layered resource and application-owned migration generation with stable diagnostics and exit outcomes |
 | `tools/resource_generator/` | Typed layered resource specifications plus inward-layer, provider-specific SQLx persistence, explicit Axum/OpenAPI and Leptos UI composition, and append-only migration planning |
-| `tools/template_renderer/` | Reusable deterministic render core with a separate disposable repository-validation adapter; it is not a public CLI |
+| `tools/template_renderer/` | Reusable deterministic render core with no-follow, digest-verified package-source loading and a separate disposable repository-validation adapter; it is not a public CLI |
 
 The canonical rendered application is an independent Cargo workspace, consumes framework
-packages from a pinned release source, and records its generation identity and selected
-components in a validated `hegira.toml`. Runtime configuration and secrets remain outside that
-manifest. The canonical package locks its source inputs with a deterministic SHA-256 digest so
-repository-local or untracked files cannot silently enter generated output. Releases remain
+packages from a pinned release source, and records its generation identity, installed
+composition, and selected adapters in a validated `hegira.toml`. Runtime configuration and
+secrets remain outside that manifest. The canonical package locks its source inputs with a
+deterministic SHA-256 digest so repository-local or untracked files cannot silently enter
+generated output. Package and framework identity, declared paths, regular-file types, and the
+opened package root are verified before those snapshot bytes become render input. Releases remain
 source-only; the CLI is not distributed through crates.io or as a standalone
 executable. Keep the source tree available when running the source-built CLI.
 
@@ -100,8 +103,10 @@ Run `cargo run --locked -p hegira_cli -- new` in an interactive terminal for a g
 The prompts show the implemented choices and defaults, summarize the resulting application, and
 ask for confirmation before any files are written. Non-interactive terminals never wait for
 prompt input and require the application name and destination explicitly.
-Supplying both inputs skips prompts and confirmation. Only SQLite/PostgreSQL,
-Leptos, and Identity selections are supported for application creation. The
+Supplying both inputs skips prompts and confirmation. SQLite/PostgreSQL and
+Leptos are supported for application creation. Identity remains the recommended
+default composition; an explicit module-free `minimal` composition is also
+available. The
 CLI also generates complete layered resources and application-owned migration
 scaffolds; it does not provide module management or automatic upgrades.
 
@@ -122,8 +127,10 @@ cd ../my-application
 ```
 
 Pass `--database postgres` to make PostgreSQL the generated application's selected and default
-database adapter. `--client leptos` and `--component identity` may be supplied explicitly for
-automation; they are the currently supported client and official component selections.
+database adapter. `--client leptos` and `--composition identity` may be supplied explicitly for
+automation. Use `--composition minimal` only for a layered application without
+an installed authentication or authorization module; protected resource
+generation remains unavailable in that state.
 
 Use a new destination under an existing real parent directory. Existing entries
 are never overwritten. See [Getting started](docs/getting-started.md) for identity,
@@ -142,7 +149,8 @@ Start with SQLite and no external services:
 
 ```sh
 APP_ENV=sqlite cargo leptos watch -p app_server \
-  --bin-features ssr,db-sqlite --lib-features hydrate
+  --bin-features ssr,db-sqlite --lib-features hydrate \
+  --bin-cargo-args=--locked --lib-cargo-args=--locked
 ```
 
 Open `http://127.0.0.1:3000`. The SQLite profile seeds the development admin

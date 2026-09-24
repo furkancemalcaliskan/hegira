@@ -9,9 +9,11 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use application_manifest::ApplicationManifest;
+
 use crate::{
     FrameworkDependency, ManifestCatalog, RenderPlan, RenderRequest, RenderResult, RendererError,
-    RendererErrorKind, Result, plan as core_plan, publish,
+    RendererErrorKind, Result, plan as core_plan, publish, render::PlannedFile,
 };
 
 #[derive(Debug)]
@@ -59,6 +61,14 @@ pub fn stage_generated(
         planned.bytes = bytes;
     }
     let mut staged = patch_plan(request, generated)?;
+    isolate_staged_framework(request, &mut staged)?;
+    publish(&request.render.output, staged)
+}
+
+fn isolate_staged_framework(
+    request: &RepositoryValidationRequest,
+    staged: &mut RenderPlan,
+) -> Result<()> {
     // In-tree path dependencies would otherwise become automatic workspace
     // members and enable official-module defaults during --workspace checks.
     if let Some(path) = &request.framework_path
@@ -91,6 +101,99 @@ pub fn stage_generated(
             )
             .into_bytes();
     }
+    Ok(())
+}
+
+/// Stage a CLI-created minimal application after the public CLI has installed
+/// the bundled Identity component. The caller owns the disposable source and
+/// must perform generation and installation before invoking this adapter.
+pub fn stage_identity_added(
+    request: &RepositoryValidationRequest,
+    source: &Path,
+) -> Result<RenderResult> {
+    let mut generated = core_plan(&request.render)?;
+    if generated.components != ["layered-base", "layered-leptos-minimal"] {
+        return Err(validation_error(
+            "Identity staging requires the minimal composition",
+        ));
+    }
+    let mut files = std::collections::BTreeMap::new();
+    read_generated_tree(source, source, &mut files)?;
+    let manifest_bytes = files
+        .get(Path::new("hegira.toml"))
+        .ok_or_else(|| validation_error("installed application manifest is missing"))?;
+    let manifest = ApplicationManifest::from_toml(
+        std::str::from_utf8(manifest_bytes)
+            .map_err(|_| validation_error("installed application manifest is not UTF-8"))?,
+    )
+    .map_err(|_| validation_error("installed application manifest is invalid"))?;
+    let base_manifest = generated
+        .files
+        .get(Path::new("hegira.toml"))
+        .ok_or_else(|| validation_error("minimal application manifest is missing"))?;
+    let base_manifest = ApplicationManifest::from_toml(
+        std::str::from_utf8(&base_manifest.bytes)
+            .map_err(|_| validation_error("minimal application manifest is not UTF-8"))?,
+    )
+    .map_err(|_| validation_error("minimal application manifest is invalid"))?;
+    if manifest.application != base_manifest.application
+        || manifest.selection != base_manifest.selection
+    {
+        return Err(validation_error(
+            "installed application changes the minimal application identity",
+        ));
+    }
+    let catalog = ManifestCatalog::load(&request.render.repository_root, &request.render.template)
+        .map_err(classify)?;
+    let graph = catalog
+        .resolve_component_roots(Some(&["identity".to_owned()]))
+        .map_err(|_| validation_error("cannot resolve the installed Identity composition"))?;
+    let mut expected_components = graph.installed_components().collect::<Vec<_>>();
+    expected_components.sort_by(|left, right| left.id.cmp(&right.id));
+    manifest
+        .validate_rendered_components(
+            graph
+                .components
+                .iter()
+                .map(|component| component.id.as_str()),
+        )
+        .map_err(|_| {
+            validation_error("installed component list differs from Identity composition")
+        })?;
+    if manifest.framework != graph.framework
+        || manifest.composition.as_ref().is_none_or(|composition| {
+            composition.package != graph.package
+                || composition.components != expected_components
+                || composition.modules != graph.modules
+                || composition.capabilities != graph.capabilities
+        })
+    {
+        return Err(validation_error(
+            "installed Identity composition identity differs from package",
+        ));
+    }
+    for (path, planned) in &mut generated.files {
+        planned.bytes = files
+            .remove(path)
+            .ok_or_else(|| validation_error("installed application is missing a base file"))?;
+    }
+    for (path, bytes) in files {
+        generated.files.insert(
+            path,
+            PlannedFile {
+                bytes,
+                owner: "repository-validation".to_owned(),
+            },
+        );
+    }
+    generated.components = graph
+        .components
+        .iter()
+        .map(|component| component.id.clone())
+        .collect();
+    generated.composition = Some(graph);
+    let mut staged = patch_plan(request, generated)?;
+    isolate_staged_framework(request, &mut staged)?;
     publish(&request.render.output, staged)
 }
 
@@ -134,7 +237,10 @@ fn patch_plan(
 ) -> Result<RenderPlan> {
     let catalog = ManifestCatalog::load(&request.render.repository_root, &request.render.template)
         .map_err(classify)?;
-    let components = catalog.resolve_components().map_err(classify)?;
+    let components = match render_plan.composition() {
+        Some(composition) => catalog.components_for(composition).map_err(classify)?,
+        None => catalog.resolve_components().map_err(classify)?,
+    };
     let framework_root = fs::canonicalize(&request.framework_root)
         .map_err(|error| validation_error(format!("failed to resolve framework root: {error}")))?;
     if !framework_root.is_dir() {
@@ -143,39 +249,64 @@ fn patch_plan(
     let framework_path = request.framework_path.as_deref().unwrap_or(&framework_root);
     validate_framework_path(framework_path)?;
 
+    let mut dependencies = std::collections::BTreeMap::new();
     for component in components {
-        for dependency in &component.framework_dependencies {
-            let dependency_root =
-                fs::canonicalize(framework_root.join(&dependency.path)).map_err(|error| {
-                    validation_error(format!(
-                        "failed to resolve framework dependency {}: {error}",
-                        dependency.path.display()
-                    ))
-                })?;
-            if !dependency_root.starts_with(&framework_root) {
+        let installation_dependencies = component
+            .installation
+            .as_ref()
+            .into_iter()
+            .flat_map(|installation| &installation.framework_dependencies);
+        for dependency in component
+            .framework_dependencies
+            .iter()
+            .chain(installation_dependencies)
+        {
+            let key = (dependency.manifest.clone(), dependency.name.clone());
+            if let Some(previous) = dependencies.insert(key, dependency)
+                && previous != dependency
+            {
                 return Err(validation_error(
-                    "framework dependency escapes framework root",
+                    "conflicting framework dependency declarations",
                 ));
             }
-            if !dependency_root.join("Cargo.toml").is_file() {
-                return Err(validation_error(format!(
-                    "framework dependency {} has no Cargo.toml",
-                    dependency.path.display()
-                )));
-            }
-
-            let planned = render_plan
-                .files
-                .get_mut(&dependency.manifest)
-                .ok_or_else(|| {
-                    validation_error(format!(
-                        "framework dependency patch targets missing output: {}",
-                        dependency.manifest.display()
-                    ))
-                })?;
-            patch_dependency(planned, dependency, &framework_path.join(&dependency.path))?;
         }
     }
+    for dependency in dependencies.into_values() {
+        let dependency_root =
+            fs::canonicalize(framework_root.join(&dependency.path)).map_err(|error| {
+                validation_error(format!(
+                    "failed to resolve framework dependency {}: {error}",
+                    dependency.path.display()
+                ))
+            })?;
+        if !dependency_root.starts_with(&framework_root) {
+            return Err(validation_error(
+                "framework dependency escapes framework root",
+            ));
+        }
+        if !dependency_root.join("Cargo.toml").is_file() {
+            return Err(validation_error(format!(
+                "framework dependency {} has no Cargo.toml",
+                dependency.path.display()
+            )));
+        }
+
+        let planned = render_plan
+            .files
+            .get_mut(&dependency.manifest)
+            .ok_or_else(|| {
+                validation_error(format!(
+                    "framework dependency patch targets missing output: {}",
+                    dependency.manifest.display()
+                ))
+            })?;
+        patch_dependency(planned, dependency, &framework_path.join(&dependency.path))?;
+    }
+
+    render_plan
+        .files
+        .remove(Path::new("Cargo.lock"))
+        .ok_or_else(|| validation_error("canonical application lockfile is missing"))?;
 
     Ok(render_plan)
 }

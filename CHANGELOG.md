@@ -4,6 +4,86 @@ All notable changes are documented here. Releases follow Semantic Versioning.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-23
+
+### Added
+
+- Added schema-2 application manifests that record the exact component package,
+  resolved components, official modules, capabilities, database provider, and
+  client composition.
+- Added deterministic component dependency, compatibility, capability, module
+  ownership, and conflict resolution before rendering or mutation.
+- Added human-readable and versioned JSON composition status to `hegira
+  inspect`.
+- Added typed, content-redacted additive component installation plans with
+  shared dry-run/apply behavior, digest preconditions, atomic publication,
+  rollback, and durable recovery state.
+- Added authenticated package loading through directory-anchored no-follow
+  reads, a digest-verified immutable source snapshot, and rejection of
+  graph-undeclared files and unsafe provenance.
+- Added an explicit module-free minimal layered composition while retaining the
+  Axum server, Leptos client, selected SQLx provider, configuration, and
+  deployment boundaries.
+- Added data-driven Identity installation contributions for layered packages,
+  selected-provider migrations, configuration, seeding, background work,
+  Bearer and cookie routes, OpenAPI, and Leptos navigation and routes.
+- Added `hegira component add identity` with deterministic human and JSON
+  output for installing the official Identity module into a compatible minimal
+  application.
+- Added capability-aware resource generation that rejects protected resource
+  generation until authentication and authorization are present.
+- Added read-only `hegira doctor` diagnostics for application composition,
+  managed integration points, recovery state, and local development
+  prerequisites.
+- Added canonical generated-application lockfiles so new SQLite and PostgreSQL
+  applications begin with the dependency graph reviewed for this release.
+
+### Changed
+
+- Derived default and minimal generation from the same closed composition graph
+  used by existing-application inspection and mutation.
+- Kept the recommended default composition unchanged: Leptos, Identity, and
+  SQLite unless PostgreSQL is selected explicitly.
+- Made the generated-application quality gate cover default, minimal, and
+  Identity-added compositions across both providers, native and hydration
+  builds, the documented development build, migrations, production containers,
+  authentication, authorization, and generated-resource CRUD.
+- Documented the implemented component, official-module, capability,
+  installation, diagnosis, recovery, and manual post-install contracts.
+
+### Fixed
+
+- Erased transparent Identity routes explicitly for the current Leptos router
+  contract.
+- Restored the documented non-release Cargo Leptos development build.
+- Made generated application dependency resolution reproducible from its first
+  locked build.
+- Allowed protected resource generation after a minimal application receives
+  the complete Identity composition.
+
+### Security
+
+- Component package loading verifies canonical framework and package identity,
+  source digests, declared paths, regular-file ownership, and one immutable
+  snapshot before rendering or planning installation.
+- Additive installation rejects stale files, occupied paths, symlink traversal,
+  incompatible compositions, unsupported providers or clients, concurrent
+  mutation, and incomplete recovery instead of overwriting application source.
+- Minimal applications do not receive anonymous or allow-all authorization;
+  protected resource generation fails closed until the required capabilities
+  are installed.
+
+### Upgrade And Maintainer Notes
+
+- v0.5.0 manifests remain readable but are not automatically upgraded or
+  mutable under the v0.6.0 schema-2 compatibility policy.
+- Component installation is additive only. It does not remove components,
+  upgrade framework source, execute database migrations, or replace application
+  review and validation.
+- Distribution remains source-only, with no crates.io publication, standalone
+  executable, container image, application bundle, preview, or deployment. See
+  the [v0.6.0 release notes](docs/releases/v0.6.0.md) for the complete contract.
+
 ## [0.5.0] - 2026-09-10
 
 ### Added
