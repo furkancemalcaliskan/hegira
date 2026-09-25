@@ -4,6 +4,10 @@ set -eu
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 template_root="$repo_root/templates/applications/layered"
 . "$repo_root/scripts/validation-cache.sh"
+generated_tool_bin=$(sh "$repo_root/scripts/generated-toolchain.sh" prepare \
+  templates/applications/layered/Cargo.lock)
+PATH="$generated_tool_bin:$PATH"
+export PATH
 validation_cache_prepare "$repo_root" layered-template-check
 staging_parent="$HEGIRA_VALIDATION_WORKSPACE"
 staging_root="$staging_parent/application"

@@ -17,6 +17,8 @@ const REQUIRED_CONTRACTS = [
   ["official module validation", "sh scripts/official-modules-check.sh"],
   ["tooling validation", "sh scripts/layered-template-check.sh"],
   ["CLI validation", "sh scripts/cli-check.sh"],
+  ["pinned Node selection", "node-version-file: .node-version"],
+  ["pinned Cargo Leptos selection", "cargo-leptos@0.3.7"],
   [
     "generated application validation",
     "run: sh scripts/generated-application-check.sh\n",
@@ -38,6 +40,14 @@ const QUALITY_DEPENDENCIES = [
 ];
 
 const GENERATED_APPLICATION_CONTRACTS = [
+  [
+    "early generated tooling preparation",
+    'generated_tool_bin=$(sh "$repo_root/scripts/generated-toolchain.sh" prepare',
+  ],
+  [
+    "container tooling preflight",
+    "templates/applications/layered/Cargo.lock --container",
+  ],
   ["public SQLite application creation", "-- new sqlite-application"],
   ["public PostgreSQL application creation", "-- new postgres-application"],
   ["canonical application lockfile", 'test -f "$staging_parent/sqlite-source/Cargo.lock"'],

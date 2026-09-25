@@ -112,7 +112,7 @@ jobs:
           tool: cargo-leptos@0.3.7
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version-file: .node-version
           cache: npm
           cache-dependency-path: templates/applications/layered/apps/web/src/package-lock.json
       - name: Validate rendering tooling and canonical application source
@@ -135,7 +135,7 @@ jobs:
           tool: cargo-leptos@0.3.7
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version-file: .node-version
           cache: npm
           cache-dependency-path: templates/applications/layered/apps/web/src/package-lock.json
       - name: Validate generated applications across development and production

@@ -52,18 +52,31 @@ selection; explicit flags are retained.
 
 - the Rust toolchain pinned by `rust-toolchain.toml`;
 - the `wasm32-unknown-unknown` target;
-- `cargo-leptos` (CI validates version `0.3.7`);
-- Node.js and npm for the Leptos stylesheet toolchain (CI uses Node.js 22);
-- Docker Compose when using the local PostgreSQL service or container checks.
+- `cargo-leptos` version `0.3.7`;
+- Node.js 22 or newer and npm 10 or newer for the Leptos stylesheet toolchain
+  (CI selects Node.js 22 through the committed `.node-version`);
+- Docker Engine 24 or newer and Docker Compose 2 or newer when using the local
+  PostgreSQL service or container checks.
 
 From the framework repository root:
 
 ```sh
 rustup target add wasm32-unknown-unknown
-cargo install cargo-leptos
+cargo install --locked cargo-leptos --version 0.3.7
 cargo run --locked -p hegira_cli -- new my-application \
   --destination ../my-application
+cd ../my-application
+tool_bin=$(sh scripts/prepare-wasm-bindgen.sh install Cargo.lock target/hegira-tools/wasm-bindgen/bin)
+export PATH="$tool_bin:$PATH"
+npm ci --prefix apps/web/src
 ```
+
+The preparation script reads the exact `wasm-bindgen` version from
+`Cargo.lock`, downloads only the declared official release asset with bounded
+retries, verifies its committed SHA-256 digest, and rejects a version mismatch
+before Cargo Leptos starts an application build. The production Dockerfile runs
+the same preparation contract before copying application source, so a missing
+tool cannot surface only after the expensive release compilation.
 
 The output is an independent Cargo workspace. Its normal dependencies use the
 framework repository and release tag declared by the template rather than

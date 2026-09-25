@@ -14,6 +14,10 @@ if [ "$#" -gt 1 ]; then
   echo "usage: sh scripts/generated-application-check.sh [default|identity-added]" >&2
   exit 2
 fi
+generated_tool_bin=$(sh "$repo_root/scripts/generated-toolchain.sh" prepare \
+  templates/applications/layered/Cargo.lock --container)
+PATH="$generated_tool_bin:$PATH"
+export PATH
 validation_cache_prepare "$repo_root" "$check_name"
 staging_parent="$HEGIRA_VALIDATION_WORKSPACE"
 generated_root="$staging_parent/postgres-validation"
