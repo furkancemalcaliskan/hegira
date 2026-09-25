@@ -1,4 +1,4 @@
-FROM node:22-bookworm-slim AS node
+FROM node:25-bookworm-slim AS node
 
 FROM rust:1.96.1-bookworm AS tooling
 
