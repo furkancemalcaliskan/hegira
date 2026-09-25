@@ -1,11 +1,21 @@
 FROM node:22-bookworm-slim AS node
 
-FROM rust:1.97.0-bookworm AS builder
+FROM rust:1.96.1-bookworm AS tooling
 
 WORKDIR /app
 COPY --from=node /usr/local /usr/local
-RUN rustup target add wasm32-unknown-unknown && \
-    cargo install --locked cargo-leptos --version 0.3.7
+COPY Cargo.lock rust-toolchain.toml ./
+COPY scripts/prepare-wasm-bindgen.sh scripts/prepare-wasm-bindgen.sh
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ca-certificates curl && \
+    rm -rf /var/lib/apt/lists/* && \
+    rustup target add wasm32-unknown-unknown && \
+    cargo install --locked cargo-leptos --version 0.3.7 && \
+    sh scripts/prepare-wasm-bindgen.sh install Cargo.lock /opt/wasm-bindgen/bin
+ENV PATH="/opt/wasm-bindgen/bin:${PATH}"
+
+FROM tooling AS builder
+
 COPY . .
 RUN npm ci --prefix apps/web/src && \
     PATH="/app/apps/web/src/node_modules/.bin:${PATH}" \

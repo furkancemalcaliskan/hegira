@@ -2,6 +2,7 @@
 set -eu
 
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+canonical_lock="$repo_root/templates/applications/layered/Cargo.lock"
 compose_file="$repo_root/scripts/generated-application-smoke.yml"
 . "$repo_root/scripts/validation-cache.sh"
 mode="${1:-default}"
@@ -14,6 +15,10 @@ if [ "$#" -gt 1 ]; then
   echo "usage: sh scripts/generated-application-check.sh [default|identity-added]" >&2
   exit 2
 fi
+generated_tool_bin=$(sh "$repo_root/scripts/generated-toolchain.sh" prepare \
+  "$canonical_lock" --container)
+PATH="$generated_tool_bin:$PATH"
+export PATH
 validation_cache_prepare "$repo_root" "$check_name"
 staging_parent="$HEGIRA_VALIDATION_WORKSPACE"
 generated_root="$staging_parent/postgres-validation"
@@ -180,10 +185,13 @@ fi
 development_root="$staging_parent/sqlite-development-validation"
 stage_application "$staging_parent/sqlite-source" "$development_root" sqlite
 stage_framework_source "$development_root"
+generated_tool_bin=$(sh "$repo_root/scripts/generated-toolchain.sh" application \
+  "$development_root")
+PATH="$generated_tool_bin:$PATH"
+export PATH
 
 (
   cd "$development_root"
-  cargo generate-lockfile
   npm ci --prefix apps/web/src
   PATH="$development_root/apps/web/src/node_modules/.bin:$PATH"
   export PATH
@@ -282,10 +290,13 @@ for database in sqlite postgres; do
   cmp "$migration_artifacts/before-duplicate.sha256" "$migration_artifacts/after-duplicate.sha256"
 
   stage_framework_source "$validation_root"
+  generated_tool_bin=$(sh "$repo_root/scripts/generated-toolchain.sh" application \
+    "$validation_root")
+  PATH="$generated_tool_bin:$PATH"
+  export PATH
 
   (
     cd "$validation_root"
-    cargo generate-lockfile
     test -f Cargo.lock
     cargo check --locked --workspace --all-targets --features app_server/ssr
     HEGIRA_TEST_GENERATED_MIGRATION_VERSION="$generated_migration_version" \

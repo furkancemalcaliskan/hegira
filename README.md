@@ -136,12 +136,14 @@ Use a new destination under an existing real parent directory. Existing entries
 are never overwritten. See [Getting started](docs/getting-started.md) for identity,
 path, and safe-publication platform requirements.
 
-Install the Rust WASM target, `cargo-leptos`, and lockfile-pinned frontend
-tooling:
+Install the pinned Cargo Leptos release, the lockfile-matched WebAssembly
+binding tool, and frontend dependencies:
 
 ```sh
 rustup target add wasm32-unknown-unknown
-cargo install cargo-leptos
+cargo install --locked cargo-leptos --version 0.3.7
+tool_bin=$(sh scripts/prepare-wasm-bindgen.sh install Cargo.lock target/hegira-tools/wasm-bindgen/bin)
+export PATH="$tool_bin:$PATH"
 npm ci --prefix apps/web/src
 ```
 

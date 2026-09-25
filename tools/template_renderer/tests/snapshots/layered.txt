@@ -1,13 +1,14 @@
 package=hegira-canonical@v0.6.0
 framework=https://github.com/furkancemalcaliskan/hegira.git#v0.6.0
-digest=sha256:cff6969dadc6e0155af7b944877dba5c61b6e0c4c3ea041d9a8a2665949c285e
+digest=sha256:4f29651a0ce22db90e02e6f4225369d2ab9130cfa2952315f581e69f94c57f31
 components=layered-base,layered-leptos-identity
 6986e1a96f1eaa98 .dockerignore
 4845a8e7ed4a8aa1 .env.example
 5993ab4d526be466 .gitignore
+60458e1827934c3d .node-version
 2a1d864019bcc81c Cargo.lock
 12538d0a22d55485 Cargo.toml
-db0ea2d9a05904a1 Dockerfile
+abb13fca335cf059 Dockerfile
 acb1f40708fef3bc apps/server/Cargo.toml
 3bde3764afe35806 apps/server/src/lib.rs
 9ea27e2845c55bb5 apps/server/src/main.rs
@@ -25,8 +26,8 @@ bccc6ef21e0cc054 apps/web/src/app/providers.rs
 e76d30fbdb62c2d7 apps/web/src/app/topbar.rs
 b58033514afd0df2 apps/web/src/dashboard.rs
 4be5e3e4a4cb60f7 apps/web/src/lib.rs
-9c700024fa843d19 apps/web/src/package-lock.json
-5d88780fe6e79270 apps/web/src/package.json
+ac532067d9f7faa0 apps/web/src/package-lock.json
+51efa4ac55ad52e1 apps/web/src/package.json
 370740627a45bc7c apps/web/src/public/assets/branding/hegira-logo.png
 2c5dbabcccc716da apps/web/src/root.rs
 b3d6c8b2db83731d apps/web/src/routes.rs
@@ -84,3 +85,5 @@ a5cee92157b6a0cb crates/infrastructure/src/operations.rs
 d9d3e75ec6021d05 crates/presentation/src/lib.rs
 1309f45751c079e0 docker-compose.yml
 7493d2e7b37fd8f2 hegira.toml
+64a3f64b8bdc337f rust-toolchain.toml
+d1e261656118b330 scripts/prepare-wasm-bindgen.sh

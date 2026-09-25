@@ -2,6 +2,10 @@
 	"name": "app-web",
 	"private": true,
 	"type": "module",
+	"engines": {
+		"node": ">=22",
+		"npm": ">=10"
+	},
 	"dependencies": {
 		"@tailwindcss/cli": "^4.3.3",
 		"tailwindcss": "^4.3.1",

@@ -50,6 +50,12 @@ jobs:
       - run: sh scripts/official-modules-check.sh
   tooling:
     steps:
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-leptos@0.3.7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
       - run: sh scripts/layered-template-check.sh
       - run: sh scripts/cli-check.sh
   generated-application:
@@ -82,6 +88,9 @@ jobs:
 
 const validGeneratedApplicationScript = `#!/usr/bin/env sh
 set -eu
+canonical_lock="$repo_root/templates/applications/layered/Cargo.lock"
+generated_tool_bin=$(sh "$repo_root/scripts/generated-toolchain.sh" prepare "$canonical_lock" --container)
+sh "$repo_root/scripts/generated-toolchain.sh" application "$staging_parent/sqlite-validation"
 cargo run --locked --quiet -p hegira_cli -- new sqlite-application
 cargo run --locked --quiet -p hegira_cli -- new postgres-application
 test -f "$staging_parent/sqlite-source/Cargo.lock"

@@ -3,6 +3,7 @@ id = "layered-base"
 version = "v0.6.0"
 source = "applications/layered"
 include = [
+  ".node-version",
   ".dockerignore",
   ".gitignore",
   "crates/application",
@@ -10,5 +11,7 @@ include = [
   "crates/domain",
   "crates/domain_shared",
   "hegira.toml",
+  "rust-toolchain.toml",
+  "scripts/prepare-wasm-bindgen.sh",
 ]
 optional_dependencies = ["identity", "layered-leptos-identity", "layered-leptos-minimal"]

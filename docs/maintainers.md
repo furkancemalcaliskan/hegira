@@ -366,8 +366,23 @@ pristine SQLite output runs the documented non-release Cargo Leptos development
 build without starting a persistent watcher or server. Each provider copy then
 runs native workspace checks and tests, WASM hydration checks, and a Cargo-Leptos
 release build.
-This requires Node/npm, `cargo-leptos`, and the `wasm32-unknown-unknown` target;
-the generated-application CI jobs install these prerequisites explicitly.
+This requires the generated application's pinned Rust toolchain and WASM target,
+Node.js 22 or newer, npm 10 or newer, `cargo-leptos` `0.3.7`, Docker Engine 24
+or newer, and Docker Compose 2 or newer. Repository validation runs
+`scripts/generated-toolchain.sh` before creating or compiling an application.
+That preflight validates the local tool contract, derives the exact
+`wasm-bindgen-cli` version from the canonical application `Cargo.lock`, and
+prepares the authenticated official binary under `target/validation/tools/`.
+The download uses a committed platform checksum and bounded retries. A missing,
+unsupported, or mismatched tool therefore fails before the expensive native,
+WASM, or production-container build begins.
+
+The canonical production Dockerfile applies the same lockfile-derived
+`wasm-bindgen-cli` contract in an early cached builder layer before application
+source is copied. CI selects Node through the committed `.node-version`; the
+generated application carries the matching Node selection and
+`rust-toolchain.toml`. Updating Rust, Node, Cargo Leptos, or the lockfile's
+`wasm-bindgen` version requires updating and validating this contract together.
 
 The check runs SQLite fresh-install and upgrade tests in memory, and starts an
 ephemeral PostgreSQL container for the equivalent PostgreSQL contracts. It then

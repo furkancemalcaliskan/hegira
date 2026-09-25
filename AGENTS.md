@@ -156,7 +156,9 @@ cargo run --locked -p hegira_cli -- new my-application \
   --destination ../my-application
 cd ../my-application
 rustup target add wasm32-unknown-unknown
-cargo install cargo-leptos
+cargo install --locked cargo-leptos --version 0.3.7
+tool_bin=$(sh scripts/prepare-wasm-bindgen.sh install Cargo.lock target/hegira-tools/wasm-bindgen/bin)
+export PATH="$tool_bin:$PATH"
 npm ci --prefix apps/web/src
 ```
 
