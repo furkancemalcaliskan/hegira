@@ -1,6 +1,6 @@
 package=hegira-canonical@v0.6.0
 framework=https://github.com/furkancemalcaliskan/hegira.git#v0.6.0
-digest=sha256:b6e4360af9737a4caf22cf42304e6db816d236f89e05cf5afc846a0e8c38c64f
+digest=sha256:4f29651a0ce22db90e02e6f4225369d2ab9130cfa2952315f581e69f94c57f31
 components=layered-base,layered-leptos-identity
 6986e1a96f1eaa98 .dockerignore
 4845a8e7ed4a8aa1 .env.example
@@ -86,4 +86,4 @@ d9d3e75ec6021d05 crates/presentation/src/lib.rs
 1309f45751c079e0 docker-compose.yml
 7493d2e7b37fd8f2 hegira.toml
 64a3f64b8bdc337f rust-toolchain.toml
-96eb676aeac847ef scripts/prepare-wasm-bindgen.sh
+d1e261656118b330 scripts/prepare-wasm-bindgen.sh

@@ -74,6 +74,12 @@ done
 
 grep -Fq -- "--retry 3" "$installer"
 grep -Fq "wasm-bindgen CLI checksum mismatch" "$installer"
+grep -Fq 'scripts/generated-toolchain.sh" application' \
+  "$repo_root/scripts/layered-template-check.sh"
+grep -Fq 'scripts/generated-toolchain.sh" application' \
+  "$repo_root/scripts/generated-application-check.sh"
+grep -Fq "82d12bb940e2d4e72e0d5605387fc1b8ca179044e012b620f0ce4e7440e8320e" \
+  "$installer"
 grep -Fq "node-version-file: .node-version" "$repo_root/.github/workflows/backend.yml"
 grep -Fq "node-version-file: .node-version" "$repo_root/.github/workflows/release.yml"
 

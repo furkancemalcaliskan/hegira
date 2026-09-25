@@ -88,7 +88,9 @@ jobs:
 
 const validGeneratedApplicationScript = `#!/usr/bin/env sh
 set -eu
-generated_tool_bin=$(sh "$repo_root/scripts/generated-toolchain.sh" prepare templates/applications/layered/Cargo.lock --container)
+canonical_lock="$repo_root/templates/applications/layered/Cargo.lock"
+generated_tool_bin=$(sh "$repo_root/scripts/generated-toolchain.sh" prepare "$canonical_lock" --container)
+sh "$repo_root/scripts/generated-toolchain.sh" application "$staging_parent/sqlite-validation"
 cargo run --locked --quiet -p hegira_cli -- new sqlite-application
 cargo run --locked --quiet -p hegira_cli -- new postgres-application
 test -f "$staging_parent/sqlite-source/Cargo.lock"

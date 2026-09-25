@@ -37,6 +37,11 @@ cargo run --locked --quiet -p template_renderer \
   --output "$staging_root" \
   --framework-root "$repo_root"
 
+generated_tool_bin=$(sh "$repo_root/scripts/generated-toolchain.sh" application \
+  "$staging_root")
+PATH="$generated_tool_bin:$PATH"
+export PATH
+
 if find "$staging_root" -name Cargo.toml -exec grep -nE 'git[[:space:]]*=[[:space:]]*"https://github.com/furkancemalcaliskan/hegira.git"' {} + |
   grep . >/dev/null; then
   echo "repository validation render contains an unpatched framework dependency" >&2
@@ -48,7 +53,6 @@ fi
   npm ci --prefix apps/web/src
   PATH="$staging_root/apps/web/src/node_modules/.bin:$PATH"
   export PATH
-  cargo generate-lockfile
   test -f Cargo.lock
   cargo check --locked --workspace --all-targets --all-features
   node "$repo_root/scripts/architecture-boundaries.mjs" \

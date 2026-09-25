@@ -46,7 +46,11 @@ const GENERATED_APPLICATION_CONTRACTS = [
   ],
   [
     "container tooling preflight",
-    "templates/applications/layered/Cargo.lock --container",
+    '"$canonical_lock" --container',
+  ],
+  [
+    "resolved generated application tooling",
+    'generated-toolchain.sh" application',
   ],
   ["public SQLite application creation", "-- new sqlite-application"],
   ["public PostgreSQL application creation", "-- new postgres-application"],

@@ -64,11 +64,41 @@ verify_prerequisites() {
   fi
 }
 
+prepare_application() {
+  application_root="$1"
+  require_container="$2"
+  [ -f "$application_root/Cargo.toml" ] ||
+    error "generated application manifest is missing: $application_root/Cargo.toml"
+  (
+    cd "$application_root"
+    cargo generate-lockfile
+  )
+  lockfile="$application_root/Cargo.lock"
+  verify_prerequisites "$lockfile" "$require_container"
+  "$installer" install "$lockfile" "$bin_dir"
+}
+
 if [ "$#" -lt 2 ] || [ "$#" -gt 3 ]; then
-  error "usage: generated-toolchain.sh <prepare|verify> <Cargo.lock> [--container]"
+  error "usage: generated-toolchain.sh <prepare|verify> <Cargo.lock> [--container] | application <application-root> [--container]"
 fi
 command_name="$1"
 lockfile="$2"
+bin_dir="$repo_root/target/validation/tools/wasm-bindgen/bin"
+if [ "$command_name" = application ]; then
+  application_root="$lockfile"
+  case "$application_root" in
+    /*) ;;
+    *) application_root="$repo_root/$application_root" ;;
+  esac
+  require_container=false
+  case "${3:-}" in
+    "") ;;
+    --container) require_container=true ;;
+    *) error "unknown option: $3" ;;
+  esac
+  prepare_application "$application_root" "$require_container"
+  exit 0
+fi
 require_container=false
 if [ "${3:-}" = --container ]; then
   require_container=true
@@ -83,7 +113,6 @@ esac
 [ -f "$lockfile" ] || error "Cargo lockfile is missing: $lockfile"
 verify_prerequisites "$lockfile" "$require_container"
 
-bin_dir="$repo_root/target/validation/tools/wasm-bindgen/bin"
 case "$command_name" in
   prepare)
     "$installer" install "$lockfile" "$bin_dir"
