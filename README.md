@@ -237,11 +237,15 @@ image, and HTTP contract, with disposable Docker state:
 sh scripts/generated-application-check.sh
 ```
 
-Repository-owned validation builds use stable workspaces and isolated caches
-under `target/validation/`. Inspect or remove only those caches without touching
-normal `target/debug` development output:
+Repository-owned validation builds use stable workspaces and automatically
+bounded LRU caches under `target/validation/`. Inspect ownership and usage,
+preview budget reclamation, or remove only those caches without touching normal
+`target/debug` development output:
 
 ```sh
+sh scripts/clean-validation-cache.sh --status
+sh scripts/clean-validation-cache.sh --prune-dry-run
+sh scripts/clean-validation-cache.sh --prune
 sh scripts/clean-validation-cache.sh --dry-run
 sh scripts/clean-validation-cache.sh
 ```

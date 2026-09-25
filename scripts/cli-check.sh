@@ -1,6 +1,19 @@
 #!/bin/sh
 set -eu
 
+repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+. "$repo_root/scripts/validation-cache.sh"
+validation_cache_prepare "$repo_root" "cli-check"
+export CARGO_TARGET_DIR="$HEGIRA_VALIDATION_TARGET"
+
+cleanup() {
+  status=$?
+  trap - EXIT INT TERM
+  validation_cache_release || status=1
+  exit "$status"
+}
+trap cleanup EXIT INT TERM
+
 run_step() {
   name="$1"
   shift
