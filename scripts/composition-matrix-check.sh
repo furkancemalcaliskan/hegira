@@ -3,7 +3,7 @@ set -eu
 
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 . "$repo_root/scripts/validation-cache.sh"
-validation_cache_prepare "$repo_root" composition-matrix-check
+validation_cache_prepare "$repo_root" "composition-matrix-check"
 workspace="$HEGIRA_VALIDATION_WORKSPACE"
 export CARGO_TARGET_DIR="$HEGIRA_VALIDATION_TARGET"
 

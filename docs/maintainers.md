@@ -418,38 +418,72 @@ branch check merely to diagnose one of its internal stages.
 
 ### Validation build-cache lifecycle
 
-The layered-template, generated-feature, and generated-application checks use
-repository-owned state below `target/validation/`:
+Every supported validation command owns its Cargo artifacts below
+`target/validation/`. Validation exports `CARGO_INCREMENTAL=0` and disables
+development and test debug information because these caches are used for
+correctness checks, not interactive debugging. Normal developer builds keep
+Cargo defaults and remain outside this lifecycle.
 
-- `workspaces/<check>` is a stable staging path. Its contents are recreated for
-  each invocation and removed on success, failure, interruption, and supported
-  termination signals. Keeping the path stable prevents each disposable render
-  from becoming a new Cargo package source identity.
-- `build/<check>` is that check's persistent Cargo target directory. It is
-  intentionally separate from normal `target/debug` developer output and may
-  be reused by later equivalent validations.
-- `locks/<check>` prevents two local invocations from sharing the same staging
-  workspace. A remaining lock after an uncatchable process termination must be
-  removed only after confirming that no matching validation process is active.
+| Path | Owner and identity | Lifecycle |
+|---|---|---|
+| `build/framework-check` | Framework packages; native dev/test profiles; minimal and all features; workspace toolchain and lock | Stable LRU cache |
+| `build/official-modules-check` | Official Identity packages; native dev/test profiles; all features and optional disposable PostgreSQL contracts; workspace toolchain and lock | Stable LRU cache |
+| `build/cli-check` | Renderer, mutator, resource generator, and CLI packages; native dev/test profiles; workspace toolchain and lock | Stable LRU cache |
+| `build/layered-template-check` | Canonical layered render; native and WASM dev/test/release profiles; PostgreSQL and all features; pinned application toolchain and generated lock | Stable LRU cache |
+| `build/generated-feature-check` | Canonical external-consumer render; native or WASM check profile; requested provider/capability set; generated lock | Stable LRU cache |
+| `build/generated-application-check` | Default public CLI output; native, WASM, test, and release profiles; SQLite and PostgreSQL lifecycle contracts; generated lock | Stable LRU cache |
+| `build/identity-added-application-check` | Minimal public CLI output plus Identity; native, WASM, test, and release profiles; SQLite and PostgreSQL lifecycle contracts; generated lock | Stable LRU cache |
+| `build/composition-matrix-check` | Minimal and Identity-added compositions; native and WASM check profiles; SQLite and PostgreSQL; generated lock | Stable LRU cache |
+| `workspaces/<check>` | Stable disposable source identity for its named check | Recreated per invocation and removed by its exit trap |
+| `locks/<check>` | Exclusive ownership of the named workspace and build cache | Exists only while that validation is active |
+| `state/<check>` | Last cache access time used for deterministic LRU ordering | Updated on prepare and release; removed with its build cache |
+| `tools/wasm-bindgen` | Authenticated lockfile-selected official CLI | Shared repository-owned tool cache |
 
-Inspect the cleanup operation, then remove all repository-owned validation
-build caches and the three legacy pre-v0.5.0 validation target directories:
+The default repository-owned budget is 65,536 MiB. The baseline that introduced
+this policy measured approximately 14.6 GiB for one warm canonical layered
+cache and 3.0 GiB of separate developer-owned output; repeated provider and
+profile validation had previously accumulated beyond 120 GiB. The default
+retains several expensive warm graphs while placing a firm lifecycle boundary
+well below that observed growth. It is a repository default rather than a
+machine assumption: constrained or dedicated machines may set a positive
+`HEGIRA_VALIDATION_CACHE_MAX_MIB` value explicitly.
+
+A representative cold `framework-check` under the bounded settings occupied
+2,476,676 KiB. An immediate equivalent warm run completed in 4.91 seconds and
+left the cache at exactly 2,476,676 KiB, demonstrating zero second-run disk
+growth for that graph.
+
+Preparation and release automatically prune the least-recently-used inactive
+build caches until the budget is satisfied. Active caches are protected by
+their check locks. If active or shared state alone exceeds the budget,
+validation stops with an actionable diagnostic instead of deleting live state
+or continuing uncontrolled growth. Pruning is serialized by a maintenance
+lock, rejects symlinks, non-directory owned entries, unsafe names, malformed
+state, and paths outside the declared namespace, and never removes Cargo
+registry data, Git checkouts, Docker storage, or normal developer output.
+
+Inspect current ownership and the largest caches, preview budget reclamation,
+or request it immediately:
+
+```sh
+sh scripts/clean-validation-cache.sh --status
+sh scripts/clean-validation-cache.sh --prune-dry-run
+sh scripts/clean-validation-cache.sh --prune
+```
+
+A complete manual removal remains available for troubleshooting. It refuses to
+run during validation or cache maintenance and includes only repository-owned
+validation state and the legacy pre-v0.5.0 validation directories:
 
 ```sh
 sh scripts/clean-validation-cache.sh --dry-run
 sh scripts/clean-validation-cache.sh
 ```
 
-Cleanup refuses to run while a validation lock exists and rejects symlinked or
-non-directory cache roots. It does not remove normal Cargo output such as
-`target/debug`, Cargo registry downloads, or Git dependency checkouts. Use
-`cargo clean` separately only when normal developer build output should also be
-discarded. Provider, feature, native, WebAssembly, release, and Cargo Leptos
-profiles legitimately occupy separate artifact sets; this lifecycle bounds
-growth caused by changing disposable source paths rather than weakening that
-matrix. Checks that compile only packages from the framework repository continue
-to use Cargo's normal target selection and are not owned by this cleanup
-contract.
+Use `cargo clean` separately only when normal developer `target/debug` or
+`target/release` output should also be discarded. Generated production images
+and Compose state retain their existing explicit cleanup lifecycle outside the
+Cargo cache budget.
 
 To reproduce pull request metadata validation with a saved GitHub
 `pull_request` event:

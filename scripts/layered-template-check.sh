@@ -8,7 +8,7 @@ generated_tool_bin=$(sh "$repo_root/scripts/generated-toolchain.sh" prepare \
   templates/applications/layered/Cargo.lock)
 PATH="$generated_tool_bin:$PATH"
 export PATH
-validation_cache_prepare "$repo_root" layered-template-check
+validation_cache_prepare "$repo_root" "layered-template-check"
 staging_parent="$HEGIRA_VALIDATION_WORKSPACE"
 staging_root="$staging_parent/application"
 export CARGO_TARGET_DIR="$HEGIRA_VALIDATION_TARGET"

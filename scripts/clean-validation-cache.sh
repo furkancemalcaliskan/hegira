@@ -7,8 +7,11 @@ repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 case "${1:-}" in
   "") validation_cache_clean "$repo_root" false ;;
   --dry-run) validation_cache_clean "$repo_root" true ;;
+  --prune) validation_cache_prune "$repo_root" false ;;
+  --prune-dry-run) validation_cache_prune "$repo_root" true ;;
+  --status) validation_cache_status "$repo_root" ;;
   *)
-    echo "usage: sh scripts/clean-validation-cache.sh [--dry-run]" >&2
+    echo "usage: sh scripts/clean-validation-cache.sh [--dry-run|--prune|--prune-dry-run|--status]" >&2
     exit 2
     ;;
 esac
