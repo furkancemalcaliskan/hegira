@@ -13,7 +13,7 @@ use sha2::{Digest, Sha256};
 use crate::{RendererError, Result, package_source::PackageSource};
 
 const TEMPLATE_MANIFEST_SCHEMA: u32 = 1;
-const COMPONENT_PACKAGE_MANIFEST_SCHEMA: u32 = 2;
+const COMPONENT_PACKAGE_MANIFEST_SCHEMA: u32 = 3;
 const COMPONENT_MANIFEST_SCHEMA: u32 = 3;
 const LEGACY_COMPONENT_MANIFEST_SCHEMA: u32 = 1;
 
@@ -37,6 +37,8 @@ pub struct ComponentPackageManifest {
     pub templates: Vec<String>,
     pub components: Vec<String>,
     pub modules: Vec<String>,
+    #[serde(default)]
+    pub upgrade_edges: Vec<PathBuf>,
     pub content_digest: String,
 }
 
@@ -114,6 +116,7 @@ pub struct ManifestCatalog {
     template: TemplateManifest,
     components: BTreeMap<String, ComponentManifest>,
     package: Option<ComponentPackageManifest>,
+    upgrade_edges: Vec<crate::UpgradeEdgeManifest>,
 }
 
 impl ManifestCatalog {
@@ -232,14 +235,23 @@ impl ManifestCatalog {
             }
         }
 
-        let catalog = Self {
+        let mut upgrade_edges = Vec::new();
+        if let Some(package) = &package {
+            for path in &package.upgrade_edges {
+                upgrade_edges.push(read_required_manifest(&source, path, "upgrade edge")?);
+            }
+        }
+
+        let mut catalog = Self {
             repository_root,
             templates_root,
             source,
             template,
             components,
             package,
+            upgrade_edges,
         };
+        catalog.validate_upgrade_graph()?;
         catalog.validate_declared_package_files()?;
         if validate_content_digest {
             catalog.validate_package_content()?;
@@ -261,6 +273,17 @@ impl ManifestCatalog {
 
     pub fn package(&self) -> Option<&ComponentPackageManifest> {
         self.package.as_ref()
+    }
+
+    pub fn upgrade_edges(&self) -> &[crate::UpgradeEdgeManifest] {
+        &self.upgrade_edges
+    }
+
+    pub fn resolve_upgrade_edge(
+        &self,
+        request: &crate::UpgradeEdgeRequest,
+    ) -> std::result::Result<crate::ResolvedUpgradeEdge, crate::UpgradeEdgeError> {
+        crate::upgrade::resolve_upgrade_edge(&self.upgrade_edges, request)
     }
 
     fn validate_package_content(&self) -> Result<()> {
@@ -294,6 +317,14 @@ impl ManifestCatalog {
                 path_to_package_key(&path)?,
                 self.required_file(&path, "packaged template manifest")?
                     .to_vec(),
+            )?;
+        }
+
+        for path in &package.upgrade_edges {
+            insert_package_entry(
+                &mut entries,
+                path_to_package_key(path)?,
+                self.required_file(path, "upgrade edge")?.to_vec(),
             )?;
         }
 
@@ -374,6 +405,7 @@ impl ManifestCatalog {
                     .join("template.toml"),
             );
         }
+        declared.extend(package.upgrade_edges.iter().cloned());
         for component in self.components.values() {
             declared.insert(PathBuf::from("components").join(format!("{}.toml", component.id)));
             let source_root = &component.source;
@@ -392,6 +424,24 @@ impl ManifestCatalog {
             ));
         }
         Ok(())
+    }
+
+    fn validate_upgrade_graph(&mut self) -> Result<()> {
+        let Some(package) = &self.package else {
+            return Ok(());
+        };
+        let mut component_paths = BTreeSet::new();
+        for component in self.components.values() {
+            for (path, _) in self.component_files(component)? {
+                component_paths.insert((component.id.clone(), path_to_package_key(&path)?));
+            }
+        }
+        crate::upgrade::validate_upgrade_graph(
+            package,
+            &self.components,
+            &component_paths,
+            &mut self.upgrade_edges,
+        )
     }
 
     pub fn resolve_components(&self) -> Result<Vec<&ComponentManifest>> {
@@ -590,6 +640,7 @@ fn validate_package(package: &ComponentPackageManifest, path: &Path) -> Result<(
     validate_sorted_identifiers(&package.templates, "package template", false)?;
     validate_sorted_identifiers(&package.components, "package component", false)?;
     validate_sorted_identifiers(&package.modules, "package module", true)?;
+    validate_upgrade_paths(&package.upgrade_edges)?;
     let digest = package
         .content_digest
         .strip_prefix("sha256:")
@@ -602,6 +653,27 @@ fn validate_package(package: &ComponentPackageManifest, path: &Path) -> Result<(
         return Err(RendererError::new(
             "component package content digest must be lowercase sha256",
         ));
+    }
+    Ok(())
+}
+
+fn validate_upgrade_paths(paths: &[PathBuf]) -> Result<()> {
+    if paths.windows(2).any(|pair| pair[0] >= pair[1]) {
+        return Err(RendererError::new(
+            "component package upgrade edges must be sorted and unique",
+        ));
+    }
+    for path in paths {
+        validate_relative_path(path, "upgrade edge").map_err(|_| {
+            RendererError::new("component package contains an invalid upgrade edge path")
+        })?;
+        if path.parent() != Some(Path::new("upgrades"))
+            || path.extension().and_then(|value| value.to_str()) != Some("toml")
+        {
+            return Err(RendererError::new(
+                "component package upgrade edges must be TOML files directly below upgrades",
+            ));
+        }
     }
     Ok(())
 }

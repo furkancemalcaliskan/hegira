@@ -608,7 +608,7 @@ produce content-redacted diagnostics, and package loading performs no network
 or process execution. Safe package-source access currently fails closed outside
 Linux and Apple platforms.
 
-The schema-2 package manifest and schema-3 component manifests form a closed
+The schema-3 package manifest and schema-3 component manifests form a closed
 composition graph. Schema-3 distinguishes rendered components from additive
 installation units. An installation unit cannot include or vendor source; it
 declares exactly one owned module, compatible database and client adapters,
@@ -629,6 +629,28 @@ framework, package, module, or recorded capability state return sorted typed
 diagnostics. Resolution reads data already loaded into the catalog and performs
 no write, process execution, network access, source resolution, or runtime
 configuration lookup.
+
+The package manifest may also declare schema-1 upgrade-edge manifests directly
+below `templates/upgrades/`. Their exact bytes and package-relative paths are
+part of the package content digest and the closed package file set. Each edge
+is inert data: it identifies one exact, direct, forward stable-SemVer release
+transition into the authenticated package release; enumerates exact source and
+target component, module, capability, database, and client states; and records
+the manifest fields and managed integration points that the transition permits.
+It cannot contain executable commands or select a different framework source,
+package identity, database adapter, or client adapter.
+
+Upgrade-graph loading normalizes declaration order and rejects duplicate edge
+or composition identities, a source composition mapped more than once,
+downgrades, skipped releases, mismatched target releases, unsupported adapters,
+and component, module, capability, or managed-path references outside the
+closed component graph. A target composition must resolve through the same
+component graph used by rendering. Exact-edge resolution consumes only the
+already authenticated in-memory graph and performs no filesystem write,
+network access, process execution, baseline lookup, or application mutation.
+The bundled package does not yet declare a concrete application upgrade edge;
+such an edge is supported only after its released source state and transition
+data are explicitly added and validated.
 
 The reusable renderer exposes typed composition request/result/diagnostic,
 render request, plan, publication-result, and error-category contracts. A

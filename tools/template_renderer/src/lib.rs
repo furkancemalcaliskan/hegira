@@ -4,6 +4,7 @@ mod manifest;
 mod package_source;
 mod render;
 pub mod repository_validation;
+mod upgrade;
 
 pub use destination::validate_destination;
 pub use manifest::{
@@ -11,6 +12,12 @@ pub use manifest::{
     ComponentPackageManifest, FrameworkDependency, ManifestCatalog, TemplateManifest,
 };
 pub use render::{RenderPlan, RenderRequest, RenderResult, plan, plan_snapshot, publish, render};
+pub use upgrade::{
+    ManagedIntegrationTransition, ManagedIntegrationTransitionKind, ResolvedUpgradeEdge,
+    UPGRADE_EDGE_SCHEMA, UpgradeCompositionState, UpgradeCompositionTransition,
+    UpgradeEdgeDiagnostic, UpgradeEdgeDiagnosticKind, UpgradeEdgeError, UpgradeEdgeManifest,
+    UpgradeEdgeRequest, UpgradeManifestTransition, UpgradeReleaseIdentity,
+};
 
 use std::fmt::{Display, Formatter};
 use std::path::Path;
