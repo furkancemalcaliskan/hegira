@@ -538,32 +538,34 @@ fn validate_field_name(name: &str) -> Result<(), SpecificationError> {
 mod tests {
     use application_manifest::{
         APPLICATION_MANIFEST_SCHEMA, ApplicationCapability, ApplicationComposition,
-        ApplicationSelection, FrameworkContract, HEGIRA_COMPONENT_PACKAGE,
+        ApplicationSelection, ApplicationUpgradeState, FrameworkContract, HEGIRA_COMPONENT_PACKAGE,
         HEGIRA_FRAMEWORK_REPOSITORY, IDENTITY_COMPONENT, IDENTITY_MODULE, InstalledComponent,
         InstalledModule, LAYERED_BASE_COMPONENT, LAYERED_LEPTOS_IDENTITY_COMPONENT,
-        LAYERED_LEPTOS_MINIMAL_COMPONENT, PackageIdentity,
+        LAYERED_LEPTOS_MINIMAL_COMPONENT, PackageIdentity, SourceOwnership, SourceOwnershipClass,
     };
 
     use super::*;
 
     fn manifest(database: DatabaseAdapter) -> ApplicationManifest {
+        let framework = FrameworkContract {
+            repository: HEGIRA_FRAMEWORK_REPOSITORY.to_owned(),
+            version: "v0.6.0".to_owned(),
+        };
+        let package = PackageIdentity {
+            id: HEGIRA_COMPONENT_PACKAGE.to_owned(),
+            version: "v0.6.0".to_owned(),
+        };
         ApplicationManifest {
             schema: APPLICATION_MANIFEST_SCHEMA,
             application: "my-application".to_owned(),
-            framework: FrameworkContract {
-                repository: HEGIRA_FRAMEWORK_REPOSITORY.to_owned(),
-                version: "v0.6.0".to_owned(),
-            },
+            framework: framework.clone(),
             selection: ApplicationSelection {
                 components: BTreeSet::new(),
                 databases: [database].into_iter().collect(),
                 clients: [ClientAdapter::Leptos].into_iter().collect(),
             },
             composition: Some(ApplicationComposition {
-                package: PackageIdentity {
-                    id: HEGIRA_COMPONENT_PACKAGE.to_owned(),
-                    version: "v0.6.0".to_owned(),
-                },
+                package: package.clone(),
                 components: [LAYERED_BASE_COMPONENT, LAYERED_LEPTOS_IDENTITY_COMPONENT]
                     .map(|id| InstalledComponent {
                         id: id.to_owned(),
@@ -581,6 +583,14 @@ mod tests {
                 ]
                 .into_iter()
                 .collect(),
+            }),
+            upgrade: Some(ApplicationUpgradeState {
+                framework,
+                package,
+                ownership: SourceOwnership {
+                    default: SourceOwnershipClass::ApplicationOwned,
+                    claims: Vec::new(),
+                },
             }),
         }
     }

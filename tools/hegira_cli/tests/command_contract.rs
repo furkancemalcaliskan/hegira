@@ -223,7 +223,7 @@ fn component_without_bundled_contributions_cannot_publish_partial_state() {
     fs::write(
         application.join("hegira.toml"),
         format!(
-            r#"schema = 2
+            r#"schema = 3
 application = "component-app"
 
 [framework]
@@ -244,6 +244,17 @@ version = "{version}"
 [[composition.components]]
 id = "layered-base"
 version = "{version}"
+
+[upgrade.framework]
+repository = "https://github.com/furkancemalcaliskan/hegira.git"
+version = "{version}"
+
+[upgrade.package]
+id = "hegira-canonical"
+version = "{version}"
+
+[upgrade.ownership]
+default = "application-owned"
 "#
         ),
     )
@@ -1007,7 +1018,7 @@ fn inspect_reports_the_discovered_application_without_writing() {
         "Root: {}\n",
         fs::canonicalize(&application).unwrap().display()
     )));
-    assert!(output.contains("Manifest schema: 2\n"));
+    assert!(output.contains("Manifest schema: 3\n"));
     assert!(output.contains("Framework: https://github.com/furkancemalcaliskan/hegira.git"));
     assert!(output.contains("Composition status: compatible\n"));
     assert!(output.contains("Component package: hegira-canonical @ v0.6.0\n"));
@@ -1437,7 +1448,7 @@ fn inspect_json_is_versioned_deterministic_and_matches_explicit_resolution() {
         serde_json::from_slice(&discovered.stdout).expect("inspection JSON should parse");
     assert_eq!(document["output_schema"], 2);
     assert_eq!(document["manifest"]["application"], "json-app");
-    assert_eq!(document["manifest"]["schema"], 2);
+    assert_eq!(document["manifest"]["schema"], 3);
     assert_eq!(
         document["manifest"]["composition"]["package"]["id"],
         "hegira-canonical"
@@ -1680,8 +1691,8 @@ fn explicit_sibling_destination_still_works() {
 #[test]
 fn provider_snapshots_and_interactive_requests_match() {
     for (database, expected) in [
-        ("sqlite", 17578384185377777148_u64),
-        ("postgres", 11845780179945107245_u64),
+        ("sqlite", 1060006343628644232_u64),
+        ("postgres", 15910667783635350377_u64),
     ] {
         let root = TestDirectory::new(database);
         let explicit = root.path().join("explicit");

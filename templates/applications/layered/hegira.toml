@@ -1,4 +1,4 @@
-schema = 2
+schema = 3
 application = "{{application_name}}"
 
 [framework]
@@ -15,3 +15,95 @@ components = []
 [composition.package]
 id = "{{package_id}}"
 version = "{{package_version}}"
+
+[upgrade.framework]
+repository = "{{framework_repository}}"
+version = "{{framework_version}}"
+
+[upgrade.package]
+id = "{{package_id}}"
+version = "{{package_version}}"
+
+[upgrade.ownership]
+default = "application-owned"
+
+[[upgrade.ownership.claims]]
+path = "Dockerfile"
+class = "generated-once"
+
+[[upgrade.ownership.claims]]
+path = "apps/server/src/server.rs"
+class = "managed-integration"
+integration = "resource-bearer-routes"
+
+[[upgrade.ownership.claims]]
+path = "apps/server/src/server.rs"
+class = "managed-integration"
+integration = "resource-leptos-contexts"
+
+[[upgrade.ownership.claims]]
+path = "apps/web/src/lib.rs"
+class = "managed-integration"
+integration = "generated-modules"
+
+[[upgrade.ownership.claims]]
+path = "apps/web/src/routes.rs"
+class = "managed-integration"
+integration = "resource-routes-native"
+
+[[upgrade.ownership.claims]]
+path = "crates/application/src/lib.rs"
+class = "managed-integration"
+integration = "generated-modules"
+
+[[upgrade.ownership.claims]]
+path = "crates/application_contracts/src/lib.rs"
+class = "managed-integration"
+integration = "generated-modules"
+
+[[upgrade.ownership.claims]]
+path = "crates/domain/src/lib.rs"
+class = "managed-integration"
+integration = "generated-modules"
+
+[[upgrade.ownership.claims]]
+path = "crates/infrastructure/migrations/postgres"
+class = "immutable-history"
+
+[[upgrade.ownership.claims]]
+path = "crates/infrastructure/migrations/sqlite"
+class = "immutable-history"
+
+[[upgrade.ownership.claims]]
+path = "crates/infrastructure/src/config.rs"
+class = "managed-integration"
+integration = "module-config-fields"
+
+[[upgrade.ownership.claims]]
+path = "crates/infrastructure/src/lib.rs"
+class = "managed-integration"
+integration = "generated-modules"
+
+[[upgrade.ownership.claims]]
+path = "crates/infrastructure/src/operations.rs"
+class = "managed-integration"
+integration = "module-migrations-postgres"
+
+[[upgrade.ownership.claims]]
+path = "crates/infrastructure/src/operations.rs"
+class = "managed-integration"
+integration = "module-migrations-sqlite"
+
+[[upgrade.ownership.claims]]
+path = "crates/presentation/src/lib.rs"
+class = "managed-integration"
+integration = "generated-modules"
+
+[[upgrade.ownership.claims]]
+path = "docker-compose.yml"
+class = "generated-once"
+
+[[upgrade.ownership.claims]]
+path = "hegira.toml"
+class = "managed-integration"
+integration = "application-manifest"
