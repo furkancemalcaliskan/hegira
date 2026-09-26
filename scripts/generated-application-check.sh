@@ -7,32 +7,87 @@ compose_file="$repo_root/scripts/generated-application-smoke.yml"
 . "$repo_root/scripts/validation-cache.sh"
 mode="${1:-default}"
 case "$mode" in
-  default) check_name=generated-application-check ;;
-  identity-added) check_name=identity-added-application-check ;;
+  default)
+    check_name=generated-application-check
+    default_http_port=38081
+    default_postgres_port=35432
+    ;;
+  identity-added)
+    check_name=identity-added-application-check
+    default_http_port=38082
+    default_postgres_port=35433
+    ;;
   *) echo "usage: sh scripts/generated-application-check.sh [default|identity-added]" >&2; exit 2 ;;
 esac
 if [ "$#" -gt 1 ]; then
   echo "usage: sh scripts/generated-application-check.sh [default|identity-added]" >&2
   exit 2
 fi
-generated_tool_bin=$(sh "$repo_root/scripts/generated-toolchain.sh" prepare \
-  "$canonical_lock" --container)
+
+phase_label=
+phase_started=
+phase_begin() {
+  phase_label="$1"
+  phase_started=$(date +%s)
+  echo "==> [$mode] $phase_label"
+  if [ "${GITHUB_ACTIONS:-false}" = true ]; then
+    echo "::group::[$mode] $phase_label"
+  fi
+}
+
+phase_finish() {
+  result="${1:-passed}"
+  finished=$(date +%s)
+  duration=$((finished - phase_started))
+  if [ "${GITHUB_ACTIONS:-false}" = true ]; then
+    echo "::endgroup::"
+  fi
+  echo "==> [$mode] $phase_label: $result (${duration}s)"
+  if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+    printf '| `%s` | %s | %s | %ss |\n' \
+      "$mode" "$phase_label" "$result" "$duration" >>"$GITHUB_STEP_SUMMARY"
+  fi
+  phase_label=
+  phase_started=
+}
+
+if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+  {
+    printf '\n### Generated application lifecycle timings\n\n'
+    printf '| Lifecycle | Phase | Result | Duration |\n'
+    printf '|---|---|---:|---:|\n'
+  } >>"$GITHUB_STEP_SUMMARY"
+fi
+
+phase_begin "toolchain preflight"
+if ! generated_tool_bin=$(sh "$repo_root/scripts/generated-toolchain.sh" prepare \
+  "$canonical_lock" --container); then
+  phase_finish failed
+  exit 1
+fi
 PATH="$generated_tool_bin:$PATH"
 export PATH
-validation_cache_prepare "$repo_root" "$check_name"
+phase_finish
+
+phase_begin "bounded validation cache preparation"
+if ! validation_cache_prepare "$repo_root" "$check_name"; then
+  phase_finish failed
+  exit 1
+fi
 staging_parent="$HEGIRA_VALIDATION_WORKSPACE"
 generated_root="$staging_parent/postgres-validation"
 artifacts_dir="$staging_parent/artifacts"
 export CARGO_TARGET_DIR="$HEGIRA_VALIDATION_TARGET"
+phase_finish
 
 export COMPOSE_PROJECT_NAME="hegira-generated-$mode-${GITHUB_RUN_ID:-local}-$$"
 export GENERATED_APP_IMAGE="hegira-generated-$mode:${GITHUB_RUN_ID:-local}-$$"
 image_built=false
-export GENERATED_APP_HTTP_PORT="${GENERATED_APP_HTTP_PORT:-38081}"
-export GENERATED_APP_POSTGRES_PORT="${GENERATED_APP_POSTGRES_PORT:-35432}"
-export GENERATED_APP_DB_PASSWORD="generated-${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-0}-$$"
-export GENERATED_APP_JWT_SECRET="generated-jwt-${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-0}-$$-ephemeral"
-export GENERATED_APP_TEST_USERNAME="resource-validation-${GITHUB_RUN_ID:-local}-$$@example.test"
+export GENERATED_APP_HTTP_PORT="${GENERATED_APP_HTTP_PORT:-$default_http_port}"
+export GENERATED_APP_POSTGRES_PORT="${GENERATED_APP_POSTGRES_PORT:-$default_postgres_port}"
+export GENERATED_APP_DB_PASSWORD="generated-$mode-${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-0}-$$"
+export GENERATED_APP_JWT_SECRET="generated-jwt-$mode-${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-0}-$$-ephemeral"
+export GENERATED_APP_TEST_USERNAME="resource-validation-$mode-${GITHUB_RUN_ID:-local}-$$@example.test"
 if [ "$mode" = identity-added ]; then
   export GENERATED_APP_PUBLIC_URL=https://example.test
   export GENERATED_APP_CORS_ENABLED=false
@@ -103,6 +158,9 @@ cleanup() {
   status=$?
   trap - EXIT INT TERM
   set +e
+  if [ -n "$phase_started" ]; then
+    phase_finish failed
+  fi
   if [ "$status" -ne 0 ]; then
     compose ps --all
     compose logs --no-color postgres web
@@ -111,12 +169,19 @@ cleanup() {
   if [ "$image_built" = true ]; then
     docker image rm "$GENERATED_APP_IMAGE"
   fi
+  cache_size_kib=$(du -sk "$HEGIRA_VALIDATION_TARGET" | awk '{ print $1 }')
+  echo "generated-application cache footprint: ${cache_size_kib} KiB ($check_name)"
+  if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+    printf '\nCache footprint: `%s KiB` (`%s`).\n' \
+      "$cache_size_kib" "$check_name" >>"$GITHUB_STEP_SUMMARY"
+  fi
   validation_cache_release || status=1
   exit "$status"
 }
 trap cleanup EXIT INT TERM
 
 # Exercise the real public command without any repository-local source options.
+phase_begin "public application creation"
 for database in sqlite postgres; do
   source="$staging_parent/$database-source"
   if [ "$mode" = identity-added ]; then
@@ -181,7 +246,9 @@ if find "$repo_root/.cargo" "$repo_root/crates" \
   echo "framework validation source contains a symbolic link" >&2
   exit 1
 fi
+phase_finish
 
+phase_begin "SQLite development build"
 development_root="$staging_parent/sqlite-development-validation"
 stage_application "$staging_parent/sqlite-source" "$development_root" sqlite
 stage_framework_source "$development_root"
@@ -199,8 +266,10 @@ export PATH
     --bin-features ssr,db-sqlite --lib-features hydrate \
     --bin-cargo-args=--locked --lib-cargo-args=--locked
 )
+phase_finish
 
 for database in sqlite postgres; do
+  phase_begin "$database provider lifecycle"
   validation_root="$staging_parent/$database-validation"
   migration_artifacts="$staging_parent/$database-migration-artifacts"
   mkdir -p "$migration_artifacts"
@@ -315,8 +384,10 @@ for database in sqlite postgres; do
       --bin-features "ssr,db-$database" --lib-features hydrate \
       --bin-cargo-args=--locked --lib-cargo-args=--locked
   )
+  phase_finish
 done
 
+phase_begin "PostgreSQL migration contracts"
 compose up --detach postgres
 
 if [ "$mode" = default ]; then (
@@ -331,9 +402,14 @@ if [ "$mode" = default ]; then (
       --test database_contracts postgres_fresh_install_and_v020_upgrade_pass -- \
       --ignored --test-threads=1
 ); fi
+phase_finish
 
+phase_begin "production container build"
 docker build --tag "$GENERATED_APP_IMAGE" "$generated_root"
 image_built=true
+phase_finish
+
+phase_begin "production runtime and HTTP contracts"
 compose up --detach web
 
 base_url="http://127.0.0.1:$GENERATED_APP_HTTP_PORT"
@@ -471,5 +547,6 @@ deleted_status=$(curl --silent --show-error --output "$artifacts_dir/resource-de
   --header "authorization: Bearer $resource_token" \
   "$base_url/api/validation-records/$resource_id")
 test "$deleted_status" = "404"
+phase_finish
 
 echo "CLI-generated $mode application validation passed for development builds, generated resources, SQLite, PostgreSQL, authorized HTTP CRUD, and the production container"

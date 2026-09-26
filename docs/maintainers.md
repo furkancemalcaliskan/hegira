@@ -85,9 +85,11 @@ Keep these exact status checks required for both `develop` and `main`:
 
 The stable `quality` context is an aggregate gate. It reports failure unless
 the `framework`, `official-modules`, `tooling`, and `generated-application`
-jobs all succeed. Generated-application database, release-build, production
-container, and HTTP/security validation is therefore release-blocking without
-requiring a new protected-branch context.
+jobs all succeed. `generated-application` is a two-cell lifecycle matrix;
+GitHub reports its dependency as successful only after both `default` and
+`identity-added` cells succeed. Generated-application database, release-build,
+production-container, and HTTP/security validation is therefore
+release-blocking without requiring another protected-branch context.
 
 A plain push to an issue branch does not trigger the push-based validation
 workflows. Updating an open pull request triggers its `pull_request` checks.
@@ -106,14 +108,15 @@ The repository validation workflow separates these responsibilities:
 - `tooling` validates the DX baseline, source-runnable CLI, rendering tool,
   component manifests, workspace-external layered application, locked
   dependency boundaries, hydration, and release output;
-- `generated-application` validates untouched public CLI output, then mutates
-  separate SQLite and PostgreSQL validation copies through the public resource
-  command and exercises their locked dependency boundaries, supported v0.2.0
-  upgrades, generated HTTP contract, and rendered production container. A
-  second step in this same job creates explicit minimal applications, verifies
-  pre-install capability rejection, installs Identity through public dry-run
-  and apply, and repeats provider, hydration, production-container, and
-  authenticated CRUD coverage;
+- `generated-application (default)` validates untouched default public CLI
+  output, then mutates separate SQLite and PostgreSQL validation copies through
+  the public resource command and exercises their locked dependency boundaries,
+  supported v0.2.0 upgrades, generated HTTP contract, and rendered production
+  container;
+- `generated-application (identity-added)` independently creates explicit
+  minimal applications, verifies pre-install capability rejection, installs
+  Identity through public dry-run and apply, and repeats provider, hydration,
+  production-container, and authenticated CRUD coverage;
 - `quality` aggregates the four repository ownership gates under the existing
   required status context;
 - `supply-chain` runs dependency policy and vulnerability checks.
@@ -123,8 +126,8 @@ GitHub-hosted runners. They contain disposable test data, expose no repository
 secret, and are destroyed after validation.
 
 The former compatibility-host full-stack and production-container workflows and
-scripts are retired. The generated-application job is the single integration
-owner for those contracts.
+scripts are retired. The generated-application lifecycle matrix is the single
+integration owner for those contracts.
 
 `deny.toml` explicitly rejects the `event-listener` and `lru` version ranges
 affected by RUSTSEC-2026-0221 and RUSTSEC-2026-0253. These informational
@@ -179,11 +182,10 @@ smoke. The repository-validation adapter stages the CLI-mutated application in
 a disposable copy and rewrites only declared framework dependencies to the
 current source tree. The default application's historical v0.2.0 upgrade test
 does not apply to the newly created minimal composition, whose migration
-history starts later. Repository validation and release validation run this
-lifecycle mode as an explicit step in the existing generated-application job.
-The stable `generated-application` ownership job and aggregated `quality`
-context therefore cover both paths without introducing another protected
-branch status context.
+history starts later. Repository and release validation run the default and
+Identity-added modes as isolated cells of the same generated-application
+matrix. The stable aggregated `quality` context therefore covers both paths
+without introducing another protected-branch status requirement.
 
 The CLI process tests use disposable working and home directories and an empty
 command search path rather than the maintainer's global configuration. They
@@ -399,7 +401,25 @@ and rendered output on exit. Compose project and image names are assigned by
 the check rather than inherited from the caller. It never targets the
 maintainer's configured database.
 
-Failures in this job are owned by the contract boundary named in the output:
+CI runs the `default` and `identity-added` commands as a non-fail-fast matrix so
+both lifecycle results remain observable and the previous sequential critical
+path is removed. Each cell owns a distinct bounded target, disposable workspace,
+Compose project, ports, database, image, and runtime credentials. Provider work
+within one lifecycle remains ordered because the gate compares provider
+lockfiles and pristine source identities before compiling them and uses the
+PostgreSQL render as the production-container subject; it shares no mutable
+state with the other matrix cell.
+
+The optional remote Rust cache points at the same lifecycle-specific bounded
+target. Its key records the pinned Rust toolchain, native and WASM targets,
+development/test/release profiles, SQLite and PostgreSQL providers, compiled
+features, canonical lockfiles, and immutable Git tree. Failed jobs do not
+publish caches, and a cache miss always falls back to a complete build. Every
+major phase reports elapsed seconds, the cache action reports exact-hit state,
+and cleanup reports the final local cache footprint in the job summary.
+
+Failures in either matrix cell are owned by the contract boundary named in the
+output:
 
 - public creation or canonical verification failures belong to the CLI render
   and template-package contract;
@@ -412,9 +432,10 @@ Failures in this job are owned by the contract boundary named in the output:
 - readiness, asset, security-header, authentication, authorization, or CRUD
   failures belong to the production container and generated runtime contract.
 
-The `quality` job must propagate any such failure through the existing stable
-`quality` status context. Do not split this scenario into a second protected
-branch check merely to diagnose one of its internal stages.
+The `quality` job must propagate a failure from either cell through the existing
+stable `quality` status context. Release publication likewise depends on the
+whole matrix and cannot proceed after a skipped, cancelled, or failed lifecycle.
+Do not add either matrix display name as a protected status requirement.
 
 ### Validation build-cache lifecycle
 
