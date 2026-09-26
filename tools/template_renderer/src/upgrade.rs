@@ -16,6 +16,10 @@ use crate::{
 };
 
 pub const UPGRADE_EDGE_SCHEMA: u32 = 1;
+const MAX_UPGRADE_EDGES: usize = 16;
+const MAX_COMPOSITIONS_PER_EDGE: usize = 64;
+const MAX_MANAGED_INTEGRATIONS_PER_EDGE: usize = 512;
+const MAX_COMPOSITION_MEMBERS: usize = 64;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -124,6 +128,42 @@ pub struct UpgradeEdgeError {
     diagnostic: UpgradeEdgeDiagnostic,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum UpgradeGraphDiagnosticKind {
+    InvalidManifest,
+    InvalidSchema,
+    InvalidIdentifier,
+    InvalidReleaseIdentity,
+    InvalidReleaseVersion,
+    TargetReleaseMismatch,
+    NonDirectRelease,
+    DuplicateEdge,
+    DuplicateReleaseEdge,
+    EmptyCompositionSet,
+    DuplicateComposition,
+    NonCanonicalComposition,
+    UndeclaredComponent,
+    UndeclaredModule,
+    UndeclaredCapability,
+    UnsupportedAdapter,
+    TargetCompositionMismatch,
+    AdapterChange,
+    AmbiguousSourceComposition,
+    DuplicateManifestTransition,
+    InvalidManagedPath,
+    UndeclaredManagedPath,
+    ConflictingManagedTransition,
+    LimitExceeded,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct UpgradeGraphDiagnostic {
+    pub kind: UpgradeGraphDiagnosticKind,
+    pub subject: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct SourceCompositionKey {
     framework_repository: String,
@@ -154,12 +194,70 @@ impl Display for UpgradeEdgeError {
 
 impl std::error::Error for UpgradeEdgeError {}
 
+impl Display for UpgradeGraphDiagnostic {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            formatter,
+            "{}: {}",
+            graph_diagnostic_kind_name(self.kind),
+            self.subject
+        )
+    }
+}
+
+pub(crate) fn graph_error(
+    kind: UpgradeGraphDiagnosticKind,
+    subject: impl Into<String>,
+) -> RendererError {
+    RendererError::with_upgrade_graph(UpgradeGraphDiagnostic {
+        kind,
+        subject: subject.into(),
+    })
+}
+
+fn graph_diagnostic_kind_name(kind: UpgradeGraphDiagnosticKind) -> &'static str {
+    match kind {
+        UpgradeGraphDiagnosticKind::InvalidManifest => "invalid-manifest",
+        UpgradeGraphDiagnosticKind::InvalidSchema => "invalid-schema",
+        UpgradeGraphDiagnosticKind::InvalidIdentifier => "invalid-identifier",
+        UpgradeGraphDiagnosticKind::InvalidReleaseIdentity => "invalid-release-identity",
+        UpgradeGraphDiagnosticKind::InvalidReleaseVersion => "invalid-release-version",
+        UpgradeGraphDiagnosticKind::TargetReleaseMismatch => "target-release-mismatch",
+        UpgradeGraphDiagnosticKind::NonDirectRelease => "non-direct-release",
+        UpgradeGraphDiagnosticKind::DuplicateEdge => "duplicate-edge",
+        UpgradeGraphDiagnosticKind::DuplicateReleaseEdge => "duplicate-release-edge",
+        UpgradeGraphDiagnosticKind::EmptyCompositionSet => "empty-composition-set",
+        UpgradeGraphDiagnosticKind::DuplicateComposition => "duplicate-composition",
+        UpgradeGraphDiagnosticKind::NonCanonicalComposition => "non-canonical-composition",
+        UpgradeGraphDiagnosticKind::UndeclaredComponent => "undeclared-component",
+        UpgradeGraphDiagnosticKind::UndeclaredModule => "undeclared-module",
+        UpgradeGraphDiagnosticKind::UndeclaredCapability => "undeclared-capability",
+        UpgradeGraphDiagnosticKind::UnsupportedAdapter => "unsupported-adapter",
+        UpgradeGraphDiagnosticKind::TargetCompositionMismatch => "target-composition-mismatch",
+        UpgradeGraphDiagnosticKind::AdapterChange => "adapter-change",
+        UpgradeGraphDiagnosticKind::AmbiguousSourceComposition => "ambiguous-source-composition",
+        UpgradeGraphDiagnosticKind::DuplicateManifestTransition => "duplicate-manifest-transition",
+        UpgradeGraphDiagnosticKind::InvalidManagedPath => "invalid-managed-path",
+        UpgradeGraphDiagnosticKind::UndeclaredManagedPath => "undeclared-managed-path",
+        UpgradeGraphDiagnosticKind::ConflictingManagedTransition => {
+            "conflicting-managed-transition"
+        }
+        UpgradeGraphDiagnosticKind::LimitExceeded => "limit-exceeded",
+    }
+}
+
 pub(crate) fn validate_upgrade_graph(
     package: &ComponentPackageManifest,
     components: &BTreeMap<String, ComponentManifest>,
     component_paths: &BTreeSet<(String, String)>,
     edges: &mut [UpgradeEdgeManifest],
 ) -> Result<()> {
+    if edges.len() > MAX_UPGRADE_EDGES {
+        return Err(graph_error(
+            UpgradeGraphDiagnosticKind::LimitExceeded,
+            "upgrade-edges",
+        ));
+    }
     edges.sort_by(|left, right| left.id.cmp(&right.id));
     let mut ids = BTreeSet::new();
     let mut release_pairs = BTreeSet::new();
@@ -167,14 +265,17 @@ pub(crate) fn validate_upgrade_graph(
 
     for edge in edges.iter_mut() {
         if edge.schema != UPGRADE_EDGE_SCHEMA {
-            return Err(RendererError::new(format!(
-                "unsupported upgrade edge schema {}",
-                edge.schema
-            )));
+            return Err(graph_error(
+                UpgradeGraphDiagnosticKind::InvalidSchema,
+                "upgrade-edge.schema",
+            ));
         }
         validate_graph_identifier(&edge.id, "upgrade edge")?;
         if !ids.insert(edge.id.clone()) {
-            return Err(RendererError::new("duplicate upgrade edge id"));
+            return Err(graph_error(
+                UpgradeGraphDiagnosticKind::DuplicateEdge,
+                "upgrade-edge.id",
+            ));
         }
         validate_release_identity(package, &edge.source, false)?;
         validate_release_identity(package, &edge.target, true)?;
@@ -185,13 +286,22 @@ pub(crate) fn validate_upgrade_graph(
             edge.target.framework.version.clone(),
         );
         if !release_pairs.insert(release_pair) {
-            return Err(RendererError::new("duplicate upgrade release edge"));
+            return Err(graph_error(
+                UpgradeGraphDiagnosticKind::DuplicateReleaseEdge,
+                "upgrade-edge.release",
+            ));
         }
         if edge.compositions.is_empty() {
-            return Err(RendererError::new(format!(
-                "upgrade edge {} declares no composition transitions",
-                edge.id
-            )));
+            return Err(graph_error(
+                UpgradeGraphDiagnosticKind::EmptyCompositionSet,
+                "upgrade-edge.compositions",
+            ));
+        }
+        if edge.compositions.len() > MAX_COMPOSITIONS_PER_EDGE {
+            return Err(graph_error(
+                UpgradeGraphDiagnosticKind::LimitExceeded,
+                "upgrade-edge.compositions",
+            ));
         }
 
         edge.compositions
@@ -200,26 +310,37 @@ pub(crate) fn validate_upgrade_graph(
         for transition in &edge.compositions {
             validate_graph_identifier(&transition.id, "upgrade composition")?;
             if !composition_ids.insert(transition.id.clone()) {
-                return Err(RendererError::new("duplicate upgrade composition id"));
+                return Err(graph_error(
+                    UpgradeGraphDiagnosticKind::DuplicateComposition,
+                    "upgrade-composition.id",
+                ));
             }
             validate_composition(package, components, &transition.source, false)?;
             validate_composition(package, components, &transition.target, true)?;
             if transition.source.database != transition.target.database
                 || transition.source.client != transition.target.client
             {
-                return Err(RendererError::new(
-                    "upgrade edge cannot switch database or client adapters",
+                return Err(graph_error(
+                    UpgradeGraphDiagnosticKind::AdapterChange,
+                    "upgrade-composition.adapters",
                 ));
             }
             let source_key = composition_key(&edge.source, &transition.source);
             if !source_states.insert(source_key) {
-                return Err(RendererError::new(
-                    "upgrade graph maps one source composition more than once",
+                return Err(graph_error(
+                    UpgradeGraphDiagnosticKind::AmbiguousSourceComposition,
+                    "upgrade-composition.source",
                 ));
             }
         }
 
-        sort_unique(&mut edge.manifest_transitions, "manifest transition")?;
+        sort_unique(&mut edge.manifest_transitions)?;
+        if edge.managed_integrations.len() > MAX_MANAGED_INTEGRATIONS_PER_EDGE {
+            return Err(graph_error(
+                UpgradeGraphDiagnosticKind::LimitExceeded,
+                "upgrade-edge.managed-integrations",
+            ));
+        }
         edge.managed_integrations.sort();
         let mut managed_integrations = BTreeSet::new();
         for transition in &edge.managed_integrations {
@@ -227,8 +348,9 @@ pub(crate) fn validate_upgrade_graph(
             validate_graph_identifier(&transition.integration, "managed integration")?;
             validate_graph_path(Path::new(&transition.path), "managed integration path")?;
             if !component_paths.contains(&(transition.component.clone(), transition.path.clone())) {
-                return Err(RendererError::new(
-                    "upgrade edge references a graph-undeclared managed integration path",
+                return Err(graph_error(
+                    UpgradeGraphDiagnosticKind::UndeclaredManagedPath,
+                    "managed-integration.path",
                 ));
             }
             if !managed_integrations.insert((
@@ -236,8 +358,9 @@ pub(crate) fn validate_upgrade_graph(
                 transition.path.clone(),
                 transition.integration.clone(),
             )) {
-                return Err(RendererError::new(
-                    "upgrade edge contains conflicting managed integration transitions",
+                return Err(graph_error(
+                    UpgradeGraphDiagnosticKind::ConflictingManagedTransition,
+                    "managed-integration",
                 ));
             }
         }
@@ -285,25 +408,29 @@ fn validate_release_identity(
     release: &UpgradeReleaseIdentity,
     target: bool,
 ) -> Result<()> {
-    release
-        .framework
-        .validate()
-        .map_err(|_| RendererError::new("upgrade edge contains an invalid framework repository"))?;
+    parse_release(&release.framework.version)?;
+    release.framework.validate().map_err(|_| {
+        graph_error(
+            UpgradeGraphDiagnosticKind::InvalidReleaseIdentity,
+            "upgrade-release.framework",
+        )
+    })?;
     if release.framework.repository != package.framework.repository
         || release.package.id != package.id
         || release.framework.version != release.package.version
     {
-        return Err(RendererError::new(
-            "upgrade edge release identity does not match the package contract",
+        return Err(graph_error(
+            UpgradeGraphDiagnosticKind::InvalidReleaseIdentity,
+            "upgrade-release.identity",
         ));
     }
-    parse_release(&release.framework.version)?;
     if target
         && (release.framework.version != package.framework.version
             || release.package.version != package.version)
     {
-        return Err(RendererError::new(
-            "upgrade edge target does not match the authenticated package release",
+        return Err(graph_error(
+            UpgradeGraphDiagnosticKind::TargetReleaseMismatch,
+            "upgrade-edge.target",
         ));
     }
     Ok(())
@@ -325,22 +452,31 @@ fn validate_direct_release(
         source.major.checked_add(1) == Some(target.major) && target.minor == 0 && target.patch == 0;
     let direct = direct_patch || direct_minor || direct_major;
     if !direct {
-        return Err(RendererError::new(
-            "upgrade edge must describe one direct forward SemVer release",
+        return Err(graph_error(
+            UpgradeGraphDiagnosticKind::NonDirectRelease,
+            "upgrade-edge.release",
         ));
     }
     Ok(())
 }
 
 fn parse_release(value: &str) -> Result<Version> {
-    let version = value
-        .strip_prefix('v')
-        .ok_or_else(|| RendererError::new("upgrade release must be a stable v-prefixed SemVer"))?;
-    let version = Version::parse(version)
-        .map_err(|_| RendererError::new("upgrade release must be a stable v-prefixed SemVer"))?;
+    let version = value.strip_prefix('v').ok_or_else(|| {
+        graph_error(
+            UpgradeGraphDiagnosticKind::InvalidReleaseVersion,
+            "upgrade-release.version",
+        )
+    })?;
+    let version = Version::parse(version).map_err(|_| {
+        graph_error(
+            UpgradeGraphDiagnosticKind::InvalidReleaseVersion,
+            "upgrade-release.version",
+        )
+    })?;
     if !version.pre.is_empty() || !version.build.is_empty() {
-        return Err(RendererError::new(
-            "upgrade release must be a stable v-prefixed SemVer",
+        return Err(graph_error(
+            UpgradeGraphDiagnosticKind::InvalidReleaseVersion,
+            "upgrade-release.version",
         ));
     }
     Ok(version)
@@ -352,21 +488,34 @@ fn validate_composition(
     state: &UpgradeCompositionState,
     target: bool,
 ) -> Result<()> {
-    validate_sorted_members(&state.components, "upgrade component", false)?;
-    validate_sorted_members(&state.modules, "upgrade module", true)?;
+    if state.components.len() > MAX_COMPOSITION_MEMBERS
+        || state.modules.len() > MAX_COMPOSITION_MEMBERS
+        || state.capabilities.len() > MAX_COMPOSITION_MEMBERS
+    {
+        return Err(graph_error(
+            UpgradeGraphDiagnosticKind::LimitExceeded,
+            "upgrade-composition.members",
+        ));
+    }
+    validate_sorted_members(&state.components, "component", false)?;
+    validate_sorted_members(&state.modules, "module", true)?;
     validate_sorted_capabilities(&state.capabilities)?;
 
     for component in &state.components {
         let manifest = components.get(component).ok_or_else(|| {
-            RendererError::new("upgrade composition references a graph-undeclared component")
+            graph_error(
+                UpgradeGraphDiagnosticKind::UndeclaredComponent,
+                "upgrade-composition.components",
+            )
         })?;
         if target
             && let Some(installation) = &manifest.installation
             && (!installation.databases.contains(&state.database)
                 || !installation.clients.contains(&state.client))
         {
-            return Err(RendererError::new(
-                "upgrade target composition uses an unsupported component adapter",
+            return Err(graph_error(
+                UpgradeGraphDiagnosticKind::UnsupportedAdapter,
+                "upgrade-composition.adapters",
             ));
         }
     }
@@ -375,8 +524,9 @@ fn validate_composition(
         .iter()
         .any(|module| !package.modules.contains(module))
     {
-        return Err(RendererError::new(
-            "upgrade composition references a graph-undeclared module",
+        return Err(graph_error(
+            UpgradeGraphDiagnosticKind::UndeclaredModule,
+            "upgrade-composition.modules",
         ));
     }
     let declared_capabilities = components
@@ -388,8 +538,9 @@ fn validate_composition(
         .iter()
         .any(|capability| !declared_capabilities.contains(capability))
     {
-        return Err(RendererError::new(
-            "upgrade composition references a graph-undeclared capability",
+        return Err(graph_error(
+            UpgradeGraphDiagnosticKind::UndeclaredCapability,
+            "upgrade-composition.capabilities",
         ));
     }
     if target {
@@ -401,8 +552,13 @@ fn validate_composition(
             },
             state.components.clone(),
         );
-        let resolved = crate::composition::resolve(package, components, &request)
-            .map_err(|_| RendererError::new("upgrade target composition is not resolvable"))?;
+        let resolved =
+            crate::composition::resolve(package, components, &request).map_err(|_| {
+                graph_error(
+                    UpgradeGraphDiagnosticKind::TargetCompositionMismatch,
+                    "upgrade-composition.target",
+                )
+            })?;
         let resolved_components = resolved
             .components
             .iter()
@@ -419,8 +575,9 @@ fn validate_composition(
             || resolved_modules != state.modules
             || resolved_capabilities != state.capabilities
         {
-            return Err(RendererError::new(
-                "upgrade target composition does not match the resolved component graph",
+            return Err(graph_error(
+                UpgradeGraphDiagnosticKind::TargetCompositionMismatch,
+                "upgrade-composition.target",
             ));
         }
     }
@@ -429,46 +586,60 @@ fn validate_composition(
 
 fn validate_sorted_members(values: &[String], kind: &str, allow_empty: bool) -> Result<()> {
     if values.is_empty() && !allow_empty {
-        return Err(RendererError::new(format!("upgrade declares no {kind}s")));
+        return Err(graph_error(
+            UpgradeGraphDiagnosticKind::NonCanonicalComposition,
+            format!("upgrade-composition.{kind}s"),
+        ));
     }
     for value in values {
         validate_graph_identifier(value, kind)?;
     }
     if values.windows(2).any(|pair| pair[0] >= pair[1]) {
-        return Err(RendererError::new(format!(
-            "upgrade {kind}s must be sorted and unique"
-        )));
+        return Err(graph_error(
+            UpgradeGraphDiagnosticKind::NonCanonicalComposition,
+            format!("upgrade-composition.{kind}s"),
+        ));
     }
     Ok(())
 }
 
 fn validate_sorted_capabilities(values: &[ApplicationCapability]) -> Result<()> {
     if values.windows(2).any(|pair| pair[0] >= pair[1]) {
-        return Err(RendererError::new(
-            "upgrade capabilities must be sorted and unique",
+        return Err(graph_error(
+            UpgradeGraphDiagnosticKind::NonCanonicalComposition,
+            "upgrade-composition.capabilities",
         ));
     }
     Ok(())
 }
 
-fn sort_unique<T: Ord>(values: &mut [T], kind: &str) -> Result<()> {
+fn sort_unique<T: Ord>(values: &mut [T]) -> Result<()> {
     values.sort();
     if values.windows(2).any(|pair| pair[0] == pair[1]) {
-        return Err(RendererError::new(format!(
-            "upgrade edge contains a duplicate {kind}"
-        )));
+        return Err(graph_error(
+            UpgradeGraphDiagnosticKind::DuplicateManifestTransition,
+            "upgrade-edge.manifest-transitions",
+        ));
     }
     Ok(())
 }
 
 fn validate_graph_identifier(value: &str, kind: &str) -> Result<()> {
-    validate_identifier(value, kind)
-        .map_err(|_| RendererError::new(format!("upgrade graph contains an invalid {kind}")))
+    validate_identifier(value, kind).map_err(|_| {
+        graph_error(
+            UpgradeGraphDiagnosticKind::InvalidIdentifier,
+            format!("upgrade-graph.{}", kind.replace(' ', "-")),
+        )
+    })
 }
 
 fn validate_graph_path(path: &Path, kind: &str) -> Result<()> {
-    validate_relative_path(path, kind)
-        .map_err(|_| RendererError::new(format!("upgrade graph contains an invalid {kind}")))
+    validate_relative_path(path, kind).map_err(|_| {
+        graph_error(
+            UpgradeGraphDiagnosticKind::InvalidManagedPath,
+            format!("upgrade-graph.{}", kind.replace(' ', "-")),
+        )
+    })
 }
 
 fn composition_key(
@@ -489,16 +660,434 @@ fn composition_key(
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
+
     use super::*;
+    use crate::{ComponentInstallationManifest, FrameworkDependency};
 
     #[test]
-    fn direct_release_rejects_downgrades_and_skips() {
-        for (source, target) in [("v0.7.0", "v0.6.0"), ("v0.5.0", "v0.7.0")] {
-            let source = release(source);
-            let target = release(target);
-            assert!(validate_direct_release(&source, &target).is_err());
+    fn every_supported_composition_and_adapter_resolves_independently() {
+        let mut edges = vec![edge()];
+        validate(&mut edges, &components()).expect("canonical graph should validate");
+
+        assert_eq!(edges[0].compositions.len(), 6);
+        for transition in &edges[0].compositions {
+            let resolved = resolve_upgrade_edge(
+                &edges,
+                &UpgradeEdgeRequest {
+                    source: release("v0.5.0"),
+                    composition: transition.source.clone(),
+                },
+            )
+            .expect("every declared source state should resolve");
+            assert_eq!(resolved.composition, *transition);
+            assert_eq!(resolved.target, release("v0.6.0"));
         }
-        assert!(validate_direct_release(&release("v0.6.0"), &release("v0.7.0")).is_ok());
+    }
+
+    #[test]
+    fn declaration_permutations_produce_byte_identical_resolution() {
+        let components = components();
+        let mut canonical = vec![edge()];
+        validate(&mut canonical, &components).unwrap();
+        let expected = resolved_snapshots(&canonical);
+
+        for seed in 0..64 {
+            let mut candidate = vec![edge()];
+            candidate[0]
+                .compositions
+                .sort_by_key(|transition| deterministic_order_key(transition.id.as_bytes(), seed));
+            candidate[0].manifest_transitions.sort_by_key(|transition| {
+                deterministic_order_key(format!("{transition:?}").as_bytes(), seed + 97)
+            });
+            candidate[0].managed_integrations.reverse();
+
+            validate(&mut candidate, &components).unwrap();
+            assert_eq!(candidate, canonical, "seed {seed}");
+            assert_eq!(resolved_snapshots(&candidate), expected, "seed {seed}");
+        }
+    }
+
+    #[test]
+    fn invalid_graph_classes_return_stable_typed_redacted_diagnostics() {
+        const SENSITIVE: &str = "credential-shaped-input-must-not-appear";
+        let mut diagnostics = Vec::new();
+
+        diagnostics.push(error_after(|edge, _| edge.schema = 99));
+        diagnostics.push(error_after(|edge, _| edge.id = format!("{SENSITIVE}!")));
+        diagnostics.push(error_for(vec![edge(), edge()], components()));
+        diagnostics.push(error_after(|edge, _| {
+            edge.source.package.id = "different-package".to_owned();
+        }));
+        diagnostics.push(error_after(|edge, _| {
+            edge.source.framework.version = "v0.5.0-alpha.1".to_owned();
+            edge.source.package.version = "v0.5.0-alpha.1".to_owned();
+        }));
+        diagnostics.push(error_after(|edge, _| edge.target = release("v0.5.0")));
+        diagnostics.push(error_for(
+            {
+                let first = edge();
+                let mut second = edge();
+                second.id = "same-release-other-id".to_owned();
+                vec![first, second]
+            },
+            components(),
+        ));
+        diagnostics.push(error_after(|edge, _| edge.source = release("v0.7.0")));
+        diagnostics.push(error_after(|edge, _| edge.source = release("v0.4.0")));
+        diagnostics.push(error_after(|edge, _| edge.compositions.clear()));
+        diagnostics.push(error_after(|edge, _| {
+            let mut duplicate = edge.compositions[0].clone();
+            duplicate.target.components = vec!["base".to_owned(), "minimal".to_owned()];
+            edge.compositions.push(duplicate);
+        }));
+        diagnostics.push(error_after(|edge, _| {
+            edge.compositions[0].source.components = vec!["unknown".to_owned()];
+        }));
+        diagnostics.push(error_after(|edge, _| {
+            edge.compositions[0].source.components.reverse();
+        }));
+        diagnostics.push(error_after(|edge, _| {
+            edge.compositions[0].source.modules = vec!["unknown".to_owned()];
+        }));
+        diagnostics.push(error_after(|_, components| {
+            components
+                .values_mut()
+                .for_each(|component| component.provides_capabilities.clear());
+        }));
+        diagnostics.push(error_after(|_, components| {
+            components
+                .get_mut("identity")
+                .expect("identity component should exist")
+                .installation = Some(ComponentInstallationManifest {
+                module: "identity".to_owned(),
+                databases: vec![DatabaseAdapter::Sqlite],
+                clients: vec![ClientAdapter::Leptos],
+                contributions: Vec::new(),
+                framework_dependencies: Vec::new(),
+            });
+        }));
+        diagnostics.push(error_after(|_, components| {
+            components
+                .get_mut("minimal")
+                .expect("minimal component should exist")
+                .requires = vec!["identity".to_owned()];
+        }));
+        diagnostics.push(error_after(|edge, _| {
+            edge.compositions[0].target.client = ClientAdapter::Leptos;
+            edge.compositions[0].source.database = DatabaseAdapter::Sqlite;
+            edge.compositions[0].target.database = DatabaseAdapter::Postgres;
+        }));
+        diagnostics.push(error_after(|edge, _| {
+            edge.compositions[0].target.capabilities.clear();
+        }));
+        diagnostics.push(error_after(|edge, _| {
+            let mut ambiguous = edge.compositions[0].clone();
+            ambiguous.id = "zz-ambiguous".to_owned();
+            ambiguous.target = state("minimal", ambiguous.target.database);
+            edge.compositions.push(ambiguous);
+        }));
+        diagnostics.push(error_after(|edge, _| {
+            edge.manifest_transitions
+                .push(UpgradeManifestTransition::Schema);
+        }));
+        diagnostics.push(error_after(|edge, _| {
+            edge.managed_integrations[0].path = "../outside".to_owned();
+        }));
+        diagnostics.push(error_after(|edge, _| {
+            edge.managed_integrations[0].path = "unknown.rs".to_owned();
+        }));
+        diagnostics.push(error_after(|edge, _| {
+            let mut conflicting = edge.managed_integrations[0].clone();
+            conflicting.kind = ManagedIntegrationTransitionKind::Retire;
+            edge.managed_integrations.push(conflicting);
+        }));
+        diagnostics.push(error_after(|edge, _| {
+            edge.compositions = (0..=MAX_COMPOSITIONS_PER_EDGE)
+                .map(|index| {
+                    let mut transition = edge.compositions[0].clone();
+                    transition.id = format!("oversized-{index:03}");
+                    transition
+                })
+                .collect();
+        }));
+        diagnostics.push(error_after(|edge, _| {
+            edge.compositions[0].source.components = (0..=MAX_COMPOSITION_MEMBERS)
+                .map(|_| "base".to_owned())
+                .collect();
+        }));
+        diagnostics.push(error_after(|edge, _| {
+            edge.managed_integrations = (0..=MAX_MANAGED_INTEGRATIONS_PER_EDGE)
+                .map(|index| ManagedIntegrationTransition {
+                    component: "base".to_owned(),
+                    path: "base.rs".to_owned(),
+                    integration: format!("oversized-{index:03}"),
+                    kind: ManagedIntegrationTransitionKind::Edit,
+                })
+                .collect();
+        }));
+        diagnostics.push(error_for(
+            (0..=MAX_UPGRADE_EDGES)
+                .map(|index| {
+                    let mut edge = edge();
+                    edge.id = format!("oversized-{index:03}");
+                    edge
+                })
+                .collect(),
+            components(),
+        ));
+
+        let output = diagnostics
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert_eq!(
+            output,
+            include_str!("../tests/snapshots/upgrade-graph-invalid.txt").trim_end()
+        );
+        assert!(!output.contains(SENSITIVE));
+        assert!(
+            diagnostics
+                .iter()
+                .all(|diagnostic| !diagnostic.subject.is_empty())
+        );
+    }
+
+    #[test]
+    fn malformed_identifier_sizes_are_bounded_and_never_disclosed() {
+        for length in [1, 64, 1_024, 4_096] {
+            let sensitive = format!("{}!", "x".repeat(length));
+            let diagnostic = error_after(|edge, _| edge.id = sensitive.clone());
+            assert_eq!(
+                diagnostic.kind,
+                UpgradeGraphDiagnosticKind::InvalidIdentifier
+            );
+            assert!(!diagnostic.to_string().contains(&sensitive));
+        }
+    }
+
+    fn validate(
+        edges: &mut [UpgradeEdgeManifest],
+        components: &BTreeMap<String, ComponentManifest>,
+    ) -> Result<()> {
+        validate_upgrade_graph(&package(), components, &component_paths(), edges)
+    }
+
+    fn error_after(
+        mutate: impl FnOnce(&mut UpgradeEdgeManifest, &mut BTreeMap<String, ComponentManifest>),
+    ) -> UpgradeGraphDiagnostic {
+        let mut edge = edge();
+        let mut components = components();
+        mutate(&mut edge, &mut components);
+        error_for(vec![edge], components)
+    }
+
+    fn error_for(
+        mut edges: Vec<UpgradeEdgeManifest>,
+        components: BTreeMap<String, ComponentManifest>,
+    ) -> UpgradeGraphDiagnostic {
+        validate(&mut edges, &components)
+            .expect_err("invalid graph should fail")
+            .upgrade_graph_diagnostic()
+            .expect("graph rejection should be typed")
+            .clone()
+    }
+
+    fn resolved_snapshots(edges: &[UpgradeEdgeManifest]) -> Vec<String> {
+        edges[0]
+            .compositions
+            .iter()
+            .map(|transition| {
+                let resolved = resolve_upgrade_edge(
+                    edges,
+                    &UpgradeEdgeRequest {
+                        source: release("v0.5.0"),
+                        composition: transition.source.clone(),
+                    },
+                )
+                .unwrap();
+                toml::to_string(&resolved).unwrap()
+            })
+            .collect()
+    }
+
+    fn deterministic_order_key(value: &[u8], seed: usize) -> u64 {
+        value.iter().fold(seed as u64 + 1, |state, byte| {
+            state
+                .wrapping_mul(1_099_511_628_211)
+                .wrapping_add(u64::from(*byte) + 1)
+        })
+    }
+
+    fn package() -> ComponentPackageManifest {
+        ComponentPackageManifest {
+            schema: 3,
+            id: application_manifest::HEGIRA_COMPONENT_PACKAGE.to_owned(),
+            version: "v0.6.0".to_owned(),
+            framework: release("v0.6.0").framework,
+            templates: vec!["layered".to_owned()],
+            components: vec![
+                "base".to_owned(),
+                "default".to_owned(),
+                "identity".to_owned(),
+                "minimal".to_owned(),
+            ],
+            modules: vec!["identity".to_owned()],
+            upgrade_edges: vec![PathBuf::from("upgrades/v0-5-0-to-v0-6-0.toml")],
+            content_digest: format!("sha256:{}", "0".repeat(64)),
+        }
+    }
+
+    fn components() -> BTreeMap<String, ComponentManifest> {
+        let base = component("base", &[], &[], &[]);
+        let default = component(
+            "default",
+            &["base"],
+            &["identity"],
+            &[
+                ApplicationCapability::Authentication,
+                ApplicationCapability::Authorization,
+            ],
+        );
+        let minimal = component("minimal", &["base"], &[], &[]);
+        let mut identity = component(
+            "identity",
+            &["minimal"],
+            &["identity"],
+            &[
+                ApplicationCapability::Authentication,
+                ApplicationCapability::Authorization,
+            ],
+        );
+        identity.conflicts = vec!["default".to_owned()];
+        identity.installation = Some(ComponentInstallationManifest {
+            module: "identity".to_owned(),
+            databases: vec![DatabaseAdapter::Postgres, DatabaseAdapter::Sqlite],
+            clients: vec![ClientAdapter::Leptos],
+            contributions: Vec::new(),
+            framework_dependencies: Vec::<FrameworkDependency>::new(),
+        });
+        [base, default, identity, minimal]
+            .into_iter()
+            .map(|component| (component.id.clone(), component))
+            .collect()
+    }
+
+    fn component(
+        id: &str,
+        requires: &[&str],
+        modules: &[&str],
+        capabilities: &[ApplicationCapability],
+    ) -> ComponentManifest {
+        ComponentManifest {
+            schema: 3,
+            id: id.to_owned(),
+            version: Some("v0.6.0".to_owned()),
+            source: PathBuf::from("applications/layered"),
+            include: vec![PathBuf::from(format!("{id}.rs"))],
+            requires: requires.iter().map(|value| (*value).to_owned()).collect(),
+            conflicts: Vec::new(),
+            optional_dependencies: Vec::new(),
+            modules: modules.iter().map(|value| (*value).to_owned()).collect(),
+            provides_capabilities: capabilities.to_vec(),
+            requires_capabilities: Vec::new(),
+            framework_dependencies: Vec::new(),
+            installation: None,
+            manifest_path: PathBuf::new(),
+        }
+    }
+
+    fn component_paths() -> BTreeSet<(String, String)> {
+        ["base", "default", "identity", "minimal"]
+            .into_iter()
+            .map(|component| (component.to_owned(), format!("{component}.rs")))
+            .collect()
+    }
+
+    fn edge() -> UpgradeEdgeManifest {
+        let mut compositions = Vec::new();
+        for name in ["default", "minimal", "identity"] {
+            for database in [DatabaseAdapter::Sqlite, DatabaseAdapter::Postgres] {
+                let state = state(name, database);
+                compositions.push(UpgradeCompositionTransition {
+                    id: format!("{name}-{}", database_name(database)),
+                    source: state.clone(),
+                    target: state,
+                });
+            }
+        }
+        UpgradeEdgeManifest {
+            schema: UPGRADE_EDGE_SCHEMA,
+            id: "v0-5-0-to-v0-6-0".to_owned(),
+            source: release("v0.5.0"),
+            target: release("v0.6.0"),
+            compositions,
+            manifest_transitions: vec![
+                UpgradeManifestTransition::Ownership,
+                UpgradeManifestTransition::Schema,
+                UpgradeManifestTransition::Framework,
+            ],
+            managed_integrations: vec![
+                ManagedIntegrationTransition {
+                    component: "identity".to_owned(),
+                    path: "identity.rs".to_owned(),
+                    integration: "identity-routes".to_owned(),
+                    kind: ManagedIntegrationTransitionKind::Edit,
+                },
+                ManagedIntegrationTransition {
+                    component: "base".to_owned(),
+                    path: "base.rs".to_owned(),
+                    integration: "application-manifest".to_owned(),
+                    kind: ManagedIntegrationTransitionKind::Edit,
+                },
+            ],
+        }
+    }
+
+    fn state(name: &str, database: DatabaseAdapter) -> UpgradeCompositionState {
+        let (components, modules, capabilities) = match name {
+            "default" => (
+                vec!["base".to_owned(), "default".to_owned()],
+                vec!["identity".to_owned()],
+                vec![
+                    ApplicationCapability::Authentication,
+                    ApplicationCapability::Authorization,
+                ],
+            ),
+            "minimal" => (
+                vec!["base".to_owned(), "minimal".to_owned()],
+                Vec::new(),
+                Vec::new(),
+            ),
+            "identity" => (
+                vec![
+                    "base".to_owned(),
+                    "identity".to_owned(),
+                    "minimal".to_owned(),
+                ],
+                vec!["identity".to_owned()],
+                vec![
+                    ApplicationCapability::Authentication,
+                    ApplicationCapability::Authorization,
+                ],
+            ),
+            _ => panic!("unknown fixture composition"),
+        };
+        UpgradeCompositionState {
+            database,
+            client: ClientAdapter::Leptos,
+            components,
+            modules,
+            capabilities,
+        }
+    }
+
+    fn database_name(database: DatabaseAdapter) -> &'static str {
+        match database {
+            DatabaseAdapter::Postgres => "postgres",
+            DatabaseAdapter::Sqlite => "sqlite",
+        }
     }
 
     fn release(version: &str) -> UpgradeReleaseIdentity {

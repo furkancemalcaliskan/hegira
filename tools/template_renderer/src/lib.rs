@@ -16,7 +16,8 @@ pub use upgrade::{
     ManagedIntegrationTransition, ManagedIntegrationTransitionKind, ResolvedUpgradeEdge,
     UPGRADE_EDGE_SCHEMA, UpgradeCompositionState, UpgradeCompositionTransition,
     UpgradeEdgeDiagnostic, UpgradeEdgeDiagnosticKind, UpgradeEdgeError, UpgradeEdgeManifest,
-    UpgradeEdgeRequest, UpgradeManifestTransition, UpgradeReleaseIdentity,
+    UpgradeEdgeRequest, UpgradeGraphDiagnostic, UpgradeGraphDiagnosticKind,
+    UpgradeManifestTransition, UpgradeReleaseIdentity,
 };
 
 use std::fmt::{Display, Formatter};
@@ -49,6 +50,7 @@ pub enum RendererErrorKind {
 pub struct RendererError {
     kind: RendererErrorKind,
     message: String,
+    upgrade_graph_diagnostic: Option<UpgradeGraphDiagnostic>,
 }
 
 impl RendererError {
@@ -56,6 +58,7 @@ impl RendererError {
         Self {
             kind: RendererErrorKind::Rendering,
             message: message.into(),
+            upgrade_graph_diagnostic: None,
         }
     }
 
@@ -63,6 +66,15 @@ impl RendererError {
         Self {
             kind,
             message: message.into(),
+            upgrade_graph_diagnostic: None,
+        }
+    }
+
+    pub(crate) fn with_upgrade_graph(diagnostic: UpgradeGraphDiagnostic) -> Self {
+        Self {
+            kind: RendererErrorKind::Rendering,
+            message: diagnostic.to_string(),
+            upgrade_graph_diagnostic: Some(diagnostic),
         }
     }
 
@@ -85,6 +97,10 @@ impl RendererError {
 
     pub fn kind(&self) -> RendererErrorKind {
         self.kind
+    }
+
+    pub fn upgrade_graph_diagnostic(&self) -> Option<&UpgradeGraphDiagnostic> {
+        self.upgrade_graph_diagnostic.as_ref()
     }
 }
 

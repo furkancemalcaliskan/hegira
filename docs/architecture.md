@@ -644,10 +644,13 @@ Upgrade-graph loading normalizes declaration order and rejects duplicate edge
 or composition identities, a source composition mapped more than once,
 downgrades, skipped releases, mismatched target releases, unsupported adapters,
 and component, module, capability, or managed-path references outside the
-closed component graph. A target composition must resolve through the same
-component graph used by rendering. Exact-edge resolution consumes only the
-already authenticated in-memory graph and performs no filesystem write,
-network access, process execution, baseline lookup, or application mutation.
+closed component graph. Rejections expose a stable typed diagnostic containing
+only a bounded kind and structural subject; graph, composition, and managed
+integration counts are bounded before semantic traversal. A target composition
+must resolve through the same component graph used by rendering. Exact-edge
+resolution consumes only the already authenticated in-memory graph and performs
+no filesystem write, network access, process execution, baseline lookup, or
+application mutation.
 The bundled package does not yet declare a concrete application upgrade edge;
 such an edge is supported only after its released source state and transition
 data are explicitly added and validated.
