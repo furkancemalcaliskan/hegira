@@ -59,9 +59,26 @@ jobs:
       - run: sh scripts/layered-template-check.sh
       - run: sh scripts/cli-check.sh
   generated-application:
+    name: generated-application (\${{ matrix.lifecycle }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - lifecycle: default
+            cache_name: generated-application-check
+          - lifecycle: identity-added
+            cache_name: identity-added-application-check
     steps:
-      - run: sh scripts/generated-application-check.sh
-      - run: sh scripts/generated-application-check.sh identity-added
+      - id: source-identity
+        run: echo "tree=$(git rev-parse 'HEAD^{tree}')"
+      - id: generated-cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: . -> target/validation/build/\${{ matrix.cache_name }}
+          cache-on-failure: false
+          key: generated-\${{ matrix.lifecycle }}-targets-native-wasm32-profiles-dev-test-release-providers-sqlite-postgres-features-ssr-db-sqlite-db-postgres-hydrate-lock-\${{ hashFiles('Cargo.lock', 'templates/applications/layered/Cargo.lock') }}-source-\${{ steps.source-identity.outputs.tree }}
+      - run: echo "\${{ steps.generated-cache.outputs.cache-hit }}"
+      - run: sh scripts/generated-application-check.sh "\${{ matrix.lifecycle }}"
   quality:
     if: always()
     needs:
@@ -88,6 +105,15 @@ jobs:
 
 const validGeneratedApplicationScript = `#!/usr/bin/env sh
 set -eu
+phase_begin "public application creation"
+phase_begin "$database provider lifecycle"
+echo "$GITHUB_STEP_SUMMARY"
+echo "generated-application cache footprint"
+default_http_port=38081
+default_http_port=38082
+default_postgres_port=35432
+default_postgres_port=35433
+GENERATED_APP_DB_PASSWORD="generated-$mode-ephemeral"
 canonical_lock="$repo_root/templates/applications/layered/Cargo.lock"
 generated_tool_bin=$(sh "$repo_root/scripts/generated-toolchain.sh" prepare "$canonical_lock" --container)
 sh "$repo_root/scripts/generated-toolchain.sh" application "$staging_parent/sqlite-validation"
@@ -136,12 +162,33 @@ test("rejects generated application validation outside the quality gate", () => 
 test("rejects a missing component lifecycle gate", () => {
   const errors = validateRepositoryValidationWorkflow(
     validWorkflow.replace(
-      "sh scripts/generated-application-check.sh identity-added",
-      "true",
+      "- lifecycle: identity-added",
+      "- lifecycle: unrelated",
     ),
   );
   assert.ok(
-    errors.some((error) => error.includes("component lifecycle validation")),
+    errors.some((error) => error.includes("Identity-added lifecycle matrix entry")),
+  );
+});
+
+test("rejects a lifecycle cache without immutable source identity", () => {
+  const errors = validateRepositoryValidationWorkflow(
+    validWorkflow.replace("git rev-parse 'HEAD^{tree}'", "git rev-parse HEAD"),
+  );
+  assert.ok(
+    errors.some((error) => error.includes("immutable source tree identity")),
+  );
+});
+
+test("rejects a cache key not bound to the immutable source identity", () => {
+  const errors = validateRepositoryValidationWorkflow(
+    validWorkflow.replace(
+      "-source-\${{ steps.source-identity.outputs.tree }}",
+      "-source-unbound",
+    ),
+  );
+  assert.ok(
+    errors.some((error) => error.includes("source-bound cache identity")),
   );
 });
 

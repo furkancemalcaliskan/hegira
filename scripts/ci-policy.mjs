@@ -20,12 +20,12 @@ const REQUIRED_CONTRACTS = [
   ["pinned Node selection", "node-version-file: .node-version"],
   ["pinned Cargo Leptos selection", "cargo-leptos@0.3.7"],
   [
-    "generated application validation",
-    "run: sh scripts/generated-application-check.sh\n",
+    "parallel generated lifecycle context",
+    "name: generated-application (${{ matrix.lifecycle }})",
   ],
   [
-    "component lifecycle validation",
-    "sh scripts/generated-application-check.sh identity-added",
+    "matrix lifecycle validation",
+    'run: sh scripts/generated-application-check.sh "${{ matrix.lifecycle }}"',
   ],
   ["explicit disposable PostgreSQL authentication", "POSTGRES_HOST_AUTH_METHOD: trust"],
   ["dependency policy", "EmbarkStudios/cargo-deny-action@v2"],
@@ -79,6 +79,43 @@ const GENERATED_APPLICATION_CONTRACTS = [
   ["production container build", 'docker build --tag "$GENERATED_APP_IMAGE" "$generated_root"'],
   ["production readiness probe", '"$base_url/readyz"'],
   ["generated resource HTTP contract", '"$base_url/api/validation-records"'],
+  ["major phase timing", 'phase_begin "public application creation"'],
+  ["provider phase timing", 'phase_begin "$database provider lifecycle"'],
+  ["job summary timing output", '"$GITHUB_STEP_SUMMARY"'],
+  ["bounded cache footprint output", "generated-application cache footprint"],
+  ["default lifecycle HTTP port", "default_http_port=38081"],
+  ["Identity-added lifecycle HTTP port", "default_http_port=38082"],
+  ["default lifecycle PostgreSQL port", "default_postgres_port=35432"],
+  ["Identity-added lifecycle PostgreSQL port", "default_postgres_port=35433"],
+  ["lifecycle-bound runtime credentials", 'GENERATED_APP_DB_PASSWORD="generated-$mode-'],
+];
+
+const GENERATED_JOB_CONTRACTS = [
+  ["non-cancelling lifecycle matrix", "fail-fast: false"],
+  ["default lifecycle matrix entry", "- lifecycle: default"],
+  ["Identity-added lifecycle matrix entry", "- lifecycle: identity-added"],
+  ["default bounded cache identity", "cache_name: generated-application-check"],
+  [
+    "Identity-added bounded cache identity",
+    "cache_name: identity-added-application-check",
+  ],
+  [
+    "isolated bounded cache workspace",
+    "target/validation/build/${{ matrix.cache_name }}",
+  ],
+  ["immutable source tree identity", "git rev-parse 'HEAD^{tree}'"],
+  ["lifecycle-bound cache identity", "generated-${{ matrix.lifecycle }}"],
+  [
+    "source-bound cache identity",
+    "source-${{ steps.source-identity.outputs.tree }}",
+  ],
+  ["lockfile cache identity", "hashFiles('Cargo.lock', 'templates/applications/layered/Cargo.lock')"],
+  ["native and WASM target cache identity", "targets-native-wasm32"],
+  ["development, test, and release profile cache identity", "profiles-dev-test-release"],
+  ["SQLite and PostgreSQL cache identity", "providers-sqlite-postgres"],
+  ["compiled feature cache identity", "features-ssr-db-sqlite-db-postgres-hydrate"],
+  ["failure-safe cache publication", "cache-on-failure: false"],
+  ["cache effectiveness diagnostic", "steps.generated-cache.outputs.cache-hit"],
 ];
 
 const COMPATIBILITY_HOST_CONTRACTS = [
@@ -112,6 +149,15 @@ export function validateRepositoryValidationWorkflow(workflow) {
     errors.push(
       "component lifecycle validation must remain in the existing generated-application job",
     );
+  }
+
+  const generatedApplicationJob = workflow.match(
+    /^  generated-application:\s*$([\s\S]*?)(?=^  [a-zA-Z0-9_-]+:\s*$|(?![\s\S]))/m,
+  )?.[1] ?? "";
+  for (const [description, contract] of GENERATED_JOB_CONTRACTS) {
+    if (!generatedApplicationJob.includes(contract)) {
+      errors.push(`generated application job is missing ${description}: ${contract}`);
+    }
   }
   if (!/pull_request:\s*\n    branches:\s*\n      - develop\s*\n      - main/m.test(workflow)) {
     errors.push("repository validation must run for pull requests to develop and main");

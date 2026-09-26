@@ -121,15 +121,31 @@ jobs:
         run: sh scripts/cli-check.sh
 
   generated-application:
-    name: generated-application
+    name: generated-application (${{ matrix.lifecycle }})
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - lifecycle: default
+            cache_name: generated-application-check
+          - lifecycle: identity-added
+            cache_name: identity-added-application-check
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.96.1
         with:
           targets: wasm32-unknown-unknown
-      - uses: Swatinem/rust-cache@v2
+      - id: source-identity
+        name: Resolve immutable source identity
+        run: echo "tree=$(git rev-parse 'HEAD^{tree}')" >>"$GITHUB_OUTPUT"
+      - id: generated-cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: . -> target/validation/build/${{ matrix.cache_name }}
+          cache-on-failure: false
+          key: generated-${{ matrix.lifecycle }}-rust-1.96.1-targets-native-wasm32-profiles-dev-test-release-providers-sqlite-postgres-features-ssr-db-sqlite-db-postgres-hydrate-lock-${{ hashFiles('Cargo.lock', 'templates/applications/layered/Cargo.lock') }}-source-${{ steps.source-identity.outputs.tree }}
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-leptos@0.3.7
@@ -138,10 +154,19 @@ jobs:
           node-version-file: .node-version
           cache: npm
           cache-dependency-path: templates/applications/layered/apps/web/src/package-lock.json
-      - name: Validate generated applications across development and production
-        run: sh scripts/generated-application-check.sh
-      - name: Validate additive component lifecycle across development and production
-        run: sh scripts/generated-application-check.sh identity-added
+      - name: Report generated-application cache restoration
+        run: |
+          echo "generated-application cache hit: ${{ steps.generated-cache.outputs.cache-hit }}"
+          echo "generated-application cache identity: ${{ matrix.cache_name }}"
+          {
+            echo "### Generated application cache"
+            echo
+            echo "- Lifecycle: \`${{ matrix.lifecycle }}\`"
+            echo "- Exact cache hit: \`${{ steps.generated-cache.outputs.cache-hit }}\`"
+            echo "- Local bounded cache: \`${{ matrix.cache_name }}\`"
+          } >>"$GITHUB_STEP_SUMMARY"
+      - name: Validate ${{ matrix.lifecycle }} lifecycle across development and production
+        run: sh scripts/generated-application-check.sh "${{ matrix.lifecycle }}"
 
   quality:
     name: quality
