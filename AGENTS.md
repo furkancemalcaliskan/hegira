@@ -75,6 +75,9 @@ commands change. Never describe planned work as implemented.
   records its supported adapters, release-pinned dependencies, provider
   migration sources, configuration, security transports, OpenAPI, and Leptos
   contributions without executing code or vendoring module source.
+  Schema-3 package manifests may additionally declare digest-authenticated,
+  data-only direct upgrade edges with exact release and composition states;
+  resolving an edge performs no source mutation or external operation.
   Package-controlled
   framework source variables cannot be overridden by a normal render.
 - `tools/template_renderer/` contains the reusable deterministic and atomic

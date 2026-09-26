@@ -6,11 +6,14 @@ use std::{
 };
 
 use application_manifest::{
-    ApplicationCapability, ApplicationManifest, ClientAdapter, DatabaseAdapter,
+    ApplicationCapability, ApplicationManifest, ClientAdapter, DatabaseAdapter, FrameworkContract,
+    PackageIdentity,
 };
 use template_renderer::{
     ComponentInstallationContribution, CompositionDiagnosticKind, CompositionRequest,
-    ManifestCatalog, RenderRequest, RendererErrorKind, plan, plan_snapshot, render,
+    ManifestCatalog, RenderRequest, RendererErrorKind, UpgradeCompositionState,
+    UpgradeEdgeDiagnosticKind, UpgradeEdgeRequest, UpgradeReleaseIdentity, plan, plan_snapshot,
+    render,
     repository_validation::{RepositoryValidationRequest, render as render_for_validation},
 };
 
@@ -497,6 +500,73 @@ fn package_digest_rejects_untracked_component_content() {
     assert!(error.to_string().contains("content digest mismatch"));
     assert!(error.to_string().contains(&calculated));
     assert!(!output.exists());
+}
+
+#[test]
+fn package_authenticates_and_resolves_declarative_upgrade_edges() {
+    let repository = repository_root();
+    let fixture = TestDirectory::new("authenticated-upgrade-edge");
+    copy_directory(
+        &repository.join("templates"),
+        &fixture.path().join("templates"),
+    );
+    install_test_upgrade_edge(fixture.path());
+
+    let catalog = ManifestCatalog::load(fixture.path(), "layered")
+        .expect("authenticated upgrade graph should load");
+    assert_eq!(catalog.upgrade_edges().len(), 1);
+    let state = UpgradeCompositionState {
+        database: DatabaseAdapter::Sqlite,
+        client: ClientAdapter::Leptos,
+        components: vec![
+            "layered-base".to_owned(),
+            "layered-leptos-identity".to_owned(),
+        ],
+        modules: vec!["identity".to_owned()],
+        capabilities: vec![
+            ApplicationCapability::Authentication,
+            ApplicationCapability::Authorization,
+        ],
+    };
+    let resolved = catalog
+        .resolve_upgrade_edge(&UpgradeEdgeRequest {
+            source: upgrade_release("v0.5.0"),
+            composition: state.clone(),
+        })
+        .expect("exact source state should resolve");
+    assert_eq!(resolved.id, "v0-5-0-to-v0-6-0");
+    assert_eq!(resolved.target, upgrade_release("v0.6.0"));
+    assert_eq!(resolved.composition.target, state);
+
+    let error = catalog
+        .resolve_upgrade_edge(&UpgradeEdgeRequest {
+            source: upgrade_release("v0.4.0"),
+            composition: resolved.composition.source,
+        })
+        .expect_err("an undeclared release must not resolve");
+    assert_eq!(
+        error.diagnostic().kind,
+        UpgradeEdgeDiagnosticKind::UnsupportedRelease
+    );
+
+    let edge_path = fixture
+        .path()
+        .join("templates/upgrades/v0-5-0-to-v0-6-0.toml");
+    let tampered = fs::read_to_string(&edge_path)
+        .unwrap()
+        .replace("application-manifest", "application-manifest-v2");
+    fs::write(&edge_path, tampered).unwrap();
+    let error = ManifestCatalog::load(fixture.path(), "layered")
+        .expect_err("modified authenticated upgrade metadata must fail");
+    assert!(error.to_string().contains("content digest mismatch"));
+
+    let undeclared = fs::read_to_string(&edge_path)
+        .unwrap()
+        .replace("path = \"hegira.toml\"", "path = \"private/unknown.rs\"");
+    fs::write(&edge_path, undeclared).unwrap();
+    let error = ManifestCatalog::calculate_package_digest(fixture.path(), "layered")
+        .expect_err("a graph-undeclared managed path must fail before authentication");
+    assert!(error.to_string().contains("graph-undeclared"));
 }
 
 #[test]
@@ -1005,6 +1075,90 @@ fn canonical_request(repository: &Path, output: PathBuf) -> RenderRequest {
         output,
         components: None,
         variables: BTreeMap::new(),
+    }
+}
+
+fn install_test_upgrade_edge(repository: &Path) {
+    let upgrades = repository.join("templates/upgrades");
+    fs::create_dir(&upgrades).expect("upgrade manifest directory should be created");
+    fs::write(
+        upgrades.join("v0-5-0-to-v0-6-0.toml"),
+        r#"schema = 1
+id = "v0-5-0-to-v0-6-0"
+manifest_transitions = ["schema", "framework", "package", "components", "modules", "capabilities", "ownership"]
+
+[source.framework]
+repository = "https://github.com/furkancemalcaliskan/hegira.git"
+version = "v0.5.0"
+
+[source.package]
+id = "hegira-canonical"
+version = "v0.5.0"
+
+[target.framework]
+repository = "https://github.com/furkancemalcaliskan/hegira.git"
+version = "v0.6.0"
+
+[target.package]
+id = "hegira-canonical"
+version = "v0.6.0"
+
+[[compositions]]
+id = "layered-leptos-identity-sqlite"
+
+[compositions.source]
+database = "sqlite"
+client = "leptos"
+components = ["layered-base", "layered-leptos-identity"]
+modules = ["identity"]
+capabilities = ["authentication", "authorization"]
+
+[compositions.target]
+database = "sqlite"
+client = "leptos"
+components = ["layered-base", "layered-leptos-identity"]
+modules = ["identity"]
+capabilities = ["authentication", "authorization"]
+
+[[managed_integrations]]
+component = "layered-base"
+path = "hegira.toml"
+integration = "application-manifest"
+kind = "edit"
+"#,
+    )
+    .expect("upgrade manifest should be written");
+
+    let package_path = repository.join("templates/package.toml");
+    let package = fs::read_to_string(&package_path)
+        .expect("component package manifest should be readable")
+        .replace(
+            "upgrade_edges = []",
+            "upgrade_edges = [\"upgrades/v0-5-0-to-v0-6-0.toml\"]",
+        );
+    fs::write(&package_path, package).expect("upgrade edge should be declared");
+    let digest = ManifestCatalog::calculate_package_digest(repository, "layered")
+        .expect("test package digest should be calculated");
+    let package =
+        fs::read_to_string(&package_path).expect("component package manifest should be readable");
+    let old_digest = package
+        .lines()
+        .find(|line| line.starts_with("content_digest = "))
+        .expect("component package digest should be declared");
+    let package = package.replace(old_digest, &format!("content_digest = \"{digest}\""));
+    fs::write(package_path, package).expect("component package digest should be updated");
+}
+
+fn upgrade_release(version: &str) -> UpgradeReleaseIdentity {
+    UpgradeReleaseIdentity {
+        framework: FrameworkContract {
+            repository: "https://github.com/furkancemalcaliskan/hegira.git".to_owned(),
+            version: version.to_owned(),
+        },
+        package: PackageIdentity {
+            id: "hegira-canonical".to_owned(),
+            version: version.to_owned(),
+        },
     }
 }
 

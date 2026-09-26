@@ -4796,6 +4796,7 @@ version = "0.6.0"
 dependencies = [
  "application_manifest",
  "rustix",
+ "semver",
  "serde",
  "sha2 0.10.9",
  "toml",

@@ -653,13 +653,14 @@ mod tests {
 
     fn package() -> ComponentPackageManifest {
         ComponentPackageManifest {
-            schema: 2,
+            schema: 3,
             id: "hegira-canonical".to_owned(),
             version: "v0.6.0".to_owned(),
             framework: framework(),
             templates: vec!["layered".to_owned()],
             components: vec!["base".to_owned(), "identity".to_owned()],
             modules: vec!["identity".to_owned()],
+            upgrade_edges: Vec::new(),
             content_digest: format!("sha256:{}", "0".repeat(64)),
         }
     }
