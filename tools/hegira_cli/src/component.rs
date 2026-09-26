@@ -218,7 +218,7 @@ mod tests {
 
     fn minimal_manifest(version: &str) -> String {
         format!(
-            r#"schema = 2
+            r#"schema = 3
 application = "component-command"
 
 [framework]
@@ -239,6 +239,17 @@ version = "{version}"
 [[composition.components]]
 id = "layered-base"
 version = "{version}"
+
+[upgrade.framework]
+repository = "https://github.com/furkancemalcaliskan/hegira.git"
+version = "{version}"
+
+[upgrade.package]
+id = "hegira-canonical"
+version = "{version}"
+
+[upgrade.ownership]
+default = "application-owned"
 "#
         )
     }

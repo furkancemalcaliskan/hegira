@@ -663,17 +663,24 @@ normal render cannot replace its compatible release source through a variable
 override. Both normal rendering and the repository-validation adapter load and
 verify this same canonical package contract.
 
-Every render includes schema-versioned `hegira.toml`. It records the
+Every render includes schema-versioned `hegira.toml`. Schema 3 records the
 application identifier, HTTPS framework repository and stable SemVer tag,
 installed component-package, component and module identities with their
-versions, provided capabilities, and selected database and client adapters.
+versions, provided capabilities, selected database and client adapters, exact
+framework/package upgrade state, and explicit source-ownership claims.
+Unclaimed paths are application-owned. Managed integration points carry stable
+integration identities, generated-once scaffolding is not adopted as managed
+source, and immutable history can be represented without authorizing rewrites.
 The parser rejects unknown fields, duplicate identities, unsupported values,
-inconsistent composition state, credentials, local framework paths, and
-mismatches between the recorded and actually rendered component sets.
+inconsistent composition or upgrade state, invalid or overlapping ownership
+paths, credentials, local framework paths, and mismatches between the recorded
+and actually rendered component sets.
 Deterministic serialization records the validated generation contract; it is
 not a runtime configuration or secret store. Editing it does not trigger
-regeneration or upgrades. Schema-1 manifests remain readable for inspection,
-but cannot be serialized or mutated as schema 2 without an explicit upgrade.
+regeneration or upgrades. Schema-1 and schema-2 manifests remain readable for
+inspection, but cannot be serialized or mutated as schema 3 without an
+explicit supported transition. Manifest parsing, validation, and compatibility
+assessment perform no network access or filesystem mutation.
 The field-level contract is documented in
 [Getting started](getting-started.md#generated-ownership-and-hegiratoml).
 

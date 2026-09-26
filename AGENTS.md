@@ -57,10 +57,12 @@ commands change. Never describe planned work as implemented.
   outward-layer variant. It preserves the server, Leptos client, selected SQLx
   provider, configuration, and deployment boundaries while recording no
   official module or authentication/authorization capabilities.
-  Each render owns a validated `hegira.toml` containing only application
-  identity, framework source/version, installed component-package, component,
-  module and capability composition, and selected database/client adapters.
-  Runtime configuration and secrets do not belong in that manifest.
+  Each render owns a validated schema-3 `hegira.toml` containing only
+  application identity, exact framework and component-package release state,
+  installed component, module and capability composition, selected
+  database/client adapters, and explicit source-ownership claims. Unclaimed
+  paths remain application-owned; runtime configuration and secrets do not
+  belong in that manifest.
 - `templates/package.toml` identifies the versioned canonical, data-only
   component package, its compatible framework release source, contained
   templates/components and official modules, and locked source digest.
