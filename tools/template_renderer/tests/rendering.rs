@@ -12,8 +12,8 @@ use application_manifest::{
 use template_renderer::{
     ComponentInstallationContribution, CompositionDiagnosticKind, CompositionRequest,
     ManifestCatalog, RenderRequest, RendererErrorKind, UpgradeCompositionState,
-    UpgradeEdgeDiagnosticKind, UpgradeEdgeRequest, UpgradeReleaseIdentity, plan, plan_snapshot,
-    render,
+    UpgradeEdgeDiagnosticKind, UpgradeEdgeRequest, UpgradeGraphDiagnosticKind,
+    UpgradeReleaseIdentity, plan, plan_snapshot, render,
     repository_validation::{RepositoryValidationRequest, render as render_for_validation},
 };
 
@@ -515,6 +515,11 @@ fn package_authenticates_and_resolves_declarative_upgrade_edges() {
     let catalog = ManifestCatalog::load(fixture.path(), "layered")
         .expect("authenticated upgrade graph should load");
     assert_eq!(catalog.upgrade_edges().len(), 1);
+    let original_digest = catalog
+        .package()
+        .expect("package identity should be available")
+        .content_digest
+        .clone();
     let state = UpgradeCompositionState {
         database: DatabaseAdapter::Sqlite,
         client: ClientAdapter::Leptos,
@@ -556,6 +561,9 @@ fn package_authenticates_and_resolves_declarative_upgrade_edges() {
         .unwrap()
         .replace("application-manifest", "application-manifest-v2");
     fs::write(&edge_path, tampered).unwrap();
+    let changed_digest = ManifestCatalog::calculate_package_digest(fixture.path(), "layered")
+        .expect("valid changed graph metadata should have a deterministic digest");
+    assert_ne!(changed_digest, original_digest);
     let error = ManifestCatalog::load(fixture.path(), "layered")
         .expect_err("modified authenticated upgrade metadata must fail");
     assert!(error.to_string().contains("content digest mismatch"));
@@ -566,7 +574,23 @@ fn package_authenticates_and_resolves_declarative_upgrade_edges() {
     fs::write(&edge_path, undeclared).unwrap();
     let error = ManifestCatalog::calculate_package_digest(fixture.path(), "layered")
         .expect_err("a graph-undeclared managed path must fail before authentication");
-    assert!(error.to_string().contains("graph-undeclared"));
+    assert_eq!(
+        error.upgrade_graph_diagnostic().map(|value| value.kind),
+        Some(UpgradeGraphDiagnosticKind::UndeclaredManagedPath)
+    );
+
+    fs::write(
+        &edge_path,
+        "schema = 1\nid = \"credential-shaped-input\"\nunknown = true\n",
+    )
+    .unwrap();
+    let error = ManifestCatalog::calculate_package_digest(fixture.path(), "layered")
+        .expect_err("malformed graph metadata must fail with a bounded diagnostic");
+    assert_eq!(
+        error.upgrade_graph_diagnostic().map(|value| value.kind),
+        Some(UpgradeGraphDiagnosticKind::InvalidManifest)
+    );
+    assert!(!error.to_string().contains("credential-shaped-input"));
 }
 
 #[test]

@@ -238,7 +238,14 @@ impl ManifestCatalog {
         let mut upgrade_edges = Vec::new();
         if let Some(package) = &package {
             for path in &package.upgrade_edges {
-                upgrade_edges.push(read_required_manifest(&source, path, "upgrade edge")?);
+                upgrade_edges.push(
+                    read_required_manifest(&source, path, "upgrade edge").map_err(|_| {
+                        crate::upgrade::graph_error(
+                            crate::UpgradeGraphDiagnosticKind::InvalidManifest,
+                            "upgrade-edge.manifest",
+                        )
+                    })?,
+                );
             }
         }
 
@@ -659,19 +666,24 @@ fn validate_package(package: &ComponentPackageManifest, path: &Path) -> Result<(
 
 fn validate_upgrade_paths(paths: &[PathBuf]) -> Result<()> {
     if paths.windows(2).any(|pair| pair[0] >= pair[1]) {
-        return Err(RendererError::new(
-            "component package upgrade edges must be sorted and unique",
+        return Err(crate::upgrade::graph_error(
+            crate::UpgradeGraphDiagnosticKind::InvalidManifest,
+            "component-package.upgrade-edges",
         ));
     }
     for path in paths {
         validate_relative_path(path, "upgrade edge").map_err(|_| {
-            RendererError::new("component package contains an invalid upgrade edge path")
+            crate::upgrade::graph_error(
+                crate::UpgradeGraphDiagnosticKind::InvalidManagedPath,
+                "component-package.upgrade-edge-path",
+            )
         })?;
         if path.parent() != Some(Path::new("upgrades"))
             || path.extension().and_then(|value| value.to_str()) != Some("toml")
         {
-            return Err(RendererError::new(
-                "component package upgrade edges must be TOML files directly below upgrades",
+            return Err(crate::upgrade::graph_error(
+                crate::UpgradeGraphDiagnosticKind::InvalidManagedPath,
+                "component-package.upgrade-edge-path",
             ));
         }
     }
