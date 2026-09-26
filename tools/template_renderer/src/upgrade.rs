@@ -158,7 +158,7 @@ pub(crate) fn validate_upgrade_graph(
     package: &ComponentPackageManifest,
     components: &BTreeMap<String, ComponentManifest>,
     component_paths: &BTreeSet<(String, String)>,
-    edges: &mut Vec<UpgradeEdgeManifest>,
+    edges: &mut [UpgradeEdgeManifest],
 ) -> Result<()> {
     edges.sort_by(|left, right| left.id.cmp(&right.id));
     let mut ids = BTreeSet::new();
@@ -360,16 +360,14 @@ fn validate_composition(
         let manifest = components.get(component).ok_or_else(|| {
             RendererError::new("upgrade composition references a graph-undeclared component")
         })?;
-        if target {
-            if let Some(installation) = &manifest.installation {
-                if !installation.databases.contains(&state.database)
-                    || !installation.clients.contains(&state.client)
-                {
-                    return Err(RendererError::new(
-                        "upgrade target composition uses an unsupported component adapter",
-                    ));
-                }
-            }
+        if target
+            && let Some(installation) = &manifest.installation
+            && (!installation.databases.contains(&state.database)
+                || !installation.clients.contains(&state.client))
+        {
+            return Err(RendererError::new(
+                "upgrade target composition uses an unsupported component adapter",
+            ));
         }
     }
     if state
@@ -453,7 +451,7 @@ fn validate_sorted_capabilities(values: &[ApplicationCapability]) -> Result<()> 
     Ok(())
 }
 
-fn sort_unique<T: Ord>(values: &mut Vec<T>, kind: &str) -> Result<()> {
+fn sort_unique<T: Ord>(values: &mut [T], kind: &str) -> Result<()> {
     values.sort();
     if values.windows(2).any(|pair| pair[0] == pair[1]) {
         return Err(RendererError::new(format!(
