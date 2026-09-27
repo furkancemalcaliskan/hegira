@@ -9,11 +9,12 @@ use application_manifest::{
     ApplicationCapability, ApplicationManifest, ClientAdapter, DatabaseAdapter, FrameworkContract,
     PackageIdentity,
 };
+use sha2::{Digest, Sha256};
 use template_renderer::{
     ComponentInstallationContribution, CompositionDiagnosticKind, CompositionRequest,
-    ManifestCatalog, RenderRequest, RendererErrorKind, UpgradeCompositionState,
-    UpgradeEdgeDiagnosticKind, UpgradeEdgeRequest, UpgradeGraphDiagnosticKind,
-    UpgradeReleaseIdentity, plan, plan_snapshot, render,
+    ManifestCatalog, RenderRequest, RendererErrorKind, UpgradeAuthenticationDiagnosticKind,
+    UpgradeCompositionState, UpgradeEdgeDiagnosticKind, UpgradeEdgeRequest,
+    UpgradeGraphDiagnosticKind, UpgradeReleaseIdentity, plan, plan_snapshot, render,
     repository_validation::{RepositoryValidationRequest, render as render_for_validation},
 };
 
@@ -593,6 +594,104 @@ fn package_authenticates_and_resolves_declarative_upgrade_edges() {
     assert!(!error.to_string().contains("credential-shaped-input"));
 }
 
+#[cfg(unix)]
+#[test]
+fn upgrade_authentication_rejects_modified_and_unsafe_managed_sources_without_writes() {
+    use std::os::unix::fs::symlink;
+
+    let repository = repository_root();
+    let fixture = TestDirectory::new("upgrade-source-authentication");
+    copy_directory(
+        &repository.join("templates"),
+        &fixture.path().join("templates"),
+    );
+    install_test_upgrade_edge(fixture.path());
+    let application = fixture.path().join("application");
+    fs::create_dir(&application).unwrap();
+    let manifest = r#"schema = 2
+application = "custom-application"
+
+[framework]
+repository = "https://github.com/furkancemalcaliskan/hegira.git"
+version = "v0.5.0"
+
+[selection]
+databases = ["sqlite"]
+clients = ["leptos"]
+
+[composition]
+capabilities = ["authentication", "authorization"]
+
+[composition.package]
+id = "hegira-canonical"
+version = "v0.5.0"
+
+[[composition.components]]
+id = "layered-base"
+version = "v0.5.0"
+
+[[composition.components]]
+id = "layered-leptos-identity"
+version = "v0.5.0"
+
+[[composition.modules]]
+id = "identity"
+version = "v0.5.0"
+"#;
+    fs::write(application.join("hegira.toml"), manifest).unwrap();
+    set_test_upgrade_source_digest(fixture.path(), manifest.as_bytes());
+    let catalog = ManifestCatalog::load(fixture.path(), "layered").unwrap();
+
+    let authenticated = catalog.authenticate_upgrade_source(&application).unwrap();
+    assert_eq!(authenticated.edge().id, "v0-5-0-to-v0-6-0");
+    assert_eq!(authenticated.managed_sources().len(), 1);
+    assert_eq!(
+        authenticated.managed_sources()[0].source(),
+        Some(manifest.as_bytes())
+    );
+    assert!(!application.join(".hegira-mutation.lock").exists());
+
+    fs::write(
+        application.join("hegira.toml"),
+        format!("{manifest}\n# local managed change\n"),
+    )
+    .unwrap();
+    let changed = catalog
+        .authenticate_upgrade_source(&application)
+        .unwrap_err();
+    assert_eq!(
+        changed.diagnostic().kind,
+        UpgradeAuthenticationDiagnosticKind::SourceDigestMismatch
+    );
+    assert!(!changed.to_string().contains("local managed change"));
+
+    fs::write(
+        application.join("hegira.toml"),
+        manifest.replace("v0.5.0", "v0.4.0"),
+    )
+    .unwrap();
+    let release = catalog
+        .authenticate_upgrade_source(&application)
+        .unwrap_err();
+    assert_eq!(
+        release.diagnostic().kind,
+        UpgradeAuthenticationDiagnosticKind::UnsupportedRelease
+    );
+
+    let outside = fixture.path().join("outside-secret");
+    fs::write(&outside, "credential-shaped-secret").unwrap();
+    fs::remove_file(application.join("hegira.toml")).unwrap();
+    symlink(&outside, application.join("hegira.toml")).unwrap();
+    let linked = catalog
+        .authenticate_upgrade_source(&application)
+        .unwrap_err();
+    assert_eq!(
+        linked.diagnostic().kind,
+        UpgradeAuthenticationDiagnosticKind::UnsupportedSourceType
+    );
+    assert!(!linked.to_string().contains("credential-shaped-secret"));
+}
+
 #[test]
 fn package_rejects_files_outside_the_declared_component_graph() {
     let repository = repository_root();
@@ -1105,10 +1204,14 @@ fn canonical_request(repository: &Path, output: PathBuf) -> RenderRequest {
 fn install_test_upgrade_edge(repository: &Path) {
     let upgrades = repository.join("templates/upgrades");
     fs::create_dir(&upgrades).expect("upgrade manifest directory should be created");
+    let target = fs::read(repository.join("templates/applications/layered/hegira.toml"))
+        .expect("managed target should be readable");
+    let target_digest = format!("sha256:{:x}", Sha256::digest(target));
     fs::write(
         upgrades.join("v0-5-0-to-v0-6-0.toml"),
-        r#"schema = 1
+        format!(r#"schema = 1
 id = "v0-5-0-to-v0-6-0"
+source_package_digest = "sha256:{source_package_digest}"
 manifest_transitions = ["schema", "framework", "package", "components", "modules", "capabilities", "ownership"]
 
 [source.framework]
@@ -1129,6 +1232,15 @@ version = "v0.6.0"
 
 [[compositions]]
 id = "layered-leptos-identity-sqlite"
+source_baseline_digest = "sha256:{source_baseline_digest}"
+
+[compositions.source_ownership]
+default = "application-owned"
+
+[[compositions.source_ownership.claims]]
+path = "hegira.toml"
+class = "managed-integration"
+integration = "application-manifest"
 
 [compositions.source]
 database = "sqlite"
@@ -1149,7 +1261,13 @@ component = "layered-base"
 path = "hegira.toml"
 integration = "application-manifest"
 kind = "edit"
+source_sha256 = "sha256:{source_digest}"
+target_sha256 = "{target_digest}"
 "#,
+            source_package_digest = "d".repeat(64),
+            source_baseline_digest = "c".repeat(64),
+            source_digest = "b".repeat(64),
+        ),
     )
     .expect("upgrade manifest should be written");
 
@@ -1161,8 +1279,22 @@ kind = "edit"
             "upgrade_edges = [\"upgrades/v0-5-0-to-v0-6-0.toml\"]",
         );
     fs::write(&package_path, package).expect("upgrade edge should be declared");
+    update_test_package_digest(repository);
+}
+
+fn set_test_upgrade_source_digest(repository: &Path, source: &[u8]) {
+    let edge_path = repository.join("templates/upgrades/v0-5-0-to-v0-6-0.toml");
+    let edge = fs::read_to_string(&edge_path).unwrap();
+    let expected = format!("source_sha256 = \"sha256:{}\"", "b".repeat(64));
+    let replacement = format!("source_sha256 = \"sha256:{:x}\"", Sha256::digest(source));
+    fs::write(&edge_path, edge.replace(&expected, &replacement)).unwrap();
+    update_test_package_digest(repository);
+}
+
+fn update_test_package_digest(repository: &Path) {
     let digest = ManifestCatalog::calculate_package_digest(repository, "layered")
         .expect("test package digest should be calculated");
+    let package_path = repository.join("templates/package.toml");
     let package =
         fs::read_to_string(&package_path).expect("component package manifest should be readable");
     let old_digest = package

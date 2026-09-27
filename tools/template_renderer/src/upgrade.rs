@@ -6,6 +6,7 @@ use std::{
 
 use application_manifest::{
     ApplicationCapability, ClientAdapter, DatabaseAdapter, FrameworkContract, PackageIdentity,
+    SourceOwnership, SourceOwnershipClass,
 };
 use semver::Version;
 use serde::{Deserialize, Serialize};
@@ -44,6 +45,8 @@ pub struct UpgradeCompositionState {
 #[serde(deny_unknown_fields)]
 pub struct UpgradeCompositionTransition {
     pub id: String,
+    pub source_baseline_digest: String,
+    pub source_ownership: SourceOwnership,
     pub source: UpgradeCompositionState,
     pub target: UpgradeCompositionState,
 }
@@ -75,6 +78,10 @@ pub struct ManagedIntegrationTransition {
     pub path: String,
     pub integration: String,
     pub kind: ManagedIntegrationTransitionKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_sha256: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_sha256: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -82,6 +89,7 @@ pub struct ManagedIntegrationTransition {
 pub struct UpgradeEdgeManifest {
     pub schema: u32,
     pub id: String,
+    pub source_package_digest: String,
     pub source: UpgradeReleaseIdentity,
     pub target: UpgradeReleaseIdentity,
     pub compositions: Vec<UpgradeCompositionTransition>,
@@ -152,6 +160,8 @@ pub enum UpgradeGraphDiagnosticKind {
     AmbiguousSourceComposition,
     DuplicateManifestTransition,
     InvalidManagedPath,
+    InvalidDigest,
+    InvalidOwnership,
     UndeclaredManagedPath,
     ConflictingManagedTransition,
     LimitExceeded,
@@ -238,6 +248,8 @@ fn graph_diagnostic_kind_name(kind: UpgradeGraphDiagnosticKind) -> &'static str 
         UpgradeGraphDiagnosticKind::AmbiguousSourceComposition => "ambiguous-source-composition",
         UpgradeGraphDiagnosticKind::DuplicateManifestTransition => "duplicate-manifest-transition",
         UpgradeGraphDiagnosticKind::InvalidManagedPath => "invalid-managed-path",
+        UpgradeGraphDiagnosticKind::InvalidDigest => "invalid-digest",
+        UpgradeGraphDiagnosticKind::InvalidOwnership => "invalid-ownership",
         UpgradeGraphDiagnosticKind::UndeclaredManagedPath => "undeclared-managed-path",
         UpgradeGraphDiagnosticKind::ConflictingManagedTransition => {
             "conflicting-managed-transition"
@@ -249,7 +261,7 @@ fn graph_diagnostic_kind_name(kind: UpgradeGraphDiagnosticKind) -> &'static str 
 pub(crate) fn validate_upgrade_graph(
     package: &ComponentPackageManifest,
     components: &BTreeMap<String, ComponentManifest>,
-    component_paths: &BTreeSet<(String, String)>,
+    component_paths: &BTreeMap<(String, String), String>,
     edges: &mut [UpgradeEdgeManifest],
 ) -> Result<()> {
     if edges.len() > MAX_UPGRADE_EDGES {
@@ -280,6 +292,10 @@ pub(crate) fn validate_upgrade_graph(
         validate_release_identity(package, &edge.source, false)?;
         validate_release_identity(package, &edge.target, true)?;
         validate_direct_release(&edge.source, &edge.target)?;
+        validate_sha256(
+            &edge.source_package_digest,
+            "upgrade-edge.source-package-digest",
+        )?;
 
         let release_pair = (
             edge.source.framework.version.clone(),
@@ -317,6 +333,16 @@ pub(crate) fn validate_upgrade_graph(
             }
             validate_composition(package, components, &transition.source, false)?;
             validate_composition(package, components, &transition.target, true)?;
+            validate_sha256(
+                &transition.source_baseline_digest,
+                "upgrade-composition.source-baseline-digest",
+            )?;
+            transition.source_ownership.validate().map_err(|_| {
+                graph_error(
+                    UpgradeGraphDiagnosticKind::InvalidOwnership,
+                    "upgrade-composition.source-ownership",
+                )
+            })?;
             if transition.source.database != transition.target.database
                 || transition.source.client != transition.target.client
             {
@@ -347,12 +373,13 @@ pub(crate) fn validate_upgrade_graph(
             validate_graph_identifier(&transition.component, "managed integration component")?;
             validate_graph_identifier(&transition.integration, "managed integration")?;
             validate_graph_path(Path::new(&transition.path), "managed integration path")?;
-            if !component_paths.contains(&(transition.component.clone(), transition.path.clone())) {
+            if !components.contains_key(&transition.component) {
                 return Err(graph_error(
-                    UpgradeGraphDiagnosticKind::UndeclaredManagedPath,
-                    "managed-integration.path",
+                    UpgradeGraphDiagnosticKind::UndeclaredComponent,
+                    "managed-integration.component",
                 ));
             }
+            validate_transition_digests(transition, component_paths)?;
             if !managed_integrations.insert((
                 transition.component.clone(),
                 transition.path.clone(),
@@ -364,6 +391,95 @@ pub(crate) fn validate_upgrade_graph(
                 ));
             }
         }
+
+        for composition in &edge.compositions {
+            let applicable_components = composition
+                .source
+                .components
+                .iter()
+                .chain(&composition.target.components)
+                .collect::<BTreeSet<_>>();
+            for transition in edge
+                .managed_integrations
+                .iter()
+                .filter(|transition| applicable_components.contains(&transition.component))
+            {
+                let declared = composition.source_ownership.claims.iter().any(|claim| {
+                    claim.path == transition.path
+                        && claim.class == SourceOwnershipClass::ManagedIntegration
+                        && claim.integration.as_deref() == Some(&transition.integration)
+                });
+                if !declared {
+                    return Err(graph_error(
+                        UpgradeGraphDiagnosticKind::InvalidOwnership,
+                        "managed-integration.ownership",
+                    ));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+fn validate_transition_digests(
+    transition: &ManagedIntegrationTransition,
+    component_paths: &BTreeMap<(String, String), String>,
+) -> Result<()> {
+    let source_required = matches!(
+        transition.kind,
+        ManagedIntegrationTransitionKind::Edit | ManagedIntegrationTransitionKind::Retire
+    );
+    let target_required = matches!(
+        transition.kind,
+        ManagedIntegrationTransitionKind::Create | ManagedIntegrationTransitionKind::Edit
+    );
+    if source_required != transition.source_sha256.is_some()
+        || target_required != transition.target_sha256.is_some()
+    {
+        return Err(graph_error(
+            UpgradeGraphDiagnosticKind::InvalidDigest,
+            "managed-integration.digest-contract",
+        ));
+    }
+    if let Some(source) = &transition.source_sha256 {
+        validate_sha256(source, "managed-integration.source-sha256")?;
+    }
+    if let Some(target) = &transition.target_sha256 {
+        validate_sha256(target, "managed-integration.target-sha256")?;
+        let actual = component_paths
+            .get(&(transition.component.clone(), transition.path.clone()))
+            .ok_or_else(|| {
+                graph_error(
+                    UpgradeGraphDiagnosticKind::UndeclaredManagedPath,
+                    "managed-integration.path",
+                )
+            })?;
+        if actual != target {
+            return Err(graph_error(
+                UpgradeGraphDiagnosticKind::InvalidDigest,
+                "managed-integration.target-sha256",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_sha256(value: &str, subject: &str) -> Result<()> {
+    let Some(digest) = value.strip_prefix("sha256:") else {
+        return Err(graph_error(
+            UpgradeGraphDiagnosticKind::InvalidDigest,
+            subject,
+        ));
+    };
+    if digest.len() != 64
+        || !digest
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
+    {
+        return Err(graph_error(
+            UpgradeGraphDiagnosticKind::InvalidDigest,
+            subject,
+        ));
     }
     Ok(())
 }
@@ -800,6 +916,7 @@ mod tests {
         diagnostics.push(error_after(|edge, _| {
             let mut conflicting = edge.managed_integrations[0].clone();
             conflicting.kind = ManagedIntegrationTransitionKind::Retire;
+            conflicting.target_sha256 = None;
             edge.managed_integrations.push(conflicting);
         }));
         diagnostics.push(error_after(|edge, _| {
@@ -823,6 +940,8 @@ mod tests {
                     path: "base.rs".to_owned(),
                     integration: format!("oversized-{index:03}"),
                     kind: ManagedIntegrationTransitionKind::Edit,
+                    source_sha256: Some(digest('b')),
+                    target_sha256: Some(digest('a')),
                 })
                 .collect();
         }));
@@ -865,6 +984,35 @@ mod tests {
             );
             assert!(!diagnostic.to_string().contains(&sensitive));
         }
+    }
+
+    #[test]
+    fn source_package_baseline_ownership_and_file_digests_fail_closed() {
+        let cases = [
+            error_after(|edge, _| edge.source_package_digest = "sha256:not-a-digest".to_owned()),
+            error_after(|edge, _| {
+                edge.compositions[0].source_baseline_digest = "sha256:short".to_owned();
+            }),
+            error_after(|edge, _| {
+                edge.compositions[0].source_ownership.claims.clear();
+            }),
+            error_after(|edge, _| {
+                edge.managed_integrations[0].source_sha256 = None;
+            }),
+            error_after(|edge, _| {
+                edge.managed_integrations[0].target_sha256 = Some(digest('f'));
+            }),
+        ];
+
+        assert_eq!(cases[0].kind, UpgradeGraphDiagnosticKind::InvalidDigest);
+        assert_eq!(cases[1].kind, UpgradeGraphDiagnosticKind::InvalidDigest);
+        assert_eq!(cases[2].kind, UpgradeGraphDiagnosticKind::InvalidOwnership);
+        assert_eq!(cases[3].kind, UpgradeGraphDiagnosticKind::InvalidDigest);
+        assert_eq!(cases[4].kind, UpgradeGraphDiagnosticKind::InvalidDigest);
+        assert!(cases.iter().all(|diagnostic| {
+            !diagnostic.to_string().contains("not-a-digest")
+                && !diagnostic.to_string().contains("sha256:short")
+        }));
     }
 
     fn validate(
@@ -998,10 +1146,15 @@ mod tests {
         }
     }
 
-    fn component_paths() -> BTreeSet<(String, String)> {
+    fn component_paths() -> BTreeMap<(String, String), String> {
         ["base", "default", "identity", "minimal"]
             .into_iter()
-            .map(|component| (component.to_owned(), format!("{component}.rs")))
+            .map(|component| {
+                (
+                    (component.to_owned(), format!("{component}.rs")),
+                    digest('a'),
+                )
+            })
             .collect()
     }
 
@@ -1010,8 +1163,21 @@ mod tests {
         for name in ["default", "minimal", "identity"] {
             for database in [DatabaseAdapter::Sqlite, DatabaseAdapter::Postgres] {
                 let state = state(name, database);
+                let mut claims = vec![managed_claim("base.rs", "application-manifest")];
+                if state
+                    .components
+                    .iter()
+                    .any(|component| component == "identity")
+                {
+                    claims.push(managed_claim("identity.rs", "identity-routes"));
+                }
                 compositions.push(UpgradeCompositionTransition {
                     id: format!("{name}-{}", database_name(database)),
+                    source_baseline_digest: digest('c'),
+                    source_ownership: SourceOwnership {
+                        default: SourceOwnershipClass::ApplicationOwned,
+                        claims,
+                    },
                     source: state.clone(),
                     target: state,
                 });
@@ -1020,6 +1186,7 @@ mod tests {
         UpgradeEdgeManifest {
             schema: UPGRADE_EDGE_SCHEMA,
             id: "v0-5-0-to-v0-6-0".to_owned(),
+            source_package_digest: digest('d'),
             source: release("v0.5.0"),
             target: release("v0.6.0"),
             compositions,
@@ -1034,15 +1201,31 @@ mod tests {
                     path: "identity.rs".to_owned(),
                     integration: "identity-routes".to_owned(),
                     kind: ManagedIntegrationTransitionKind::Edit,
+                    source_sha256: Some(digest('b')),
+                    target_sha256: Some(digest('a')),
                 },
                 ManagedIntegrationTransition {
                     component: "base".to_owned(),
                     path: "base.rs".to_owned(),
                     integration: "application-manifest".to_owned(),
                     kind: ManagedIntegrationTransitionKind::Edit,
+                    source_sha256: Some(digest('b')),
+                    target_sha256: Some(digest('a')),
                 },
             ],
         }
+    }
+
+    fn managed_claim(path: &str, integration: &str) -> application_manifest::SourceOwnershipClaim {
+        application_manifest::SourceOwnershipClaim {
+            path: path.to_owned(),
+            class: SourceOwnershipClass::ManagedIntegration,
+            integration: Some(integration.to_owned()),
+        }
+    }
+
+    fn digest(character: char) -> String {
+        format!("sha256:{}", character.to_string().repeat(64))
     }
 
     fn state(name: &str, database: DatabaseAdapter) -> UpgradeCompositionState {

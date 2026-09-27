@@ -5,6 +5,7 @@ mod package_source;
 mod render;
 pub mod repository_validation;
 mod upgrade;
+mod upgrade_authentication;
 
 pub use destination::validate_destination;
 pub use manifest::{
@@ -18,6 +19,11 @@ pub use upgrade::{
     UpgradeEdgeDiagnostic, UpgradeEdgeDiagnosticKind, UpgradeEdgeError, UpgradeEdgeManifest,
     UpgradeEdgeRequest, UpgradeGraphDiagnostic, UpgradeGraphDiagnosticKind,
     UpgradeManifestTransition, UpgradeReleaseIdentity,
+};
+pub use upgrade_authentication::{
+    AuthenticatedManagedSource, AuthenticatedUpgradeBoundary, UPGRADE_AUTHENTICATION_SCHEMA,
+    UpgradeAuthenticationDiagnostic, UpgradeAuthenticationDiagnosticKind,
+    UpgradeAuthenticationError,
 };
 
 use std::fmt::{Display, Formatter};
