@@ -444,6 +444,14 @@ fn validate_transition_digests(
     if let Some(source) = &transition.source_sha256 {
         validate_sha256(source, "managed-integration.source-sha256")?;
     }
+    if transition.kind == ManagedIntegrationTransitionKind::Edit
+        && transition.source_sha256 == transition.target_sha256
+    {
+        return Err(graph_error(
+            UpgradeGraphDiagnosticKind::InvalidDigest,
+            "managed-integration.unchanged-edit",
+        ));
+    }
     if let Some(target) = &transition.target_sha256 {
         validate_sha256(target, "managed-integration.target-sha256")?;
         let actual = component_paths
@@ -1002,6 +1010,10 @@ mod tests {
             error_after(|edge, _| {
                 edge.managed_integrations[0].target_sha256 = Some(digest('f'));
             }),
+            error_after(|edge, _| {
+                edge.managed_integrations[0].target_sha256 =
+                    edge.managed_integrations[0].source_sha256.clone();
+            }),
         ];
 
         assert_eq!(cases[0].kind, UpgradeGraphDiagnosticKind::InvalidDigest);
@@ -1009,6 +1021,7 @@ mod tests {
         assert_eq!(cases[2].kind, UpgradeGraphDiagnosticKind::InvalidOwnership);
         assert_eq!(cases[3].kind, UpgradeGraphDiagnosticKind::InvalidDigest);
         assert_eq!(cases[4].kind, UpgradeGraphDiagnosticKind::InvalidDigest);
+        assert_eq!(cases[5].kind, UpgradeGraphDiagnosticKind::InvalidDigest);
         assert!(cases.iter().all(|diagnostic| {
             !diagnostic.to_string().contains("not-a-digest")
                 && !diagnostic.to_string().contains("sha256:short")

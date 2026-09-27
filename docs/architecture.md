@@ -177,7 +177,7 @@ The direct local dependency allowlist is enforced from locked Cargo metadata by
 | `application_mutator` | `application_manifest` |
 | `hegira_cli` | `application_manifest`, `application_mutator`, `resource_generator`, `template_renderer` |
 | `resource_generator` | `application_manifest`, `application_mutator` |
-| `template_renderer` | `application_manifest` |
+| `template_renderer` | `application_manifest`, `application_mutator` |
 | `upgrade_test_support` | None |
 
 Normal, optional, development, and build dependencies use the same ownership
@@ -681,6 +681,20 @@ plan exists. The returned in-memory boundary contains authenticated source and
 target bytes for later planning; diagnostics are versioned and content-redacted.
 Authentication performs no write, network access, process execution, dependency
 initialization, or application mutation.
+
+An authenticated direct edge can then be converted into one complete
+`application_mutator::ChangePlan`. Edge-declared creates use absent
+preconditions, edits retain the observed source digest and authenticated target
+bytes, and retirements retain the observed digest plus the exact managed
+integration owner. The planner sorts the complete plan by canonical application
+path, rejects duplicate or conflicting operations, and never edits or retires
+application migration history. Its versioned summary binds the exact source and
+target releases, package and baseline digests, component and integration owners,
+preconditions, and result digests without exposing source or resulting content.
+Blocked, unsupported, incompatible, and conflicting inputs are distinct typed,
+content-redacted outcomes. Planning performs no publication, database, network,
+or process operation.
+
 The bundled package does not yet declare a concrete application upgrade edge;
 such an edge is supported only after its released source state and transition
 data are explicitly added and validated.
