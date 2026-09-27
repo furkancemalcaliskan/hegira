@@ -89,10 +89,14 @@ commands change. Never describe planned work as implemented.
   and renders only from the digest-verified snapshot. It is not the public
   Hegira CLI.
 - `tools/application_mutator/` contains the deterministic, content-redacted
-  existing-application change-plan contract. Its additive component plan maps
-  canonically owned artifacts and integrations to ordered relative creates and
-  digest-preconditioned edits, rejects historical migration edits, and exposes
-  only versioned content-redacted summaries. Typed component editors constrain
+  existing-application change-plan contract. It supports ordered absent-file
+  creation, digest-preconditioned edits, and exact-digest retirement restricted
+  to manifest-declared managed integrations. Retirement is atomically staged
+  for rollback and cannot target application-owned, generated-once, or
+  immutable-history source. Its additive component plan maps canonically owned
+  artifacts and integrations to creates and edits, rejects historical migration
+  edits, and exposes only versioned content-redacted summaries. Typed component
+  editors constrain
   Cargo dependencies, features, module roots, routes, provider migrations,
   configuration, and client contributions to explicit managed points; chained
   edits preserve their first observed digest. Publication is serialized by an

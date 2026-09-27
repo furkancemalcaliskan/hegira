@@ -675,7 +675,12 @@ version = "v0.6.0"
     }
 
     fn source(change: &PlannedFileChange) -> &str {
-        std::str::from_utf8(change.resulting_content()).unwrap()
+        std::str::from_utf8(
+            change
+                .resulting_content()
+                .expect("generated source changes have resulting content"),
+        )
+        .unwrap()
     }
 
     #[test]

@@ -669,7 +669,9 @@ impl ComponentInstallationPlan {
                     path: change.path,
                     operation: change.operation,
                     precondition: change.precondition,
-                    result_sha256: change.result_sha256,
+                    result_sha256: change
+                        .result_sha256
+                        .expect("component installation never retires files"),
                 })
                 .collect(),
         }
@@ -1154,7 +1156,12 @@ mod tests {
             plan.changes().changes()[0].precondition(),
             FilePrecondition::MatchesDigest(ContentDigest::calculate(original))
         );
-        let result = std::str::from_utf8(plan.changes().changes()[0].resulting_content()).unwrap();
+        let result = std::str::from_utf8(
+            plan.changes().changes()[0]
+                .resulting_content()
+                .expect("component installation changes have content"),
+        )
+        .unwrap();
         assert!(result.contains("identity_http = { workspace = true, optional = true }"));
         assert!(result.contains("\"dep:identity_http\""));
         assert!(matches!(

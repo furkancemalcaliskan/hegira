@@ -70,6 +70,7 @@ dependencies = [
 name = "application_mutator"
 version = "0.6.0"
 dependencies = [
+ "application_manifest",
  "rustix",
  "serde",
  "serde_json",

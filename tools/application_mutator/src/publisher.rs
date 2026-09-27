@@ -185,7 +185,7 @@ mod platform {
         temp_name: OsString,
         operation: ChangeOperation,
         expected: FilePrecondition,
-        result_digest: ContentDigest,
+        result_digest: Option<ContentDigest>,
         original: Option<ObservedFile>,
         staged_identity: Identity,
         published: bool,
@@ -265,7 +265,10 @@ mod platform {
         }
 
         for change in &prepared {
-            if change.operation == ChangeOperation::Edit {
+            if matches!(
+                change.operation,
+                ChangeOperation::Edit | ChangeOperation::Retire
+            ) {
                 remove_backup(change)?;
             }
         }
@@ -443,15 +446,19 @@ mod platform {
             let operation = match change.operation() {
                 ChangeOperation::Create => "create",
                 ChangeOperation::Edit => "edit",
+                ChangeOperation::Retire => "retire",
             };
             let precondition = match change.precondition() {
                 FilePrecondition::Absent => "absent".to_owned(),
                 FilePrecondition::MatchesDigest(digest) => digest.to_hex(),
             };
+            let result = change
+                .result_digest()
+                .map_or_else(|| "absent".to_owned(), ContentDigest::to_hex);
             manifest.push_str(&format!(
                 "change={index}\t{operation}\t{}\t{precondition}\t{}\t{}\n",
                 change.path(),
-                change.result_digest(),
+                result,
                 temp_name(transaction, index)
                     .to_str()
                     .expect("transaction temp names are ASCII")
@@ -491,16 +498,17 @@ mod platform {
             let parent = descend(&root.fd, parent_path, change.path())?;
             let original = verify_initial_precondition(&parent, name, change)?;
             let temp_name = temp_name(transaction, index);
-            let result_mode = original.as_ref().map_or(CREATED_MODE, |observed| {
-                Mode::from_raw_mode(observed.mode & 0o0777)
-            });
-            let staged_identity = stage_file(
-                &parent,
-                &temp_name,
-                change.path(),
-                change.resulting_content(),
-                result_mode,
-            )?;
+            let staged_identity = if let Some(content) = change.resulting_content() {
+                let result_mode = original.as_ref().map_or(CREATED_MODE, |observed| {
+                    Mode::from_raw_mode(observed.mode & 0o0777)
+                });
+                stage_file(&parent, &temp_name, change.path(), content, result_mode)?
+            } else {
+                original
+                    .as_ref()
+                    .expect("retirements have observed original state")
+                    .identity
+            };
             prepared.push(PreparedChange {
                 path: change.path().clone(),
                 parent_path: parent_path.to_path_buf(),
@@ -631,7 +639,10 @@ mod platform {
             }
             (FilePrecondition::MatchesDigest(expected), Some(original)) => {
                 let observed = read_regular_file(&change.parent, &change.name, &change.path)?;
-                if observed.identity != original.identity || observed.digest != *expected {
+                if observed.identity != original.identity
+                    || observed.digest != *expected
+                    || observed.mode != original.mode
+                {
                     return Err(precondition_failed(&change.path));
                 }
                 Ok(())
@@ -759,6 +770,23 @@ mod platform {
                 )
                 .map(|()| exchanged = true)
                 .map_err(|_| unsupported_semantics(&change.path)),
+                ChangeOperation::Retire => fs::renameat_with(
+                    &change.parent,
+                    &first_name,
+                    &change.parent,
+                    &second_name,
+                    RenameFlags::NOREPLACE,
+                )
+                .map_or_else(
+                    |error| {
+                        if error == Errno::EXIST {
+                            Ok(())
+                        } else {
+                            Err(unsupported_semantics(&change.path))
+                        }
+                    },
+                    |()| Err(unsupported_semantics(&change.path)),
+                ),
             };
             let (first_expected, second_expected) = if exchanged {
                 (second, first)
@@ -820,42 +848,53 @@ mod platform {
     }
 
     fn publish_one(change: &PreparedChange) -> Result<(), MutationError> {
-        let flags = match change.operation {
-            ChangeOperation::Create => RenameFlags::NOREPLACE,
-            ChangeOperation::Edit => RenameFlags::EXCHANGE,
+        let (source, destination, flags) = match change.operation {
+            ChangeOperation::Create => (&change.temp_name, &change.name, RenameFlags::NOREPLACE),
+            ChangeOperation::Edit => (&change.temp_name, &change.name, RenameFlags::EXCHANGE),
+            ChangeOperation::Retire => (&change.name, &change.temp_name, RenameFlags::NOREPLACE),
         };
-        fs::renameat_with(
-            &change.parent,
-            &change.temp_name,
-            &change.parent,
-            &change.name,
-            flags,
+        fs::renameat_with(&change.parent, source, &change.parent, destination, flags).map_err(
+            |error| {
+                if error == Errno::EXIST {
+                    precondition_failed(&change.path)
+                } else {
+                    MutationError::at_path(
+                        MutationErrorKind::PublicationFailed,
+                        &change.path,
+                        "atomic mutation publication failed",
+                    )
+                }
+            },
         )
-        .map_err(|error| {
-            if error == Errno::EXIST {
-                precondition_failed(&change.path)
-            } else {
-                MutationError::at_path(
-                    MutationErrorKind::PublicationFailed,
-                    &change.path,
-                    "atomic mutation publication failed",
-                )
-            }
-        })
     }
 
     fn verify_published(change: &PreparedChange) -> Result<(), MutationError> {
-        let result = read_regular_file(&change.parent, &change.name, &change.path)?;
-        if result.identity != change.staged_identity || result.digest != change.result_digest {
-            return Err(MutationError::at_path(
-                MutationErrorKind::PublicationFailed,
-                &change.path,
-                "published mutation result could not be verified",
-            ));
+        if change.operation == ChangeOperation::Retire {
+            ensure_absent(&change.parent, &change.name, &change.path).map_err(|_| {
+                MutationError::at_path(
+                    MutationErrorKind::PublicationFailed,
+                    &change.path,
+                    "retired mutation path is unexpectedly present",
+                )
+            })?;
+        } else {
+            let result = read_regular_file(&change.parent, &change.name, &change.path)?;
+            if result.identity != change.staged_identity
+                || Some(result.digest) != change.result_digest
+            {
+                return Err(MutationError::at_path(
+                    MutationErrorKind::PublicationFailed,
+                    &change.path,
+                    "published mutation result could not be verified",
+                ));
+            }
         }
         if let Some(original) = &change.original {
             let backup = read_regular_file(&change.parent, &change.temp_name, &change.path)?;
-            if backup.identity != original.identity || backup.digest != original.digest {
+            if backup.identity != original.identity
+                || backup.digest != original.digest
+                || backup.mode != original.mode
+            {
                 return Err(MutationError::at_path(
                     MutationErrorKind::PublicationFailed,
                     &change.path,
@@ -906,20 +945,32 @@ mod platform {
     }
 
     fn rollback_one(change: &mut PreparedChange) -> Result<(), MutationError> {
-        let result =
-            read_regular_file(&change.parent, &change.name, &change.path).map_err(|_| {
+        if change.operation == ChangeOperation::Retire {
+            ensure_absent(&change.parent, &change.name, &change.path).map_err(|_| {
                 MutationError::at_path(
                     MutationErrorKind::RollbackIncomplete,
                     &change.path,
-                    "cannot verify a published file before rollback",
+                    "a retired path was recreated before rollback; it was not overwritten",
                 )
             })?;
-        if result.identity != change.staged_identity || result.digest != change.result_digest {
-            return Err(MutationError::at_path(
-                MutationErrorKind::RollbackIncomplete,
-                &change.path,
-                "a published file changed before rollback; it was not overwritten",
-            ));
+        } else {
+            let result =
+                read_regular_file(&change.parent, &change.name, &change.path).map_err(|_| {
+                    MutationError::at_path(
+                        MutationErrorKind::RollbackIncomplete,
+                        &change.path,
+                        "cannot verify a published file before rollback",
+                    )
+                })?;
+            if result.identity != change.staged_identity
+                || Some(result.digest) != change.result_digest
+            {
+                return Err(MutationError::at_path(
+                    MutationErrorKind::RollbackIncomplete,
+                    &change.path,
+                    "a published file changed before rollback; it was not overwritten",
+                ));
+            }
         }
         match change.operation {
             ChangeOperation::Create => {
@@ -941,7 +992,10 @@ mod platform {
                             "cannot verify the original file before rollback",
                         )
                     })?;
-                if backup.identity != original.identity || backup.digest != original.digest {
+                if backup.identity != original.identity
+                    || backup.digest != original.digest
+                    || backup.mode != original.mode
+                {
                     return Err(MutationError::at_path(
                         MutationErrorKind::RollbackIncomplete,
                         &change.path,
@@ -963,7 +1017,10 @@ mod platform {
                     )
                 })?;
                 let restored = read_regular_file(&change.parent, &change.name, &change.path)?;
-                if restored.identity != original.identity || restored.digest != original.digest {
+                if restored.identity != original.identity
+                    || restored.digest != original.digest
+                    || restored.mode != original.mode
+                {
                     return Err(MutationError::at_path(
                         MutationErrorKind::RollbackIncomplete,
                         &change.path,
@@ -971,6 +1028,55 @@ mod platform {
                     ));
                 }
                 remove_staged_temp(change)?;
+            }
+            ChangeOperation::Retire => {
+                let original = change
+                    .original
+                    .as_ref()
+                    .expect("retirements have original state");
+                let backup = read_regular_file(&change.parent, &change.temp_name, &change.path)
+                    .map_err(|_| {
+                        MutationError::at_path(
+                            MutationErrorKind::RollbackIncomplete,
+                            &change.path,
+                            "cannot verify the retired file before rollback",
+                        )
+                    })?;
+                if backup.identity != original.identity
+                    || backup.digest != original.digest
+                    || backup.mode != original.mode
+                {
+                    return Err(MutationError::at_path(
+                        MutationErrorKind::RollbackIncomplete,
+                        &change.path,
+                        "the retired rollback file changed; it was not restored",
+                    ));
+                }
+                fs::renameat_with(
+                    &change.parent,
+                    &change.temp_name,
+                    &change.parent,
+                    &change.name,
+                    RenameFlags::NOREPLACE,
+                )
+                .map_err(|_| {
+                    MutationError::at_path(
+                        MutationErrorKind::RollbackIncomplete,
+                        &change.path,
+                        "cannot atomically restore a retired file",
+                    )
+                })?;
+                let restored = read_regular_file(&change.parent, &change.name, &change.path)?;
+                if restored.identity != original.identity
+                    || restored.digest != original.digest
+                    || restored.mode != original.mode
+                {
+                    return Err(MutationError::at_path(
+                        MutationErrorKind::RollbackIncomplete,
+                        &change.path,
+                        "restored retired-file identity or metadata could not be verified",
+                    ));
+                }
             }
         }
         change.published = false;
@@ -1054,7 +1160,10 @@ mod platform {
     }
 
     fn remove_backup(change: &PreparedChange) -> Result<(), MutationError> {
-        let original = change.original.as_ref().expect("only edits have backups");
+        let original = change
+            .original
+            .as_ref()
+            .expect("edits and retirements have backups");
         remove_named_if_identity(&change.parent, &change.temp_name, original.identity).map_err(
             |_| {
                 MutationError::at_path(
@@ -1121,7 +1230,7 @@ mod platform {
             collections::BTreeMap,
             ffi::OsString,
             fs as stdfs,
-            os::unix::fs::symlink,
+            os::unix::fs::{MetadataExt as _, PermissionsExt as _, symlink},
             process::Command,
             sync::atomic::{AtomicU64, Ordering},
         };
@@ -1130,8 +1239,9 @@ mod platform {
         use crate::{
             ApplicationFileOwner, ComponentArtifact, ComponentContribution,
             ComponentInstallationErrorKind, ComponentInstallationPlan, ComponentIntegration,
-            FileCreation, StructuredFileEdit, plan_component_installation,
+            FileCreation, ManagedFileRetirement, StructuredFileEdit, plan_component_installation,
         };
+        use application_manifest::{SourceOwnership, SourceOwnershipClaim, SourceOwnershipClass};
 
         static NEXT_FIXTURE: AtomicU64 = AtomicU64::new(0);
 
@@ -1284,6 +1394,20 @@ mod platform {
             MutationError::new(MutationErrorKind::PublicationFailed, "injected failure")
         }
 
+        fn retirement(path: &str, content: &[u8]) -> PlannedFileChange {
+            let ownership = SourceOwnership {
+                default: SourceOwnershipClass::ApplicationOwned,
+                claims: vec![SourceOwnershipClaim {
+                    path: path.to_owned(),
+                    class: SourceOwnershipClass::ManagedIntegration,
+                    integration: Some("server-routes".to_owned()),
+                }],
+            };
+            ManagedFileRetirement::new(&ownership, path, "server-routes", content)
+                .unwrap()
+                .into()
+        }
+
         fn snapshot(root: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
             fn visit(root: &Path, current: &Path, files: &mut BTreeMap<PathBuf, Vec<u8>>) {
                 let mut entries = stdfs::read_dir(current)
@@ -1354,6 +1478,143 @@ mod platform {
             publish_change_plan(&first.root, &first_plan).unwrap();
             publish_change_plan(&second.root, &second_plan).unwrap();
             assert_eq!(snapshot(&first.root), snapshot(&second.root));
+        }
+
+        #[test]
+        fn retires_an_exact_managed_file_and_cleans_private_state() {
+            let fixture = Fixture::new("retirement-success");
+            let path = "crates/domain/src/managed.rs";
+            let absolute = fixture.root.join(path);
+            let content = b"release-managed source\n";
+            stdfs::write(&absolute, content).unwrap();
+            stdfs::set_permissions(&absolute, stdfs::Permissions::from_mode(0o640)).unwrap();
+            let plan = ChangePlan::new([retirement(path, content)]).unwrap();
+            let dry_run = plan.summary();
+
+            let receipt = publish_change_plan(&fixture.root, &plan).unwrap();
+
+            assert_eq!(receipt.changed_files(), 1);
+            assert_eq!(dry_run, plan.summary());
+            assert_eq!(dry_run.changes[0].operation, ChangeOperation::Retire);
+            assert!(!absolute.exists());
+            assert!(!fixture.root.join(MUTATION_MARKER).exists());
+            assert_eq!(
+                stdfs::read_dir(fixture.root.join("crates/domain/src"))
+                    .unwrap()
+                    .count(),
+                0
+            );
+        }
+
+        #[test]
+        fn later_failure_restores_retired_bytes_identity_and_mode() {
+            let fixture = Fixture::new("retirement-rollback");
+            let path = "crates/domain/src/managed.rs";
+            let absolute = fixture.root.join(path);
+            let content = b"release-managed source\n";
+            stdfs::write(&absolute, content).unwrap();
+            stdfs::set_permissions(&absolute, stdfs::Permissions::from_mode(0o640)).unwrap();
+            let original = stdfs::metadata(&absolute).unwrap();
+            let plan = ChangePlan::new([
+                retirement(path, content),
+                FileCreation::new("crates/domain/src/z-later.rs", b"later".to_vec())
+                    .unwrap()
+                    .into(),
+            ])
+            .unwrap();
+
+            let error = publish_with(&fixture.root, &plan, |point| {
+                if point == HookPoint::BeforeChange(1) {
+                    return Err(injected());
+                }
+                Ok(())
+            })
+            .unwrap_err();
+
+            assert_eq!(error.kind(), MutationErrorKind::PublicationFailed);
+            assert_eq!(stdfs::read(&absolute).unwrap(), content);
+            let restored = stdfs::metadata(&absolute).unwrap();
+            assert_eq!(restored.ino(), original.ino());
+            assert_eq!(restored.mode(), original.mode());
+            assert!(!fixture.root.join("crates/domain/src/z-later.rs").exists());
+            assert!(!fixture.root.join(MUTATION_MARKER).exists());
+        }
+
+        #[test]
+        fn retirement_rejects_changed_missing_symlinked_and_non_file_paths() {
+            for kind in ["changed", "missing", "symlink", "directory"] {
+                let fixture = Fixture::new(kind);
+                let path = "crates/domain/src/managed.rs";
+                let absolute = fixture.root.join(path);
+                let content = b"release-managed source\n";
+                stdfs::write(&absolute, content).unwrap();
+                let plan = ChangePlan::new([retirement(path, content)]).unwrap();
+                let outside = fixture.root.with_extension(format!("{kind}-outside"));
+                match kind {
+                    "changed" => stdfs::write(&absolute, b"application change\n").unwrap(),
+                    "missing" => stdfs::remove_file(&absolute).unwrap(),
+                    "symlink" => {
+                        stdfs::remove_file(&absolute).unwrap();
+                        stdfs::write(&outside, b"outside\n").unwrap();
+                        symlink(&outside, &absolute).unwrap();
+                    }
+                    "directory" => {
+                        stdfs::remove_file(&absolute).unwrap();
+                        stdfs::create_dir(&absolute).unwrap();
+                    }
+                    _ => unreachable!(),
+                }
+
+                let error = publish_change_plan(&fixture.root, &plan).unwrap_err();
+
+                assert_eq!(
+                    error.kind(),
+                    MutationErrorKind::PreconditionFailed,
+                    "{kind}"
+                );
+                assert!(!fixture.root.join(MUTATION_MARKER).exists(), "{kind}");
+                if kind == "symlink" {
+                    assert_eq!(stdfs::read(&outside).unwrap(), b"outside\n");
+                    stdfs::remove_file(outside).unwrap();
+                }
+            }
+        }
+
+        #[test]
+        fn incomplete_retirement_rollback_is_redacted_and_blocks_retry() {
+            let fixture = Fixture::new("retirement-incomplete-rollback");
+            let path = "crates/domain/src/managed.rs";
+            let absolute = fixture.root.join(path);
+            let content = b"retired super-secret source\n";
+            stdfs::write(&absolute, content).unwrap();
+            let plan = ChangePlan::new([retirement(path, content)]).unwrap();
+
+            let error = publish_with(&fixture.root, &plan, |point| {
+                if point == HookPoint::AfterChange(0) {
+                    let temp = stdfs::read_dir(absolute.parent().unwrap())
+                        .unwrap()
+                        .map(|entry| entry.unwrap().path())
+                        .find(|path| {
+                            path.file_name()
+                                .and_then(|name| name.to_str())
+                                .is_some_and(|name| name.starts_with(".hegira-mutation-"))
+                        })
+                        .unwrap();
+                    stdfs::write(temp, b"tampered rollback source\n").unwrap();
+                    return Err(injected());
+                }
+                Ok(())
+            })
+            .unwrap_err();
+
+            assert_eq!(error.kind(), MutationErrorKind::RollbackIncomplete);
+            let marker = stdfs::read_to_string(fixture.root.join(MUTATION_MARKER)).unwrap();
+            assert!(marker.contains("retire"));
+            assert!(marker.contains(path));
+            assert!(marker.contains("absent"));
+            assert!(!marker.contains("super-secret"));
+            let retry = publish_change_plan(&fixture.root, &plan).unwrap_err();
+            assert_eq!(retry.kind(), MutationErrorKind::RecoveryRequired);
         }
 
         #[test]

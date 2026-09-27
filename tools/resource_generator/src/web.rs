@@ -1635,7 +1635,12 @@ version = "v0.6.0"
             .iter()
             .find(|change| change.path().as_str() == path)
             .unwrap();
-        std::str::from_utf8(change.resulting_content()).unwrap()
+        std::str::from_utf8(
+            change
+                .resulting_content()
+                .expect("generated web changes have resulting content"),
+        )
+        .unwrap()
     }
 
     #[test]

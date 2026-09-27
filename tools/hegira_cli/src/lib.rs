@@ -896,7 +896,7 @@ fn planned_content<'a>(plan: &'a ChangePlan, path: &str) -> Result<&'a [u8], Cli
     plan.changes()
         .iter()
         .find(|change| change.path().as_str() == path)
-        .map(PlannedFileChange::resulting_content)
+        .and_then(PlannedFileChange::resulting_content)
         .ok_or_else(|| {
             CliDiagnostic::internal(format!(
                 "resource emitter omitted required intermediate source `{path}`"
