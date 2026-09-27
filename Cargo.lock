@@ -5403,6 +5403,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8ecb6da28b8a351d773b68d5825ac39017e680750f980f3a1a85cd8dd28a47c1"
 
 [[package]]
+name = "upgrade_test_support"
+version = "0.6.0"
+dependencies = [
+ "serde",
+ "sha2 0.10.9",
+ "toml",
+]
+
+[[package]]
 name = "url"
 version = "2.5.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"

@@ -76,6 +76,8 @@ ownership:
 | `tools/hegira_cli/` | Source-runnable application creation and inspection plus reviewable layered resource and application-owned migration generation with stable diagnostics and exit outcomes |
 | `tools/resource_generator/` | Typed layered resource specifications plus inward-layer, provider-specific SQLx persistence, explicit Axum/OpenAPI and Leptos UI composition, and append-only migration planning |
 | `tools/template_renderer/` | Reusable deterministic render core with no-follow, digest-verified package-source loading and a separate disposable repository-validation adapter; it is not a public CLI |
+| `tools/upgrade_test_support/` | Test-only authenticated access to immutable, content-addressed released-application baselines |
+| `test-fixtures/application-baselines/` | Closed released-source baseline data for deterministic offline application-upgrade tests |
 
 The canonical rendered application is an independent Cargo workspace, consumes framework
 packages from a pinned release source, and records its generation identity, installed

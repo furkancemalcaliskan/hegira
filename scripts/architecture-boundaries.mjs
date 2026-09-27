@@ -75,6 +75,7 @@ export const WORKSPACE_DEPENDENCY_POLICY = Object.freeze({
   ],
   resource_generator: ["application_manifest", "application_mutator"],
   template_renderer: ["application_manifest"],
+  upgrade_test_support: [],
 });
 
 const packageContract = (role, disposition, issues = []) =>
@@ -109,6 +110,7 @@ export const WORKSPACE_PACKAGE_POLICY = Object.freeze({
   hegira_cli: packageContract("tool", "retain"),
   resource_generator: packageContract("tool", "retain"),
   template_renderer: packageContract("tool", "refactor-and-retain", [148]),
+  upgrade_test_support: packageContract("tool", "retain"),
 });
 
 export const REPOSITORY_OWNERSHIP_POLICY = Object.freeze({

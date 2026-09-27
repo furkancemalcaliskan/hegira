@@ -29,6 +29,7 @@ members = [
     "tools/hegira_cli",
     "tools/resource_generator",
     "tools/template_renderer",
+    "tools/upgrade_test_support",
 ]
 
 [profile.wasm-release]

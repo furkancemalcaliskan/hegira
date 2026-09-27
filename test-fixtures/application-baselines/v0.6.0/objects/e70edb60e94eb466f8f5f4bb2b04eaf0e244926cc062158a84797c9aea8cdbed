@@ -1,0 +1,881 @@
+use serde::Deserialize;
+use std::net::SocketAddr;
+
+pub use background_jobs::DurableWorkerConfig as DurableJobsConfig;
+pub use persistence::{DatabaseBackend, DatabaseConfig};
+pub use platform_core::CompiledCapabilities;
+pub use runtime::RuntimeRole;
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct AppConfig {
+    pub environment: String,
+    pub application: ApplicationConfig,
+    pub server: ServerConfig,
+    pub runtime: RuntimeConfig,
+    pub worker_operations: WorkerOperationsConfig,
+    pub startup: StartupConfig,
+    pub database: DatabaseConfig,
+    pub security: SecurityConfig,
+    pub sessions: SessionsConfig,
+    pub oauth: OAuthConfig,
+    pub mailer: MailerConfig,
+    pub cache: CacheConfig,
+    pub storage: StorageConfig,
+    pub search: SearchConfig,
+    pub scheduler: SchedulerConfig,
+    pub jobs: JobsConfig,
+    pub audit: AuditConfig,
+    pub settings: SettingsConfig,
+    pub openapi: OpenApiConfig,
+    pub metrics: MetricsConfig,
+    pub telemetry: TelemetryConfig,
+    pub health: HealthConfig,
+    pub seed: SeedConfig,
+    pub logging: LoggingConfig,
+    // hegira:module-config-fields
+    // hegira:module-config-fields:end
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ApplicationConfig {
+    pub name: String,
+    pub public_url: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ServerConfig {
+    pub addr: SocketAddr,
+    pub request_timeout_seconds: u64,
+    pub body_limit_bytes: usize,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct RuntimeConfig {
+    pub role: RuntimeRole,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct WorkerOperationsConfig {
+    pub enabled: bool,
+    pub addr: SocketAddr,
+    pub heartbeat_grace_seconds: u64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct StartupConfig {
+    pub ensure_database: bool,
+    pub seed_identity: bool,
+    pub scheduler: bool,
+    pub durable_jobs: bool,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct SecurityConfig {
+    pub jwt_secret: String,
+    pub trusted_proxies: Vec<String>,
+    pub cors: CorsConfig,
+    pub rate_limit: RateLimitConfig,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct CorsConfig {
+    pub enabled: bool,
+    pub allowed_origins: Vec<String>,
+    pub allow_credentials: bool,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct RateLimitConfig {
+    pub enabled: bool,
+    pub backend: RateLimitBackend,
+    pub max_requests: usize,
+    pub window_seconds: u64,
+    pub redis: RedisRateLimitConfig,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RateLimitBackend {
+    Memory,
+    Redis,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct RedisRateLimitConfig {
+    pub url: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct SessionsConfig {
+    pub backend: SessionBackend,
+    pub sliding_ttl_seconds: u64,
+    pub max_lifetime_seconds: u64,
+    pub refresh_threshold_percent: u8,
+    pub redis: RedisSessionConfig,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SessionBackend {
+    Database,
+    Redis,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct RedisSessionConfig {
+    pub url: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct OAuthConfig {
+    pub enabled: bool,
+    pub state_ttl_seconds: i64,
+    pub providers: OAuthProvidersConfig,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct OAuthProvidersConfig {
+    pub google: OAuthProviderConfig,
+    pub github: OAuthProviderConfig,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct OAuthProviderConfig {
+    pub enabled: bool,
+    pub client_id: String,
+    pub client_secret: String,
+    pub redirect_uri: String,
+    pub authorization_url: String,
+    pub token_url: String,
+    pub userinfo_url: String,
+    pub scopes: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct MailerConfig {
+    pub enabled: bool,
+    pub backend: MailerBackend,
+    pub from: String,
+    pub smtp: SmtpMailerConfig,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum MailerBackend {
+    Null,
+    Log,
+    Smtp,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct SmtpMailerConfig {
+    pub host: String,
+    pub port: u16,
+    pub username: Option<String>,
+    pub password: Option<String>,
+    pub starttls: bool,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct CacheConfig {
+    pub enabled: bool,
+    pub backend: CacheBackend,
+    pub authorization_ttl_seconds: u64,
+    pub redis: RedisCacheConfig,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum CacheBackend {
+    Null,
+    Memory,
+    Redis,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct RedisCacheConfig {
+    pub url: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct StorageConfig {
+    pub enabled: bool,
+    pub backend: StorageBackend,
+    pub local: LocalStorageConfig,
+    pub s3: S3StorageConfig,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum StorageBackend {
+    Null,
+    Local,
+    S3,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct LocalStorageConfig {
+    pub root: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct S3StorageConfig {
+    pub bucket: String,
+    pub region: String,
+    pub endpoint_url: Option<String>,
+    pub force_path_style: bool,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct SearchConfig {
+    pub enabled: bool,
+    pub backend: SearchBackend,
+    pub index_prefix: String,
+    pub task_timeout_milliseconds: u64,
+    pub meilisearch: MeilisearchConfig,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SearchBackend {
+    Null,
+    Meilisearch,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct MeilisearchConfig {
+    pub url: String,
+    pub api_key: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct SchedulerConfig {
+    pub enabled: bool,
+    pub run_on_startup: bool,
+    pub cleanup_expired_sessions_interval_seconds: u64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct JobsConfig {
+    pub durable: DurableJobsConfig,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct AuditConfig {
+    pub enabled: bool,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct SettingsConfig {
+    pub enabled: bool,
+    pub cache_ttl_seconds: u64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct OpenApiConfig {
+    pub enabled: bool,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct MetricsConfig {
+    pub enabled: bool,
+    pub path: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct TelemetryConfig {
+    pub enabled: bool,
+    pub protocol: OtlpProtocol,
+    pub endpoint: String,
+    pub timeout_milliseconds: u64,
+    pub sample_ratio: f64,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum OtlpProtocol {
+    Grpc,
+    HttpProtobuf,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct HealthConfig {
+    pub readiness_timeout_milliseconds: u64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct SeedConfig {
+    pub seed_admin: bool,
+    pub admin_username: String,
+    pub admin_password: String,
+}
+
+impl identity_sqlx::identity::seed::IdentitySeedSettings for SeedConfig {
+    fn seed_admin(&self) -> bool {
+        self.seed_admin
+    }
+
+    fn admin_username(&self) -> &str {
+        &self.admin_username
+    }
+
+    fn admin_password(&self) -> &str {
+        &self.admin_password
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct LoggingConfig {
+    pub filter: String,
+}
+
+impl AppConfig {
+    pub fn load() -> Result<Self, configuration::ConfigError> {
+        let profile = configuration::Profile::from_environment("APP_ENV", "development");
+
+        profile
+            .builder("config", "APP")
+            .set_default("environment", "development")?
+            .set_default("application.name", "Application")?
+            .set_default("application.public_url", "http://127.0.0.1:3000")?
+            .set_default("server.addr", "127.0.0.1:3000")?
+            .set_default("server.request_timeout_seconds", 30)?
+            .set_default("server.body_limit_bytes", 2_097_152)?
+            .set_default("runtime.role", "all")?
+            .set_default("worker_operations.enabled", false)?
+            .set_default("worker_operations.addr", "127.0.0.1:9091")?
+            .set_default("worker_operations.heartbeat_grace_seconds", 30)?
+            .set_default("startup.ensure_database", true)?
+            .set_default("startup.seed_identity", true)?
+            .set_default("startup.scheduler", false)?
+            .set_default("startup.durable_jobs", true)?
+            .set_default(
+                "database.url",
+                "postgres://postgres@localhost:5432/application",
+            )?
+            .set_default("database.backend", "postgres")?
+            .set_default("database.max_connections", 5)?
+            .set_default("database.auto_migrate", true)?
+            .set_default("security.jwt_secret", ["development", "only"].join("-"))?
+            .set_default("security.trusted_proxies", Vec::<String>::new())?
+            .set_default("security.cors.enabled", true)?
+            .set_default(
+                "security.cors.allowed_origins",
+                vec!["http://127.0.0.1:3000".to_string()],
+            )?
+            .set_default("security.cors.allow_credentials", false)?
+            .set_default("security.rate_limit.enabled", true)?
+            .set_default("security.rate_limit.backend", "memory")?
+            .set_default("security.rate_limit.max_requests", 20)?
+            .set_default("security.rate_limit.window_seconds", 60)?
+            .set_default("security.rate_limit.redis.url", "redis://127.0.0.1:6379")?
+            .set_default("sessions.backend", "database")?
+            .set_default("sessions.sliding_ttl_seconds", 1800)?
+            .set_default("sessions.max_lifetime_seconds", 3600)?
+            .set_default("sessions.refresh_threshold_percent", 25)?
+            .set_default("sessions.redis.url", "redis://127.0.0.1:6379")?
+            .set_default("oauth.enabled", false)?
+            .set_default("oauth.state_ttl_seconds", 600)?
+            .set_default("oauth.providers.google.enabled", false)?
+            .set_default("oauth.providers.google.client_id", "")?
+            .set_default("oauth.providers.google.client_secret", "")?
+            .set_default("oauth.providers.google.redirect_uri", "")?
+            .set_default(
+                "oauth.providers.google.authorization_url",
+                "https://accounts.google.com/o/oauth2/v2/auth",
+            )?
+            .set_default(
+                "oauth.providers.google.token_url",
+                "https://oauth2.googleapis.com/token",
+            )?
+            .set_default(
+                "oauth.providers.google.userinfo_url",
+                "https://openidconnect.googleapis.com/v1/userinfo",
+            )?
+            .set_default(
+                "oauth.providers.google.scopes",
+                vec![
+                    "openid".to_string(),
+                    "email".to_string(),
+                    "profile".to_string(),
+                ],
+            )?
+            .set_default("oauth.providers.github.enabled", false)?
+            .set_default("oauth.providers.github.client_id", "")?
+            .set_default("oauth.providers.github.client_secret", "")?
+            .set_default("oauth.providers.github.redirect_uri", "")?
+            .set_default(
+                "oauth.providers.github.authorization_url",
+                "https://github.com/login/oauth/authorize",
+            )?
+            .set_default(
+                "oauth.providers.github.token_url",
+                "https://github.com/login/oauth/access_token",
+            )?
+            .set_default(
+                "oauth.providers.github.userinfo_url",
+                "https://api.github.com/user",
+            )?
+            .set_default(
+                "oauth.providers.github.scopes",
+                vec!["read:user".to_string(), "user:email".to_string()],
+            )?
+            .set_default("mailer.enabled", false)?
+            .set_default("mailer.backend", "log")?
+            .set_default("mailer.from", "no-reply@example.com")?
+            .set_default("mailer.smtp.host", "localhost")?
+            .set_default("mailer.smtp.port", 1025)?
+            .set_default("mailer.smtp.username", Option::<String>::None)?
+            .set_default("mailer.smtp.password", Option::<String>::None)?
+            .set_default("mailer.smtp.starttls", false)?
+            .set_default("cache.enabled", false)?
+            .set_default("cache.backend", "null")?
+            .set_default("cache.authorization_ttl_seconds", 60)?
+            .set_default("cache.redis.url", "redis://127.0.0.1:6379")?
+            .set_default("storage.enabled", false)?
+            .set_default("storage.backend", "null")?
+            .set_default("storage.local.root", "storage/development")?
+            .set_default("storage.s3.bucket", "")?
+            .set_default("storage.s3.region", "us-east-1")?
+            .set_default("storage.s3.endpoint_url", Option::<String>::None)?
+            .set_default("storage.s3.force_path_style", true)?
+            .set_default("search.enabled", false)?
+            .set_default("search.backend", "null")?
+            .set_default("search.index_prefix", "application")?
+            .set_default("search.task_timeout_milliseconds", 10_000)?
+            .set_default("search.meilisearch.url", "http://127.0.0.1:7700")?
+            .set_default("search.meilisearch.api_key", Option::<String>::None)?
+            .set_default("scheduler.enabled", false)?
+            .set_default("scheduler.run_on_startup", true)?
+            .set_default("scheduler.cleanup_expired_sessions_interval_seconds", 300)?
+            .set_default("jobs.durable.enabled", false)?
+            .set_default("jobs.durable.poll_interval_milliseconds", 1_000)?
+            .set_default("jobs.durable.batch_size", 20)?
+            .set_default("jobs.durable.lock_timeout_seconds", 300)?
+            .set_default("audit.enabled", true)?
+            .set_default("settings.enabled", true)?
+            .set_default("settings.cache_ttl_seconds", 60)?
+            .set_default("openapi.enabled", false)?
+            .set_default("metrics.enabled", false)?
+            .set_default("metrics.path", "/metrics")?
+            .set_default("telemetry.enabled", false)?
+            .set_default("telemetry.protocol", "grpc")?
+            .set_default("telemetry.endpoint", "http://127.0.0.1:4317")?
+            .set_default("telemetry.timeout_milliseconds", 5_000)?
+            .set_default("telemetry.sample_ratio", 1.0)?
+            .set_default("health.readiness_timeout_milliseconds", 2_000)?
+            .set_default("seed.seed_admin", true)?
+            .set_default("seed.admin_username", "admin@example.com")?
+            .set_default(
+                "seed.admin_password",
+                ["local", "admin", "password"].join("-"),
+            )?
+            .set_default("logging.filter", "info")?
+            .set_override("environment", profile.name())?
+            .build()?
+            .try_deserialize()
+    }
+
+    pub fn validate_structure(&self) -> Result<(), String> {
+        validate_http_url("application.public_url", &self.application.public_url)?;
+
+        if self.database.max_connections == 0 {
+            return Err("database.max_connections must be greater than zero".to_string());
+        }
+        match self.database.backend {
+            DatabaseBackend::Postgres
+                if !(self.database.url.starts_with("postgres://")
+                    || self.database.url.starts_with("postgresql://")) =>
+            {
+                return Err("database.backend=postgres requires a postgres URL".to_string());
+            }
+            DatabaseBackend::Sqlite if !self.database.url.starts_with("sqlite:") => {
+                return Err("database.backend=sqlite requires a sqlite URL".to_string());
+            }
+            _ => {}
+        }
+        if self.server.request_timeout_seconds == 0 {
+            return Err("server.request_timeout_seconds must be greater than zero".to_string());
+        }
+        if self.server.body_limit_bytes == 0 {
+            return Err("server.body_limit_bytes must be greater than zero".to_string());
+        }
+        if self.metrics.enabled && !self.metrics.path.starts_with('/') {
+            return Err("metrics.path must start with /".to_string());
+        }
+        if self.metrics.enabled && matches!(self.metrics.path.as_str(), "/healthz" | "/readyz") {
+            return Err("metrics.path must not replace a health endpoint".to_string());
+        }
+        if self.health.readiness_timeout_milliseconds == 0 {
+            return Err(
+                "health.readiness_timeout_milliseconds must be greater than zero".to_string(),
+            );
+        }
+        for network in &self.security.trusted_proxies {
+            let parsed = network.parse::<ipnet::IpNet>().map_err(|_| {
+                format!(
+                    "security.trusted_proxies entry `{network}` must be a valid IPv4 or IPv6 CIDR"
+                )
+            })?;
+            if parsed.prefix_len() == 0 {
+                return Err(format!(
+                    "security.trusted_proxies entry `{network}` must not trust every address"
+                ));
+            }
+        }
+        if self.security.rate_limit.enabled {
+            if self.security.rate_limit.max_requests == 0 {
+                return Err(
+                    "security.rate_limit.max_requests must be greater than zero".to_string()
+                );
+            }
+            if self.security.rate_limit.window_seconds == 0 {
+                return Err(
+                    "security.rate_limit.window_seconds must be greater than zero".to_string(),
+                );
+            }
+            if self.security.rate_limit.backend == RateLimitBackend::Redis {
+                validate_redis_url(
+                    "security.rate_limit.redis.url",
+                    &self.security.rate_limit.redis.url,
+                )?;
+            }
+        }
+        if self.sessions.backend == SessionBackend::Redis {
+            validate_redis_url("sessions.redis.url", &self.sessions.redis.url)?;
+        }
+        if self.cache.enabled {
+            if self.cache.authorization_ttl_seconds == 0 {
+                return Err("cache.authorization_ttl_seconds must be greater than zero".to_string());
+            }
+            if self.cache.backend == CacheBackend::Redis {
+                validate_redis_url("cache.redis.url", &self.cache.redis.url)?;
+            }
+        }
+        if self.telemetry.enabled {
+            validate_http_url("telemetry.endpoint", &self.telemetry.endpoint)?;
+            if self.telemetry.timeout_milliseconds == 0 {
+                return Err("telemetry.timeout_milliseconds must be greater than zero".to_string());
+            }
+            if !self.telemetry.sample_ratio.is_finite()
+                || !(0.0..=1.0).contains(&self.telemetry.sample_ratio)
+            {
+                return Err("telemetry.sample_ratio must be between 0.0 and 1.0".to_string());
+            }
+        }
+        if self.search.enabled {
+            if self.search.index_prefix.trim().is_empty() {
+                return Err("search.index_prefix must not be empty".to_string());
+            }
+            if self.search.task_timeout_milliseconds == 0 {
+                return Err(
+                    "search.task_timeout_milliseconds must be greater than zero".to_string()
+                );
+            }
+            if self.search.backend == SearchBackend::Meilisearch {
+                validate_http_url("search.meilisearch.url", &self.search.meilisearch.url)?;
+            }
+        }
+        if self.worker_operations.enabled {
+            if self.runtime.role != RuntimeRole::Worker {
+                return Err("worker_operations.enabled requires runtime.role=worker".to_string());
+            }
+            if self.worker_operations.heartbeat_grace_seconds == 0 {
+                return Err(
+                    "worker_operations.heartbeat_grace_seconds must be greater than zero"
+                        .to_string(),
+                );
+            }
+        }
+        if self.scheduler.enabled && self.scheduler.cleanup_expired_sessions_interval_seconds == 0 {
+            return Err(
+                "scheduler.cleanup_expired_sessions_interval_seconds must be greater than zero"
+                    .to_string(),
+            );
+        }
+
+        if self.jobs.durable.enabled {
+            if self.jobs.durable.poll_interval_milliseconds == 0 {
+                return Err(
+                    "jobs.durable.poll_interval_milliseconds must be greater than zero".to_string(),
+                );
+            }
+            if self.jobs.durable.batch_size == 0 {
+                return Err("jobs.durable.batch_size must be greater than zero".to_string());
+            }
+            if self.jobs.durable.lock_timeout_seconds == 0 {
+                return Err(
+                    "jobs.durable.lock_timeout_seconds must be greater than zero".to_string(),
+                );
+            }
+        }
+
+        if self.settings.enabled && self.settings.cache_ttl_seconds == 0 {
+            return Err("settings.cache_ttl_seconds must be greater than zero".to_string());
+        }
+
+        if self.sessions.sliding_ttl_seconds == 0 {
+            return Err("sessions.sliding_ttl_seconds must be greater than zero".to_string());
+        }
+
+        if self.sessions.max_lifetime_seconds < self.sessions.sliding_ttl_seconds {
+            return Err(
+                "sessions.max_lifetime_seconds must be greater than or equal to sessions.sliding_ttl_seconds"
+                    .to_string(),
+            );
+        }
+
+        if self.sessions.refresh_threshold_percent > 100 {
+            return Err("sessions.refresh_threshold_percent must be between 0 and 100".to_string());
+        }
+
+        if self.oauth.enabled {
+            if self.oauth.state_ttl_seconds <= 0 {
+                return Err("oauth.state_ttl_seconds must be greater than zero".to_string());
+            }
+
+            if !self.oauth.providers.google.enabled && !self.oauth.providers.github.enabled {
+                return Err(
+                    "oauth.enabled requires at least one enabled oauth.providers entry".to_string(),
+                );
+            }
+
+            validate_oauth_provider("oauth.providers.google", &self.oauth.providers.google)?;
+            validate_oauth_provider("oauth.providers.github", &self.oauth.providers.github)?;
+        }
+
+        if self.mailer.enabled && self.mailer.backend == MailerBackend::Smtp {
+            if self.mailer.from.trim().is_empty() {
+                return Err("mailer.from must not be empty when SMTP is enabled".to_string());
+            }
+            if self.mailer.smtp.host.trim().is_empty() {
+                return Err("mailer.smtp.host must not be empty when SMTP is enabled".to_string());
+            }
+            if self.mailer.smtp.port == 0 {
+                return Err("mailer.smtp.port must be greater than zero".to_string());
+            }
+            if self.mailer.smtp.username.is_some() != self.mailer.smtp.password.is_some() {
+                return Err(
+                    "mailer.smtp.username and mailer.smtp.password must be configured together"
+                        .to_string(),
+                );
+            }
+        }
+
+        if self.storage.enabled && self.storage.backend == StorageBackend::S3 {
+            if self.storage.s3.bucket.trim().is_empty() {
+                return Err("storage.s3.bucket must not be empty when S3 is enabled".to_string());
+            }
+            if self.storage.s3.region.trim().is_empty() {
+                return Err("storage.s3.region must not be empty when S3 is enabled".to_string());
+            }
+            if let Some(endpoint) = &self.storage.s3.endpoint_url {
+                validate_http_url("storage.s3.endpoint_url", endpoint)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn validate_production_policy(&self) -> Result<(), String> {
+        if !self.is_production() {
+            return Ok(());
+        }
+
+        if self.security.jwt_secret == "change-me-in-production"
+            || self.security.jwt_secret.len() < 32
+        {
+            return Err(
+                "production requires security.jwt_secret with at least 32 characters".to_string(),
+            );
+        }
+
+        if self.seed.seed_admin {
+            return Err("production must not enable seed.seed_admin".to_string());
+        }
+
+        validate_https_url("application.public_url", &self.application.public_url)?;
+
+        if self.security.cors.enabled {
+            if self.security.cors.allowed_origins.is_empty() {
+                return Err(
+                    "production security.cors.allowed_origins must not be empty".to_string()
+                );
+            }
+            for origin in &self.security.cors.allowed_origins {
+                validate_https_origin("security.cors.allowed_origins", origin)?;
+            }
+        }
+
+        if self.openapi.enabled {
+            return Err("production must not enable openapi.enabled".to_string());
+        }
+
+        if self.database.backend == DatabaseBackend::Sqlite && self.runtime.role != RuntimeRole::All
+        {
+            return Err(
+                "production database.backend=sqlite requires runtime.role=all; split runtimes cannot safely share a local database"
+                    .to_string(),
+            );
+        }
+
+        Ok(())
+    }
+
+    pub fn validate_capabilities(&self, compiled: CompiledCapabilities) -> Result<(), String> {
+        let mut missing = Vec::new();
+
+        match self.database.backend {
+            DatabaseBackend::Postgres if !compiled.db_postgres => {
+                missing.push("database.backend=postgres requires the db-postgres Cargo feature")
+            }
+            DatabaseBackend::Sqlite if !compiled.db_sqlite => {
+                missing.push("database.backend=sqlite requires the db-sqlite Cargo feature")
+            }
+            _ => {}
+        }
+        if self.sessions.backend == SessionBackend::Redis && !compiled.cache_redis {
+            missing.push("sessions.backend=redis requires the cache-redis Cargo feature");
+        }
+        if self.security.rate_limit.enabled
+            && self.security.rate_limit.backend == RateLimitBackend::Redis
+            && !compiled.cache_redis
+        {
+            missing
+                .push("security.rate_limit.backend=redis requires the cache-redis Cargo feature");
+        }
+        if self.cache.enabled && self.cache.backend == CacheBackend::Redis && !compiled.cache_redis
+        {
+            missing.push("cache.backend=redis requires the cache-redis Cargo feature");
+        }
+        if self.mailer.enabled
+            && self.mailer.backend == MailerBackend::Smtp
+            && !compiled.mailer_smtp
+        {
+            missing.push("mailer.backend=smtp requires the mailer-smtp Cargo feature");
+        }
+        if self.storage.enabled
+            && self.storage.backend == StorageBackend::S3
+            && !compiled.storage_s3
+        {
+            missing.push("storage.backend=s3 requires the storage-s3 Cargo feature");
+        }
+        if self.search.enabled
+            && self.search.backend == SearchBackend::Meilisearch
+            && !compiled.search_meilisearch
+        {
+            missing
+                .push("search.backend=meilisearch requires the search-meilisearch Cargo feature");
+        }
+        if self.metrics.enabled && !compiled.metrics_prometheus {
+            missing.push("metrics.enabled=true requires the metrics-prometheus Cargo feature");
+        }
+        if self.telemetry.enabled && !compiled.otel_otlp {
+            missing.push("telemetry.enabled=true requires the otel-otlp Cargo feature");
+        }
+        if self.openapi.enabled && !compiled.openapi {
+            missing.push("openapi.enabled=true requires the openapi Cargo feature");
+        }
+
+        if missing.is_empty() {
+            Ok(())
+        } else {
+            Err(format!(
+                "runtime configuration requires capabilities not present in the binary:\n- {}",
+                missing.join("\n- ")
+            ))
+        }
+    }
+
+    pub fn is_production(&self) -> bool {
+        self.environment.eq_ignore_ascii_case("production")
+    }
+}
+
+impl configuration::ValidateConfiguration for AppConfig {
+    type Capabilities = CompiledCapabilities;
+
+    fn validate_structure(&self) -> Result<(), String> {
+        AppConfig::validate_structure(self)
+    }
+
+    fn validate_capabilities(&self, capabilities: Self::Capabilities) -> Result<(), String> {
+        AppConfig::validate_capabilities(self, capabilities)
+    }
+
+    fn validate_production_policy(&self) -> Result<(), String> {
+        AppConfig::validate_production_policy(self)
+    }
+}
+
+fn validate_oauth_provider(name: &str, provider: &OAuthProviderConfig) -> Result<(), String> {
+    if !provider.enabled {
+        return Ok(());
+    }
+
+    if provider.client_id.is_empty() || provider.client_secret.is_empty() {
+        return Err(format!(
+            "{name}.client_id and {name}.client_secret must not be empty"
+        ));
+    }
+
+    if provider.redirect_uri.is_empty() {
+        return Err(format!("{name}.redirect_uri must not be empty"));
+    }
+
+    validate_http_url(&format!("{name}.redirect_uri"), &provider.redirect_uri)?;
+    validate_http_url(
+        &format!("{name}.authorization_url"),
+        &provider.authorization_url,
+    )?;
+    validate_http_url(&format!("{name}.token_url"), &provider.token_url)?;
+    validate_http_url(&format!("{name}.userinfo_url"), &provider.userinfo_url)?;
+
+    Ok(())
+}
+
+fn validate_http_url(key: &str, value: &str) -> Result<reqwest::Url, String> {
+    let url =
+        reqwest::Url::parse(value).map_err(|_| format!("{key} must be a valid http(s) URL"))?;
+    if !matches!(url.scheme(), "http" | "https") || url.host_str().is_none() {
+        return Err(format!("{key} must be a valid http(s) URL"));
+    }
+
+    Ok(url)
+}
+
+fn validate_https_origin(key: &str, value: &str) -> Result<(), String> {
+    let url = validate_http_url(key, value)?;
+    if url.scheme() != "https"
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.path() != "/"
+        || url.query().is_some()
+        || url.fragment().is_some()
+    {
+        return Err(format!("{key} must contain an exact HTTPS origin"));
+    }
+
+    Ok(())
+}
+
+fn validate_https_url(key: &str, value: &str) -> Result<(), String> {
+    let url = validate_http_url(key, value)?;
+    if url.scheme() != "https" || !url.username().is_empty() || url.password().is_some() {
+        return Err(format!(
+            "{key} must be a valid HTTPS URL without credentials"
+        ));
+    }
+
+    Ok(())
+}
+
+fn validate_redis_url(key: &str, value: &str) -> Result<(), String> {
+    let url = reqwest::Url::parse(value).map_err(|_| format!("{key} must be a valid Redis URL"))?;
+    if !matches!(url.scheme(), "redis" | "rediss") || url.host_str().is_none() {
+        return Err(format!("{key} must be a valid redis:// or rediss:// URL"));
+    }
+
+    Ok(())
+}
+
