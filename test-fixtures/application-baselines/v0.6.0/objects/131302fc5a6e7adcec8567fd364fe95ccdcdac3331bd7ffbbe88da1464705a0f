@@ -1,0 +1,17 @@
+environment: development
+application:
+  name: Application
+server:
+  addr: 127.0.0.1:3000
+  request_timeout_seconds: 30
+  body_limit_bytes: 2097152
+database:
+  backend: postgres
+  url: postgres://postgres@127.0.0.1:5432/application
+  max_connections: 5
+  auto_migrate: true
+startup:
+  ensure_database: true
+logging:
+  filter: info
+

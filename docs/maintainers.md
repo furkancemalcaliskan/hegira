@@ -214,6 +214,16 @@ staging cleanup, sentinel preservation, and a successful retry. Catalog failure
 is tested through the CLI dispatcher with a disposable missing source. These
 tests neither build generated applications nor require network access.
 
+Before the mutation and CLI suites, the same tooling gate authenticates the
+closed v0.6.0 released-application baseline matrix through
+`upgrade_test_support`. It verifies the pinned tag object, commit, source tree,
+package digest, generated lock revision, every sorted tree manifest, and every
+referenced content object. Default, minimal, and Identity-added applications
+are covered for SQLite and PostgreSQL. Normal validation reads only committed
+data, executes no fixture content, and performs no Git or network operation.
+The maintainer-only importer writes an absent destination so a regenerated
+fixture can be recursively compared before an intentional baseline update.
+
 The same gate validates `application_mutator` plan ordering, explicit absent and
 content-digest preconditions, duplicate and conflicting path diagnostics,
 canonical relative-path enforcement, content-redacted summaries, additive

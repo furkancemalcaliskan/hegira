@@ -1,0 +1,112 @@
+use app_infrastructure::{identity::services::AppServices, identity_config::AppConfig};
+use leptos::prelude::provide_context;
+
+#[derive(Clone)]
+pub struct IdentityRuntime {
+    services: std::sync::Arc<AppServices>,
+    leptos: identity_leptos::identity::server::IdentityLeptosServices,
+    cookie: identity_http::cookie::IdentityCookieSettings,
+    policy: http_support::policy::CookieBffPolicy,
+    rate_limiter: http_support::rate_limit::RateLimiter,
+    openapi: bool,
+}
+
+impl IdentityRuntime {
+    pub fn preflight() -> Result<AppConfig, String> {
+        let config = AppConfig::load().map_err(|error| format!("failed to load Identity configuration: {error}"))?;
+        configuration::validate(&config, platform_core::CompiledCapabilities {
+            db_postgres: cfg!(feature = "db-postgres"), db_sqlite: cfg!(feature = "db-sqlite"),
+            cache_redis: false, mailer_smtp: false, storage_s3: false,
+            search_meilisearch: false, metrics_prometheus: false, otel_otlp: false,
+            openapi: cfg!(feature = "openapi"),
+        }).map_err(|error| error.to_string())?;
+        if config.mailer.enabled || config.cache.enabled || config.search.enabled || config.storage.enabled
+            || config.telemetry.enabled || config.metrics.enabled || config.jobs.durable.enabled
+            || config.worker_operations.enabled || config.startup.scheduler {
+            return Err("Identity installation does not compose distributed providers or background workers".to_owned());
+        }
+        if !matches!(config.security.rate_limit.backend, app_infrastructure::identity_config::RateLimitBackend::Memory) {
+            return Err("Identity installation supports only memory rate limiting".to_owned());
+        }
+        if !matches!(config.sessions.backend, app_infrastructure::identity_config::SessionBackend::Database) {
+            return Err("Identity installation supports only database-backed sessions".to_owned());
+        }
+        Ok(config)
+    }
+
+    pub async fn initialize(database: persistence::DatabasePool, config: AppConfig) -> Result<Self, String> {
+        if config.startup.seed_identity {
+            let repository = identity_sqlx::identity::IdentityRepositoryAdapter::new(database.clone());
+            identity_sqlx::identity::seed::seed_identity(
+                &repository,
+                &app_infrastructure::security::password_hasher::Argon2PasswordHasher,
+                &config.seed,
+            ).await.map_err(|error| format!("failed to seed Identity: {error}"))?;
+        }
+        let cache = cache::CacheAdapter::from_settings(&cache::CacheSettings {
+            enabled: false, backend: cache::CacheBackend::Null, redis_url: String::new(),
+        }).map_err(|error| error.to_string())?;
+        let search = search::SearchAdapter::from_settings(&search::SearchSettings {
+            enabled: false, backend: search::SearchBackend::Null, index_prefix: config.search.index_prefix.clone(),
+            task_timeout_milliseconds: config.search.task_timeout_milliseconds,
+            meilisearch: search::MeilisearchSettings { url: String::new(), api_key: None },
+        }).map_err(|error| error.to_string())?;
+        let mailer = mail::MailerAdapter::from_settings(&mail::MailerSettings {
+            enabled: false, backend: mail::MailerBackend::Null, from: config.mailer.from.clone(),
+            smtp: mail::SmtpSettings { host: String::new(), port: 0, username: None, password: None, starttls: false },
+        }).map_err(|error| error.to_string())?;
+        let services = std::sync::Arc::new(AppServices::new(database, &config, cache, search, mailer));
+        let leptos = identity_leptos::identity::server::IdentityLeptosServices::new(
+            services.auth.clone(), services.oauth.clone(), services.users.clone(), services.permissions.clone(),
+            identity_http::cookie::SESSION_COOKIE,
+        );
+        let cookie = identity_http::cookie::IdentityCookieSettings {
+            secure: config.is_production(), max_lifetime_seconds: config.sessions.max_lifetime_seconds as i64,
+        };
+        let policy = identity_http::policy::IdentityTransportPolicies::from_public_url(&config.application.public_url)
+            .map_err(|error| format!("invalid Identity transport policy: {error}"))?.cookie_bff;
+        let rate_limiter = http_support::rate_limit::RateLimiter::from_options(
+            &http_support::rate_limit::RateLimitOptions {
+                enabled: config.security.rate_limit.enabled,
+                max_requests: config.security.rate_limit.max_requests,
+                window: std::time::Duration::from_secs(config.security.rate_limit.window_seconds),
+                backend: http_support::rate_limit::RateLimitBackend::Memory,
+            },
+            &config.security.trusted_proxies,
+        ).map_err(|error| format!("invalid Identity rate limit configuration: {error}"))?;
+        Ok(Self { services, leptos, cookie, policy, rate_limiter, openapi: config.openapi.enabled && !config.is_production() })
+    }
+
+    pub fn provide_leptos_context(&self) {
+        provide_context(self.leptos.clone());
+        provide_context(self.cookie);
+    }
+
+    #[allow(dead_code)] // Becomes active after the first application resource is generated.
+    pub fn services(&self) -> &AppServices {
+        &self.services
+    }
+
+    pub fn bearer_routes(&self) -> axum::Router<leptos::prelude::LeptosOptions> {
+        let router = identity_http::bearer_api_routes(identity_http::state::IdentityHttpState::new(
+            self.services.auth.clone(), self.services.oauth.clone(), self.services.users.clone(), self.services.permissions.clone(),
+        )).with_state(());
+        #[cfg(feature = "openapi")]
+        let router = if self.openapi {
+            let document = identity_http::openapi::document();
+            // hegira:resource-openapi-documents
+            // hegira:resource-openapi-documents:end
+            router.merge(identity_http::openapi::routes_with_document(document))
+        } else { router };
+        let _ = self.openapi;
+        router
+    }
+
+    pub fn cookie_policy(&self) -> http_support::csrf::CsrfPolicy {
+        self.policy.csrf()
+    }
+
+    pub fn rate_limiter(&self) -> http_support::rate_limit::RateLimiter {
+        self.rate_limiter.clone()
+    }
+}

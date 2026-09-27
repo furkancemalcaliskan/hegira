@@ -40,7 +40,10 @@ automatic module discovery, application upgrades, or registry distribution.
 │   ├── application_mutator/ existing-application change-plan core
 │   ├── hegira_cli/          source-runnable CLI command shell
 │   ├── resource_generator/  layered resource generation and composition core
-│   └── template_renderer/   render core and repository-validation adapter
+│   ├── template_renderer/   render core and repository-validation adapter
+│   └── upgrade_test_support/ authenticated released-application test data
+├── test-fixtures/
+│   └── application-baselines/ immutable content-addressed upgrade baselines
 ├── docs/                    current technical and maintainer documentation
 ├── scripts/                 validation and release helpers
 ├── Cargo.toml               virtual framework workspace manifest
@@ -175,6 +178,7 @@ The direct local dependency allowlist is enforced from locked Cargo metadata by
 | `hegira_cli` | `application_manifest`, `application_mutator`, `resource_generator`, `template_renderer` |
 | `resource_generator` | `application_manifest`, `application_mutator` |
 | `template_renderer` | `application_manifest` |
+| `upgrade_test_support` | None |
 
 Normal, optional, development, and build dependencies use the same ownership
 checks. The retired package names `hegira`, `domain_shared`, `domain`,
@@ -654,6 +658,16 @@ application mutation.
 The bundled package does not yet declare a concrete application upgrade edge;
 such an edge is supported only after its released source state and transition
 data are explicitly added and validated.
+
+Upgrade tests obtain v0.6.0 application source from committed, content-addressed
+release baselines rather than current templates or mutable remote content. One
+release manifest pins the annotated tag object, commit, source tree, package
+digest, and generated lock revision. Sorted tree manifests cover default,
+minimal, and Identity-added SQLite and PostgreSQL states while a shared SHA-256
+object store avoids duplicate bytes. The test-only `upgrade_test_support` tool
+authenticates the complete closed fixture set before exposing an in-memory
+snapshot or materializing it into a previously absent disposable directory; it
+does not invoke Git, execute fixture content, or access the network.
 
 The reusable renderer exposes typed composition request/result/diagnostic,
 render request, plan, publication-result, and error-category contracts. A

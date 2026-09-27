@@ -29,6 +29,7 @@ const PACKAGE_LOCATIONS = Object.freeze({
   hegira_cli: "tools/hegira_cli",
   resource_generator: "tools/resource_generator",
   template_renderer: "tools/template_renderer",
+  upgrade_test_support: "tools/upgrade_test_support",
 });
 
 function packageLocation(name) {
