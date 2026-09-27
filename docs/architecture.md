@@ -648,20 +648,39 @@ is inert data: it identifies one exact, direct, forward stable-SemVer release
 transition into the authenticated package release; enumerates exact source and
 target component, module, capability, database, and client states; and records
 the manifest fields and managed integration points that the transition permits.
-It cannot contain executable commands or select a different framework source,
-package identity, database adapter, or client adapter.
+The edge also binds the exact source package and released baseline digests,
+declares source ownership for each composition, and supplies direction-correct
+source and target SHA-256 digests for every managed integration. Create
+operations have only a target digest, edits have both digests, and retirements
+have only a source digest. It cannot contain executable commands or select a
+different framework source, package identity, database adapter, or client
+adapter.
 
 Upgrade-graph loading normalizes declaration order and rejects duplicate edge
 or composition identities, a source composition mapped more than once,
 downgrades, skipped releases, mismatched target releases, unsupported adapters,
 and component, module, capability, or managed-path references outside the
-closed component graph. Rejections expose a stable typed diagnostic containing
-only a bounded kind and structural subject; graph, composition, and managed
-integration counts are bounded before semantic traversal. A target composition
-must resolve through the same component graph used by rendering. Exact-edge
-resolution consumes only the already authenticated in-memory graph and performs
-no filesystem write, network access, process execution, baseline lookup, or
-application mutation.
+closed component graph. Every applicable managed transition must have an exact
+managed-integration ownership claim in the authenticated source-composition
+contract. Target digests for creates and edits must match bytes in the package
+snapshot. Rejections expose a stable typed diagnostic containing only a bounded
+kind and structural subject; graph, composition, and managed integration counts
+are bounded before semantic traversal. A target composition must resolve
+through the same component graph used by rendering.
+
+Existing-application authentication opens the application root and declared
+parents through anchored no-follow directory handles. It validates
+`hegira.toml`, resolves exactly one release and composition edge, and observes
+only applicable managed paths. Creates require absence; edits and retirements
+require regular bounded files with the edge-declared digest. Schema-3 local
+ownership must agree with the authenticated edge ownership, while an explicitly
+supported older schema obtains its ownership proof from that edge rather than
+from the local manifest. Root replacement, symlinks, special files, oversized
+inputs, path aliases, ownership disagreement, and digest mismatch fail before a
+plan exists. The returned in-memory boundary contains authenticated source and
+target bytes for later planning; diagnostics are versioned and content-redacted.
+Authentication performs no write, network access, process execution, dependency
+initialization, or application mutation.
 The bundled package does not yet declare a concrete application upgrade edge;
 such an edge is supported only after its released source state and transition
 data are explicitly added and validated.

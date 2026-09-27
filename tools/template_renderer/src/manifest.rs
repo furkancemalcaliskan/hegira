@@ -293,6 +293,17 @@ impl ManifestCatalog {
         crate::upgrade::resolve_upgrade_edge(&self.upgrade_edges, request)
     }
 
+    pub(crate) fn component_file(&self, component: &str, path: &Path) -> Result<&[u8]> {
+        let component = self
+            .components
+            .get(component)
+            .ok_or_else(|| RendererError::new("upgrade component is not in the package graph"))?;
+        self.component_files(component)?
+            .into_iter()
+            .find_map(|(candidate, bytes)| (candidate == path).then_some(bytes))
+            .ok_or_else(|| RendererError::new("upgrade target is not in the package graph"))
+    }
+
     fn validate_package_content(&self) -> Result<()> {
         let Some(package) = &self.package else {
             return Ok(());
@@ -437,10 +448,13 @@ impl ManifestCatalog {
         let Some(package) = &self.package else {
             return Ok(());
         };
-        let mut component_paths = BTreeSet::new();
+        let mut component_paths = BTreeMap::new();
         for component in self.components.values() {
-            for (path, _) in self.component_files(component)? {
-                component_paths.insert((component.id.clone(), path_to_package_key(&path)?));
+            for (path, bytes) in self.component_files(component)? {
+                component_paths.insert(
+                    (component.id.clone(), path_to_package_key(&path)?),
+                    format!("sha256:{:x}", Sha256::digest(bytes)),
+                );
             }
         }
         crate::upgrade::validate_upgrade_graph(

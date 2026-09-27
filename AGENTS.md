@@ -86,8 +86,12 @@ commands change. Never describe planned work as implemented.
   maintainer checks may select the adapter that rewrites them. Package loading
   snapshots source through directory-anchored no-follow reads, authenticates
   the bundled package and framework identity, rejects graph-undeclared files,
-  and renders only from the digest-verified snapshot. It is not the public
-  Hegira CLI.
+  and renders only from the digest-verified snapshot. Upgrade edges bind exact
+  source package and baseline identities, composition-specific ownership, and
+  direction-correct managed source/target digests. Existing applications are
+  authenticated read-only through anchored no-follow reads before a plan can
+  exist; only edge-declared managed paths are observed and diagnostics remain
+  versioned and content-redacted. It is not the public Hegira CLI.
 - `tools/application_mutator/` contains the deterministic, content-redacted
   existing-application change-plan contract. It supports ordered absent-file
   creation, digest-preconditioned edits, and exact-digest retirement restricted
