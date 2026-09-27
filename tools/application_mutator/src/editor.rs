@@ -555,6 +555,86 @@ pub fn plan_cargo_dependency(
     )
 }
 
+/// Moves one existing workspace dependency between exact framework releases.
+///
+/// The observed declaration must match the complete authenticated source
+/// contract before its release source is replaced. Dependency identity,
+/// optionality, default-feature policy, and explicit features cannot change.
+pub fn plan_cargo_dependency_transition(
+    path: impl AsRef<Path>,
+    observed_source: &[u8],
+    section: CargoDependencySection,
+    source: &CargoDependency,
+    target: &CargoDependency,
+) -> Result<StructuredEditOutcome, StructuredEditError> {
+    let path = ChangePath::new(path)?;
+    validate_cargo_dependency(section, source, &path)?;
+    validate_cargo_dependency(section, target, &path)?;
+    let (
+        CargoDependencySource::FrameworkRelease {
+            repository: source_repository,
+            version: source_version,
+            default_features: source_default_features,
+        },
+        CargoDependencySource::FrameworkRelease {
+            repository: target_repository,
+            version: target_version,
+            default_features: target_default_features,
+        },
+    ) = (&source.source, &target.source)
+    else {
+        return Err(StructuredEditError::at_path(
+            StructuredEditErrorKind::InvalidInput,
+            &path,
+            "framework dependency transitions may change only the authenticated release source",
+        ));
+    };
+    if source.name != target.name
+        || source.optional != target.optional
+        || source.features != target.features
+        || source_repository != target_repository
+        || source_default_features != target_default_features
+        || source_version == target_version
+    {
+        return Err(StructuredEditError::at_path(
+            StructuredEditErrorKind::InvalidInput,
+            &path,
+            "framework dependency transitions may change only the authenticated release version",
+        ));
+    }
+
+    let source_text = std::str::from_utf8(observed_source).map_err(|_| {
+        StructuredEditError::at_path(
+            StructuredEditErrorKind::InvalidSource,
+            &path,
+            "Cargo integration source must be UTF-8",
+        )
+    })?;
+    let mut document = parse_toml(source_text, &path)?;
+    let table = find_table(&mut document, section.table_path(), &path)?;
+    let existing = table.get(&source.name).ok_or_else(|| {
+        StructuredEditError::at_path(
+            StructuredEditErrorKind::TomlConflict,
+            &path,
+            "framework dependency required by the target composition is missing",
+        )
+    })?;
+    if !cargo_dependency_matches(existing, source) {
+        return Err(StructuredEditError::at_path(
+            StructuredEditErrorKind::TomlConflict,
+            &path,
+            "framework dependency does not match the authenticated source release",
+        ));
+    }
+    table.insert(&target.name, Item::Value(cargo_dependency_value(target)));
+    planned(
+        StructuredEditKind::CargoDependency,
+        path,
+        observed_source,
+        document.to_string().into_bytes(),
+    )
+}
+
 fn cargo_dependency_matches(existing: &Item, dependency: &CargoDependency) -> bool {
     let Some(declaration) = existing.as_table_like() else {
         return false;
@@ -1417,6 +1497,81 @@ mod tests {
         assert!(result.contains(
             "identity_domain = { workspace = true, optional = true, features = [\"testing\"] }"
         ));
+    }
+
+    #[test]
+    fn cargo_dependency_transition_requires_the_exact_source_release_contract() {
+        let source = b"# retained\n[workspace.dependencies]\nidentity_http = { git = \"https://github.com/example/framework\", tag = \"v0.6.0\", default-features = false }\nserde = \"1\"\n";
+        let from = CargoDependency::framework_release(
+            "identity_http",
+            "https://github.com/example/framework",
+            "v0.6.0",
+            false,
+            false,
+            std::iter::empty::<&str>(),
+        );
+        let to = CargoDependency::framework_release(
+            "identity_http",
+            "https://github.com/example/framework",
+            "v0.7.0",
+            false,
+            false,
+            std::iter::empty::<&str>(),
+        );
+        let edit = planned(
+            plan_cargo_dependency_transition(
+                "Cargo.toml",
+                source,
+                CargoDependencySection::WorkspaceDependencies,
+                &from,
+                &to,
+            )
+            .unwrap(),
+        );
+        let result = std::str::from_utf8(edit.resulting_content()).unwrap();
+        assert!(result.starts_with("# retained\n"));
+        assert!(result.contains("serde = \"1\""));
+        assert!(result.contains(
+            "identity_http = { git = \"https://github.com/example/framework\", tag = \"v0.7.0\", default-features = false }"
+        ));
+
+        let stale = std::str::from_utf8(source)
+            .unwrap()
+            .replace("v0.6.0", "v0.5.0")
+            .into_bytes();
+        assert_eq!(
+            plan_cargo_dependency_transition(
+                "Cargo.toml",
+                &stale,
+                CargoDependencySection::WorkspaceDependencies,
+                &from,
+                &to,
+            )
+            .unwrap_err()
+            .kind(),
+            StructuredEditErrorKind::TomlConflict
+        );
+
+        let changed_policy = CargoDependency::framework_release(
+            "identity_http",
+            "https://github.com/example/framework",
+            "v0.7.0",
+            true,
+            false,
+            std::iter::empty::<&str>(),
+        );
+        assert_eq!(
+            plan_cargo_dependency_transition(
+                "Cargo.toml",
+                source,
+                CargoDependencySection::WorkspaceDependencies,
+                &from,
+                &changed_policy,
+            )
+            .unwrap_err()
+            .kind(),
+            StructuredEditErrorKind::InvalidInput
+        );
     }
 
     #[test]

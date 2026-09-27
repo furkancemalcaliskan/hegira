@@ -21,8 +21,9 @@ mod publisher;
 pub use editor::{
     CargoDependency, CargoDependencySection, CargoDependencySource, RUST_MODULES_END,
     RUST_MODULES_START, StructuredEditError, StructuredEditErrorKind, StructuredEditKind,
-    StructuredEditOutcome, plan_cargo_dependency, plan_rust_managed_entry, plan_rust_module,
-    plan_toml_array_string, plan_toml_identity_entry, plan_toml_table_string,
+    StructuredEditOutcome, plan_cargo_dependency, plan_cargo_dependency_transition,
+    plan_rust_managed_entry, plan_rust_module, plan_toml_array_string, plan_toml_identity_entry,
+    plan_toml_table_string,
 };
 pub use installation::{
     ApplicationFileOwner, COMPONENT_INSTALLATION_SUMMARY_SCHEMA, ComponentArtifact,

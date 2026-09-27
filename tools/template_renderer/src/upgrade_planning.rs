@@ -1,25 +1,34 @@
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     fmt::{Display, Formatter},
     path::Path,
 };
 
-use application_manifest::SourceOwnershipClass;
+use application_manifest::{
+    APPLICATION_MANIFEST_SCHEMA, ApplicationComposition, ApplicationManifest,
+    ApplicationUpgradeState, InstalledModule, SourceOwnershipClass,
+};
 use application_mutator::{
-    ChangeOperation, ChangePlan, FileCreation, ManagedFileRetirement, PlannedFileChange,
-    PreconditionSummary, StructuredFileEdit,
+    CargoDependency, CargoDependencySection, ChangeOperation, ChangePlan, FileCreation,
+    ManagedFileRetirement, PlannedFileChange, PreconditionSummary, StructuredEditErrorKind,
+    StructuredEditOutcome, StructuredFileEdit, plan_cargo_dependency,
+    plan_cargo_dependency_transition,
 };
 use serde::Serialize;
 
 use crate::{
-    AuthenticatedUpgradeBoundary, ManagedIntegrationTransition, ManagedIntegrationTransitionKind,
-    ManifestCatalog, UpgradeAuthenticationDiagnosticKind, UpgradeAuthenticationError,
-    UpgradeReleaseIdentity,
+    AuthenticatedManagedSource, AuthenticatedUpgradeBoundary, CompositionRequest,
+    FrameworkDependency, ManagedIntegrationTransition, ManagedIntegrationTransitionKind,
+    ManifestCatalog, ResolvedComposition, UpgradeAuthenticationDiagnosticKind,
+    UpgradeAuthenticationError, UpgradeManifestTransition, UpgradeReleaseIdentity,
 };
 
 pub const UPGRADE_PLAN_SUMMARY_SCHEMA: u32 = 1;
 pub const UPGRADE_PLANNING_DIAGNOSTIC_SCHEMA: u32 = 1;
 const HISTORICAL_MIGRATION_ROOT: &str = "crates/infrastructure/migrations/";
+const APPLICATION_MANIFEST_PATH: &str = "hegira.toml";
+const APPLICATION_MANIFEST_INTEGRATION: &str = "application-manifest";
+const FRAMEWORK_DEPENDENCIES_INTEGRATION: &str = "framework-dependencies";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "kebab-case")]
@@ -77,38 +86,64 @@ pub struct UpgradePlan {
     source_baseline_digest: String,
     change_plan: ChangePlan,
     owners: BTreeMap<String, UpgradeChangeOwner>,
+    manifest_transitions: Vec<UpgradeManifestTransition>,
+    framework_dependencies: Vec<String>,
+    target_components: Vec<String>,
+    target_modules: Vec<String>,
 }
 
 impl UpgradePlan {
     pub fn from_authenticated(
+        catalog: &ManifestCatalog,
         boundary: AuthenticatedUpgradeBoundary,
     ) -> Result<Self, UpgradePlanningError> {
+        let graph = resolve_target_composition(catalog, &boundary)?;
+        reject_component_removal(&boundary, &graph)?;
+        let dependencies = target_framework_dependencies(catalog, &graph)?;
+        let target_manifest = target_manifest(&boundary, &graph)?;
+        let manifest_transitions = manifest_transitions(boundary.application(), &target_manifest);
+        if manifest_transitions != boundary.edge().manifest_transitions {
+            return Err(planning_error(
+                UpgradePlanningErrorKind::Incompatible,
+                "manifest-transitions",
+            ));
+        }
+
         let mut changes = Vec::new();
         let mut owners = BTreeMap::new();
-        for managed in boundary.managed_sources() {
-            let transition = managed.transition();
-            let change = plan_transition(
-                &boundary.edge().composition.source_ownership,
-                transition,
-                managed.source(),
-                managed.target(),
-            )?;
+        let mut structured_paths = BTreeSet::new();
+        plan_framework_dependencies(
+            &boundary,
+            &dependencies,
+            &mut changes,
+            &mut owners,
+            &mut structured_paths,
+        )?;
+        plan_application_manifest(
+            &boundary,
+            &target_manifest,
+            &mut changes,
+            &mut owners,
+            &mut structured_paths,
+        )?;
 
-            if owners
-                .insert(
-                    transition.path.clone(),
-                    UpgradeChangeOwner {
-                        component: transition.component.clone(),
-                        integration: transition.integration.clone(),
-                    },
-                )
-                .is_some()
-            {
-                return Err(planning_error(
-                    UpgradePlanningErrorKind::Conflict,
-                    transition.path.clone(),
-                ));
+        for managed in boundary.managed_sources() {
+            if structured_paths.contains(&managed.transition().path) {
+                continue;
             }
+            let transition = managed.transition();
+            let ownership = match transition.kind {
+                ManagedIntegrationTransitionKind::Create
+                | ManagedIntegrationTransitionKind::Edit => {
+                    &boundary.edge().composition.target_ownership
+                }
+                ManagedIntegrationTransitionKind::Retire => {
+                    &boundary.edge().composition.source_ownership
+                }
+            };
+            let change =
+                plan_transition(ownership, transition, managed.source(), managed.target())?;
+            insert_owner(&mut owners, transition)?;
             changes.push(change);
         }
         let change_plan = ChangePlan::new(changes).map_err(plan_error)?;
@@ -121,6 +156,21 @@ impl UpgradePlan {
             source_baseline_digest: boundary.source_baseline_digest().to_owned(),
             change_plan,
             owners,
+            manifest_transitions,
+            framework_dependencies: dependencies
+                .iter()
+                .map(|dependency| dependency.name.clone())
+                .collect(),
+            target_components: graph
+                .components
+                .iter()
+                .map(|component| component.id.clone())
+                .collect(),
+            target_modules: graph
+                .modules
+                .iter()
+                .map(|module| module.id.clone())
+                .collect(),
         })
     }
 
@@ -173,11 +223,403 @@ impl UpgradePlan {
             target: UpgradeReleaseSummary::from(&self.target),
             source_package_digest: self.source_package_digest.clone(),
             source_baseline_digest: self.source_baseline_digest.clone(),
+            manifest_transitions: self.manifest_transitions.clone(),
+            framework_dependencies: self.framework_dependencies.clone(),
+            target_components: self.target_components.clone(),
+            target_modules: self.target_modules.clone(),
             changes,
         }
     }
 }
 
+fn resolve_target_composition(
+    catalog: &ManifestCatalog,
+    boundary: &AuthenticatedUpgradeBoundary,
+) -> Result<ResolvedComposition, UpgradePlanningError> {
+    let edge = boundary.edge();
+    let request = CompositionRequest::new(
+        edge.target.framework.clone(),
+        edge.target.package.clone(),
+        edge.composition.target.components.clone(),
+    )
+    .with_recorded_state(
+        edge.composition
+            .target
+            .modules
+            .iter()
+            .map(|module| InstalledModule {
+                id: module.clone(),
+                version: edge.target.package.version.clone(),
+            }),
+        edge.composition.target.capabilities.iter().copied(),
+    );
+    catalog
+        .resolve_composition(&request)
+        .map_err(|_| planning_error(UpgradePlanningErrorKind::Incompatible, "target-composition"))
+}
+
+fn reject_component_removal(
+    boundary: &AuthenticatedUpgradeBoundary,
+    graph: &ResolvedComposition,
+) -> Result<(), UpgradePlanningError> {
+    let target_components = graph
+        .components
+        .iter()
+        .map(|component| component.id.as_str())
+        .collect::<BTreeSet<_>>();
+    let target_modules = graph
+        .modules
+        .iter()
+        .map(|module| module.id.as_str())
+        .collect::<BTreeSet<_>>();
+    let source = &boundary.edge().composition.source;
+    if source
+        .components
+        .iter()
+        .any(|component| !target_components.contains(component.as_str()))
+        || source
+            .modules
+            .iter()
+            .any(|module| !target_modules.contains(module.as_str()))
+    {
+        return Err(planning_error(
+            UpgradePlanningErrorKind::Unsupported,
+            "component-removal",
+        ));
+    }
+    Ok(())
+}
+
+fn target_framework_dependencies(
+    catalog: &ManifestCatalog,
+    graph: &ResolvedComposition,
+) -> Result<Vec<FrameworkDependency>, UpgradePlanningError> {
+    let mut dependencies = BTreeMap::new();
+    for component in catalog
+        .components_for(graph)
+        .map_err(|_| planning_error(UpgradePlanningErrorKind::Incompatible, "target-components"))?
+    {
+        for dependency in component.framework_dependencies.iter().chain(
+            component
+                .installation
+                .iter()
+                .flat_map(|installation| &installation.framework_dependencies),
+        ) {
+            let key = (
+                dependency.manifest.to_string_lossy().into_owned(),
+                dependency.name.clone(),
+            );
+            if dependencies
+                .insert(key.clone(), dependency.clone())
+                .is_some_and(|existing| existing != *dependency)
+            {
+                return Err(planning_error(
+                    UpgradePlanningErrorKind::Incompatible,
+                    format!("framework-dependency.{}", dependency.name),
+                ));
+            }
+        }
+    }
+    Ok(dependencies.into_values().collect())
+}
+
+fn target_manifest(
+    boundary: &AuthenticatedUpgradeBoundary,
+    graph: &ResolvedComposition,
+) -> Result<ApplicationManifest, UpgradePlanningError> {
+    let edge = boundary.edge();
+    let mut manifest = boundary.application().clone();
+    manifest.schema = APPLICATION_MANIFEST_SCHEMA;
+    manifest.framework = edge.target.framework.clone();
+    manifest.composition = Some(ApplicationComposition {
+        package: edge.target.package.clone(),
+        components: graph.installed_components().collect(),
+        modules: graph.modules.clone(),
+        capabilities: graph.capabilities.clone(),
+    });
+    manifest.upgrade = Some(ApplicationUpgradeState {
+        framework: edge.target.framework.clone(),
+        package: edge.target.package.clone(),
+        ownership: edge.composition.target_ownership.clone(),
+    });
+    manifest
+        .to_toml()
+        .map_err(|_| planning_error(UpgradePlanningErrorKind::Incompatible, "target-manifest"))?;
+    Ok(manifest)
+}
+
+fn manifest_transitions(
+    source: &ApplicationManifest,
+    target: &ApplicationManifest,
+) -> Vec<UpgradeManifestTransition> {
+    let mut transitions = Vec::new();
+    if source.schema != target.schema {
+        transitions.push(UpgradeManifestTransition::Schema);
+    }
+    if source.framework != target.framework {
+        transitions.push(UpgradeManifestTransition::Framework);
+    }
+    let source_composition = source.composition.as_ref();
+    let target_composition = target.composition.as_ref();
+    if source_composition.map(|composition| &composition.package)
+        != target_composition.map(|composition| &composition.package)
+    {
+        transitions.push(UpgradeManifestTransition::Package);
+    }
+    if source_composition.map(|composition| &composition.components)
+        != target_composition.map(|composition| &composition.components)
+    {
+        transitions.push(UpgradeManifestTransition::Components);
+    }
+    if source_composition.map(|composition| &composition.modules)
+        != target_composition.map(|composition| &composition.modules)
+    {
+        transitions.push(UpgradeManifestTransition::Modules);
+    }
+    if source_composition.map(|composition| &composition.capabilities)
+        != target_composition.map(|composition| &composition.capabilities)
+    {
+        transitions.push(UpgradeManifestTransition::Capabilities);
+    }
+    if source.upgrade.as_ref().map(|upgrade| &upgrade.ownership)
+        != target.upgrade.as_ref().map(|upgrade| &upgrade.ownership)
+    {
+        transitions.push(UpgradeManifestTransition::Ownership);
+    }
+    transitions.sort();
+    transitions
+}
+
+fn plan_application_manifest(
+    boundary: &AuthenticatedUpgradeBoundary,
+    target: &ApplicationManifest,
+    changes: &mut Vec<PlannedFileChange>,
+    owners: &mut BTreeMap<String, UpgradeChangeOwner>,
+    structured_paths: &mut BTreeSet<String>,
+) -> Result<(), UpgradePlanningError> {
+    let managed = required_managed_source(
+        boundary,
+        APPLICATION_MANIFEST_PATH,
+        APPLICATION_MANIFEST_INTEGRATION,
+    )?;
+    if managed.transition().kind != ManagedIntegrationTransitionKind::Edit
+        || managed.source() != Some(boundary.manifest_source())
+    {
+        return Err(planning_error(
+            UpgradePlanningErrorKind::Incompatible,
+            "application-manifest",
+        ));
+    }
+    let target = target
+        .to_toml()
+        .map_err(|_| planning_error(UpgradePlanningErrorKind::Incompatible, "target-manifest"))?;
+    let change = StructuredFileEdit::new(
+        APPLICATION_MANIFEST_PATH,
+        boundary.manifest_source(),
+        target.into_bytes(),
+    )
+    .map(PlannedFileChange::from)
+    .map_err(plan_error)?;
+    insert_owner(owners, managed.transition())?;
+    structured_paths.insert(APPLICATION_MANIFEST_PATH.to_owned());
+    changes.push(change);
+    Ok(())
+}
+
+fn reject_removed_framework_dependencies(
+    source: &[u8],
+    repository: &str,
+    version: &str,
+    targets: &[&FrameworkDependency],
+) -> Result<(), UpgradePlanningError> {
+    let source = std::str::from_utf8(source).map_err(|_| {
+        planning_error(UpgradePlanningErrorKind::Conflict, "framework-dependencies")
+    })?;
+    let document = source.parse::<toml::Table>().map_err(|_| {
+        planning_error(UpgradePlanningErrorKind::Conflict, "framework-dependencies")
+    })?;
+    let dependencies = document
+        .get("workspace")
+        .and_then(toml::Value::as_table)
+        .and_then(|workspace| workspace.get("dependencies"))
+        .and_then(toml::Value::as_table)
+        .ok_or_else(|| {
+            planning_error(UpgradePlanningErrorKind::Conflict, "framework-dependencies")
+        })?;
+    let mut source_names = BTreeSet::new();
+    for (name, declaration) in dependencies {
+        let Some(declaration) = declaration.as_table() else {
+            continue;
+        };
+        let repository_matches = declaration
+            .get("git")
+            .and_then(toml::Value::as_str)
+            .is_some_and(|value| value == repository);
+        let version_matches = declaration
+            .get("tag")
+            .and_then(toml::Value::as_str)
+            .is_some_and(|value| value == version);
+        if repository_matches != version_matches {
+            return Err(planning_error(
+                UpgradePlanningErrorKind::Conflict,
+                format!("framework-dependency.{name}"),
+            ));
+        }
+        if repository_matches {
+            source_names.insert(name.as_str());
+        }
+    }
+    let target_names = targets
+        .iter()
+        .map(|dependency| dependency.name.as_str())
+        .collect::<BTreeSet<_>>();
+    if !source_names.is_subset(&target_names) {
+        return Err(planning_error(
+            UpgradePlanningErrorKind::Unsupported,
+            "framework-dependency-removal",
+        ));
+    }
+    Ok(())
+}
+
+fn plan_framework_dependencies(
+    boundary: &AuthenticatedUpgradeBoundary,
+    dependencies: &[FrameworkDependency],
+    changes: &mut Vec<PlannedFileChange>,
+    owners: &mut BTreeMap<String, UpgradeChangeOwner>,
+    structured_paths: &mut BTreeSet<String>,
+) -> Result<(), UpgradePlanningError> {
+    let mut by_manifest = BTreeMap::<String, Vec<&FrameworkDependency>>::new();
+    for dependency in dependencies {
+        by_manifest
+            .entry(dependency.manifest.to_string_lossy().into_owned())
+            .or_default()
+            .push(dependency);
+    }
+    for (path, manifest_dependencies) in by_manifest {
+        let managed = required_managed_source(boundary, &path, FRAMEWORK_DEPENDENCIES_INTEGRATION)?;
+        if managed.transition().kind != ManagedIntegrationTransitionKind::Edit {
+            return Err(planning_error(
+                UpgradePlanningErrorKind::Incompatible,
+                "framework-dependencies",
+            ));
+        }
+        let original = required_source(managed.source())?;
+        reject_removed_framework_dependencies(
+            original,
+            &boundary.edge().source.framework.repository,
+            &boundary.edge().source.framework.version,
+            &manifest_dependencies,
+        )?;
+        let mut current = original.to_vec();
+        for dependency in manifest_dependencies {
+            let default_features = dependency.default_features.unwrap_or(true);
+            let source = CargoDependency::framework_release(
+                &dependency.name,
+                &boundary.edge().source.framework.repository,
+                &boundary.edge().source.framework.version,
+                default_features,
+                false,
+                std::iter::empty::<String>(),
+            );
+            let target = CargoDependency::framework_release(
+                &dependency.name,
+                &boundary.edge().target.framework.repository,
+                &boundary.edge().target.framework.version,
+                default_features,
+                false,
+                std::iter::empty::<String>(),
+            );
+            let outcome = match plan_cargo_dependency_transition(
+                &path,
+                &current,
+                CargoDependencySection::WorkspaceDependencies,
+                &source,
+                &target,
+            ) {
+                Ok(outcome) => outcome,
+                Err(error) if error.kind() == StructuredEditErrorKind::TomlConflict => {
+                    plan_cargo_dependency(
+                        &path,
+                        &current,
+                        CargoDependencySection::WorkspaceDependencies,
+                        &target,
+                    )
+                    .map_err(structured_edit_error)?
+                }
+                Err(error) => return Err(structured_edit_error(error)),
+            };
+            current = match outcome {
+                StructuredEditOutcome::Planned { edit, .. } => edit.resulting_content().to_vec(),
+                StructuredEditOutcome::AlreadyPresent { .. } => {
+                    return Err(planning_error(
+                        UpgradePlanningErrorKind::Conflict,
+                        "framework-dependencies",
+                    ));
+                }
+            };
+        }
+        let change = StructuredFileEdit::new(&path, original, current)
+            .map(PlannedFileChange::from)
+            .map_err(plan_error)?;
+        insert_owner(owners, managed.transition())?;
+        structured_paths.insert(path);
+        changes.push(change);
+    }
+    Ok(())
+}
+
+fn required_managed_source<'a>(
+    boundary: &'a AuthenticatedUpgradeBoundary,
+    path: &str,
+    integration: &str,
+) -> Result<&'a AuthenticatedManagedSource, UpgradePlanningError> {
+    let mut matches = boundary.managed_sources().iter().filter(|managed| {
+        managed.transition().path == path && managed.transition().integration == integration
+    });
+    let source = matches.next().ok_or_else(|| {
+        planning_error(
+            UpgradePlanningErrorKind::Incompatible,
+            integration.to_owned(),
+        )
+    })?;
+    if matches.next().is_some() {
+        return Err(planning_error(
+            UpgradePlanningErrorKind::Conflict,
+            integration.to_owned(),
+        ));
+    }
+    Ok(source)
+}
+
+fn insert_owner(
+    owners: &mut BTreeMap<String, UpgradeChangeOwner>,
+    transition: &ManagedIntegrationTransition,
+) -> Result<(), UpgradePlanningError> {
+    if owners
+        .insert(
+            transition.path.clone(),
+            UpgradeChangeOwner {
+                component: transition.component.clone(),
+                integration: transition.integration.clone(),
+            },
+        )
+        .is_some()
+    {
+        return Err(planning_error(
+            UpgradePlanningErrorKind::Conflict,
+            transition.path.clone(),
+        ));
+    }
+    Ok(())
+}
+
+fn structured_edit_error(error: application_mutator::StructuredEditError) -> UpgradePlanningError {
+    planning_error(
+        UpgradePlanningErrorKind::Conflict,
+        error.path().map_or("structured-edit", |path| path.as_str()),
+    )
+}
 impl ManifestCatalog {
     pub fn plan_upgrade(
         &self,
@@ -186,7 +628,7 @@ impl ManifestCatalog {
         let boundary = self
             .authenticate_upgrade_source(application_root)
             .map_err(UpgradePlanningError::from)?;
-        UpgradePlan::from_authenticated(boundary)
+        UpgradePlan::from_authenticated(self, boundary)
     }
 }
 
@@ -219,6 +661,10 @@ pub struct UpgradePlanSummary {
     pub target: UpgradeReleaseSummary,
     pub source_package_digest: String,
     pub source_baseline_digest: String,
+    pub manifest_transitions: Vec<UpgradeManifestTransition>,
+    pub framework_dependencies: Vec<String>,
+    pub target_components: Vec<String>,
+    pub target_modules: Vec<String>,
     pub changes: Vec<UpgradePlannedChangeSummary>,
 }
 

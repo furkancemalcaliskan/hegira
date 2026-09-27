@@ -649,10 +649,11 @@ transition into the authenticated package release; enumerates exact source and
 target component, module, capability, database, and client states; and records
 the manifest fields and managed integration points that the transition permits.
 The edge also binds the exact source package and released baseline digests,
-declares source ownership for each composition, and supplies direction-correct
-source and target SHA-256 digests for every managed integration. Create
-operations have only a target digest, edits have both digests, and retirements
-have only a source digest. It cannot contain executable commands or select a
+declares source and target ownership for each composition, and supplies
+direction-correct source and target SHA-256 digests for every managed
+integration. Create operations have only a target digest, edits have both
+digests, and retirements have only a source digest. It cannot contain executable
+commands or select a
 different framework source, package identity, database adapter, or client
 adapter.
 
@@ -661,9 +662,10 @@ or composition identities, a source composition mapped more than once,
 downgrades, skipped releases, mismatched target releases, unsupported adapters,
 and component, module, capability, or managed-path references outside the
 closed component graph. Every applicable managed transition must have an exact
-managed-integration ownership claim in the authenticated source-composition
-contract. Target digests for creates and edits must match bytes in the package
-snapshot. Rejections expose a stable typed diagnostic containing only a bounded
+managed-integration claim in the ownership contract for the state where it
+exists: creates in the target, retirements in the source, and edits in both.
+Target digests for creates and edits must match bytes in the package snapshot.
+Rejections expose a stable typed diagnostic containing only a bounded
 kind and structural subject; graph, composition, and managed integration counts
 are bounded before semantic traversal. A target composition must resolve
 through the same component graph used by rendering.
@@ -682,15 +684,23 @@ target bytes for later planning; diagnostics are versioned and content-redacted.
 Authentication performs no write, network access, process execution, dependency
 initialization, or application mutation.
 
-An authenticated direct edge can then be converted into one complete
-`application_mutator::ChangePlan`. Edge-declared creates use absent
-preconditions, edits retain the observed source digest and authenticated target
-bytes, and retirements retain the observed digest plus the exact managed
-integration owner. The planner sorts the complete plan by canonical application
-path, rejects duplicate or conflicting operations, and never edits or retires
+An authenticated direct edge is resolved against the target component graph and
+converted into one complete `application_mutator::ChangePlan`. The planner
+requires exact target component, module, and capability state; preserves the
+selected database and client; moves authenticated framework dependencies to the
+target release without changing their feature policy; and constructs the target
+`hegira.toml` from typed composition data. Declared manifest transitions must
+match the fields that actually change, and neither the manifest nor dependency
+state can advance without its required managed source transition. Edge-declared
+creates use absent preconditions, edits retain the observed source digest, and
+retirements retain the observed digest plus the exact managed integration
+owner. The planner sorts the complete plan by canonical application path,
+rejects duplicate or conflicting operations, and never edits or retires
 application migration history. Its versioned summary binds the exact source and
-target releases, package and baseline digests, component and integration owners,
-preconditions, and result digests without exposing source or resulting content.
+target releases, package and baseline digests, target components, modules,
+framework dependencies and manifest transitions, and component and integration
+owners, preconditions, and result digests without exposing source or resulting
+content.
 Blocked, unsupported, incompatible, and conflicting inputs are distinct typed,
 content-redacted outcomes. Planning performs no publication, database, network,
 or process operation.
