@@ -47,6 +47,7 @@ pub struct UpgradeCompositionTransition {
     pub id: String,
     pub source_baseline_digest: String,
     pub source_ownership: SourceOwnership,
+    pub target_ownership: SourceOwnership,
     pub source: UpgradeCompositionState,
     pub target: UpgradeCompositionState,
 }
@@ -323,7 +324,21 @@ pub(crate) fn validate_upgrade_graph(
         edge.compositions
             .sort_by(|left, right| left.id.cmp(&right.id));
         let mut composition_ids = BTreeSet::new();
-        for transition in &edge.compositions {
+        for transition in &mut edge.compositions {
+            transition.source_ownership.claims.sort_by(|left, right| {
+                (&left.path, left.class, &left.integration).cmp(&(
+                    &right.path,
+                    right.class,
+                    &right.integration,
+                ))
+            });
+            transition.target_ownership.claims.sort_by(|left, right| {
+                (&left.path, left.class, &left.integration).cmp(&(
+                    &right.path,
+                    right.class,
+                    &right.integration,
+                ))
+            });
             validate_graph_identifier(&transition.id, "upgrade composition")?;
             if !composition_ids.insert(transition.id.clone()) {
                 return Err(graph_error(
@@ -341,6 +356,12 @@ pub(crate) fn validate_upgrade_graph(
                 graph_error(
                     UpgradeGraphDiagnosticKind::InvalidOwnership,
                     "upgrade-composition.source-ownership",
+                )
+            })?;
+            transition.target_ownership.validate().map_err(|_| {
+                graph_error(
+                    UpgradeGraphDiagnosticKind::InvalidOwnership,
+                    "upgrade-composition.target-ownership",
                 )
             })?;
             if transition.source.database != transition.target.database
@@ -404,11 +425,22 @@ pub(crate) fn validate_upgrade_graph(
                 .iter()
                 .filter(|transition| applicable_components.contains(&transition.component))
             {
-                let declared = composition.source_ownership.claims.iter().any(|claim| {
-                    claim.path == transition.path
-                        && claim.class == SourceOwnershipClass::ManagedIntegration
-                        && claim.integration.as_deref() == Some(&transition.integration)
-                });
+                let ownership = match transition.kind {
+                    ManagedIntegrationTransitionKind::Create => &composition.target_ownership,
+                    ManagedIntegrationTransitionKind::Edit => {
+                        let source_declared =
+                            ownership_declares(&composition.source_ownership, transition);
+                        if !source_declared {
+                            return Err(graph_error(
+                                UpgradeGraphDiagnosticKind::InvalidOwnership,
+                                "managed-integration.source-ownership",
+                            ));
+                        }
+                        &composition.target_ownership
+                    }
+                    ManagedIntegrationTransitionKind::Retire => &composition.source_ownership,
+                };
+                let declared = ownership_declares(ownership, transition);
                 if !declared {
                     return Err(graph_error(
                         UpgradeGraphDiagnosticKind::InvalidOwnership,
@@ -419,6 +451,17 @@ pub(crate) fn validate_upgrade_graph(
         }
     }
     Ok(())
+}
+
+fn ownership_declares(
+    ownership: &SourceOwnership,
+    transition: &ManagedIntegrationTransition,
+) -> bool {
+    ownership.claims.iter().any(|claim| {
+        claim.path == transition.path
+            && claim.class == SourceOwnershipClass::ManagedIntegration
+            && claim.integration.as_deref() == Some(&transition.integration)
+    })
 }
 
 fn validate_transition_digests(
@@ -1188,6 +1231,10 @@ mod tests {
                     id: format!("{name}-{}", database_name(database)),
                     source_baseline_digest: digest('c'),
                     source_ownership: SourceOwnership {
+                        default: SourceOwnershipClass::ApplicationOwned,
+                        claims: claims.clone(),
+                    },
+                    target_ownership: SourceOwnership {
                         default: SourceOwnershipClass::ApplicationOwned,
                         claims,
                     },

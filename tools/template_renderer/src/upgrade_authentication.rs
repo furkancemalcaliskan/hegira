@@ -87,6 +87,7 @@ impl AuthenticatedManagedSource {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AuthenticatedUpgradeBoundary {
     application: ApplicationManifest,
+    manifest_source: Vec<u8>,
     edge: ResolvedUpgradeEdge,
     source_package_digest: String,
     source_baseline_digest: String,
@@ -96,6 +97,10 @@ pub struct AuthenticatedUpgradeBoundary {
 impl AuthenticatedUpgradeBoundary {
     pub fn application(&self) -> &ApplicationManifest {
         &self.application
+    }
+
+    pub fn manifest_source(&self) -> &[u8] {
+        &self.manifest_source
     }
 
     pub fn edge(&self) -> &ResolvedUpgradeEdge {
@@ -217,6 +222,7 @@ impl ManifestCatalog {
 
         Ok(AuthenticatedUpgradeBoundary {
             application,
+            manifest_source: manifest_bytes,
             edge: edge.clone(),
             source_package_digest: package_edge.source_package_digest.clone(),
             source_baseline_digest: edge.composition.source_baseline_digest.clone(),
@@ -295,9 +301,17 @@ fn require_ownership(
                 && claim.integration.as_deref() == Some(&transition.integration)
         })
     };
-    if !matches(&edge.composition.source_ownership)
-        || local.is_some_and(|ownership| !matches(ownership))
-    {
+    let edge_matches = match transition.kind {
+        ManagedIntegrationTransitionKind::Create => matches(&edge.composition.target_ownership),
+        ManagedIntegrationTransitionKind::Edit => {
+            matches(&edge.composition.source_ownership)
+                && matches(&edge.composition.target_ownership)
+        }
+        ManagedIntegrationTransitionKind::Retire => matches(&edge.composition.source_ownership),
+    };
+    let local_matches =
+        transition.kind == ManagedIntegrationTransitionKind::Create || local.is_none_or(matches);
+    if !edge_matches || !local_matches {
         return Err(error(
             UpgradeAuthenticationDiagnosticKind::OwnershipMismatch,
             transition.path.clone(),
