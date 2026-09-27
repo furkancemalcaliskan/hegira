@@ -9,12 +9,13 @@ use application_manifest::{
     ApplicationCapability, ApplicationManifest, ClientAdapter, DatabaseAdapter, FrameworkContract,
     PackageIdentity,
 };
+use application_mutator::{ChangeOperation, ContentDigest, FilePrecondition};
 use sha2::{Digest, Sha256};
 use template_renderer::{
     ComponentInstallationContribution, CompositionDiagnosticKind, CompositionRequest,
-    ManifestCatalog, RenderRequest, RendererErrorKind, UpgradeAuthenticationDiagnosticKind,
-    UpgradeCompositionState, UpgradeEdgeDiagnosticKind, UpgradeEdgeRequest,
-    UpgradeGraphDiagnosticKind, UpgradeReleaseIdentity, plan, plan_snapshot, render,
+    ManifestCatalog, RenderRequest, RendererErrorKind, UpgradeCompositionState,
+    UpgradeEdgeDiagnosticKind, UpgradeEdgeRequest, UpgradeGraphDiagnosticKind,
+    UpgradePlanningErrorKind, UpgradeReleaseIdentity, plan, plan_snapshot, render,
     repository_validation::{RepositoryValidationRequest, render as render_for_validation},
 };
 
@@ -596,7 +597,7 @@ fn package_authenticates_and_resolves_declarative_upgrade_edges() {
 
 #[cfg(unix)]
 #[test]
-fn upgrade_authentication_rejects_modified_and_unsafe_managed_sources_without_writes() {
+fn upgrade_planning_is_deterministic_redacted_and_rejects_unsafe_sources_without_writes() {
     use std::os::unix::fs::symlink;
 
     let repository = repository_root();
@@ -639,6 +640,17 @@ id = "identity"
 version = "v0.5.0"
 "#;
     fs::write(application.join("hegira.toml"), manifest).unwrap();
+    let application_owned_secret = fixture.path().join("application-owned-secret");
+    fs::write(
+        &application_owned_secret,
+        "credential-shaped-application-data",
+    )
+    .unwrap();
+    symlink(
+        &application_owned_secret,
+        application.join("product-owned.rs"),
+    )
+    .unwrap();
     set_test_upgrade_source_digest(fixture.path(), manifest.as_bytes());
     let catalog = ManifestCatalog::load(fixture.path(), "layered").unwrap();
 
@@ -649,6 +661,35 @@ version = "v0.5.0"
         authenticated.managed_sources()[0].source(),
         Some(manifest.as_bytes())
     );
+    let first_plan = catalog.plan_upgrade(&application).unwrap();
+    let second_plan = catalog.plan_upgrade(&application).unwrap();
+    assert_eq!(first_plan, second_plan);
+    assert_eq!(first_plan.edge_id(), "v0-5-0-to-v0-6-0");
+    assert_eq!(first_plan.source().framework.version, "v0.5.0");
+    assert_eq!(first_plan.target().framework.version, "v0.6.0");
+    assert_eq!(first_plan.change_plan().changes().len(), 1);
+    let change = &first_plan.change_plan().changes()[0];
+    assert_eq!(change.path().as_str(), "hegira.toml");
+    assert_eq!(change.operation(), ChangeOperation::Edit);
+    assert_eq!(
+        change.precondition(),
+        FilePrecondition::MatchesDigest(ContentDigest::calculate(manifest.as_bytes()))
+    );
+    assert!(change.result_digest().is_some());
+    let summary = serde_json::to_string(&first_plan.summary()).unwrap();
+    assert!(summary.contains("\"schema\":1"));
+    assert!(summary.contains("\"component\":\"layered-base\""));
+    assert!(summary.contains("\"integration\":\"application-manifest\""));
+    assert!(summary.contains("\"ownership\":\"managed-integration\""));
+    assert!(summary.contains("\"result\":{\"kind\":\"present\",\"sha256\":"));
+    assert!(!summary.contains("custom-application"));
+    assert!(!summary.contains("[composition]"));
+    assert!(!summary.contains("credential-shaped-application-data"));
+    assert_eq!(
+        fs::read(application.join("hegira.toml")).unwrap(),
+        manifest.as_bytes()
+    );
+    assert!(application.join("product-owned.rs").is_symlink());
     assert!(!application.join(".hegira-mutation.lock").exists());
 
     fs::write(
@@ -656,13 +697,8 @@ version = "v0.5.0"
         format!("{manifest}\n# local managed change\n"),
     )
     .unwrap();
-    let changed = catalog
-        .authenticate_upgrade_source(&application)
-        .unwrap_err();
-    assert_eq!(
-        changed.diagnostic().kind,
-        UpgradeAuthenticationDiagnosticKind::SourceDigestMismatch
-    );
+    let changed = catalog.plan_upgrade(&application).unwrap_err();
+    assert_eq!(changed.diagnostic().kind, UpgradePlanningErrorKind::Blocked);
     assert!(!changed.to_string().contains("local managed change"));
 
     fs::write(
@@ -670,25 +706,18 @@ version = "v0.5.0"
         manifest.replace("v0.5.0", "v0.4.0"),
     )
     .unwrap();
-    let release = catalog
-        .authenticate_upgrade_source(&application)
-        .unwrap_err();
+    let release = catalog.plan_upgrade(&application).unwrap_err();
     assert_eq!(
         release.diagnostic().kind,
-        UpgradeAuthenticationDiagnosticKind::UnsupportedRelease
+        UpgradePlanningErrorKind::Unsupported
     );
 
     let outside = fixture.path().join("outside-secret");
     fs::write(&outside, "credential-shaped-secret").unwrap();
     fs::remove_file(application.join("hegira.toml")).unwrap();
     symlink(&outside, application.join("hegira.toml")).unwrap();
-    let linked = catalog
-        .authenticate_upgrade_source(&application)
-        .unwrap_err();
-    assert_eq!(
-        linked.diagnostic().kind,
-        UpgradeAuthenticationDiagnosticKind::UnsupportedSourceType
-    );
+    let linked = catalog.plan_upgrade(&application).unwrap_err();
+    assert_eq!(linked.diagnostic().kind, UpgradePlanningErrorKind::Blocked);
     assert!(!linked.to_string().contains("credential-shaped-secret"));
 }
 

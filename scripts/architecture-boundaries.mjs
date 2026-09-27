@@ -74,7 +74,7 @@ export const WORKSPACE_DEPENDENCY_POLICY = Object.freeze({
     "template_renderer",
   ],
   resource_generator: ["application_manifest", "application_mutator"],
-  template_renderer: ["application_manifest"],
+  template_renderer: ["application_manifest", "application_mutator"],
   upgrade_test_support: [],
 });
 

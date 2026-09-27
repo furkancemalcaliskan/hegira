@@ -91,7 +91,10 @@ commands change. Never describe planned work as implemented.
   direction-correct managed source/target digests. Existing applications are
   authenticated read-only through anchored no-follow reads before a plan can
   exist; only edge-declared managed paths are observed and diagnostics remain
-  versioned and content-redacted. It is not the public Hegira CLI.
+  versioned and content-redacted. Authenticated direct edges become one sorted,
+  digest-preconditioned `application_mutator` plan whose versioned summary
+  records exact release, owner, integration, precondition, and result identities
+  without source content. It is not the public Hegira CLI.
 - `tools/application_mutator/` contains the deterministic, content-redacted
   existing-application change-plan contract. It supports ordered absent-file
   creation, digest-preconditioned edits, and exact-digest retirement restricted

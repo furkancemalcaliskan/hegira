@@ -4796,9 +4796,11 @@ name = "template_renderer"
 version = "0.6.0"
 dependencies = [
  "application_manifest",
+ "application_mutator",
  "rustix",
  "semver",
  "serde",
+ "serde_json",
  "sha2 0.10.9",
  "toml",
 ]
