@@ -66,7 +66,7 @@ export const WORKSPACE_DEPENDENCY_POLICY = Object.freeze({
     "identity_domain_shared",
     "leptos_support",
   ],
-  application_mutator: [],
+  application_mutator: ["application_manifest"],
   hegira_cli: [
     "application_manifest",
     "application_mutator",

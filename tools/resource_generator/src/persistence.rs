@@ -540,7 +540,12 @@ version = "v0.6.0"
             .iter()
             .find(|change| change.path().as_str().ends_with(path_suffix))
             .unwrap();
-        std::str::from_utf8(change.resulting_content()).unwrap()
+        std::str::from_utf8(
+            change
+                .resulting_content()
+                .expect("generated persistence changes have resulting content"),
+        )
+        .unwrap()
     }
 
     #[test]

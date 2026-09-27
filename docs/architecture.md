@@ -174,7 +174,7 @@ The direct local dependency allowlist is enforced from locked Cargo metadata by
 | `identity_sqlx` | `background_jobs`, `identity_application`, `identity_application_contracts`, `identity_domain`, `identity_domain_shared`, `persistence`, `search` |
 | `identity_http` | `http_support`, `identity_application`, `identity_application_contracts`, `leptos_support` |
 | `identity_leptos` | `identity_application`, `identity_application_contracts`, `identity_domain_shared`, `leptos_support` |
-| `application_mutator` | None |
+| `application_mutator` | `application_manifest` |
 | `hegira_cli` | `application_manifest`, `application_mutator`, `resource_generator`, `template_renderer` |
 | `resource_generator` | `application_manifest`, `application_mutator` |
 | `template_renderer` | `application_manifest` |
@@ -343,15 +343,22 @@ revert migrations, accept arbitrary SQL input, or infer runtime configuration.
 `tools/application_mutator` owns the internal typed contract for coordinated
 changes to an existing validated application. New-file operations require the
 target path to be absent. Structured edits carry the SHA-256 digest of the
-observed content as an explicit publication precondition. Every result also
-carries its digest. Application-relative canonical paths and a sorted complete
-plan make validation and summaries deterministic; duplicate paths and mixed
-operations against one path are typed conflicts.
+observed content as an explicit publication precondition. Managed-file
+retirement additionally requires a matching `managed-integration` ownership
+claim from the application manifest and an exact observed digest; application-
+owned, generated-once, and immutable-history paths cannot be retired. Present
+results carry their digest, while retirement has an explicit absent result.
+Application-relative canonical paths and a sorted complete plan make validation
+and summaries deterministic; duplicate paths and incompatible operations
+against one path are typed conflicts.
 
-Plan summaries expose only relative paths, operation identities, preconditions,
-and digests. They never expose source or resulting file content. The crate does
-not execute generated code or provide the repository-validation dependency
-rewriting available to maintainer tooling.
+Plan summaries expose only relative paths, operation and managed-integration
+identities, preconditions, and digests. They never expose source, resulting, or
+retired file content. Publication moves a retired file to a private transaction
+name atomically, preserving its bytes and metadata until the transaction is
+durable; a later failure restores it through the same anchored no-follow
+boundary. The crate does not execute generated code or provide the repository-
+validation dependency rewriting available to maintainer tooling.
 
 Additive component installation has a separate typed plan over the same change
 contract. A request names one not-yet-installed component and supplies only
