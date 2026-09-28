@@ -1952,10 +1952,11 @@ mod platform {
             let fixture = UpgradeFixture::new("marker-replacement");
             let plan = fixture.plan();
             let marker = fixture.root.join(MUTATION_MARKER);
+            let replacement = fixture.root.join("replacement-marker");
             let error = publish_with(&fixture.root, &plan, |point| {
                 if point == HookPoint::BeforeChange(0) {
-                    stdfs::remove_file(&marker).unwrap();
-                    stdfs::write(&marker, b"untrusted replacement\n").unwrap();
+                    stdfs::write(&replacement, b"untrusted replacement\n").unwrap();
+                    stdfs::rename(&replacement, &marker).unwrap();
                 }
                 Ok(())
             })
