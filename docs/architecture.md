@@ -400,7 +400,9 @@ change runtime configuration by themselves.
 Failure-safe publication is a separate stage over the validated plan. The
 publisher opens the real application root and every change parent without
 following symlinks, creates an exclusive `.hegira-mutation.lock` recovery
-marker, and stages private files on each target filesystem. Required exclusive
+marker, and stages private files on each target filesystem. Staged result
+files remain private until their atomic rename; their final permissions are
+applied and verified on the published file. Required exclusive
 rename and atomic-exchange behavior is probed before application files change.
 All target identities and absent or digest preconditions are then rechecked
 immediately before publication. Edits exchange the staged result with the

@@ -9,7 +9,7 @@ use application_manifest::{
     ApplicationCapability, ApplicationManifest, ClientAdapter, DatabaseAdapter, FrameworkContract,
     PackageIdentity,
 };
-use application_mutator::{ChangeOperation, ContentDigest, FilePrecondition};
+use application_mutator::{ChangeOperation, ContentDigest, FilePrecondition, publish_change_plan};
 use sha2::{Digest, Sha256};
 use template_renderer::{
     ComponentInstallationContribution, CompositionDiagnosticKind, CompositionRequest,
@@ -597,7 +597,7 @@ fn package_authenticates_and_resolves_declarative_upgrade_edges() {
 
 #[cfg(unix)]
 #[test]
-fn upgrade_planning_is_deterministic_redacted_and_rejects_unsafe_sources_without_writes() {
+fn upgrade_planning_is_deterministic_redacted_and_publishes_only_authenticated_changes() {
     use std::os::unix::fs::symlink;
 
     let repository = repository_root();
@@ -729,6 +729,34 @@ version = "v0.5.0"
     assert!(!summary.contains("custom-application"));
     assert!(!summary.contains("[composition]"));
     assert!(!summary.contains("credential-shaped-application-data"));
+    let published = fixture.path().join("published-application");
+    fs::create_dir(&published).unwrap();
+    fs::write(published.join("Cargo.toml"), &source_cargo).unwrap();
+    fs::write(published.join("hegira.toml"), manifest).unwrap();
+    fs::write(
+        published.join("product-owned.txt"),
+        b"private product data\n",
+    )
+    .unwrap();
+    let receipt = publish_change_plan(&published, first_plan.change_plan()).unwrap();
+    assert_eq!(receipt.changed_files(), 2);
+    assert_eq!(
+        ApplicationManifest::read(published.join("hegira.toml"))
+            .unwrap()
+            .framework
+            .version,
+        "v0.6.0"
+    );
+    assert!(
+        fs::read_to_string(published.join("Cargo.toml"))
+            .unwrap()
+            .contains("tag = \"v0.6.0\"")
+    );
+    assert_eq!(
+        fs::read(published.join("product-owned.txt")).unwrap(),
+        b"private product data\n"
+    );
+    assert!(!published.join(".hegira-mutation.lock").exists());
     assert_eq!(
         fs::read(application.join("hegira.toml")).unwrap(),
         manifest.as_bytes()
