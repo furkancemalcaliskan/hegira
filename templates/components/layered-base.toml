@@ -1,6 +1,6 @@
 schema = 3
 id = "layered-base"
-version = "v0.6.0"
+version = "v0.7.0"
 source = "applications/layered"
 include = [
   ".node-version",
