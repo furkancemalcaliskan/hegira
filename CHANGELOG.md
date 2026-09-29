@@ -4,6 +4,18 @@ All notable changes are documented here. Releases follow Semantic Versioning.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-29
+
+Pre-tag source candidate; v0.7.0 has not been published. The release date and
+complete notes are finalized during release preparation.
+
+### Changed
+
+- Aligned framework, official-module, tooling, component-package, and canonical
+  application source identities to v0.7.0.
+- Pinned default and minimal application lockfiles to one reviewed framework
+  source candidate while retaining the normal release-tag Git dependency.
+
 ## [0.6.0] - 2026-09-23
 
 ### Added

@@ -32,11 +32,6 @@ members = [
     "tools/upgrade_test_support",
 ]
 
-[workspace.metadata.hegira.release_candidate]
-base = "v0.6.0"
-target = "v0.7.0"
-issue = 350
-
 [profile.wasm-release]
 inherits = "release"
 opt-level = 'z'

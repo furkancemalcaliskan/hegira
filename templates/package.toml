@@ -1,12 +1,12 @@
 schema = 3
 id = "hegira-canonical"
-version = "v0.6.0"
+version = "v0.7.0"
 templates = ["layered"]
 components = ["identity", "layered-base", "layered-leptos-identity", "layered-leptos-minimal"]
 modules = ["identity"]
 upgrade_edges = []
-content_digest = "sha256:2668f6c8b601abb6da9f1ca91a5850525518ff25bd815f78ae9cc6c06c78ae7a"
+content_digest = "sha256:6db59c1926e50b55db945de25c783a0da5bdee0cbfad6a40ffa471701bc31953"
 
 [framework]
 repository = "https://github.com/furkancemalcaliskan/hegira.git"
-version = "v0.6.0"
+version = "v0.7.0"
