@@ -177,7 +177,7 @@ The direct local dependency allowlist is enforced from locked Cargo metadata by
 | `application_mutator` | `application_manifest` |
 | `hegira_cli` | `application_manifest`, `application_mutator`, `resource_generator`, `template_renderer` |
 | `resource_generator` | `application_manifest`, `application_mutator` |
-| `template_renderer` | `application_manifest`, `application_mutator` |
+| `template_renderer` | `application_manifest`, `application_mutator`; test-only `upgrade_test_support` |
 | `upgrade_test_support` | None |
 
 Normal, optional, development, and build dependencies use the same ownership
@@ -654,9 +654,11 @@ The edge also binds the exact source package and released baseline digests,
 declares source and target ownership for each composition, and supplies
 direction-correct source and target SHA-256 digests for every managed
 integration. Create operations have only a target digest, edits have both
-digests, and retirements have only a source digest. It cannot contain executable
-commands or select a
-different framework source, package identity, database adapter, or client
+digests, and retirements have only a source digest. Managed file digests and
+manifest transition sets may be scoped to a specific composition when provider
+or module profiles differ; shared declarations apply to every selected
+composition. It cannot contain executable commands or select a different
+framework source, package identity, database adapter, or client
 adapter.
 
 Upgrade-graph loading normalizes declaration order and rejects duplicate edge
@@ -707,9 +709,12 @@ Blocked, unsupported, incompatible, and conflicting inputs are distinct typed,
 content-redacted outcomes. Planning performs no publication, database, network,
 or process operation.
 
-The bundled package does not yet declare a concrete application upgrade edge;
-such an edge is supported only after its released source state and transition
-data are explicitly added and validated.
+The bundled package declares one direct v0.6.0-to-v0.7.0 edge for default and
+minimal layered applications with SQLite or PostgreSQL. It authenticates the
+released baseline and changes only `hegira.toml`, the workspace `Cargo.toml`,
+and `Cargo.lock`. Product layers, runtime configuration, and migration history
+remain application-owned or immutable. The public CLI does not yet expose this
+edge; Identity-added lifecycle transitions are a separate composition contract.
 
 Upgrade tests obtain v0.6.0 application source from committed, content-addressed
 release baselines rather than current templates or mutable remote content. One

@@ -597,6 +597,112 @@ fn package_authenticates_and_resolves_declarative_upgrade_edges() {
 
 #[cfg(unix)]
 #[test]
+fn released_default_and_minimal_baselines_upgrade_only_declared_managed_files() {
+    use upgrade_test_support::{
+        BaselineCatalog, BaselineComposition, BaselineDatabase, BaselineRequest,
+    };
+
+    let repository = repository_root();
+    let baselines = BaselineCatalog::from_repository(&repository).unwrap();
+    let catalog = ManifestCatalog::load(&repository, "layered").unwrap();
+    let parent = TestDirectory::new("released-upgrade-matrix");
+    for composition in [BaselineComposition::Default, BaselineComposition::Minimal] {
+        for database in BaselineDatabase::ALL {
+            let request = BaselineRequest::new(composition, database);
+            let application = parent.path().join(request.id());
+            baselines
+                .snapshot(request)
+                .unwrap()
+                .materialize(&application)
+                .unwrap();
+            let domain = application.join("crates/domain/src/lib.rs");
+            let mut owned_source = fs::read(&domain).unwrap();
+            owned_source.extend_from_slice(b"\n// application-owned product change\n");
+            fs::write(&domain, owned_source).unwrap();
+            let before = output_tree(&application);
+
+            let first = catalog.plan_upgrade(&application).unwrap();
+            let second = catalog.plan_upgrade(&application).unwrap();
+            assert_eq!(first, second, "{}", request.id());
+            assert_eq!(first.source().framework.version, "v0.6.0");
+            assert_eq!(first.target().framework.version, "v0.7.0");
+            let changed = first
+                .change_plan()
+                .changes()
+                .iter()
+                .map(|change| change.path().as_str().to_owned())
+                .collect::<Vec<_>>();
+            assert_eq!(changed, ["Cargo.lock", "Cargo.toml", "hegira.toml"]);
+            let summary = serde_json::to_string(&first.summary()).unwrap();
+            assert!(!summary.contains("application-owned product change"));
+            assert!(!summary.contains("baseline-application"));
+
+            let receipt = publish_change_plan(&application, first.change_plan()).unwrap();
+            assert_eq!(receipt.changed_files(), 3);
+            let after = output_tree(&application);
+            assert_eq!(before.len(), after.len());
+            for (path, bytes) in &before {
+                if !changed.iter().any(|managed| path == Path::new(managed)) {
+                    assert_eq!(
+                        after.get(path),
+                        Some(bytes),
+                        "{}: {}",
+                        request.id(),
+                        path.display()
+                    );
+                }
+            }
+            let manifest = ApplicationManifest::read(application.join("hegira.toml")).unwrap();
+            assert_eq!(manifest.schema, 3);
+            assert_eq!(manifest.application, "baseline-application");
+            assert_eq!(manifest.framework.version, "v0.7.0");
+            assert_eq!(
+                manifest.composition.as_ref().unwrap().package.version,
+                "v0.7.0"
+            );
+            assert_eq!(manifest.selection.databases.len(), 1);
+            assert_eq!(manifest.selection.clients.len(), 1);
+            assert_eq!(
+                manifest.composition.as_ref().unwrap().modules.is_empty(),
+                composition == BaselineComposition::Minimal
+            );
+            let cargo = fs::read_to_string(application.join("Cargo.toml")).unwrap();
+            assert!(cargo.contains("tag = \"v0.7.0\""));
+            assert!(!cargo.contains("tag = \"v0.6.0\""));
+            let lock = fs::read_to_string(application.join("Cargo.lock")).unwrap();
+            assert!(lock.contains("?tag=v0.7.0#"));
+            assert!(!lock.contains("?tag=v0.6.0#"));
+            let expected_lock = if composition == BaselineComposition::Minimal {
+                repository.join("templates/applications/layered-minimal/Cargo.lock")
+            } else {
+                repository.join("templates/applications/layered/Cargo.lock")
+            };
+            assert_eq!(
+                fs::read(application.join("Cargo.lock")).unwrap(),
+                fs::read(expected_lock).unwrap()
+            );
+            assert!(!application.join(".hegira-mutation.lock").exists());
+        }
+    }
+
+    let tampered = parent.path().join("tampered-default-sqlite");
+    baselines
+        .snapshot(BaselineRequest::new(
+            BaselineComposition::Default,
+            BaselineDatabase::Sqlite,
+        ))
+        .unwrap()
+        .materialize(&tampered)
+        .unwrap();
+    fs::write(tampered.join("Cargo.lock"), b"modified managed lockfile").unwrap();
+    let before = output_tree(&tampered);
+    let error = catalog.plan_upgrade(&tampered).unwrap_err();
+    assert_eq!(error.diagnostic().kind, UpgradePlanningErrorKind::Blocked);
+    assert_eq!(before, output_tree(&tampered));
+}
+
+#[cfg(unix)]
+#[test]
 fn upgrade_planning_is_deterministic_redacted_and_publishes_only_authenticated_changes() {
     use std::os::unix::fs::symlink;
 
@@ -1304,7 +1410,7 @@ fn canonical_request(repository: &Path, output: PathBuf) -> RenderRequest {
 
 fn install_test_upgrade_edge(repository: &Path) {
     let upgrades = repository.join("templates/upgrades");
-    fs::create_dir(&upgrades).expect("upgrade manifest directory should be created");
+    fs::create_dir_all(&upgrades).expect("upgrade manifest directory should exist");
     let target = fs::read(repository.join("templates/applications/layered/hegira.toml"))
         .expect("managed target should be readable");
     let target_digest = format!("sha256:{:x}", Sha256::digest(target));

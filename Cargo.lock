@@ -4803,6 +4803,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "toml",
+ "upgrade_test_support",
 ]
 
 [[package]]
