@@ -597,7 +597,7 @@ fn package_authenticates_and_resolves_declarative_upgrade_edges() {
 
 #[cfg(unix)]
 #[test]
-fn released_default_and_minimal_baselines_upgrade_only_declared_managed_files() {
+fn released_application_baselines_upgrade_only_declared_managed_files() {
     use upgrade_test_support::{
         BaselineCatalog, BaselineComposition, BaselineDatabase, BaselineRequest,
     };
@@ -606,7 +606,7 @@ fn released_default_and_minimal_baselines_upgrade_only_declared_managed_files() 
     let baselines = BaselineCatalog::from_repository(&repository).unwrap();
     let catalog = ManifestCatalog::load(&repository, "layered").unwrap();
     let parent = TestDirectory::new("released-upgrade-matrix");
-    for composition in [BaselineComposition::Default, BaselineComposition::Minimal] {
+    for composition in BaselineComposition::ALL {
         for database in BaselineDatabase::ALL {
             let request = BaselineRequest::new(composition, database);
             let application = parent.path().join(request.id());
@@ -619,6 +619,10 @@ fn released_default_and_minimal_baselines_upgrade_only_declared_managed_files() 
             let mut owned_source = fs::read(&domain).unwrap();
             owned_source.extend_from_slice(b"\n// application-owned product change\n");
             fs::write(&domain, owned_source).unwrap();
+            let config = application.join("config/development.yaml");
+            let mut owned_config = fs::read(&config).unwrap();
+            owned_config.extend_from_slice(b"\n# application-owned identity setting\n");
+            fs::write(&config, owned_config).unwrap();
             let before = output_tree(&application);
 
             let first = catalog.plan_upgrade(&application).unwrap();
@@ -635,6 +639,7 @@ fn released_default_and_minimal_baselines_upgrade_only_declared_managed_files() 
             assert_eq!(changed, ["Cargo.lock", "Cargo.toml", "hegira.toml"]);
             let summary = serde_json::to_string(&first.summary()).unwrap();
             assert!(!summary.contains("application-owned product change"));
+            assert!(!summary.contains("application-owned identity setting"));
             assert!(!summary.contains("baseline-application"));
 
             let receipt = publish_change_plan(&application, first.change_plan()).unwrap();
@@ -669,6 +674,40 @@ fn released_default_and_minimal_baselines_upgrade_only_declared_managed_files() 
             let cargo = fs::read_to_string(application.join("Cargo.toml")).unwrap();
             assert!(cargo.contains("tag = \"v0.7.0\""));
             assert!(!cargo.contains("tag = \"v0.6.0\""));
+            for name in [
+                "identity_application",
+                "identity_http",
+                "identity_leptos",
+                "identity_sqlx",
+            ] {
+                let declaration = cargo
+                    .lines()
+                    .find(|line| line.starts_with(&format!("{name} = ")));
+                assert_eq!(
+                    declaration.is_some(),
+                    composition != BaselineComposition::Minimal
+                );
+                if let Some(declaration) = declaration {
+                    assert!(declaration.contains("tag = \"v0.7.0\""));
+                    assert!(declaration.contains("default-features = false"));
+                }
+            }
+            if composition == BaselineComposition::IdentityAdded {
+                let source = std::str::from_utf8(
+                    baselines
+                        .snapshot(request)
+                        .unwrap()
+                        .file("Cargo.toml")
+                        .unwrap()
+                        .bytes(),
+                )
+                .unwrap();
+                let expected = source
+                    .replace("tag = \"v0.6.0\"", "tag = \"v0.7.0\"")
+                    .parse::<toml::Table>()
+                    .unwrap();
+                assert_eq!(cargo.parse::<toml::Table>().unwrap(), expected);
+            }
             let lock = fs::read_to_string(application.join("Cargo.lock")).unwrap();
             assert!(lock.contains("?tag=v0.7.0#"));
             assert!(!lock.contains("?tag=v0.6.0#"));

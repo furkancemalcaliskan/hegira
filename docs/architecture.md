@@ -657,9 +657,13 @@ integration. Create operations have only a target digest, edits have both
 digests, and retirements have only a source digest. Managed file digests and
 manifest transition sets may be scoped to a specific composition when provider
 or module profiles differ; shared declarations apply to every selected
-composition. It cannot contain executable commands or select a different
-framework source, package identity, database adapter, or client
-adapter.
+composition. A managed integration may explicitly take its target bytes from
+another declared package component at the same path. Its ownership stays with
+the installed component, while the target path and digest must match the
+authenticated package snapshot. This lets an Identity-added application use
+the canonical Identity lockfile without installing the default UI component.
+Edges cannot contain executable commands or change the framework source,
+package identity, database adapter, or client adapter.
 
 Upgrade-graph loading normalizes declaration order and rejects duplicate edge
 or composition identities, a source composition mapped more than once,
@@ -709,12 +713,16 @@ Blocked, unsupported, incompatible, and conflicting inputs are distinct typed,
 content-redacted outcomes. Planning performs no publication, database, network,
 or process operation.
 
-The bundled package declares one direct v0.6.0-to-v0.7.0 edge for default and
-minimal layered applications with SQLite or PostgreSQL. It authenticates the
-released baseline and changes only `hegira.toml`, the workspace `Cargo.toml`,
-and `Cargo.lock`. Product layers, runtime configuration, and migration history
-remain application-owned or immutable. The public CLI does not yet expose this
-edge; Identity-added lifecycle transitions are a separate composition contract.
+The bundled package declares one direct v0.6.0-to-v0.7.0 edge for default,
+minimal, and Identity-added layered applications with SQLite or PostgreSQL.
+It authenticates the released baseline and changes only `hegira.toml`, the
+workspace `Cargo.toml`, and `Cargo.lock`. Default and later-installed Identity
+compositions retain their explicit server, HTTP, migration-source, configuration,
+and Leptos integrations because these application files do not change across
+this release edge; the version-pinned official packages advance together.
+Product layers, runtime configuration values, generated resources, and migration
+history remain application-owned or immutable. The public CLI does not yet
+expose this edge.
 
 Upgrade tests obtain v0.6.0 application source from committed, content-addressed
 release baselines rather than current templates or mutable remote content. One

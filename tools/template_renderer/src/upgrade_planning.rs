@@ -886,6 +886,7 @@ mod tests {
             integration: "managed-source".to_owned(),
             kind,
             source_sha256: None,
+            target_source_component: None,
             target_sha256: None,
         }
     }

@@ -86,6 +86,8 @@ pub struct ManagedIntegrationTransition {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_sha256: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_source_component: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub target_sha256: Option<String>,
 }
 
@@ -488,6 +490,21 @@ fn validate_managed_integrations(
                 "managed-integration.component",
             ));
         }
+        if let Some(source_component) = &transition.target_source_component {
+            validate_graph_identifier(source_component, "target source component")?;
+            if !components.contains_key(source_component) {
+                return Err(graph_error(
+                    UpgradeGraphDiagnosticKind::UndeclaredComponent,
+                    "managed-integration.target-source-component",
+                ));
+            }
+            if transition.kind == ManagedIntegrationTransitionKind::Retire {
+                return Err(graph_error(
+                    UpgradeGraphDiagnosticKind::InvalidDigest,
+                    "managed-integration.target-source-component",
+                ));
+            }
+        }
         validate_transition_digests(transition, component_paths)?;
         if !seen.insert((
             &transition.component,
@@ -546,8 +563,12 @@ fn validate_transition_digests(
     }
     if let Some(target) = &transition.target_sha256 {
         validate_sha256(target, "managed-integration.target-sha256")?;
+        let target_component = transition
+            .target_source_component
+            .as_ref()
+            .unwrap_or(&transition.component);
         let actual = component_paths
-            .get(&(transition.component.clone(), transition.path.clone()))
+            .get(&(target_component.clone(), transition.path.clone()))
             .ok_or_else(|| {
                 graph_error(
                     UpgradeGraphDiagnosticKind::UndeclaredManagedPath,
@@ -983,6 +1004,34 @@ mod tests {
     }
 
     #[test]
+    fn target_source_component_is_declared_and_path_bounded() {
+        let missing_component = error_after(|edge, _| {
+            edge.managed_integrations[1].target_source_component =
+                Some("unknown-component".to_owned());
+        });
+        assert_eq!(
+            missing_component.kind,
+            UpgradeGraphDiagnosticKind::UndeclaredComponent
+        );
+
+        let undeclared_path = error_after(|edge, _| {
+            edge.managed_integrations[1].target_source_component = Some("identity".to_owned());
+        });
+        assert_eq!(
+            undeclared_path.kind,
+            UpgradeGraphDiagnosticKind::UndeclaredManagedPath
+        );
+
+        let retirement = error_after(|edge, _| {
+            let transition = &mut edge.managed_integrations[1];
+            transition.kind = ManagedIntegrationTransitionKind::Retire;
+            transition.target_sha256 = None;
+            transition.target_source_component = Some("identity".to_owned());
+        });
+        assert_eq!(retirement.kind, UpgradeGraphDiagnosticKind::InvalidDigest);
+    }
+
+    #[test]
     fn declaration_permutations_produce_byte_identical_resolution() {
         let components = components();
         let mut canonical = vec![edge()];
@@ -1125,6 +1174,7 @@ mod tests {
                     integration: format!("oversized-{index:03}"),
                     kind: ManagedIntegrationTransitionKind::Edit,
                     source_sha256: Some(digest('b')),
+                    target_source_component: None,
                     target_sha256: Some(digest('a')),
                 })
                 .collect();
@@ -1421,6 +1471,7 @@ mod tests {
                     integration: "identity-routes".to_owned(),
                     kind: ManagedIntegrationTransitionKind::Edit,
                     source_sha256: Some(digest('b')),
+                    target_source_component: None,
                     target_sha256: Some(digest('a')),
                 },
                 ManagedIntegrationTransition {
@@ -1429,6 +1480,7 @@ mod tests {
                     integration: "application-manifest".to_owned(),
                     kind: ManagedIntegrationTransitionKind::Edit,
                     source_sha256: Some(digest('b')),
+                    target_source_component: None,
                     target_sha256: Some(digest('a')),
                 },
             ],
