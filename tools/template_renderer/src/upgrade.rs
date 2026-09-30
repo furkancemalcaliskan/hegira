@@ -50,6 +50,10 @@ pub struct UpgradeCompositionTransition {
     pub target_ownership: SourceOwnership,
     pub source: UpgradeCompositionState,
     pub target: UpgradeCompositionState,
+    #[serde(default)]
+    pub manifest_transitions: Option<Vec<UpgradeManifestTransition>>,
+    #[serde(default)]
+    pub managed_integrations: Vec<ManagedIntegrationTransition>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -321,6 +325,18 @@ pub(crate) fn validate_upgrade_graph(
             ));
         }
 
+        let integration_count = edge.managed_integrations.len()
+            + edge
+                .compositions
+                .iter()
+                .map(|composition| composition.managed_integrations.len())
+                .sum::<usize>();
+        if integration_count > MAX_MANAGED_INTEGRATIONS_PER_EDGE {
+            return Err(graph_error(
+                UpgradeGraphDiagnosticKind::LimitExceeded,
+                "upgrade-edge.managed-integrations",
+            ));
+        }
         edge.compositions
             .sort_by(|left, right| left.id.cmp(&right.id));
         let mut composition_ids = BTreeSet::new();
@@ -339,6 +355,10 @@ pub(crate) fn validate_upgrade_graph(
                     &right.integration,
                 ))
             });
+            transition.managed_integrations.sort();
+            if let Some(manifest_transitions) = &mut transition.manifest_transitions {
+                sort_unique(manifest_transitions)?;
+            }
             validate_graph_identifier(&transition.id, "upgrade composition")?;
             if !composition_ids.insert(transition.id.clone()) {
                 return Err(graph_error(
@@ -382,36 +402,8 @@ pub(crate) fn validate_upgrade_graph(
         }
 
         sort_unique(&mut edge.manifest_transitions)?;
-        if edge.managed_integrations.len() > MAX_MANAGED_INTEGRATIONS_PER_EDGE {
-            return Err(graph_error(
-                UpgradeGraphDiagnosticKind::LimitExceeded,
-                "upgrade-edge.managed-integrations",
-            ));
-        }
         edge.managed_integrations.sort();
-        let mut managed_integrations = BTreeSet::new();
-        for transition in &edge.managed_integrations {
-            validate_graph_identifier(&transition.component, "managed integration component")?;
-            validate_graph_identifier(&transition.integration, "managed integration")?;
-            validate_graph_path(Path::new(&transition.path), "managed integration path")?;
-            if !components.contains_key(&transition.component) {
-                return Err(graph_error(
-                    UpgradeGraphDiagnosticKind::UndeclaredComponent,
-                    "managed-integration.component",
-                ));
-            }
-            validate_transition_digests(transition, component_paths)?;
-            if !managed_integrations.insert((
-                transition.component.clone(),
-                transition.path.clone(),
-                transition.integration.clone(),
-            )) {
-                return Err(graph_error(
-                    UpgradeGraphDiagnosticKind::ConflictingManagedTransition,
-                    "managed-integration",
-                ));
-            }
-        }
+        validate_managed_integrations(&edge.managed_integrations, components, component_paths)?;
 
         for composition in &edge.compositions {
             let applicable_components = composition
@@ -420,11 +412,38 @@ pub(crate) fn validate_upgrade_graph(
                 .iter()
                 .chain(&composition.target.components)
                 .collect::<BTreeSet<_>>();
+            validate_managed_integrations(
+                &composition.managed_integrations,
+                components,
+                component_paths,
+            )?;
+            if composition
+                .managed_integrations
+                .iter()
+                .any(|transition| !applicable_components.contains(&transition.component))
+            {
+                return Err(graph_error(
+                    UpgradeGraphDiagnosticKind::UndeclaredComponent,
+                    "upgrade-composition.managed-integration.component",
+                ));
+            }
+            let mut applicable_integrations = BTreeSet::new();
             for transition in edge
                 .managed_integrations
                 .iter()
+                .chain(composition.managed_integrations.iter())
                 .filter(|transition| applicable_components.contains(&transition.component))
             {
+                if !applicable_integrations.insert((
+                    &transition.component,
+                    &transition.path,
+                    &transition.integration,
+                )) {
+                    return Err(graph_error(
+                        UpgradeGraphDiagnosticKind::ConflictingManagedTransition,
+                        "managed-integration",
+                    ));
+                }
                 let ownership = match transition.kind {
                     ManagedIntegrationTransitionKind::Create => &composition.target_ownership,
                     ManagedIntegrationTransitionKind::Edit => {
@@ -453,6 +472,36 @@ pub(crate) fn validate_upgrade_graph(
     Ok(())
 }
 
+fn validate_managed_integrations(
+    integrations: &[ManagedIntegrationTransition],
+    components: &BTreeMap<String, ComponentManifest>,
+    component_paths: &BTreeMap<(String, String), String>,
+) -> Result<()> {
+    let mut seen = BTreeSet::new();
+    for transition in integrations {
+        validate_graph_identifier(&transition.component, "managed integration component")?;
+        validate_graph_identifier(&transition.integration, "managed integration")?;
+        validate_graph_path(Path::new(&transition.path), "managed integration path")?;
+        if !components.contains_key(&transition.component) {
+            return Err(graph_error(
+                UpgradeGraphDiagnosticKind::UndeclaredComponent,
+                "managed-integration.component",
+            ));
+        }
+        validate_transition_digests(transition, component_paths)?;
+        if !seen.insert((
+            &transition.component,
+            &transition.path,
+            &transition.integration,
+        )) {
+            return Err(graph_error(
+                UpgradeGraphDiagnosticKind::ConflictingManagedTransition,
+                "managed-integration",
+            ));
+        }
+    }
+    Ok(())
+}
 fn ownership_declares(
     ownership: &SourceOwnership,
     transition: &ManagedIntegrationTransition,
@@ -565,8 +614,16 @@ pub(crate) fn resolve_upgrade_edge(
         source: matching_release.source.clone(),
         target: matching_release.target.clone(),
         composition: composition.clone(),
-        manifest_transitions: matching_release.manifest_transitions.clone(),
-        managed_integrations: matching_release.managed_integrations.clone(),
+        manifest_transitions: composition
+            .manifest_transitions
+            .clone()
+            .unwrap_or_else(|| matching_release.manifest_transitions.clone()),
+        managed_integrations: matching_release
+            .managed_integrations
+            .iter()
+            .chain(composition.managed_integrations.iter())
+            .cloned()
+            .collect(),
     })
 }
 
@@ -853,6 +910,79 @@ mod tests {
     }
 
     #[test]
+    fn composition_specific_managed_digests_resolve_without_cross_profile_leakage() {
+        let mut candidate = edge();
+        let base = candidate
+            .managed_integrations
+            .iter()
+            .position(|integration| integration.component == "base")
+            .map(|index| candidate.managed_integrations.remove(index))
+            .unwrap();
+        for composition in &mut candidate.compositions {
+            let mut integration = base.clone();
+            integration.source_sha256 = Some(if composition.id.starts_with("minimal") {
+                digest('c')
+            } else {
+                digest('b')
+            });
+            if composition.id.starts_with("minimal") {
+                composition.manifest_transitions = Some(vec![UpgradeManifestTransition::Framework]);
+            }
+            composition.managed_integrations.push(integration);
+        }
+        let mut edges = vec![candidate];
+        validate(&mut edges, &components()).unwrap();
+        for composition in &edges[0].compositions {
+            let resolved = resolve_upgrade_edge(
+                &edges,
+                &UpgradeEdgeRequest {
+                    source: release("v0.5.0"),
+                    composition: composition.source.clone(),
+                },
+            )
+            .unwrap();
+            assert_eq!(
+                resolved.manifest_transitions,
+                if composition.id.starts_with("minimal") {
+                    vec![UpgradeManifestTransition::Framework]
+                } else {
+                    edges[0].manifest_transitions.clone()
+                }
+            );
+            let expected = if composition.id.starts_with("minimal") {
+                digest('c')
+            } else {
+                digest('b')
+            };
+            assert_eq!(
+                resolved
+                    .managed_integrations
+                    .iter()
+                    .find(|integration| integration.component == "base")
+                    .unwrap()
+                    .source_sha256,
+                Some(expected)
+            );
+        }
+        let duplicated = edges[0].managed_integrations[0].clone();
+        let matching = edges[0]
+            .compositions
+            .iter_mut()
+            .find(|composition| {
+                composition
+                    .source
+                    .components
+                    .contains(&duplicated.component)
+            })
+            .unwrap();
+        matching.managed_integrations.push(duplicated);
+        assert_eq!(
+            error_for(edges, components()).kind,
+            UpgradeGraphDiagnosticKind::ConflictingManagedTransition
+        );
+    }
+
+    #[test]
     fn declaration_permutations_produce_byte_identical_resolution() {
         let components = components();
         let mut canonical = vec![edge()];
@@ -868,6 +998,9 @@ mod tests {
                 deterministic_order_key(format!("{transition:?}").as_bytes(), seed + 97)
             });
             candidate[0].managed_integrations.reverse();
+            for composition in &mut candidate[0].compositions {
+                composition.managed_integrations.reverse();
+            }
 
             validate(&mut candidate, &components).unwrap();
             assert_eq!(candidate, canonical, "seed {seed}");
@@ -1021,6 +1154,30 @@ mod tests {
             diagnostics
                 .iter()
                 .all(|diagnostic| !diagnostic.subject.is_empty())
+        );
+    }
+
+    #[test]
+    fn invalid_composition_specific_managed_transitions_fail_closed() {
+        let invalid_target = error_after(|edge, _| {
+            let mut transition = edge.managed_integrations[1].clone();
+            transition.target_sha256 = Some(digest('f'));
+            edge.compositions[0].managed_integrations.push(transition);
+        });
+        assert_eq!(
+            invalid_target.kind,
+            UpgradeGraphDiagnosticKind::InvalidDigest
+        );
+
+        let undeclared_owner = error_after(|edge, _| {
+            let transition = edge.managed_integrations.remove(1);
+            edge.managed_integrations.clear();
+            edge.compositions[0].target_ownership.claims.clear();
+            edge.compositions[0].managed_integrations.push(transition);
+        });
+        assert_eq!(
+            undeclared_owner.kind,
+            UpgradeGraphDiagnosticKind::InvalidOwnership
         );
     }
 
@@ -1240,6 +1397,8 @@ mod tests {
                     },
                     source: state.clone(),
                     target: state,
+                    manifest_transitions: None,
+                    managed_integrations: Vec::new(),
                 });
             }
         }

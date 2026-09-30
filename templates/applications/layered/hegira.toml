@@ -28,6 +28,16 @@ version = "{{package_version}}"
 default = "application-owned"
 
 [[upgrade.ownership.claims]]
+path = "Cargo.lock"
+class = "managed-integration"
+integration = "framework-lockfile"
+
+[[upgrade.ownership.claims]]
+path = "Cargo.toml"
+class = "managed-integration"
+integration = "framework-dependencies"
+
+[[upgrade.ownership.claims]]
 path = "Dockerfile"
 class = "generated-once"
 
