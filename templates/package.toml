@@ -5,7 +5,7 @@ templates = ["layered"]
 components = ["identity", "layered-base", "layered-leptos-identity", "layered-leptos-minimal"]
 modules = ["identity"]
 upgrade_edges = ["upgrades/v0-6-0-to-v0-7-0.toml"]
-content_digest = "sha256:cf46f0e1a4cc41475982fbac125e6d6f85e9ec198c7b0e9d3107bcef991a290f"
+content_digest = "sha256:e80d6a643650708c7b623ab0516868c7606564b553929ad4814b190e89a905c9"
 
 [framework]
 repository = "https://github.com/furkancemalcaliskan/hegira.git"
