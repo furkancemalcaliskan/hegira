@@ -177,7 +177,7 @@ The direct local dependency allowlist is enforced from locked Cargo metadata by
 | `application_mutator` | `application_manifest` |
 | `hegira_cli` | `application_manifest`, `application_mutator`, `resource_generator`, `template_renderer` |
 | `resource_generator` | `application_manifest`, `application_mutator` |
-| `template_renderer` | `application_manifest`, `application_mutator`; test-only `upgrade_test_support` |
+| `template_renderer` | `application_manifest`, `application_mutator`; test-only `resource_generator`, `upgrade_test_support` |
 | `upgrade_test_support` | None |
 
 Normal, optional, development, and build dependencies use the same ownership
@@ -733,6 +733,24 @@ object store avoids duplicate bytes. The test-only `upgrade_test_support` tool
 authenticates the complete closed fixture set before exposing an in-memory
 snapshot or materializing it into a previously absent disposable directory; it
 does not invoke Git, execute fixture content, or access the network.
+
+Focused preservation tests customize these released baselines with product
+code in every application layer, provider-specific generated resources where
+Identity is installed, runtime configuration values, and append-only application
+migrations. Sorted path/SHA-256 fingerprints prove that every file outside the
+three declared release-managed files and every historical migration remains
+unchanged. Minimal applications retain their capability boundary and reject
+protected resource generation. Conflicting managed edits block planning, and
+edits made after planning block publication without changing product files.
+Fixed product-tree fingerprints also prevent later generator changes from
+silently replacing the customized source used to exercise released applications.
+The layered-template gate additionally compiles all six customized upgraded
+profiles natively and with hydration. Only separate disposable compile copies
+replace release dependencies with local framework paths; verified upgrade
+output retains its release-pinned sources and lockfile.
+Profile compilation is serialized through one stable application source path
+to prevent Cargo from confusing same-named local packages across fixture trees
+while reusing compatible framework artifacts.
 
 The reusable renderer exposes typed composition request/result/diagnostic,
 render request, plan, publication-result, and error-category contracts. A

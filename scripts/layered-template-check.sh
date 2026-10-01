@@ -66,4 +66,28 @@ fi
     --bin-cargo-args=--locked --lib-cargo-args=--locked
 )
 
+echo "==> Customized released-application upgrade preservation"
+cargo run --locked --quiet -p template_renderer --example upgrade_preservation -- \
+  "$repo_root" "$staging_parent/upgrade-preservation"
+for composition in default minimal identity-added; do
+  for database in sqlite postgres; do
+    echo "==> Customized upgrade compilation: $composition/$database"
+    # These workspaces intentionally share package names. Use one stable source
+    # path, copied after the preceding build, so Cargo observes changed local
+    # source instead of reusing artifacts from another fixture tree.
+    compile_root="$staging_parent/upgrade-preservation/compile-application"
+    rm -rf "$compile_root"
+    cp -R "$staging_parent/upgrade-preservation/$composition-$database" "$compile_root"
+    (
+      cd "$compile_root"
+      # Resolve only the separate local-source compile copy, then require its lock.
+      cargo generate-lockfile
+      cargo check --locked --workspace --all-targets --no-default-features \
+        --features "app_server/ssr,app_server/db-$database"
+      cargo check --locked -p app_server --no-default-features --features hydrate \
+        --target wasm32-unknown-unknown
+    )
+  done
+done
+
 echo "canonical layered application template: ok"
