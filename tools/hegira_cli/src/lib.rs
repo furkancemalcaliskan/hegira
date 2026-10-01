@@ -41,6 +41,7 @@ mod component;
 mod doctor;
 mod identity_installation;
 mod mutation;
+mod upgrade;
 
 use component::ComponentCommand;
 use doctor::DoctorCommand;
@@ -90,6 +91,8 @@ enum CliCommand {
     Inspect(InspectCommand),
     /// Diagnose application composition and local prerequisites without modifying it.
     Doctor(DoctorCommand),
+    /// Inspect application upgrade readiness without modifying source.
+    Upgrade(upgrade::UpgradeCommand),
     /// Manage bundled additive application components.
     Component(ComponentCommand),
     /// Generate application-owned source through validated change plans.
@@ -429,6 +432,9 @@ fn run_command(
             output,
             diagnostics,
         ),
+        CliCommand::Upgrade(command) => {
+            upgrade::run(command, repository_root, working_directory, output)
+        }
         CliCommand::Component(command) => component::run(
             command,
             repository_root,

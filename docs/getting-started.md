@@ -19,6 +19,7 @@ cargo run --locked -p hegira_cli -- --help
 cargo run --locked -p hegira_cli -- new --help
 cargo run --locked -p hegira_cli -- inspect --help
 cargo run --locked -p hegira_cli -- doctor --help
+cargo run --locked -p hegira_cli -- upgrade status --help
 cargo run --locked -p hegira_cli -- component add --help
 cargo run --locked -p hegira_cli -- generate resource --help
 cargo run --locked -p hegira_cli -- generate migration --help
@@ -208,7 +209,7 @@ current CLI will not mutate or serialize them until an explicit supported
 schema transition has been applied. Reading or validating the manifest does
 not access the network or modify application files.
 
-The CLI currently exposes application creation, read-only inspection, a
+The CLI currently exposes application creation, read-only inspection and upgrade readiness, a
 reviewable bundled-component addition boundary, complete layered resource
 generation, and application-owned migration scaffold generation. Component
 addition accepts one bundled component identity, resolves the authenticated
@@ -325,6 +326,51 @@ Inspection is read-only. It opens the manifest and required application-owned
 read application source, runtime configuration, environment values, user-home
 state, or secrets; it exposes no machine-local framework path and does not
 write application files.
+
+## Assess Application Upgrade Readiness
+
+From an application root or descendant directory, invoke the source-built CLI:
+
+```sh
+cargo run --locked --manifest-path /path/to/hegira/Cargo.toml \
+  -p hegira_cli -- upgrade status --json
+```
+
+Omit `--json` for human output, or select `--application-root /path/to/application`
+explicitly. Discovery uses the same no-follow, ambiguity-rejecting contract as
+`inspect`. Assessment authenticates the bundled package, exact source and direct
+target release identities, composition, ownership, managed source digests, and
+the declared manifest transition. The supported source states are the immutable
+v0.6.0 default, minimal, and Identity-added SQLite/PostgreSQL profiles, each with
+one direct v0.7.0 target. Compatible current v0.7.0 profiles report `no-upgrade`;
+their managed-boundary check is `not-applicable` because there is no outgoing
+edge to assess.
+
+The schema-1 JSON report contains `output_schema`, `status`, `source`, `target`,
+sorted `composition` components/modules/capabilities/adapters, `recovery`,
+`managed_boundaries`, and sorted content-redacted `diagnostics`. Release output
+contains framework versions and package identities, not machine-local paths or
+arbitrary recorded repository URLs. Human and JSON assessments are written to
+stdout, including unsuccessful assessments. Parser usage errors use stderr.
+
+| Status | Exit code | Meaning |
+| --- | --- | --- |
+| `ready` | 0 | The supported direct transition passed preflight |
+| `no-upgrade` | 0 | The current composition has no outgoing bundled upgrade |
+| `unsupported` | 3 | The source release or schema has no supported direct edge |
+| `incompatible` | 3 | Release source, composition, or manifest transition does not match |
+| `invalid-input` | 3 | Application discovery or manifest validation failed |
+| `conflict` | 4 | Application source cannot be safely authenticated |
+| `recovery-blocked` | 4 | A mutation recovery marker exists |
+| `internal-error` | 1 | The bundled package or CLI contract cannot be established |
+
+Malformed command syntax exits 2. Recovery checks only inspect marker presence;
+they do not read, remove, or follow the marker. Assessment creates no mutation
+plan or publication state and performs no source writes, network requests,
+database access, subprocess execution, or runtime configuration/secret reads.
+`ready` is an observation, not authorization to mutate: source must be
+reauthenticated for a subsequent operation. Public upgrade plan/apply commands
+are not exposed by this source checkout.
 
 ## Diagnose An Existing Application
 

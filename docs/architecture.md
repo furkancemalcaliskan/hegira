@@ -175,7 +175,7 @@ The direct local dependency allowlist is enforced from locked Cargo metadata by
 | `identity_http` | `http_support`, `identity_application`, `identity_application_contracts`, `leptos_support` |
 | `identity_leptos` | `identity_application`, `identity_application_contracts`, `identity_domain_shared`, `leptos_support` |
 | `application_mutator` | `application_manifest` |
-| `hegira_cli` | `application_manifest`, `application_mutator`, `resource_generator`, `template_renderer` |
+| `hegira_cli` | `application_manifest`, `application_mutator`, `resource_generator`, `template_renderer`; test-only `upgrade_test_support` |
 | `resource_generator` | `application_manifest`, `application_mutator` |
 | `template_renderer` | `application_manifest`, `application_mutator`; test-only `resource_generator`, `upgrade_test_support` |
 | `upgrade_test_support` | None |
@@ -423,7 +423,7 @@ are modified; the contract does not claim universal filesystem transactions.
 
 `tools/hegira_cli` owns the `hegira` binary command shell. It defines top-level
 help, version reporting, guided and deterministic non-interactive application
-creation, read-only application inspection, concise diagnostics, and stable
+creation, read-only application inspection and direct-upgrade readiness, concise diagnostics, and stable
 process outcomes without reading a user home directory or global configuration.
 It delegates new-application component planning and atomic publication to
 `template_renderer`, and existing-application publication to
@@ -431,7 +431,8 @@ It delegates new-application component planning and atomic publication to
 `resource_generator`; repository-local dependency rewrites remain unavailable
 to the public command. Help, version information, successful creation
 instructions, inspection results, and mutation plans are written to standard
-output; usage and failure diagnostics are written to standard error.
+output; usage and failure diagnostics are written to standard error, except
+upgrade assessments, whose typed unsuccessful outcomes also remain on stdout.
 
 The process outcomes are `0` for success, `1` for an internal error, `2` for
 invalid usage, `3` for validation failure, and `4` for a destination or state
@@ -721,8 +722,15 @@ compositions retain their explicit server, HTTP, migration-source, configuration
 and Leptos integrations because these application files do not change across
 this release edge; the version-pinned official packages advance together.
 Product layers, runtime configuration values, generated resources, and migration
-history remain application-owned or immutable. The public CLI does not yet
-expose this edge.
+history remain application-owned or immutable. The public CLI exposes this edge
+through read-only `upgrade status`, not through public plan/apply commands.
+Readiness authenticates the package, application ownership and managed boundary,
+then shares the planner's pure target-manifest validation without constructing
+a change plan. Recovery-marker inspection is anchored and no-follow; any marker
+blocks readiness without reading its contents. Sorted schema-1 JSON and human
+reports redact source content and machine-local paths and distinguish unsupported,
+incompatible, conflicting, and recovery-blocked states. Compatible current
+compositions report no upgrade. Assessment does not authorize later mutation.
 
 Upgrade tests obtain v0.6.0 application source from committed, content-addressed
 release baselines rather than current templates or mutable remote content. One
