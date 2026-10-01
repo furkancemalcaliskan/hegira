@@ -4797,6 +4797,7 @@ version = "0.7.0"
 dependencies = [
  "application_manifest",
  "application_mutator",
+ "resource_generator",
  "rustix",
  "semver",
  "serde",
