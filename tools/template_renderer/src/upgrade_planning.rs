@@ -30,6 +30,34 @@ const APPLICATION_MANIFEST_PATH: &str = "hegira.toml";
 const APPLICATION_MANIFEST_INTEGRATION: &str = "application-manifest";
 const FRAMEWORK_DEPENDENCIES_INTEGRATION: &str = "framework-dependencies";
 
+impl ManifestCatalog {
+    /// Validate the target manifest contract without constructing a mutation plan.
+    pub fn validate_upgrade_transition(
+        &self,
+        boundary: &AuthenticatedUpgradeBoundary,
+    ) -> Result<(), UpgradePlanningError> {
+        validated_target_manifest(self, boundary).map(|_| ())
+    }
+}
+
+fn validated_target_manifest(
+    catalog: &ManifestCatalog,
+    boundary: &AuthenticatedUpgradeBoundary,
+) -> Result<(ResolvedComposition, ApplicationManifest), UpgradePlanningError> {
+    let graph = resolve_target_composition(catalog, boundary)?;
+    reject_component_removal(boundary, &graph)?;
+    target_framework_dependencies(catalog, &graph)?;
+    let target = target_manifest(boundary, &graph)?;
+    if manifest_transitions(boundary.application(), &target) != boundary.edge().manifest_transitions
+    {
+        return Err(planning_error(
+            UpgradePlanningErrorKind::Incompatible,
+            "manifest-transitions",
+        ));
+    }
+    Ok((graph, target))
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum UpgradePlanningErrorKind {
@@ -97,17 +125,9 @@ impl UpgradePlan {
         catalog: &ManifestCatalog,
         boundary: AuthenticatedUpgradeBoundary,
     ) -> Result<Self, UpgradePlanningError> {
-        let graph = resolve_target_composition(catalog, &boundary)?;
-        reject_component_removal(&boundary, &graph)?;
+        let (graph, target_manifest) = validated_target_manifest(catalog, &boundary)?;
         let dependencies = target_framework_dependencies(catalog, &graph)?;
-        let target_manifest = target_manifest(&boundary, &graph)?;
         let manifest_transitions = manifest_transitions(boundary.application(), &target_manifest);
-        if manifest_transitions != boundary.edge().manifest_transitions {
-            return Err(planning_error(
-                UpgradePlanningErrorKind::Incompatible,
-                "manifest-transitions",
-            ));
-        }
 
         let mut changes = Vec::new();
         let mut owners = BTreeMap::new();

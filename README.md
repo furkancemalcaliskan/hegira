@@ -174,6 +174,11 @@ Run the command from anywhere below the application root, or pass
 versioned machine-readable contract. See [Inspecting an existing application](docs/getting-started.md#inspect-an-existing-application)
 for discovery, compatibility, and safety behavior.
 
+Use `upgrade status` (optionally `--json`) to assess the authenticated direct
+upgrade target without changing application source. See
+[Upgrade readiness](docs/getting-started.md#assess-application-upgrade-readiness)
+for supported release states, recovery checks, and process outcomes.
+
 From a generated application, create an append-only migration scaffold for
 the database adapter selected in `hegira.toml`:
 

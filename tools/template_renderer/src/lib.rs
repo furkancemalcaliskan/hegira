@@ -24,7 +24,7 @@ pub use upgrade::{
 pub use upgrade_authentication::{
     AuthenticatedManagedSource, AuthenticatedUpgradeBoundary, UPGRADE_AUTHENTICATION_SCHEMA,
     UpgradeAuthenticationDiagnostic, UpgradeAuthenticationDiagnosticKind,
-    UpgradeAuthenticationError,
+    UpgradeAuthenticationError, upgrade_recovery_pending,
 };
 pub use upgrade_planning::{
     UPGRADE_PLAN_SUMMARY_SCHEMA, UPGRADE_PLANNING_DIAGNOSTIC_SCHEMA, UpgradePlan,

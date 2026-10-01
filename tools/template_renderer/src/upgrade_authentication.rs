@@ -15,6 +15,26 @@ use crate::{
 pub const UPGRADE_AUTHENTICATION_SCHEMA: u32 = 1;
 const MAX_MANAGED_SOURCE_BYTES: u64 = 64 * 1024 * 1024;
 
+/// Inspect only the reserved marker's existence through an anchored no-follow
+/// read. Marker contents are neither opened nor interpreted.
+pub fn upgrade_recovery_pending(
+    application_root: impl AsRef<Path>,
+) -> Result<bool, UpgradeAuthenticationError> {
+    let source = ApplicationSource::open(application_root.as_ref())?;
+    let pending = match source.ensure_absent(Path::new(application_mutator::MUTATION_MARKER)) {
+        Ok(()) => false,
+        Err(error)
+            if error.diagnostic().kind
+                == UpgradeAuthenticationDiagnosticKind::UnexpectedManagedSource =>
+        {
+            true
+        }
+        Err(error) => return Err(error),
+    };
+    source.verify_root()?;
+    Ok(pending)
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum UpgradeAuthenticationDiagnosticKind {

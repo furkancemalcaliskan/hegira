@@ -1774,6 +1774,7 @@ dependencies = [
  "serde",
  "serde_json",
  "template_renderer",
+ "upgrade_test_support",
 ]
 
 [[package]]
