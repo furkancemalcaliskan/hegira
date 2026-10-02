@@ -21,10 +21,20 @@ use crate::{
 
 pub const UPGRADE_STATUS_OUTPUT_SCHEMA: u32 = 1;
 
+mod preview;
+
 #[derive(Debug, Args)]
 pub(crate) struct UpgradeCommand {
     #[command(subcommand)]
-    command: UpgradeSubcommand,
+    command: Option<UpgradeSubcommand>,
+    #[command(flatten)]
+    options: StatusCommand,
+    /// Preview the supported direct upgrade without modifying the application.
+    #[arg(long)]
+    dry_run: bool,
+    /// Exact direct target release; skipped and arbitrary targets are rejected.
+    #[arg(long, value_name = "VERSION")]
+    target: Option<String>,
 }
 
 #[derive(Debug, Subcommand)]
@@ -166,8 +176,45 @@ pub(crate) fn run(
     repository: PathBuf,
     working_directory: PathBuf,
     output: &mut impl Write,
+    diagnostics: &mut impl Write,
 ) -> CliExit {
-    let UpgradeSubcommand::Status(command) = command.command;
+    let command = match command.command {
+        Some(UpgradeSubcommand::Status(status))
+            if !command.dry_run
+                && command.target.is_none()
+                && !command.options.json
+                && command.options.application_root.is_none() =>
+        {
+            status
+        }
+        Some(_) => {
+            return crate::write_diagnostic(
+                crate::CliDiagnostic::usage(
+                    "upgrade status does not accept upgrade preview options",
+                    "Use hegira upgrade status --help.",
+                ),
+                diagnostics,
+            );
+        }
+        None if command.dry_run => {
+            return preview::run(
+                &repository,
+                working_directory,
+                command.options,
+                command.target,
+                output,
+            );
+        }
+        None => {
+            return crate::write_diagnostic(
+                crate::CliDiagnostic::usage(
+                    "upgrade requires status or --dry-run",
+                    "Use hegira upgrade --dry-run to preview the supported direct transition.",
+                ),
+                diagnostics,
+            );
+        }
+    };
     let report = assess(&repository, working_directory, command.application_root);
     let rendered = if command.json {
         serde_json::to_string_pretty(&report).ok()
@@ -541,6 +588,23 @@ mod tests {
         let json = serde_json::to_string(&report).unwrap();
         assert!(!json.contains(root.to_str().unwrap()));
         assert!(!root.join(application_mutator::MUTATION_MARKER).exists());
+        let mut preview_output = Vec::new();
+        assert_eq!(
+            preview::run(
+                &root,
+                root.clone(),
+                StatusCommand {
+                    application_root: None,
+                    json: true
+                },
+                None,
+                &mut preview_output
+            ),
+            CliExit::Internal
+        );
+        let preview: serde_json::Value = serde_json::from_slice(&preview_output).unwrap();
+        assert_eq!(preview["outcome"], "unavailable");
+        assert!(preview["plan"].is_null());
         std::fs::remove_dir_all(root).unwrap();
     }
 }

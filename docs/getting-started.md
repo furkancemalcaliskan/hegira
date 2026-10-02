@@ -20,6 +20,7 @@ cargo run --locked -p hegira_cli -- new --help
 cargo run --locked -p hegira_cli -- inspect --help
 cargo run --locked -p hegira_cli -- doctor --help
 cargo run --locked -p hegira_cli -- upgrade status --help
+cargo run --locked -p hegira_cli -- upgrade --help
 cargo run --locked -p hegira_cli -- component add --help
 cargo run --locked -p hegira_cli -- generate resource --help
 cargo run --locked -p hegira_cli -- generate migration --help
@@ -209,8 +210,8 @@ current CLI will not mutate or serialize them until an explicit supported
 schema transition has been applied. Reading or validating the manifest does
 not access the network or modify application files.
 
-The CLI currently exposes application creation, read-only inspection and upgrade readiness, a
-reviewable bundled-component addition boundary, complete layered resource
+The CLI currently exposes application creation, read-only inspection, upgrade
+readiness and dry-run plans, a reviewable bundled-component addition boundary, complete layered resource
 generation, and application-owned migration scaffold generation. Component
 addition accepts one bundled component identity, resolves the authenticated
 package graph, and uses the shared `--dry-run` and `--json` mutation contract.
@@ -369,8 +370,49 @@ they do not read, remove, or follow the marker. Assessment creates no mutation
 plan or publication state and performs no source writes, network requests,
 database access, subprocess execution, or runtime configuration/secret reads.
 `ready` is an observation, not authorization to mutate: source must be
-reauthenticated for a subsequent operation. Public upgrade plan/apply commands
-are not exposed by this source checkout.
+reauthenticated for a subsequent operation. Review a complete plan with
+`upgrade --dry-run`; applying an upgrade is not exposed by this source checkout.
+
+## Preview An Application Upgrade
+
+From an application root or descendant, review the exact supported direct edge:
+
+```sh
+cargo run --locked --manifest-path /path/to/hegira/Cargo.toml \
+  -p hegira_cli -- upgrade --dry-run --json
+```
+
+Omit `--json` for human output. `--application-root` uses the same discovery
+contract as readiness. Optional `--target v0.7.0` must exactly match the
+authenticated direct edge; skipped releases, downgrades, arbitrary coordinates,
+and unprefixed versions are rejected without echoing the supplied value.
+Invoking `upgrade` without `status` or `--dry-run` is a usage error, not implicit
+authorization to apply. Preview options cannot be combined with `status`.
+
+Schema-1 JSON contains `output_schema`, `mode: "dry-run"`, `outcome`,
+`assessment` (the readiness report), nullable `plan`, and `preserved_boundaries`.
+The plan is the renderer's schema-1 `UpgradePlanSummary`, not a second CLI plan:
+it identifies the edge, exact source/target release identities, authenticated
+source package and baseline digests, manifest transitions, framework dependency
+names, target components/modules, and ordered file changes. Each change records
+its application-relative path, operation, component owner, integration,
+managed ownership, absent/exact-digest precondition, and resulting digest or
+absence. Create, edit, and retirement use the same typed summary contract.
+Human output describes the same operations and conditions without file contents.
+
+`outcome` is `planned` when an authenticated plan exists, `no-upgrade` for a
+compatible current release without a requested target, and `unavailable` on a
+blocking assessment. Failures never contain an apparently applicable plan.
+Assessment exit codes and stdout/stderr behavior match `upgrade status`.
+Requesting a target when no direct edge exists is unsupported, not a no-op.
+
+Application-owned, generated-once, and immutable-history boundaries remain
+preserved. The current edge edits only `Cargo.lock`, `Cargo.toml`, and
+`hegira.toml`. Preview writes no file, cached plan, recovery marker, database,
+or application modification timestamp. It does not execute subprocesses,
+access runtime secrets, or contact a network. A preview is not a reusable
+authorization token; later publication must enforce the same in-memory plan's
+digest preconditions. No public upgrade apply command is available yet.
 
 ## Diagnose An Existing Application
 

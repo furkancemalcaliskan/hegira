@@ -175,7 +175,8 @@ versioned machine-readable contract. See [Inspecting an existing application](do
 for discovery, compatibility, and safety behavior.
 
 Use `upgrade status` (optionally `--json`) to assess the authenticated direct
-upgrade target without changing application source. See
+upgrade target, and `upgrade --dry-run` to review its content-redacted plan
+without changing application source. See
 [Upgrade readiness](docs/getting-started.md#assess-application-upgrade-readiness)
 for supported release states, recovery checks, and process outcomes.
 
