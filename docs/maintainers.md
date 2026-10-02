@@ -483,6 +483,7 @@ Cargo defaults and remain outside this lifecycle.
 | `build/generated-application-check` | Default public CLI output; native, WASM, test, and release profiles; SQLite and PostgreSQL lifecycle contracts; generated lock | Stable LRU cache |
 | `build/identity-added-application-check` | Minimal public CLI output plus Identity; native, WASM, test, and release profiles; SQLite and PostgreSQL lifecycle contracts; generated lock | Stable LRU cache |
 | `build/composition-matrix-check` | Minimal and Identity-added compositions; native and WASM check profiles; SQLite and PostgreSQL; generated lock | Stable LRU cache |
+| `build/upgraded-application-{all,default,minimal,identity-added}` | Authenticated released applications; native, WASM, test, and release profiles; selected compositions and both database providers; disposable owner-reviewed lock | Stable LRU cache |
 | `workspaces/<check>` | Stable disposable source identity for its named check | Recreated per invocation and removed by its exit trap |
 | `locks/<check>` | Exclusive ownership of the named workspace and build cache | Exists only while that validation is active |
 | `state/<check>` | Last cache access time used for deterministic LRU ordering | Updated on prepare and release; removed with its build cache |
@@ -577,6 +578,46 @@ The same public-process matrix runs against untouched immutable baselines with
 All six customized results reuse one sequential compile location to prevent Cargo
 from confusing equal package names across fixture trees; each result receives both
 locked native and WASM hydration checks without duplicating the compile matrix.
+
+The separate released-application production lifecycle gate is:
+
+```sh
+sh scripts/upgraded-application-check.sh
+# Focused composition runs (each still covers SQLite and PostgreSQL):
+sh scripts/upgraded-application-check.sh default
+sh scripts/upgraded-application-check.sh minimal
+sh scripts/upgraded-application-check.sh identity-added
+```
+
+This manually invoked gate materializes all six authenticated v0.6.0 baselines,
+customizes application-owned source, and uses public readiness, preview, apply,
+inspect, doctor, and repeat-upgrade checks. Verified public source is never patched
+for local compilation. Separate validation copies add a post-upgrade application
+migration and database tests, use local framework dependencies, and resolve their
+own reviewed lockfiles. Source fingerprints are checked again after production smoke.
+
+Released application migration bytes come from the immutable baseline. Identity
+SQL is checked against the committed SHA-256 inventory extracted from the reviewed
+v0.6.0 commit, not assumed to match the current module. New module migrations cannot
+silently enter the released database fixture. Both fresh and upgrade databases must
+be empty and explicitly authorized; tests perform no database reset. The upgrade
+scenario records migration checksums, seeds product data before applying the current
+plan, verifies history/data preservation and the post-upgrade migration, and proves
+that repeating migrations is a no-op. PostgreSQL runs in an isolated Compose project;
+SQLite files live only in the bounded validation workspace.
+
+Each selected profile receives native/hydration checks, existing application tests,
+locked release assets, and a production image compiled by the canonical Debian
+builder. Only the selected provider feature is changed in the disposable Dockerfile;
+host-linked binaries are not substituted. Production probes check health, assets,
+headers, preserved product data, CRUD, user creation/login, denied unprivileged
+access, and cookie/Bearer isolation. Minimal profiles expose neither Identity nor
+protected-resource APIs. Ephemeral credentials are generated in memory. Compose
+resources, images, SQLite files, and workspaces are cleaned on success, failure,
+SIGINT, and SIGTERM; SIGKILL cannot run shell cleanup. Docker's shared builder cache
+is owned by the daemon, not the repository Cargo-cache budget, and is never globally
+pruned by this gate. Phase output names the composition, provider, and contract.
+The existing generated-application CI lifecycle remains unchanged by this command.
 
 To include the framework and official-module gates' ignored PostgreSQL tests locally, provide
 a disposable PostgreSQL database and opt in explicitly:
