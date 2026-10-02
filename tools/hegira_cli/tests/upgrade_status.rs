@@ -13,8 +13,21 @@ use upgrade_test_support::{
 
 static NEXT_DIRECTORY: AtomicU64 = AtomicU64::new(0);
 
+#[path = "support/upgrade_matrix.rs"]
+mod upgrade_matrix;
 #[path = "support/upgrade_schema.rs"]
 mod upgrade_schema;
+
+#[test]
+fn public_upgrade_matrix_retains_composition_and_capability_contracts() {
+    for composition in BaselineComposition::ALL {
+        for database in BaselineDatabase::ALL {
+            let fixture = Fixture::new();
+            let root = fixture.baseline(composition, database);
+            upgrade_matrix::verify(Path::new(env!("CARGO_BIN_EXE_hegira")), &root);
+        }
+    }
+}
 
 struct Fixture(PathBuf);
 impl Fixture {

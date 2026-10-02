@@ -124,7 +124,12 @@ pub fn customize(repository: &Path, application: &Path, request: BaselineRequest
     );
 }
 
-pub fn upgrade_and_verify(repository: &Path, application: &Path, request: BaselineRequest) {
+pub fn upgrade_and_verify_with(
+    repository: &Path,
+    application: &Path,
+    request: BaselineRequest,
+    apply: impl FnOnce(&Path),
+) {
     let before = fingerprints(application);
     let history = history_fingerprints(application);
     let source = ApplicationManifest::read(application.join("hegira.toml")).unwrap();
@@ -156,7 +161,7 @@ pub fn upgrade_and_verify(repository: &Path, application: &Path, request: Baseli
     ] {
         assert!(!summary.contains(product_content));
     }
-    publish_change_plan(application, first.change_plan()).unwrap();
+    apply(application);
     let after = fingerprints(application);
     assert_eq!(
         before.keys().collect::<Vec<_>>(),

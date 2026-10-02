@@ -1,6 +1,8 @@
-//! Repository-only compile fixtures; no public command or application mutation API.
+//! Repository-only compile fixtures upgraded through the public CLI.
 #[path = "../tests/support/upgrade_preservation.rs"]
 mod support;
+#[path = "../../hegira_cli/tests/support/upgrade_matrix.rs"]
+mod upgrade_matrix;
 
 use application_manifest::ApplicationManifest;
 use std::{
@@ -15,11 +17,12 @@ fn main() {
     let arguments: Vec<_> = env::args_os().skip(1).collect();
     assert_eq!(
         arguments.len(),
-        2,
-        "usage: upgrade_preservation <repository-root> <new-output>"
+        3,
+        "usage: upgrade_preservation <repository-root> <new-output> <hegira-binary>"
     );
     let repository = fs::canonicalize(&arguments[0]).unwrap();
     let output = PathBuf::from(&arguments[1]);
+    let binary = fs::canonicalize(&arguments[2]).unwrap();
     fs::create_dir(&output).expect("validation output must be new");
     let catalog = ManifestCatalog::load(&repository, "layered").unwrap();
     for composition in BaselineComposition::ALL {
@@ -28,7 +31,9 @@ fn main() {
             let source = output.join(format!("{}-source", request.id()));
             support::customize(&repository, &source, request);
             let product = support::product_fingerprint(&source);
-            support::upgrade_and_verify(&repository, &source, request);
+            support::upgrade_and_verify_with(&repository, &source, request, |application| {
+                upgrade_matrix::verify(&binary, application);
+            });
             assert_eq!(product, support::product_fingerprint(&source));
             let verified = support::fingerprints(&source);
             let staged = output.join(request.id());
