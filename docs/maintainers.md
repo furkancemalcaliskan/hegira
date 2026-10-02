@@ -204,6 +204,24 @@ output, and missing local tools as warnings. Additional isolated PATH and home
 fixtures pin JSON field and check order, success/warning/failure exit outcomes,
 and ensure the Rustup probe does not inherit application runtime secrets.
 
+Upgrade outputs are validated against the committed closed schemas in
+`tools/hegira_cli/schemas/`, with negative tests for unknown fields/versions,
+malformed digests, and missing or contradictory receipts. The test-only schema
+checker implements only the keywords used by these offline schemas and fails
+on unrecognized keywords; it is not a general-purpose schema engine.
+Human/JSON snapshots in `tools/hegira_cli/tests/snapshots/upgrade/` cover
+readiness, plans, receipts, no-upgrade, repeated apply, invalid input,
+unsupported source, incompatible composition, conflict, and recovery.
+Typed state/exit/diagnostic mapping tests cover internal and publisher failures.
+
+Snapshot mismatches fail with an explicit review message and the actual
+content-redacted outputs. There is no automatic snapshot-update or acceptance
+flag. Inspect the semantic and security change, update the schema contract if
+needed, and edit only intentionally reviewed snapshots. Do not bless changed
+output merely to obtain a green gate. A breaking public shape requires a new
+output-schema version and corresponding schemas/tests. All upgrade contract
+checks run in `sh scripts/cli-check.sh`.
+
 SQLite and PostgreSQL requests have committed whole-tree fingerprints covering
 file paths and bytes, including binary assets, and are compared with equivalent
 interactive requests. Review generated content before updating these regression

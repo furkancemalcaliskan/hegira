@@ -1,0 +1,10 @@
+Upgrade status: no-upgrade
+Source: v0.7.0 (hegira-canonical v0.7.0)
+Direct target: none
+Components: layered-base @ v0.7.0, layered-leptos-identity @ v0.7.0
+Modules: identity @ v0.7.0
+Capabilities: authentication, authorization
+Databases: sqlite
+Clients: leptos
+Recovery: pass
+Managed boundaries: not-applicable

@@ -1,0 +1,230 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Hegira upgrade readiness output v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "output_schema",
+    "status",
+    "source",
+    "target",
+    "composition",
+    "recovery",
+    "managed_boundaries",
+    "diagnostics"
+  ],
+  "properties": {
+    "output_schema": {
+      "const": 1
+    },
+    "status": {
+      "enum": [
+        "ready",
+        "no-upgrade",
+        "unsupported",
+        "incompatible",
+        "conflict",
+        "recovery-blocked",
+        "invalid-input",
+        "internal-error"
+      ]
+    },
+    "source": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/release"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "target": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/release"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "composition": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/composition"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "recovery": {
+      "$ref": "#/$defs/preflight"
+    },
+    "managed_boundaries": {
+      "$ref": "#/$defs/preflight"
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/diagnostic"
+      }
+    }
+  },
+  "$defs": {
+    "named": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "version"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    "package": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "version"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    "release": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "framework_version",
+        "package"
+      ],
+      "properties": {
+        "framework_version": {
+          "type": "string"
+        },
+        "package": {
+          "$ref": "#/$defs/package"
+        }
+      }
+    },
+    "composition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "components",
+        "modules",
+        "capabilities",
+        "databases",
+        "clients"
+      ],
+      "properties": {
+        "components": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/named"
+          }
+        },
+        "modules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/named"
+          }
+        },
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "authentication",
+              "authorization"
+            ]
+          }
+        },
+        "databases": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "sqlite",
+              "postgres"
+            ]
+          }
+        },
+        "clients": {
+          "type": "array",
+          "items": {
+            "const": "leptos"
+          }
+        }
+      }
+    },
+    "preflight": {
+      "enum": [
+        "pass",
+        "blocked",
+        "not-applicable",
+        "unverified"
+      ]
+    },
+    "diagnostic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "message"
+      ],
+      "properties": {
+        "code": {
+          "enum": [
+            "compatibility-policy",
+            "application-context",
+            "manifest-schema",
+            "manifest-composition",
+            "package-authentication",
+            "framework-source",
+            "composition-adapters",
+            "current-manifest",
+            "composition",
+            "direct-edge",
+            "manifest-transition",
+            "manifest-changed",
+          "recovery-pending",
+          "recovery-inspection",
+            "unsafe-source",
+            "manifest",
+            "ownership",
+            "managed-source-digest",
+            "managed-source-missing",
+            "managed-source-occupied",
+            "source-limit",
+            "package-contract",
+            "target",
+            "application-changed",
+            "upgrade-plan",
+            "receipt-mismatch",
+            "publication-precondition",
+            "publication-platform",
+            "publication-plan",
+            "publication-failed",
+            "recovery-uncertain"
+          ]
+        },
+        "message": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

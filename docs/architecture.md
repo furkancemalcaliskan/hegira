@@ -754,6 +754,15 @@ emit a success receipt. Repeated apply rejects the absent direct edge without
 writes. Migration execution, lockfile regeneration, subprocesses, network
 access, and service startup remain outside upgrade publication.
 
+Committed readiness/execution v1 JSON schemas describe the closed public
+automation contract, including plan, receipt, and diagnostic definitions.
+Structural validation, negative schema tests, typed exit/diagnostic mapping,
+and reviewed human/JSON snapshots enforce separate aspects of the contract.
+Filesystem creation order, reversed current component declarations, and supplied
+versus closed stdin do not change deterministic output. Snapshot mismatches
+require explicit review; they are not auto-accepted and are not the sole API
+test. Upgrade commands have no interactive prompt protocol.
+
 Upgrade tests obtain v0.6.0 application source from committed, content-addressed
 release baselines rather than current templates or mutable remote content. One
 release manifest pins the annotated tag object, commit, source tree, package

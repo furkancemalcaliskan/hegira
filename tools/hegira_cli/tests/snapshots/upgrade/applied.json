@@ -1,0 +1,178 @@
+{
+  "output_schema": 1,
+  "mode": "apply",
+  "outcome": "applied",
+  "assessment": {
+    "output_schema": 1,
+    "status": "ready",
+    "source": {
+      "framework_version": "v0.6.0",
+      "package": {
+        "id": "hegira-canonical",
+        "version": "v0.6.0"
+      }
+    },
+    "target": {
+      "framework_version": "v0.7.0",
+      "package": {
+        "id": "hegira-canonical",
+        "version": "v0.7.0"
+      }
+    },
+    "composition": {
+      "components": [
+        {
+          "id": "layered-base",
+          "version": "v0.6.0"
+        },
+        {
+          "id": "layered-leptos-identity",
+          "version": "v0.6.0"
+        }
+      ],
+      "modules": [
+        {
+          "id": "identity",
+          "version": "v0.6.0"
+        }
+      ],
+      "capabilities": [
+        "authentication",
+        "authorization"
+      ],
+      "databases": [
+        "sqlite"
+      ],
+      "clients": [
+        "leptos"
+      ]
+    },
+    "recovery": "pass",
+    "managed_boundaries": "pass",
+    "diagnostics": []
+  },
+  "plan": {
+    "schema": 1,
+    "edge": "v0-6-0-to-v0-7-0",
+    "source": {
+      "framework_repository": "https://github.com/furkancemalcaliskan/hegira.git",
+      "framework_version": "v0.6.0",
+      "package": "hegira-canonical",
+      "package_version": "v0.6.0"
+    },
+    "target": {
+      "framework_repository": "https://github.com/furkancemalcaliskan/hegira.git",
+      "framework_version": "v0.7.0",
+      "package": "hegira-canonical",
+      "package_version": "v0.7.0"
+    },
+    "source_package_digest": "sha256:cff6969dadc6e0155af7b944877dba5c61b6e0c4c3ea041d9a8a2665949c285e",
+    "source_baseline_digest": "sha256:9e4ac33b3a0307234eb971806484076b99692ef2457fa2efb5a96267500ea261",
+    "manifest_transitions": [
+      "schema",
+      "framework",
+      "package",
+      "components",
+      "modules",
+      "ownership"
+    ],
+    "framework_dependencies": [
+      "audit",
+      "background_jobs",
+      "cache",
+      "configuration",
+      "http_support",
+      "identity_application",
+      "identity_application_contracts",
+      "identity_domain",
+      "identity_domain_shared",
+      "identity_http",
+      "identity_leptos",
+      "identity_sqlx",
+      "leptos_support",
+      "mail",
+      "observability",
+      "persistence",
+      "platform_core",
+      "runtime",
+      "search",
+      "security",
+      "settings",
+      "storage"
+    ],
+    "target_components": [
+      "layered-base",
+      "layered-leptos-identity"
+    ],
+    "target_modules": [
+      "identity"
+    ],
+    "changes": [
+      {
+        "path": "Cargo.lock",
+        "operation": "edit",
+        "component": "layered-leptos-identity",
+        "integration": "framework-lockfile",
+        "ownership": "managed-integration",
+        "precondition": {
+          "kind": "matches-digest",
+          "sha256": "c6cb0aec5f366a1015b3549d174cb56fb60cb6acb8df1e587f6f5e43b8c492ff"
+        },
+        "result": {
+          "kind": "present",
+          "sha256": "e10876086dddb27e5c931ae5512c937ac226e954a845492d9dcac15debbb0e00"
+        }
+      },
+      {
+        "path": "Cargo.toml",
+        "operation": "edit",
+        "component": "layered-leptos-identity",
+        "integration": "framework-dependencies",
+        "ownership": "managed-integration",
+        "precondition": {
+          "kind": "matches-digest",
+          "sha256": "1ba1cd11d85c189fc0f1a1f31bae34531ec3b50d53f32add603cf8fb7dc6e152"
+        },
+        "result": {
+          "kind": "present",
+          "sha256": "7bf28812e2a060ebcb9697d877cd3456ec556a56ab0014255a0c6b1851d91f42"
+        }
+      },
+      {
+        "path": "hegira.toml",
+        "operation": "edit",
+        "component": "layered-base",
+        "integration": "application-manifest",
+        "ownership": "managed-integration",
+        "precondition": {
+          "kind": "matches-digest",
+          "sha256": "4d4048a4403bfb5ab53c6c0b082773ccbae5e9acb2f1e9319007f5c648d5334d"
+        },
+        "result": {
+          "kind": "present",
+          "sha256": "def65e49a41b74200c3e659a8139392549f1bed30680250cb1cb409c3be1415f"
+        }
+      }
+    ]
+  },
+  "preserved_boundaries": [
+    "application-owned",
+    "generated-once",
+    "immutable-history"
+  ],
+  "receipt": {
+    "changed_files": 3,
+    "edge": "v0-6-0-to-v0-7-0",
+    "target": {
+      "framework_repository": "https://github.com/furkancemalcaliskan/hegira.git",
+      "framework_version": "v0.7.0",
+      "package": "hegira-canonical",
+      "package_version": "v0.7.0"
+    }
+  },
+  "next_steps": [
+    "Review the managed Cargo.toml, Cargo.lock, and hegira.toml changes; do not regenerate the lockfile blindly.",
+    "Apply application-owned database migrations through the application's documented operation workflow, with backups and the correct environment.",
+    "Run application tests, native/hydration checks, and deployment validation before starting or deploying services."
+  ]
+}
