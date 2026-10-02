@@ -13,6 +13,9 @@ use upgrade_test_support::{
 
 static NEXT_DIRECTORY: AtomicU64 = AtomicU64::new(0);
 
+#[path = "support/upgrade_schema.rs"]
+mod upgrade_schema;
+
 struct Fixture(PathBuf);
 impl Fixture {
     fn new() -> Self {
@@ -103,6 +106,7 @@ fn status(root: &Path, expected: &str, exit: i32) -> serde_json::Value {
     assert!(first.stderr.is_empty());
     assert_eq!(first.stdout, second.stdout);
     let report: serde_json::Value = serde_json::from_slice(&first.stdout).unwrap();
+    upgrade_schema::assert_output(&report, false);
     assert_eq!(report["output_schema"], 1);
     assert_eq!(report["status"], expected);
     let human = run(root, &["upgrade", "status"]);
@@ -418,6 +422,7 @@ fn preview(root: &Path, extra: &[&str], expected: i32) -> serde_json::Value {
     assert_eq!(tree(root), before);
     assert_eq!(entry_metadata(root), metadata);
     let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+    upgrade_schema::assert_output(&value, true);
     assert_eq!(value["output_schema"], 1);
     assert_eq!(value["mode"], "dry-run");
     value
@@ -591,6 +596,7 @@ fn public_apply_uses_the_preview_plan_and_preserves_every_unmanaged_byte() {
                 assert!(!text.contains(private));
             }
             let applied: serde_json::Value = serde_json::from_str(&text).unwrap();
+            upgrade_schema::assert_output(&applied, true);
             assert_eq!(applied["output_schema"], 1);
             assert_eq!(applied["mode"], "apply");
             assert_eq!(applied["outcome"], "applied");
@@ -751,6 +757,189 @@ fn concurrent_public_apply_cannot_issue_two_receipts() {
         "v0.7.0"
     );
     assert!(!root.join(".hegira-mutation.lock").exists());
+}
+
+#[test]
+fn reviewed_upgrade_snapshots_cover_successes_and_failures() {
+    let fixture = Fixture::new();
+    let root = fixture.baseline(BaselineComposition::Default, BaselineDatabase::Sqlite);
+    let original = fs::read_to_string(root.join("hegira.toml")).unwrap();
+    let lock = fs::read(root.join("Cargo.lock")).unwrap();
+    let mut snapshots = BTreeMap::new();
+    let mut capture = |name: &str, args: &[&str], expected: i32| {
+        let human = run(&root, args);
+        assert_eq!(human.status.code(), Some(expected));
+        assert!(human.stderr.is_empty());
+        let mut json_args = args.to_vec();
+        json_args.push("--json");
+        let json = run(&root, &json_args);
+        assert_eq!(json.status.code(), Some(expected));
+        assert!(json.stderr.is_empty());
+        let value: serde_json::Value = serde_json::from_slice(&json.stdout).unwrap();
+        upgrade_schema::assert_output(&value, args.get(1) != Some(&"status"));
+        snapshots.insert(
+            format!("{name}.txt"),
+            String::from_utf8(human.stdout).unwrap(),
+        );
+        snapshots.insert(
+            format!("{name}.json"),
+            String::from_utf8(json.stdout).unwrap(),
+        );
+    };
+    capture("ready", &["upgrade", "status"], 0);
+    capture("planned", &["upgrade", "--dry-run"], 0);
+    fs::write(
+        root.join("hegira.toml"),
+        original.replace("v0.6.0", "v0.4.0"),
+    )
+    .unwrap();
+    capture("unsupported", &["upgrade", "status"], 3);
+    fs::write(root.join("hegira.toml"), format!("{original}\n[[composition.components]]\nid = \"custom-component\"\nversion = \"v0.6.0\"\n")).unwrap();
+    capture("incompatible", &["upgrade", "status"], 3);
+    fs::write(
+        root.join("hegira.toml"),
+        "schema = 'private-runtime-value'\n",
+    )
+    .unwrap();
+    capture("invalid", &["upgrade", "status"], 3);
+    fs::write(root.join("hegira.toml"), &original).unwrap();
+    fs::write(root.join("Cargo.lock"), "managed-private-content").unwrap();
+    capture("conflict", &["upgrade", "--dry-run"], 4);
+    fs::write(root.join("Cargo.lock"), lock).unwrap();
+    fs::write(root.join(".hegira-mutation.lock"), "private-runtime-value").unwrap();
+    capture("recovery", &["upgrade"], 4);
+    fs::remove_file(root.join(".hegira-mutation.lock")).unwrap();
+    // Apply human and JSON to separate immutable baseline copies.
+    let other_fixture = Fixture::new();
+    let other = other_fixture.baseline(BaselineComposition::Default, BaselineDatabase::Sqlite);
+    for (name, output) in [
+        ("applied.txt", run(&root, &["upgrade"])),
+        ("applied.json", run(&other, &["upgrade", "--json"])),
+    ] {
+        assert!(output.status.success());
+        assert!(output.stderr.is_empty());
+        snapshots.insert(name.to_owned(), String::from_utf8(output.stdout).unwrap());
+    }
+    for (name, args, exit) in [
+        ("no-upgrade", vec!["upgrade", "status"], 0),
+        ("repeated", vec!["upgrade"], 3),
+    ] {
+        let human = run(&root, &args);
+        let mut args = args;
+        args.push("--json");
+        let json = run(&root, &args);
+        assert_eq!(human.status.code(), Some(exit));
+        assert_eq!(json.status.code(), Some(exit));
+        snapshots.insert(
+            format!("{name}.txt"),
+            String::from_utf8(human.stdout).unwrap(),
+        );
+        snapshots.insert(
+            format!("{name}.json"),
+            String::from_utf8(json.stdout).unwrap(),
+        );
+    }
+    let snapshot_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots/upgrade");
+    for actual in snapshots.values() {
+        for forbidden in [
+            "private-runtime-value",
+            "managed-private-content",
+            root.to_str().unwrap(),
+        ] {
+            assert!(
+                !actual.contains(forbidden),
+                "snapshot output must remain content-redacted"
+            );
+        }
+    }
+    let differences = snapshots
+        .iter()
+        .filter(|(name, actual)| {
+            fs::read_to_string(snapshot_dir.join(name)).as_ref().ok() != Some(actual)
+        })
+        .map(|(name, _)| name.clone())
+        .collect::<Vec<_>>();
+    if !differences.is_empty() {
+        println!(
+            "UPGRADE_SNAPSHOT_REVIEW={}",
+            serde_json::to_string(&snapshots).unwrap()
+        );
+    }
+    assert!(
+        differences.is_empty(),
+        "Review upgrade human/JSON output explicitly before changing snapshots: {differences:?}"
+    );
+}
+
+#[test]
+fn upgrade_requests_ignore_stdin_and_keep_the_same_noninteractive_contract() {
+    use std::io::Write;
+    for args in [
+        vec!["upgrade", "status", "--json"],
+        vec!["upgrade", "--dry-run", "--json"],
+        vec!["upgrade", "--json"],
+    ] {
+        let fixture = Fixture::new();
+        let root = fixture.baseline(BaselineComposition::Default, BaselineDatabase::Sqlite);
+        let other_fixture = Fixture::new();
+        let other = other_fixture.baseline(BaselineComposition::Default, BaselineDatabase::Sqlite);
+        let expected = run(&root, &args);
+        let mut child = Command::new(env!("CARGO_BIN_EXE_hegira"))
+            .args(&args)
+            .current_dir(&other)
+            .env_clear()
+            .env("PATH", "")
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        child
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(b"private-runtime-value\ninteractive answers are not upgrade authority\n")
+            .unwrap();
+        let actual = child.wait_with_output().unwrap();
+        assert_eq!(actual.status.code(), expected.status.code());
+        assert_eq!(actual.stdout, expected.stdout);
+        assert_eq!(actual.stderr, expected.stderr);
+    }
+    let fixture = Fixture::new();
+    let usage = run(&fixture.0, &["upgrade", "status", "--unknown"]);
+    assert_eq!(usage.status.code(), Some(2));
+    assert!(usage.stdout.is_empty());
+    assert!(!usage.stderr.is_empty());
+}
+
+#[test]
+fn filesystem_creation_order_does_not_change_readiness_plans_or_receipts() {
+    let fixture = Fixture::new();
+    let root = fixture.baseline(BaselineComposition::Default, BaselineDatabase::Sqlite);
+    let other = fixture.0.join("reverse-order");
+    fs::create_dir(&other).unwrap();
+    for (path, bytes) in tree(&root).into_iter().rev() {
+        let original = root.join(&path);
+        let target = other.join(path);
+        if original.is_dir() {
+            fs::create_dir_all(target).unwrap();
+        } else {
+            fs::create_dir_all(target.parent().unwrap()).unwrap();
+            fs::write(target, bytes).unwrap();
+        }
+    }
+    for args in [
+        vec!["upgrade", "status", "--json"],
+        vec!["upgrade", "--dry-run", "--json"],
+        vec!["upgrade", "--json"],
+    ] {
+        let first = run(&root, &args);
+        let second = run(&other, &args);
+        assert!(first.status.success());
+        assert_eq!(first.status.code(), second.status.code());
+        assert_eq!(first.stdout, second.stdout);
+        assert_eq!(first.stderr, second.stderr);
+    }
 }
 
 #[test]

@@ -23,6 +23,10 @@ pub const UPGRADE_STATUS_OUTPUT_SCHEMA: u32 = 1;
 
 mod execution;
 
+#[cfg(test)]
+#[path = "../tests/support/upgrade_schema.rs"]
+mod schema_contract;
+
 #[derive(Debug, Args)]
 pub(crate) struct UpgradeCommand {
     #[command(subcommand)]
@@ -566,6 +570,25 @@ mod tests {
     };
 
     #[test]
+    fn every_upgrade_state_has_a_fixed_process_outcome() {
+        for (status, exit) in [
+            (Status::Ready, CliExit::Success),
+            (Status::NoUpgrade, CliExit::Success),
+            (Status::Unsupported, CliExit::Validation),
+            (Status::Incompatible, CliExit::Validation),
+            (Status::InvalidInput, CliExit::Validation),
+            (Status::Conflict, CliExit::Conflict),
+            (Status::RecoveryBlocked, CliExit::Conflict),
+            (Status::InternalError, CliExit::Internal),
+        ] {
+            assert_eq!(status.exit(), exit);
+            let mut report = Report::new();
+            report.status = status;
+            schema_contract::assert_output(&serde_json::to_value(report).unwrap(), false);
+        }
+    }
+
+    #[test]
     fn unauthenticated_package_is_a_redacted_internal_outcome() {
         let repository = Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
@@ -588,6 +611,7 @@ mod tests {
         assert_eq!(report.status.exit(), CliExit::Internal);
         assert_eq!(report.diagnostics[0].code, "package-authentication");
         let json = serde_json::to_string(&report).unwrap();
+        schema_contract::assert_output(&serde_json::from_str(&json).unwrap(), false);
         assert!(!json.contains(root.to_str().unwrap()));
         assert!(!root.join(application_mutator::MUTATION_MARKER).exists());
         let mut preview_output = Vec::new();
@@ -606,8 +630,64 @@ mod tests {
             CliExit::Internal
         );
         let preview: serde_json::Value = serde_json::from_slice(&preview_output).unwrap();
+        schema_contract::assert_output(&preview, true);
         assert_eq!(preview["outcome"], "unavailable");
         assert!(preview["plan"].is_null());
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn authentication_codes_and_diagnostic_order_are_stable() {
+        use UpgradeAuthenticationDiagnosticKind::*;
+        for (kind, exit, code) in [
+            (UnsupportedRelease, CliExit::Validation, "direct-edge"),
+            (UnsupportedComposition, CliExit::Validation, "composition"),
+            (InvalidManifest, CliExit::Validation, "manifest"),
+            (OwnershipMismatch, CliExit::Conflict, "ownership"),
+            (
+                SourceDigestMismatch,
+                CliExit::Conflict,
+                "managed-source-digest",
+            ),
+            (
+                MissingManagedSource,
+                CliExit::Conflict,
+                "managed-source-missing",
+            ),
+            (
+                UnexpectedManagedSource,
+                CliExit::Conflict,
+                "managed-source-occupied",
+            ),
+            (UnsupportedSourceType, CliExit::Conflict, "unsafe-source"),
+            (UnsafeApplicationRoot, CliExit::Conflict, "unsafe-source"),
+            (SourceLimitExceeded, CliExit::Conflict, "source-limit"),
+            (PackageContract, CliExit::Internal, "package-contract"),
+        ] {
+            let mut report = Report::new();
+            authentication_failure(kind, &mut report);
+            assert_eq!(report.status.exit(), exit);
+            assert_eq!(report.diagnostics[0].code, code);
+            schema_contract::assert_output(&serde_json::to_value(report).unwrap(), false);
+        }
+        let mut report = Report::new();
+        report.fail(
+            Status::Conflict,
+            "managed-source-missing",
+            "static missing diagnostic",
+        );
+        report.fail(
+            Status::Conflict,
+            "managed-source-digest",
+            "static digest diagnostic",
+        );
+        assert_eq!(
+            report
+                .diagnostics
+                .iter()
+                .map(|d| d.code)
+                .collect::<Vec<_>>(),
+            ["managed-source-digest", "managed-source-missing"]
+        );
     }
 }

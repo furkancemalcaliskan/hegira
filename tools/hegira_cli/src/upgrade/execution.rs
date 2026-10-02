@@ -408,6 +408,10 @@ mod tests {
             publication_failure(kind, &mut report);
             assert_eq!(report.status.exit(), exit);
             assert_eq!(report.diagnostics[0].code, code);
+            super::super::schema_contract::assert_output(
+                &serde_json::to_value(&report).unwrap(),
+                false,
+            );
             if matches!(
                 kind,
                 MutationErrorKind::RecoveryRequired | MutationErrorKind::RollbackIncomplete

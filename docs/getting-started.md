@@ -459,6 +459,43 @@ execute database migrations, start services, access runtime secrets, or run
 network/subprocess operations. Product source and immutable history remain
 untouched.
 
+## Upgrade Automation Contract
+
+The committed Draft 2020-12 schemas are
+[readiness v1](../tools/hegira_cli/schemas/upgrade-status-v1.schema.json) and
+[execution v1](../tools/hegira_cli/schemas/upgrade-execution-v1.schema.json).
+Execution includes the typed plan, applied receipt, and failure shapes; its
+readiness reference resolves locally. Validation requires no remote schema
+lookup. Unknown fields, versions, diagnostic codes, and malformed digests are
+rejected by the current closed schemas. Applied outcomes require a receipt and
+owner steps; failed outcomes cannot contain an applicable plan or receipt.
+
+Use `output_schema`, `status`, `outcome`, and `diagnostics[].code`, not prose,
+for automation. Assessments and execution results, including failures, go to
+stdout as one JSON object with `--json`; stderr is empty for those outcomes.
+Command usage errors exit 2 with empty stdout and diagnostics on stderr.
+Output-delivery failures exit 1 and cannot guarantee a complete JSON result;
+inspect application state before retrying an apply.
+
+| Exit | Stable diagnostic codes |
+| --- | --- |
+| 0 | No blocker: ready, planned, applied, or no-upgrade preview/status |
+| 1 | `compatibility-policy`, `package-authentication`, `package-contract`, `receipt-mismatch`, `publication-plan`, `publication-failed`, `recovery-uncertain` |
+| 3 | `manifest-schema`, `manifest-composition`, `framework-source`, `composition-adapters`, `current-manifest`, `composition`, `direct-edge`, `manifest-transition`, `manifest`, `target`, `publication-platform` |
+| 4 | `manifest-changed`, `recovery-pending`, `recovery-inspection`, `ownership`, `managed-source-digest`, `managed-source-missing`, `managed-source-occupied`, `unsafe-source`, `source-limit`, `application-changed`, `publication-precondition` |
+| 3 or 4 | `application-context` (invalid input versus unsafe/conflicting discovery); `upgrade-plan` (unsupported/incompatible versus blocked/conflicting planning) |
+
+Diagnostics are sorted by code. Components and modules are sorted by identity;
+capabilities and adapters use stable typed order. Plans use application-relative
+path order. Filesystem creation order and declaration order do not determine
+output order. Digests identify content; source bytes, runtime values, staging
+paths, and machine-local roots are never output.
+
+Upgrade commands do not prompt or consume interactive answers. Closed stdin or
+supplied stdin produces the same command contract. Explicit flags, not stdin,
+select the root, target, and dry-run/apply mode. Human output is a reviewed
+presentation of the same state and plan, not the automation API.
+
 ## Diagnose An Existing Application
 
 From the application root, run the source-built CLI's read-only doctor:

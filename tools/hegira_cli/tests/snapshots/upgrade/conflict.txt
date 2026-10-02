@@ -1,0 +1,14 @@
+Upgrade status: conflict
+Source: v0.6.0 (hegira-canonical v0.6.0)
+Direct target: v0.7.0 (hegira-canonical v0.7.0)
+Components: layered-base @ v0.6.0, layered-leptos-identity @ v0.6.0
+Modules: identity @ v0.6.0
+Capabilities: authentication, authorization
+Databases: sqlite
+Clients: leptos
+Recovery: pass
+Managed boundaries: blocked
+managed-source-digest: A managed source file differs from the supported release boundary.
+Upgrade result: unavailable (dry-run)
+Preserved: application-owned, generated-once, immutable-history boundaries.
+No application files were changed. No cached plan was written.

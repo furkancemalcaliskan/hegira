@@ -1,0 +1,6 @@
+Upgrade status: invalid-input
+Source: none
+Direct target: none
+Recovery: unverified
+Managed boundaries: unverified
+application-context: Cannot safely discover or validate the application manifest.

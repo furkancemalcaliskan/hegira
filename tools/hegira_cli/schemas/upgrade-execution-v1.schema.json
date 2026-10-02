@@ -1,0 +1,436 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Hegira upgrade execution output v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "output_schema",
+    "mode",
+    "outcome",
+    "assessment",
+    "plan",
+    "preserved_boundaries"
+  ],
+  "properties": {
+    "output_schema": {
+      "const": 1
+    },
+    "mode": {
+      "enum": [
+        "dry-run",
+        "apply"
+      ]
+    },
+    "outcome": {
+      "enum": [
+        "planned",
+        "applied",
+        "no-upgrade",
+        "unavailable"
+      ]
+    },
+    "assessment": {
+      "$ref": "upgrade-status-v1.schema.json"
+    },
+    "plan": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/plan"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "preserved_boundaries": {
+      "const": [
+        "application-owned",
+        "generated-once",
+        "immutable-history"
+      ]
+    },
+    "receipt": {
+      "$ref": "#/$defs/receipt"
+    },
+    "next_steps": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "outcome": {
+            "const": "applied"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "receipt",
+          "next_steps"
+        ],
+        "properties": {
+          "mode": {
+            "const": "apply"
+          },
+          "plan": {
+            "$ref": "#/$defs/plan"
+          },
+          "assessment": {
+            "properties": {
+              "status": {
+                "const": "ready"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "outcome": {
+            "const": "planned"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "mode": {
+            "const": "dry-run"
+          },
+          "plan": {
+            "$ref": "#/$defs/plan"
+          },
+          "assessment": {
+            "properties": {
+              "status": {
+                "const": "ready"
+              }
+            }
+          }
+        },
+        "not": {
+          "anyOf": [
+            {
+              "required": [
+                "receipt"
+              ]
+            },
+            {
+              "required": [
+                "next_steps"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "outcome": {
+            "const": "no-upgrade"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "mode": {
+            "const": "dry-run"
+          },
+          "plan": {
+            "type": "null"
+          },
+          "assessment": {
+            "properties": {
+              "status": {
+                "const": "no-upgrade"
+              }
+            }
+          }
+        },
+        "not": {
+          "anyOf": [
+            {
+              "required": [
+                "receipt"
+              ]
+            },
+            {
+              "required": [
+                "next_steps"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "outcome": {
+            "const": "unavailable"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "plan": {
+            "type": "null"
+          }
+        },
+        "not": {
+          "anyOf": [
+            {
+              "required": [
+                "receipt"
+              ]
+            },
+            {
+              "required": [
+                "next_steps"
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "release": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "framework_repository",
+        "framework_version",
+        "package",
+        "package_version"
+      ],
+      "properties": {
+        "framework_repository": {
+          "type": "string"
+        },
+        "framework_version": {
+          "type": "string"
+        },
+        "package": {
+          "type": "string"
+        },
+        "package_version": {
+          "type": "string"
+        }
+      }
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "precondition": {
+      "anyOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind"
+          ],
+          "properties": {
+            "kind": {
+              "const": "absent"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "sha256"
+          ],
+          "properties": {
+            "kind": {
+              "const": "matches-digest"
+            },
+            "sha256": {
+              "$ref": "#/$defs/digest"
+            }
+          }
+        }
+      ]
+    },
+    "result": {
+      "anyOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind"
+          ],
+          "properties": {
+            "kind": {
+              "const": "absent"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "sha256"
+          ],
+          "properties": {
+            "kind": {
+              "const": "present"
+            },
+            "sha256": {
+              "$ref": "#/$defs/digest"
+            }
+          }
+        }
+      ]
+    },
+    "change": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "operation",
+        "component",
+        "integration",
+        "ownership",
+        "precondition",
+        "result"
+      ],
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "operation": {
+          "enum": [
+            "create",
+            "edit",
+            "retire"
+          ]
+        },
+        "component": {
+          "type": "string"
+        },
+        "integration": {
+          "type": "string"
+        },
+        "ownership": {
+          "const": "managed-integration"
+        },
+        "precondition": {
+          "$ref": "#/$defs/precondition"
+        },
+        "result": {
+          "$ref": "#/$defs/result"
+        }
+      }
+    },
+    "plan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "edge",
+        "source",
+        "target",
+        "source_package_digest",
+        "source_baseline_digest",
+        "manifest_transitions",
+        "framework_dependencies",
+        "target_components",
+        "target_modules",
+        "changes"
+      ],
+      "properties": {
+        "schema": {
+          "const": 1
+        },
+        "edge": {
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/release"
+        },
+        "target": {
+          "$ref": "#/$defs/release"
+        },
+        "source_package_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "source_baseline_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "manifest_transitions": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "schema",
+              "framework",
+              "package",
+              "components",
+              "modules",
+              "capabilities",
+              "ownership"
+            ]
+          }
+        },
+        "framework_dependencies": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "target_components": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "target_modules": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "changes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/change"
+          }
+        }
+      }
+    },
+    "receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "changed_files",
+        "edge",
+        "target"
+      ],
+      "properties": {
+        "changed_files": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "edge": {
+          "type": "string"
+        },
+        "target": {
+          "$ref": "#/$defs/release"
+        }
+      }
+    }
+  }
+}

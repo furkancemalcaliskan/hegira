@@ -1,0 +1,65 @@
+{
+  "output_schema": 1,
+  "mode": "apply",
+  "outcome": "unavailable",
+  "assessment": {
+    "output_schema": 1,
+    "status": "recovery-blocked",
+    "source": {
+      "framework_version": "v0.6.0",
+      "package": {
+        "id": "hegira-canonical",
+        "version": "v0.6.0"
+      }
+    },
+    "target": {
+      "framework_version": "v0.7.0",
+      "package": {
+        "id": "hegira-canonical",
+        "version": "v0.7.0"
+      }
+    },
+    "composition": {
+      "components": [
+        {
+          "id": "layered-base",
+          "version": "v0.6.0"
+        },
+        {
+          "id": "layered-leptos-identity",
+          "version": "v0.6.0"
+        }
+      ],
+      "modules": [
+        {
+          "id": "identity",
+          "version": "v0.6.0"
+        }
+      ],
+      "capabilities": [
+        "authentication",
+        "authorization"
+      ],
+      "databases": [
+        "sqlite"
+      ],
+      "clients": [
+        "leptos"
+      ]
+    },
+    "recovery": "blocked",
+    "managed_boundaries": "unverified",
+    "diagnostics": [
+      {
+        "code": "recovery-pending",
+        "message": "Inspect pending mutation recovery state before another operation. Preserve the marker and staged files; do not delete them or retry until recovery is verified."
+      }
+    ]
+  },
+  "plan": null,
+  "preserved_boundaries": [
+    "application-owned",
+    "generated-once",
+    "immutable-history"
+  ]
+}

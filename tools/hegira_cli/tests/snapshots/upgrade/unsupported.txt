@@ -1,0 +1,11 @@
+Upgrade status: unsupported
+Source: v0.4.0 (hegira-canonical v0.4.0)
+Direct target: none
+Components: layered-base @ v0.4.0, layered-leptos-identity @ v0.4.0
+Modules: identity @ v0.4.0
+Capabilities: authentication, authorization
+Databases: sqlite
+Clients: leptos
+Recovery: pass
+Managed boundaries: unverified
+direct-edge: No supported direct upgrade exists for the recorded release.
