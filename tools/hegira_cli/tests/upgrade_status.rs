@@ -233,6 +233,7 @@ fn unsupported_release_incompatible_composition_and_managed_conflict_are_distinc
     fs::write(&manifest_path, original.replace("v0.6.0", "v0.4.0")).unwrap();
     let unsupported = status(&root, "unsupported", 3);
     assert!(unsupported["target"].is_null());
+    assert!(preview(&root, &[], 3)["plan"].is_null());
     fs::write(&manifest_path, original.replace("v0.6.0", "v0.7.0")).unwrap();
     assert_eq!(
         status(&root, "incompatible", 3)["diagnostics"][0]["code"],
@@ -313,10 +314,12 @@ fn symlinked_recovery_and_managed_files_are_never_followed() {
     let marker = root.join(application_mutator::MUTATION_MARKER);
     std::os::unix::fs::symlink(&outside, &marker).unwrap();
     status(&root, "recovery-blocked", 4);
+    assert!(preview(&root, &[], 4)["plan"].is_null());
     fs::remove_file(&marker).unwrap();
     fs::remove_file(root.join("Cargo.lock")).unwrap();
     std::os::unix::fs::symlink(&outside, root.join("Cargo.lock")).unwrap();
     status(&root, "conflict", 4);
+    assert!(preview(&root, &[], 4)["plan"].is_null());
     assert_eq!(
         fs::read_to_string(outside).unwrap(),
         "managed-private-content\n"
@@ -327,6 +330,7 @@ fn symlinked_recovery_and_managed_files_are_never_followed() {
 fn invalid_and_future_manifests_have_redacted_machine_outcomes() {
     let fixture = Fixture::new();
     status(&fixture.0, "invalid-input", 3);
+    assert!(preview(&fixture.0, &[], 3)["plan"].is_null());
     let root = fixture.baseline(BaselineComposition::Default, BaselineDatabase::Sqlite);
     fs::write(
         root.join("hegira.toml"),
@@ -334,6 +338,7 @@ fn invalid_and_future_manifests_have_redacted_machine_outcomes() {
     )
     .unwrap();
     status(&root, "unsupported", 3);
+    assert!(preview(&root, &[], 3)["plan"].is_null());
     fs::write(
         root.join("hegira.toml"),
         "schema = 'private-runtime-value'\n",
@@ -354,4 +359,221 @@ fn help_exposes_only_readiness_and_unknown_upgrade_modes_are_usage_errors() {
         assert_eq!(run(&fixture.0, &["upgrade", mode]).status.code(), Some(2));
     }
     assert!(tree(&fixture.0).is_empty());
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct EntryMetadata {
+    length: u64,
+    modified: std::time::SystemTime,
+    readonly: bool,
+    #[cfg(unix)]
+    identity: (u64, u64, u32, i64, i64),
+}
+
+fn entry_metadata(root: &Path) -> BTreeMap<PathBuf, EntryMetadata> {
+    std::iter::once(PathBuf::new())
+        .chain(tree(root).into_keys())
+        .map(|relative| {
+            let metadata = fs::symlink_metadata(root.join(&relative)).unwrap();
+            let fingerprint = EntryMetadata {
+                length: metadata.len(),
+                modified: metadata.modified().unwrap(),
+                readonly: metadata.permissions().readonly(),
+                #[cfg(unix)]
+                identity: {
+                    use std::os::unix::fs::MetadataExt;
+                    (
+                        metadata.dev(),
+                        metadata.ino(),
+                        metadata.mode(),
+                        metadata.ctime(),
+                        metadata.ctime_nsec(),
+                    )
+                },
+            };
+            (relative, fingerprint)
+        })
+        .collect()
+}
+
+fn preview(root: &Path, extra: &[&str], expected: i32) -> serde_json::Value {
+    let before = tree(root);
+    let metadata = entry_metadata(root);
+    let mut args = vec!["upgrade", "--dry-run", "--json"];
+    args.extend_from_slice(extra);
+    let first = run(root, &args);
+    let second = run(root, &args);
+    assert_eq!(
+        first.status.code(),
+        Some(expected),
+        "{}",
+        String::from_utf8_lossy(&first.stderr)
+    );
+    assert!(first.stderr.is_empty());
+    assert_eq!(first.stdout, second.stdout);
+    let json = String::from_utf8(first.stdout).unwrap();
+    assert!(!json.contains(root.to_str().unwrap()));
+    assert!(!json.contains("private-runtime-value"));
+    assert!(!json.contains("managed-private-content"));
+    assert_eq!(tree(root), before);
+    assert_eq!(entry_metadata(root), metadata);
+    let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+    assert_eq!(value["output_schema"], 1);
+    assert_eq!(value["mode"], "dry-run");
+    value
+}
+
+#[test]
+fn dry_run_exposes_the_exact_typed_plan_for_every_released_profile_without_writes() {
+    let fixture = Fixture::new();
+    let repository = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap();
+    let catalog = template_renderer::ManifestCatalog::load(repository, "layered").unwrap();
+    for composition in BaselineComposition::ALL {
+        for database in BaselineDatabase::ALL {
+            let root = fixture.baseline(composition, database);
+            fs::write(root.join("config/production.yaml"), "private-runtime-value").unwrap();
+            let report = preview(&root, &[], 0);
+            assert_eq!(report["outcome"], "planned");
+            let typed = catalog.plan_upgrade(&root).unwrap();
+            assert_eq!(
+                report["plan"],
+                serde_json::to_value(typed.summary()).unwrap()
+            );
+            assert_eq!(report["plan"]["changes"].as_array().unwrap().len(), 3);
+            assert_eq!(
+                report["preserved_boundaries"],
+                serde_json::json!(["application-owned", "generated-once", "immutable-history"])
+            );
+            assert_eq!(preview(&root, &["--target", "v0.7.0"], 0), report);
+            assert_eq!(preview(&root.join("apps/web/src"), &[], 0), report);
+            let explicit = run(
+                &fixture.0,
+                &[
+                    "upgrade",
+                    "--dry-run",
+                    "--application-root",
+                    root.to_str().unwrap(),
+                    "--json",
+                ],
+            );
+            assert_eq!(
+                serde_json::from_slice::<serde_json::Value>(&explicit.stdout).unwrap(),
+                report
+            );
+            let human = run(&root, &["upgrade", "--dry-run"]);
+            assert!(human.status.success());
+            let human = String::from_utf8(human.stdout).unwrap();
+            for change in report["plan"]["changes"].as_array().unwrap() {
+                assert!(human.contains(&format!(
+                    "{} {}",
+                    change["operation"].as_str().unwrap(),
+                    change["path"].as_str().unwrap()
+                )));
+                assert!(
+                    human.contains(&format!("owner={}", change["component"].as_str().unwrap()))
+                );
+                assert!(human.contains(&format!(
+                    "integration={}",
+                    change["integration"].as_str().unwrap()
+                )));
+                assert!(human.contains("ownership=managed-integration"));
+                for field in ["precondition", "result"] {
+                    for value in change[field].as_object().unwrap().values() {
+                        assert!(human.contains(value.as_str().unwrap()));
+                    }
+                }
+            }
+            for field in ["edge", "source_package_digest", "source_baseline_digest"] {
+                assert!(human.contains(report["plan"][field].as_str().unwrap()));
+            }
+            assert!(!human.contains("private-runtime-value"));
+            assert!(!human.contains(root.to_str().unwrap()));
+        }
+    }
+}
+
+#[test]
+fn dry_run_rejects_skipped_targets_conflicts_and_recovery_without_a_plan() {
+    let fixture = Fixture::new();
+    let root = fixture.baseline(BaselineComposition::Default, BaselineDatabase::Sqlite);
+    for target in ["v0.8.0", "v0.6.0", "0.7.0", "https://private-runtime-value"] {
+        let output = preview(&root, &["--target", target], 3);
+        assert_eq!(output["assessment"]["status"], "unsupported");
+        assert!(output["plan"].is_null());
+        assert_eq!(output["outcome"], "unavailable");
+    }
+    fs::write(root.join("Cargo.lock"), "managed-private-content").unwrap();
+    assert!(preview(&root, &[], 4)["plan"].is_null());
+    fs::write(root.join(".hegira-mutation.lock"), "private-runtime-value").unwrap();
+    let output = preview(&root, &[], 4);
+    assert_eq!(output["assessment"]["status"], "recovery-blocked");
+    assert!(output["plan"].is_null());
+}
+
+#[test]
+fn dry_run_current_release_is_a_no_op_and_execution_requires_explicit_preview() {
+    let fixture = Fixture::new();
+    let root = fixture.0.join("current");
+    assert!(
+        run(
+            &fixture.0,
+            &[
+                "new",
+                "preview-app",
+                "--destination",
+                root.to_str().unwrap()
+            ]
+        )
+        .status
+        .success()
+    );
+    let output = preview(&root, &[], 0);
+    assert_eq!(output["outcome"], "no-upgrade");
+    assert!(output["plan"].is_null());
+    assert!(preview(&root, &["--target", "v0.7.0"], 3)["plan"].is_null());
+    for args in [
+        vec!["upgrade"],
+        vec!["upgrade", "--json"],
+        vec!["upgrade", "--target", "v0.7.0"],
+        vec!["upgrade", "--dry-run", "status"],
+        vec!["upgrade", "--apply"],
+    ] {
+        assert_eq!(run(&root, &args).status.code(), Some(2));
+    }
+}
+
+#[test]
+fn preview_matches_the_plan_consumed_by_existing_atomic_publication() {
+    let fixture = Fixture::new();
+    let root = fixture.baseline(BaselineComposition::Minimal, BaselineDatabase::Sqlite);
+    let repository = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap();
+    let report = preview(&root, &[], 0);
+    let catalog = template_renderer::ManifestCatalog::load(repository, "layered").unwrap();
+    let plan = catalog.plan_upgrade(&root).unwrap();
+    assert_eq!(
+        report["plan"],
+        serde_json::to_value(plan.summary()).unwrap()
+    );
+    // This fixture-only publication uses the same typed plan, not JSON replay
+    // or a public upgrade apply command.
+    application_mutator::publish_change_plan(&root, plan.change_plan()).unwrap();
+    assert_eq!(
+        ApplicationManifest::read(root.join("hegira.toml"))
+            .unwrap()
+            .framework
+            .version,
+        "v0.7.0"
+    );
+    assert_eq!(
+        report["plan"],
+        serde_json::to_value(plan.summary()).unwrap()
+    );
 }

@@ -432,9 +432,13 @@ fn run_command(
             output,
             diagnostics,
         ),
-        CliCommand::Upgrade(command) => {
-            upgrade::run(command, repository_root, working_directory, output)
-        }
+        CliCommand::Upgrade(command) => upgrade::run(
+            command,
+            repository_root,
+            working_directory,
+            output,
+            diagnostics,
+        ),
         CliCommand::Component(command) => component::run(
             command,
             repository_root,

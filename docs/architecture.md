@@ -723,7 +723,8 @@ and Leptos integrations because these application files do not change across
 this release edge; the version-pinned official packages advance together.
 Product layers, runtime configuration values, generated resources, and migration
 history remain application-owned or immutable. The public CLI exposes this edge
-through read-only `upgrade status`, not through public plan/apply commands.
+through read-only `upgrade status` and `upgrade --dry-run`. Applying an upgrade
+is not exposed by the public CLI.
 Readiness authenticates the package, application ownership and managed boundary,
 then shares the planner's pure target-manifest validation without constructing
 a change plan. Recovery-marker inspection is anchored and no-follow; any marker
@@ -731,6 +732,16 @@ blocks readiness without reading its contents. Sorted schema-1 JSON and human
 reports redact source content and machine-local paths and distinguish unsupported,
 incompatible, conflicting, and recovery-blocked states. Compatible current
 compositions report no upgrade. Assessment does not authorize later mutation.
+
+Dry-run reauthenticates the observed application and builds the renderer's
+`UpgradePlan` directly. Its schema-1 CLI envelope includes the same readiness
+assessment, nullable typed plan summary, outcome, and preserved ownership
+classes. Explicit targets must match the authenticated direct edge exactly.
+Human and JSON output retain ordered changes, owners, integrations, manifest
+transitions, component/dependency identities, preconditions, and resulting
+digests without source contents. Conflicts and recovery markers suppress the
+plan. Preview neither creates publication state nor persists a cached plan;
+the typed in-memory plan remains the contract for subsequent publication.
 
 Upgrade tests obtain v0.6.0 application source from committed, content-addressed
 release baselines rather than current templates or mutable remote content. One
