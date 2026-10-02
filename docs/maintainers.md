@@ -561,11 +561,22 @@ sh scripts/cli-check.sh
 The layered-template gate also verifies source preservation and native/hydration
 compilation for customized v0.6.0-to-v0.7.0 default, minimal, and Identity-added
 applications with both providers. It materializes authenticated released
-baselines, customizes them through the typed generators, fingerprints the
-upgrade output, and stages separate local-framework compile copies under its
+baselines, customizes them through the typed generators, and runs the source-built
+public CLI through readiness, dry-run, apply, repeated apply, inspect, and doctor.
+The shared matrix contract verifies exact release identities, unchanged provider
+and client selection, compatible composition, and protected-resource capability
+gating (including minimal rejection without writes). Empty prerequisite PATH
+keeps doctor deterministic; missing tools and unprobed PostgreSQL produce warnings,
+not permission to ignore failed manifest or integration checks. The gate fingerprints
+the upgrade output and stages separate local-framework compile copies under its
 existing bounded validation workspace. It does not connect to a database or
 execute migrations. Focused offline preservation and conflict tests run with
 `cargo test --locked -p template_renderer --test upgrade_preservation`.
+The same public-process matrix runs against untouched immutable baselines with
+`cargo test --locked -p hegira_cli --test upgrade_status public_upgrade_matrix`.
+All six customized results reuse one sequential compile location to prevent Cargo
+from confusing equal package names across fixture trees; each result receives both
+locked native and WASM hydration checks without duplicating the compile matrix.
 
 To include the framework and official-module gates' ignored PostgreSQL tests locally, provide
 a disposable PostgreSQL database and opt in explicitly:

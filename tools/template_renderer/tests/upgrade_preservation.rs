@@ -43,7 +43,11 @@ fn customized_released_applications_preserve_product_source_and_history() {
             support::customize(repository(), &application, request);
             let product = support::product_fingerprint(&application);
             snapshots.insert(request.id(), product.clone());
-            support::upgrade_and_verify(repository(), &application, request);
+            support::upgrade_and_verify_with(repository(), &application, request, |application| {
+                let catalog = ManifestCatalog::load(repository(), "layered").unwrap();
+                let plan = catalog.plan_upgrade(application).unwrap();
+                application_mutator::publish_change_plan(application, plan.change_plan()).unwrap();
+            });
             assert_eq!(product, support::product_fingerprint(&application));
         }
     }

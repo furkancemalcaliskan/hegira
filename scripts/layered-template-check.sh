@@ -66,9 +66,10 @@ fi
     --bin-cargo-args=--locked --lib-cargo-args=--locked
 )
 
-echo "==> Customized released-application upgrade preservation"
+echo "==> Public CLI released-application upgrade matrix and preservation"
+cargo build --locked -p hegira_cli --bin hegira
 cargo run --locked --quiet -p template_renderer --example upgrade_preservation -- \
-  "$repo_root" "$staging_parent/upgrade-preservation"
+  "$repo_root" "$staging_parent/upgrade-preservation" "$CARGO_TARGET_DIR/debug/hegira"
 for composition in default minimal identity-added; do
   for database in sqlite postgres; do
     echo "==> Customized upgrade compilation: $composition/$database"
