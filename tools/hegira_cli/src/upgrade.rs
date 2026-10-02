@@ -21,7 +21,7 @@ use crate::{
 
 pub const UPGRADE_STATUS_OUTPUT_SCHEMA: u32 = 1;
 
-mod preview;
+mod execution;
 
 #[derive(Debug, Args)]
 pub(crate) struct UpgradeCommand {
@@ -29,7 +29,7 @@ pub(crate) struct UpgradeCommand {
     command: Option<UpgradeSubcommand>,
     #[command(flatten)]
     options: StatusCommand,
-    /// Preview the supported direct upgrade without modifying the application.
+    /// Preview instead of applying the supported direct upgrade.
     #[arg(long)]
     dry_run: bool,
     /// Exact direct target release; skipped and arbitrary targets are rejected.
@@ -190,28 +190,30 @@ pub(crate) fn run(
         Some(_) => {
             return crate::write_diagnostic(
                 crate::CliDiagnostic::usage(
-                    "upgrade status does not accept upgrade preview options",
+                    "upgrade status does not accept upgrade execution options",
                     "Use hegira upgrade status --help.",
                 ),
                 diagnostics,
             );
         }
         None if command.dry_run => {
-            return preview::run(
+            return execution::run(
                 &repository,
                 working_directory,
                 command.options,
                 command.target,
+                true,
                 output,
             );
         }
         None => {
-            return crate::write_diagnostic(
-                crate::CliDiagnostic::usage(
-                    "upgrade requires status or --dry-run",
-                    "Use hegira upgrade --dry-run to preview the supported direct transition.",
-                ),
-                diagnostics,
+            return execution::run(
+                &repository,
+                working_directory,
+                command.options,
+                command.target,
+                false,
+                output,
             );
         }
     };
@@ -431,7 +433,7 @@ fn check_recovery(root: &Path, report: &mut Report) -> bool {
             report.fail(
                 Status::RecoveryBlocked,
                 "recovery-pending",
-                "Inspect pending mutation recovery state before another operation.",
+                "Inspect pending mutation recovery state before another operation. Preserve the marker and staged files; do not delete them or retry until recovery is verified.",
             );
             false
         }
@@ -590,7 +592,7 @@ mod tests {
         assert!(!root.join(application_mutator::MUTATION_MARKER).exists());
         let mut preview_output = Vec::new();
         assert_eq!(
-            preview::run(
+            execution::run(
                 &root,
                 root.clone(),
                 StatusCommand {
@@ -598,6 +600,7 @@ mod tests {
                     json: true
                 },
                 None,
+                true,
                 &mut preview_output
             ),
             CliExit::Internal

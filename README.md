@@ -176,7 +176,8 @@ for discovery, compatibility, and safety behavior.
 
 Use `upgrade status` (optionally `--json`) to assess the authenticated direct
 upgrade target, and `upgrade --dry-run` to review its content-redacted plan
-without changing application source. See
+without changing application source. After review, `upgrade` applies one
+supported direct transition through the atomic mutation boundary. See
 [Upgrade readiness](docs/getting-started.md#assess-application-upgrade-readiness)
 for supported release states, recovery checks, and process outcomes.
 
