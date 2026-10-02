@@ -1,24 +1,43 @@
 use super::*;
 use application_manifest::SourceOwnershipClass;
+use application_mutator::{MutationErrorKind, publish_change_plan};
 use template_renderer::{UpgradePlan, UpgradePlanSummary, UpgradePlanningErrorKind};
 
-const UPGRADE_PREVIEW_OUTPUT_SCHEMA: u32 = 1;
+const UPGRADE_EXECUTION_OUTPUT_SCHEMA: u32 = 1;
 
 #[derive(Serialize)]
-struct Preview {
+struct UpgradeExecution {
     output_schema: u32,
     mode: &'static str,
     outcome: &'static str,
     assessment: Report,
     plan: Option<UpgradePlanSummary>,
     preserved_boundaries: Vec<SourceOwnershipClass>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    receipt: Option<Receipt>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    next_steps: Vec<&'static str>,
 }
+
+#[derive(Serialize)]
+struct Receipt {
+    changed_files: usize,
+    edge: String,
+    target: template_renderer::UpgradeReleaseSummary,
+}
+
+const NEXT_STEPS: [&str; 3] = [
+    "Review the managed Cargo.toml, Cargo.lock, and hegira.toml changes; do not regenerate the lockfile blindly.",
+    "Apply application-owned database migrations through the application's documented operation workflow, with backups and the correct environment.",
+    "Run application tests, native/hydration checks, and deployment validation before starting or deploying services.",
+];
 
 pub(super) fn run(
     repository: &Path,
     working_directory: PathBuf,
     options: StatusCommand,
     target: Option<String>,
+    dry_run: bool,
     output: &mut impl Write,
 ) -> CliExit {
     let request = ApplicationContextRequest {
@@ -27,6 +46,7 @@ pub(super) fn run(
     };
     let mut report = assess(repository, working_directory, options.application_root);
     let mut plan = None;
+    let mut receipt = None;
     if matches!(report.status, Status::Ready | Status::NoUpgrade)
         && let Some(target) = &target
         && report
@@ -41,18 +61,40 @@ pub(super) fn run(
             "The requested target is not the authenticated direct upgrade target.",
         );
     }
+    if !dry_run && matches!(report.status, Status::NoUpgrade) {
+        report.fail(
+            Status::Unsupported,
+            "direct-edge",
+            "No applicable direct upgrade remains; no application files were changed.",
+        );
+    }
     if matches!(report.status, Status::Ready) {
         match prepare(repository, &request, &mut report) {
-            Some(prepared) => plan = Some(prepared.summary()),
+            Some((root, prepared)) => {
+                let summary = prepared.summary();
+                if dry_run {
+                    plan = Some(summary);
+                } else {
+                    match publish_change_plan(&root, prepared.change_plan()) {
+                        Ok(published) if published.changed_files() == summary.changes.len() => {
+                            receipt = Some(Receipt { changed_files: published.changed_files(), edge: summary.edge.clone(), target: summary.target.clone() });
+                            plan = Some(summary);
+                        }
+                        Ok(_) => report.fail(Status::InternalError, "receipt-mismatch", "Publication returned an inconsistent receipt; inspect application state before retrying."),
+                        Err(error) => publication_failure(error.kind(), &mut report),
+                    }
+                }
+            }
             None => debug_assert!(!matches!(report.status, Status::Ready)),
         }
     }
     let exit = report.status.exit();
-    let preview = Preview {
-        output_schema: UPGRADE_PREVIEW_OUTPUT_SCHEMA,
-        mode: "dry-run",
+    let preview = UpgradeExecution {
+        output_schema: UPGRADE_EXECUTION_OUTPUT_SCHEMA,
+        mode: if dry_run { "dry-run" } else { "apply" },
         outcome: match report.status {
-            Status::Ready => "planned",
+            Status::Ready if dry_run => "planned",
+            Status::Ready => "applied",
             Status::NoUpgrade => "no-upgrade",
             _ => "unavailable",
         },
@@ -63,6 +105,12 @@ pub(super) fn run(
             SourceOwnershipClass::GeneratedOnce,
             SourceOwnershipClass::ImmutableHistory,
         ],
+        next_steps: if receipt.is_some() {
+            NEXT_STEPS.to_vec()
+        } else {
+            Vec::new()
+        },
+        receipt,
     };
     let rendered = if options.json {
         serde_json::to_string_pretty(&preview).ok()
@@ -76,12 +124,12 @@ pub(super) fn run(
 }
 
 /// Build exactly the renderer's typed plan; no publication state is created.
-/// Future apply must pass this same in-memory plan to the mutation boundary.
+/// Both preview and apply consume this same in-memory plan contract.
 pub(super) fn prepare(
     repository: &Path,
     request: &ApplicationContextRequest,
     report: &mut Report,
-) -> Option<UpgradePlan> {
+) -> Option<(PathBuf, UpgradePlan)> {
     let policy = match MutationCompatibilityPolicy::for_current_release() {
         Ok(policy) => policy,
         Err(_) => {
@@ -195,13 +243,55 @@ pub(super) fn prepare(
             return None;
         }
     }
-    check_recovery(&context.root, report).then_some(plan)
+    check_recovery(&context.root, report).then_some((context.root, plan))
 }
 
-fn render_human_preview(preview: &Preview) -> String {
+fn publication_failure(kind: MutationErrorKind, report: &mut Report) {
+    let (status, code, message) = match kind {
+        MutationErrorKind::RecoveryRequired => (
+            Status::RecoveryBlocked,
+            "recovery-pending",
+            "A concurrent or interrupted mutation requires inspection. Do not delete its marker or staging files; verify the application and recover manually before retrying.",
+        ),
+        MutationErrorKind::PreconditionFailed => (
+            Status::Conflict,
+            "publication-precondition",
+            "Application preconditions changed before publication; inspect changes and run a new dry-run.",
+        ),
+        MutationErrorKind::UnsupportedPlatform | MutationErrorKind::UnsafeRoot => (
+            Status::InvalidInput,
+            "publication-platform",
+            "The application filesystem cannot satisfy safe publication requirements.",
+        ),
+        MutationErrorKind::InvalidPlan => (
+            Status::InternalError,
+            "publication-plan",
+            "The authenticated plan failed publisher validation.",
+        ),
+        MutationErrorKind::PublicationFailed => (
+            Status::InternalError,
+            "publication-failed",
+            "Publication failed without a success receipt. Inspect application state and recovery information before retrying.",
+        ),
+        MutationErrorKind::RollbackIncomplete => (
+            Status::InternalError,
+            "recovery-uncertain",
+            "Rollback could not be completed. Preserve the recovery marker and staged files; inspect and recover manually before retrying.",
+        ),
+    };
+    if matches!(
+        kind,
+        MutationErrorKind::RecoveryRequired | MutationErrorKind::RollbackIncomplete
+    ) {
+        report.recovery = Preflight::Blocked;
+    }
+    report.fail(status, code, message);
+}
+
+fn render_human_preview(preview: &UpgradeExecution) -> String {
     let mut lines = vec![
         render_human(&preview.assessment),
-        format!("Upgrade preview: {} (dry-run)", preview.outcome),
+        format!("Upgrade result: {} ({})", preview.outcome, preview.mode),
     ];
     if let Some(plan) = &preview.plan {
         lines.push(format!("Edge: {}", plan.edge));
@@ -252,6 +342,79 @@ fn render_human_preview(preview: &Preview) -> String {
     lines.push(
         "Preserved: application-owned, generated-once, immutable-history boundaries.".to_owned(),
     );
-    lines.push("No application files were changed. No cached plan was written.".to_owned());
+    if let Some(receipt) = &preview.receipt {
+        lines.push(format!(
+            "Applied receipt: {} managed files; edge {}; target {}.",
+            receipt.changed_files, receipt.edge, receipt.target.framework_version
+        ));
+        lines.extend(
+            preview
+                .next_steps
+                .iter()
+                .map(|step| format!("Next: {step}")),
+        );
+    } else if preview.mode == "dry-run" {
+        lines.push("No application files were changed. No cached plan was written.".to_owned());
+    } else {
+        lines.push("No successful upgrade receipt was issued. Inspect diagnostics and recovery state before retrying.".to_owned());
+    }
     lines.join("\n")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn publication_outcomes_are_static_redacted_and_preserve_recovery_blocking() {
+        for (kind, exit, code) in [
+            (
+                MutationErrorKind::RecoveryRequired,
+                CliExit::Conflict,
+                "recovery-pending",
+            ),
+            (
+                MutationErrorKind::PreconditionFailed,
+                CliExit::Conflict,
+                "publication-precondition",
+            ),
+            (
+                MutationErrorKind::UnsupportedPlatform,
+                CliExit::Validation,
+                "publication-platform",
+            ),
+            (
+                MutationErrorKind::UnsafeRoot,
+                CliExit::Validation,
+                "publication-platform",
+            ),
+            (
+                MutationErrorKind::InvalidPlan,
+                CliExit::Internal,
+                "publication-plan",
+            ),
+            (
+                MutationErrorKind::PublicationFailed,
+                CliExit::Internal,
+                "publication-failed",
+            ),
+            (
+                MutationErrorKind::RollbackIncomplete,
+                CliExit::Internal,
+                "recovery-uncertain",
+            ),
+        ] {
+            let mut report = Report::new();
+            publication_failure(kind, &mut report);
+            assert_eq!(report.status.exit(), exit);
+            assert_eq!(report.diagnostics[0].code, code);
+            if matches!(
+                kind,
+                MutationErrorKind::RecoveryRequired | MutationErrorKind::RollbackIncomplete
+            ) {
+                assert_eq!(report.recovery.name(), "blocked");
+                assert!(report.diagnostics[0].message.contains("marker"));
+            }
+        }
+    }
 }

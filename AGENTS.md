@@ -115,7 +115,8 @@ commands change. Never describe planned work as implemented.
   read-only existing-application inspection with human and versioned JSON
   composition status and sorted graph diagnostics, authenticated read-only
   direct-upgrade readiness with recovery and managed-source preflight,
-  content-redacted upgrade dry-run using the renderer's typed plan, complete layered resource
+  content-redacted upgrade dry-run and atomic direct-upgrade application using
+  the renderer's typed plan and existing mutation publisher, complete layered resource
   generation, application-owned migration generation, and a shared
   dry-run/apply mutation contract.
   Mutation output is deterministic, versioned, content-redacted, and derived

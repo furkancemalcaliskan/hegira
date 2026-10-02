@@ -505,6 +505,13 @@ fn dry_run_rejects_skipped_targets_conflicts_and_recovery_without_a_plan() {
         assert_eq!(output["assessment"]["status"], "unsupported");
         assert!(output["plan"].is_null());
         assert_eq!(output["outcome"], "unavailable");
+        let before = tree(&root);
+        let applied = run(&root, &["upgrade", "--target", target, "--json"]);
+        assert_eq!(applied.status.code(), Some(3));
+        let applied: serde_json::Value = serde_json::from_slice(&applied.stdout).unwrap();
+        assert!(applied["plan"].is_null());
+        assert!(applied.get("receipt").is_none());
+        assert_eq!(before, tree(&root));
     }
     fs::write(root.join("Cargo.lock"), "managed-private-content").unwrap();
     assert!(preview(&root, &[], 4)["plan"].is_null());
@@ -515,7 +522,7 @@ fn dry_run_rejects_skipped_targets_conflicts_and_recovery_without_a_plan() {
 }
 
 #[test]
-fn dry_run_current_release_is_a_no_op_and_execution_requires_explicit_preview() {
+fn current_release_preview_is_a_no_op_and_repeated_apply_has_no_direct_edge() {
     let fixture = Fixture::new();
     let root = fixture.0.join("current");
     assert!(
@@ -536,14 +543,214 @@ fn dry_run_current_release_is_a_no_op_and_execution_requires_explicit_preview() 
     assert!(output["plan"].is_null());
     assert!(preview(&root, &["--target", "v0.7.0"], 3)["plan"].is_null());
     for args in [
-        vec!["upgrade"],
-        vec!["upgrade", "--json"],
-        vec!["upgrade", "--target", "v0.7.0"],
         vec!["upgrade", "--dry-run", "status"],
         vec!["upgrade", "--apply"],
     ] {
         assert_eq!(run(&root, &args).status.code(), Some(2));
     }
+    for args in [
+        vec!["upgrade"],
+        vec!["upgrade", "--json"],
+        vec!["upgrade", "--target", "v0.7.0"],
+    ] {
+        assert_eq!(run(&root, &args).status.code(), Some(3));
+    }
+}
+
+#[test]
+fn public_apply_uses_the_preview_plan_and_preserves_every_unmanaged_byte() {
+    for composition in BaselineComposition::ALL {
+        for database in BaselineDatabase::ALL {
+            let fixture = Fixture::new();
+            let root = fixture.baseline(composition, database);
+            fs::write(root.join("config/production.yaml"), "private-runtime-value").unwrap();
+            fs::write(
+                root.join("crates/domain/src/product-owned.rs"),
+                "managed-private-content",
+            )
+            .unwrap();
+            let before = tree(&root);
+            let original = ApplicationManifest::read(root.join("hegira.toml")).unwrap();
+            let planned = preview(&root, &[], 0);
+            let applied = run(
+                &root.join("apps/web/src"),
+                &["upgrade", "--target", "v0.7.0", "--json"],
+            );
+            assert!(
+                applied.status.success(),
+                "{}",
+                String::from_utf8_lossy(&applied.stdout)
+            );
+            assert!(applied.stderr.is_empty());
+            let text = String::from_utf8(applied.stdout).unwrap();
+            for private in [
+                "private-runtime-value",
+                "managed-private-content",
+                root.to_str().unwrap(),
+            ] {
+                assert!(!text.contains(private));
+            }
+            let applied: serde_json::Value = serde_json::from_str(&text).unwrap();
+            assert_eq!(applied["output_schema"], 1);
+            assert_eq!(applied["mode"], "apply");
+            assert_eq!(applied["outcome"], "applied");
+            assert_eq!(applied["plan"], planned["plan"]);
+            assert_eq!(applied["receipt"]["changed_files"], 3);
+            assert_eq!(applied["receipt"]["target"], applied["plan"]["target"]);
+            assert_eq!(applied["next_steps"].as_array().unwrap().len(), 3);
+            let current = ApplicationManifest::read(root.join("hegira.toml")).unwrap();
+            assert_eq!(current.schema, 3);
+            assert_eq!(current.framework.version, "v0.7.0");
+            assert_eq!(current.selection, original.selection);
+            let current_composition = current.composition.unwrap();
+            let original_composition = original.composition.unwrap();
+            assert_eq!(current_composition.package.version, "v0.7.0");
+            assert_eq!(
+                current_composition.capabilities,
+                original_composition.capabilities
+            );
+            assert!(
+                current_composition
+                    .components
+                    .iter()
+                    .all(|component| component.version == "v0.7.0")
+            );
+            assert!(
+                current_composition
+                    .modules
+                    .iter()
+                    .all(|module| module.version == "v0.7.0")
+            );
+            let after = tree(&root);
+            assert_eq!(
+                before.keys().collect::<Vec<_>>(),
+                after.keys().collect::<Vec<_>>()
+            );
+            let changed = before
+                .iter()
+                .filter(|(path, bytes)| after.get(*path) != Some(*bytes))
+                .map(|(path, _)| path.to_str().unwrap())
+                .collect::<Vec<_>>();
+            assert_eq!(changed, ["Cargo.lock", "Cargo.toml", "hegira.toml"]);
+            let metadata = entry_metadata(&root);
+            let repeated = run(&root, &["upgrade", "--json"]);
+            assert_eq!(repeated.status.code(), Some(3));
+            let repeated: serde_json::Value = serde_json::from_slice(&repeated.stdout).unwrap();
+            assert_eq!(
+                repeated["assessment"]["diagnostics"][0]["code"],
+                "direct-edge"
+            );
+            assert!(repeated["plan"].is_null());
+            assert!(repeated.get("receipt").is_none());
+            assert_eq!(after, tree(&root));
+            assert_eq!(metadata, entry_metadata(&root));
+        }
+    }
+}
+
+#[test]
+fn public_apply_has_deterministic_receipts_and_explicit_owner_operations() {
+    let mut first = None;
+    for _ in 0..2 {
+        let fixture = Fixture::new();
+        let root = fixture.baseline(BaselineComposition::Default, BaselineDatabase::Sqlite);
+        let output = run(
+            &fixture.0,
+            &[
+                "upgrade",
+                "--application-root",
+                root.to_str().unwrap(),
+                "--json",
+            ],
+        );
+        assert!(output.status.success());
+        if let Some(previous) = &first {
+            assert_eq!(previous, &output.stdout);
+        }
+        first = Some(output.stdout);
+    }
+    let fixture = Fixture::new();
+    let root = fixture.baseline(BaselineComposition::Default, BaselineDatabase::Sqlite);
+    let human = run(&root, &["upgrade"]);
+    assert!(human.status.success());
+    let human = String::from_utf8(human.stdout).unwrap();
+    assert!(human.contains("Applied receipt: 3 managed files"));
+    assert!(human.contains("do not regenerate the lockfile blindly"));
+    assert!(human.contains("application-owned database migrations"));
+    assert!(human.contains("native/hydration checks"));
+    assert!(!human.contains("No application files were changed"));
+}
+
+#[test]
+fn public_apply_conflicts_and_recovery_never_issue_a_success_receipt() {
+    let fixture = Fixture::new();
+    let root = fixture.baseline(BaselineComposition::Default, BaselineDatabase::Sqlite);
+    for (path, value) in [
+        ("Cargo.lock", "managed-private-content"),
+        (".hegira-mutation.lock", "private-runtime-value"),
+    ] {
+        fs::write(root.join(path), value).unwrap();
+        let before = tree(&root);
+        let output = run(&root, &["upgrade", "--json"]);
+        assert_eq!(output.status.code(), Some(4));
+        let output: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+        assert_eq!(output["outcome"], "unavailable");
+        assert!(output["plan"].is_null());
+        assert!(output.get("receipt").is_none());
+        assert_eq!(before, tree(&root));
+    }
+}
+
+#[test]
+fn concurrent_public_apply_cannot_issue_two_receipts() {
+    let fixture = Fixture::new();
+    let root = fixture.baseline(BaselineComposition::Default, BaselineDatabase::Sqlite);
+    let mut children = Vec::new();
+    for _ in 0..2 {
+        children.push(
+            Command::new(env!("CARGO_BIN_EXE_hegira"))
+                .args(["upgrade", "--json"])
+                .current_dir(&root)
+                .env_clear()
+                .env("PATH", "")
+                .env("HOME", &root)
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .spawn()
+                .unwrap(),
+        );
+    }
+    let results = children
+        .into_iter()
+        .map(|child| child.wait_with_output().unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        results
+            .iter()
+            .filter(|output| output.status.success())
+            .count(),
+        1
+    );
+    for output in results {
+        assert!(output.stderr.is_empty());
+        let value: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+        if output.status.success() {
+            assert_eq!(value["outcome"], "applied");
+            assert_eq!(value["receipt"]["changed_files"], 3);
+        } else {
+            assert!(matches!(output.status.code(), Some(3 | 4)));
+            assert_eq!(value["outcome"], "unavailable");
+            assert!(value.get("receipt").is_none());
+        }
+    }
+    assert_eq!(
+        ApplicationManifest::read(root.join("hegira.toml"))
+            .unwrap()
+            .framework
+            .version,
+        "v0.7.0"
+    );
+    assert!(!root.join(".hegira-mutation.lock").exists());
 }
 
 #[test]

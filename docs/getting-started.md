@@ -219,7 +219,7 @@ An already installed component, an unknown component, or a component without a
 bundled additive contribution unit fails without changing the application. The
 command never downloads a package, executes component code, or interprets a
 remote coordinate. The CLI does not provide component removal, module
-management, migration execution or rollback, automatic upgrades, remote
+management, migration execution or rollback, unreviewed upgrades, remote
 component installation, or additional client templates. Optional runtime
 providers are configured explicitly in the application; they are not extra
 `new` selections.
@@ -371,7 +371,7 @@ plan or publication state and performs no source writes, network requests,
 database access, subprocess execution, or runtime configuration/secret reads.
 `ready` is an observation, not authorization to mutate: source must be
 reauthenticated for a subsequent operation. Review a complete plan with
-`upgrade --dry-run`; applying an upgrade is not exposed by this source checkout.
+`upgrade --dry-run`; after review, `upgrade` applies the supported direct edge.
 
 ## Preview An Application Upgrade
 
@@ -386,8 +386,8 @@ Omit `--json` for human output. `--application-root` uses the same discovery
 contract as readiness. Optional `--target v0.7.0` must exactly match the
 authenticated direct edge; skipped releases, downgrades, arbitrary coordinates,
 and unprefixed versions are rejected without echoing the supplied value.
-Invoking `upgrade` without `status` or `--dry-run` is a usage error, not implicit
-authorization to apply. Preview options cannot be combined with `status`.
+Invoking `upgrade` without `status` or `--dry-run` applies the supported edge.
+Execution options cannot be combined with `status`.
 
 Schema-1 JSON contains `output_schema`, `mode: "dry-run"`, `outcome`,
 `assessment` (the readiness report), nullable `plan`, and `preserved_boundaries`.
@@ -412,7 +412,52 @@ preserved. The current edge edits only `Cargo.lock`, `Cargo.toml`, and
 or application modification timestamp. It does not execute subprocesses,
 access runtime secrets, or contact a network. A preview is not a reusable
 authorization token; later publication must enforce the same in-memory plan's
-digest preconditions. No public upgrade apply command is available yet.
+digest preconditions.
+
+## Apply An Application Upgrade
+
+Back up the application and database, stop competing source mutations, and
+review `upgrade --dry-run` before invoking:
+
+```sh
+cargo run --locked --manifest-path /path/to/hegira/Cargo.toml \
+  -p hegira_cli -- upgrade --target v0.7.0 --json
+```
+
+`--target` is optional but, when supplied, must exactly match the authenticated
+direct edge. `--application-root` and root/descendant discovery behave as in
+dry-run. Apply recomputes the same typed in-memory plan from authenticated
+source. The existing publisher serializes mutation through a private recovery
+marker and validates every digest precondition before the first publication
+and again at each mutation boundary. Publication is directory-anchored,
+no-follow, privately staged, and rolled back on recoverable failures under
+the documented filesystem contract; it is not a distributed transaction.
+
+Successful schema-1 output uses `mode: "apply"`, `outcome: "applied"`, and the
+exact plan summary used by dry-run. `assessment` records the pre-publication
+source state. A content-redacted `receipt` contains the changed-file count,
+edge, and resulting release identity. `next_steps` contains application-owner
+operations; human output reports the same receipt and steps. Failures emit
+`outcome: "unavailable"` without a plan or success receipt. Apply to an already
+current application exits 3 with no applicable direct edge and performs no
+write, rather than reporting a second upgrade. Preview still reports
+`no-upgrade` successfully for that state.
+
+Concurrent/recovery conflicts exit 4; publication errors and uncertain rollback
+exit 1. An interrupted or uncertain mutation retains recovery information and
+blocks later mutation. Preserve the marker and staging files; inspect the
+application and restore a verified consistent state before retrying. Never
+delete a marker merely to make the next command proceed. If output delivery
+fails after publication, inspect source and recovery state before assuming the
+upgrade failed or retrying.
+
+Hegira owns only the authenticated managed transitions. Review `Cargo.toml`,
+`Cargo.lock`, and `hegira.toml`, then apply application-owned database migrations
+through the application's documented operations and run native, hydration,
+test, and deployment validation. Apply does not regenerate the lockfile,
+execute database migrations, start services, access runtime secrets, or run
+network/subprocess operations. Product source and immutable history remain
+untouched.
 
 ## Diagnose An Existing Application
 

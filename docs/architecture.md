@@ -723,8 +723,8 @@ and Leptos integrations because these application files do not change across
 this release edge; the version-pinned official packages advance together.
 Product layers, runtime configuration values, generated resources, and migration
 history remain application-owned or immutable. The public CLI exposes this edge
-through read-only `upgrade status` and `upgrade --dry-run`. Applying an upgrade
-is not exposed by the public CLI.
+through read-only `upgrade status`, `upgrade --dry-run`, and explicit `upgrade`
+application through the existing mutation publisher.
 Readiness authenticates the package, application ownership and managed boundary,
 then shares the planner's pure target-manifest validation without constructing
 a change plan. Recovery-marker inspection is anchored and no-follow; any marker
@@ -742,6 +742,17 @@ transitions, component/dependency identities, preconditions, and resulting
 digests without source contents. Conflicts and recovery markers suppress the
 plan. Preview neither creates publication state nor persists a cached plan;
 the typed in-memory plan remains the contract for subsequent publication.
+
+Apply uses that same preparation path and passes its plan directly to
+`application_mutator::publish_change_plan`. The publisher owns marker
+serialization, whole-plan and per-change digest preconditions, directory
+anchoring, private staging, rollback, and retained recovery state. The CLI
+does not implement a parallel filesystem mutation path. Successful schema-1
+apply output binds the exact plan to a deterministic receipt and application-owner
+next steps; the assessment records pre-publication state. Failures do not
+emit a success receipt. Repeated apply rejects the absent direct edge without
+writes. Migration execution, lockfile regeneration, subprocesses, network
+access, and service startup remain outside upgrade publication.
 
 Upgrade tests obtain v0.6.0 application source from committed, content-addressed
 release baselines rather than current templates or mutable remote content. One
