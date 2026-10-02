@@ -791,6 +791,15 @@ Profile compilation is serialized through one stable application source path
 to prevent Cargo from confusing same-named local packages across fixture trees
 while reusing compatible framework artifacts.
 
+The separate upgraded-application lifecycle validator extends those public-source
+checks to disposable fresh and released-schema databases, migration checksum/data
+preservation, release assets, and production images for both providers and all three
+compositions. Released Identity SQL is verified against its v0.6.0 source inventory.
+Only separate validation copies receive local dependencies, test fixtures, and a
+post-upgrade application migration. Production HTTP probes retain authentication,
+authorization, cookie/Bearer, and minimal-composition boundaries. The gate never
+resets persistent data or modifies verified public upgrade output.
+
 The reusable renderer exposes typed composition request/result/diagnostic,
 render request, plan, publication-result, and error-category contracts. A
 render request may choose component roots, but the loaded package exclusively

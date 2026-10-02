@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "release": "v0.6.0",
+  "commit": "91c522b0dcfa71502ef5b4f0beed2ac6fb676dd3",
+  "files": {
+    "modules/identity/sqlx/migrations/postgres/001_create_sessions.sql": "d290388e72a81d7f92c164f7c2eaf16a483bd366c6acab7db4dd6702770b05ce",
+    "modules/identity/sqlx/migrations/postgres/002_identity_token_flows.sql": "166cae42ac0bc6cfb560a8d8db35e2736255db1b9fb1b33f028f17008201238b",
+    "modules/identity/sqlx/migrations/postgres/003_identity_rbac.sql": "ea6056bceede1ad8fd5c8cd3f567203d721626eac4e51320342b6e65b22a1c67",
+    "modules/identity/sqlx/migrations/postgres/004_identity_user_ids.sql": "a18bc7cfab0e1fc29b8857d2f83cdea70953e4470187f3bd263dbf2890c40ea1",
+    "modules/identity/sqlx/migrations/postgres/005_identity_user_fk_ids.sql": "3a0836b654c930131945a8f7bb1ec201ebb8789835b75eb9a034952b9912689c",
+    "modules/identity/sqlx/migrations/postgres/008_identity_soft_delete.sql": "13539380f82cb0e8ba685890c04a348220b82441c181a9cd360794e82ded9990",
+    "modules/identity/sqlx/migrations/postgres/009_session_policy.sql": "1163f910f8f103b82cd650e3abe8ac249a10ae8a5978fc7b6d37d81e78804d71",
+    "modules/identity/sqlx/migrations/postgres/010_identity_totp.sql": "93d591e8769e693115d28453c1f800293fe3fbb4a133fdca07e4fb3ed0c23519",
+    "modules/identity/sqlx/migrations/postgres/011_identity_oauth.sql": "8763e725f131d1da6c4039488fe4a5663cc1d1901e8cc36bc0100dfabe3a5338",
+    "modules/identity/sqlx/migrations/postgres/012_identity_oauth_callback.sql": "b780fe629004e17862a7143a1f8c7aa5a049d9cddf8b0cee6d5fe9a61935e1b9",
+    "modules/identity/sqlx/migrations/postgres/013_identity_oauth_signup.sql": "d358624f02daf3386c0ee0e213bb97edf2783d086ea6e087e9887ad38669560b",
+    "modules/identity/sqlx/migrations/postgres/015_drop_legacy_identity_usernames.sql": "90613ab269b21d478ef885173b274bce70869c535078b616381ca317b046c93e",
+    "modules/identity/sqlx/migrations/postgres/017_identity_search_revision.sql": "8556f54794f938602921b71a7522927a9928d32539ee9e7147c7da21dc438839",
+    "modules/identity/sqlx/migrations/postgres/019_session_identity.sql": "a2b39aa991b054a944a9141a90c4664368fb16f7e7ffcf9e09c565994ff9fe7c",
+    "modules/identity/sqlx/migrations/postgres/020_email_change.sql": "e7a2f8462cd39ef45d265573dec25003f9ad369d4f2c2ff4faf1ee3df149080a",
+    "modules/identity/sqlx/migrations/sqlite/002_identity_sessions.sql": "f97b468748b2203db1aefb76faad495ec24d56b9e66eb4dd3d33886263c845cd",
+    "modules/identity/sqlx/migrations/sqlite/003_identity_rbac.sql": "149c098df2a2f0386e5700b3f40146b9384f28e2512278d7989e70424e935a1b",
+    "modules/identity/sqlx/migrations/sqlite/004_identity_oauth.sql": "68dd7ac5098201d2252c70135c0e628d2f8f4d789fe363e69606bbb7a1e130f5"
+  }
+}

@@ -1,0 +1,40 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: upgrade_app
+      POSTGRES_PASSWORD: ${UPGRADE_DB_PASSWORD:?required}
+      POSTGRES_DB: upgrade_app
+    ports:
+      - "127.0.0.1:${UPGRADE_POSTGRES_PORT:?required}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U upgrade_app -d upgrade_app"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  web:
+    image: ${UPGRADE_APP_IMAGE:?required}
+    environment:
+      APP_ENV: production
+      APP__APPLICATION__PUBLIC_URL: https://example.test
+      APP__SECURITY__CORS__ENABLED: "false"
+      APP__DATABASE__BACKEND: ${UPGRADE_DATABASE:?required}
+      APP__DATABASE__URL: ${UPGRADE_CONTAINER_DATABASE_URL:?required}
+      APP__DATABASE__MAX_CONNECTIONS: "1"
+      APP__SECURITY__JWT_SECRET: ${UPGRADE_JWT_SECRET:?required}
+      APP__STARTUP__ENSURE_DATABASE: "false"
+      APP__STARTUP__SEED_IDENTITY: "false"
+      APP__SEED__SEED_ADMIN: "false"
+      APP__STARTUP__SCHEDULER: "false"
+      APP__STARTUP__DURABLE_JOBS: "false"
+      APP__RUNTIME__ROLE: all
+    volumes:
+      - ${UPGRADE_SQLITE_DIRECTORY:?required}:/data:Z
+    ports:
+      - "127.0.0.1:${UPGRADE_HTTP_PORT:?required}:3000"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:3000/readyz"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
