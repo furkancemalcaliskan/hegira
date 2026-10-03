@@ -43,6 +43,11 @@ jobs:
           fi
           echo "value=$RELEASE_REF" >>"$GITHUB_OUTPUT"
           echo "commit=$(git rev-parse HEAD)" >>"$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+      - name: Audit canonical frontend dependencies
+        run: sh scripts/frontend-check.sh
       - name: Generate source SBOM from the clean checkout
         uses: anchore/sbom-action@v0
         with:

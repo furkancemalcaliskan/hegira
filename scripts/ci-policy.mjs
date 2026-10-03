@@ -191,6 +191,20 @@ const COMPATIBILITY_HOST_CONTRACTS = [
   "host composition",
 ];
 
+export function validateFrontendAuditJob(job) {
+  const errors = [];
+  if (!/^\s+(?:-\s+)?run: sh scripts\/frontend-check\.sh\s*$/m.test(job)) {
+    errors.push("frontend audit must run as an unconditional standalone gate");
+  }
+  if (!job.includes("node-version-file: .node-version")) {
+    errors.push("frontend audit requires the pinned Node toolchain");
+  }
+  if (/^\s+(?:-\s+)?(?:if:|continue-on-error:)/m.test(job)) {
+    errors.push("frontend audit job must not skip or tolerate failures");
+  }
+  return errors;
+}
+
 export function validateRepositoryValidationWorkflow(workflow) {
   const errors = [];
 
@@ -258,6 +272,11 @@ export function validateRepositoryValidationWorkflow(workflow) {
       errors.push(`repository validation is missing ${description}: ${contract}`);
     }
   }
+
+  const supplyChainJob = workflow.match(
+    /^  supply-chain:\s*$([\s\S]*?)(?=^  [a-zA-Z0-9_-]+:\s*$|(?![\s\S]))/m,
+  )?.[1] ?? "";
+  errors.push(...validateFrontendAuditJob(supplyChainJob));
 
   const qualityJob = workflow.match(
     /^  quality:\s*$([\s\S]*?)(?=^  [a-zA-Z0-9_-]+:\s*$|(?![\s\S]))/m,
