@@ -90,6 +90,12 @@ jobs:
             cache_name: generated-application-check
           - lifecycle: identity-added
             cache_name: identity-added-application-check
+          - lifecycle: upgrade-default
+            cache_name: upgraded-application-default
+          - lifecycle: upgrade-minimal
+            cache_name: upgraded-application-minimal
+          - lifecycle: upgrade-identity-added
+            cache_name: upgraded-application-identity-added
     steps:
       - id: source-identity
         run: echo "tree=$(git rev-parse 'HEAD^{tree}')"
@@ -331,6 +337,23 @@ test("rejects missing versioned release notes", (context) => {
 
 test("accepts the source-only framework release workflow contract", () => {
   assert.deepEqual(validateReleaseWorkflow(validWorkflow), []);
+});
+
+for (const composition of ["default", "minimal", "identity-added"]) {
+  test(`release requires the complete upgrade matrix: ${composition}`, () => {
+    assert.ok(validateReleaseWorkflow(validWorkflow.replace(
+      `- lifecycle: upgrade-${composition}`,
+      "- lifecycle: unrelated",
+    )).some(error => error.includes(`missing: ${composition}`)));
+  });
+}
+
+test("release rejects tolerated or skipped upgrade lifecycle validation", () => {
+  for (const condition of ["    continue-on-error: true\n", "    if: false\n"]) {
+    assert.ok(validateReleaseWorkflow(validWorkflow.replace(
+      "  generated-application:\n", `  generated-application:\n${condition}`,
+    )).some(error => error.includes("may not be conditional")));
+  }
 });
 
 test("rejects a prefixed GitHub Release title", () => {

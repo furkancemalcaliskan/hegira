@@ -3,6 +3,7 @@ import path from "node:path";
 import process from "node:process";
 import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
+import { validateUpgradeLifecycleMatrix } from "./ci-policy.mjs";
 
 const STABLE_RELEASE_REF =
   /^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/;
@@ -449,6 +450,10 @@ export function validateReleaseFiles(root, releaseRef) {
 
 export function validateReleaseWorkflow(workflow) {
   const errors = [];
+  const lifecycleJob = workflow.match(
+    /^  generated-application:\s*$([\s\S]*?)(?=^  [a-zA-Z0-9_-]+:\s*$|(?![\s\S]))/m,
+  )?.[1] ?? "";
+  errors.push(...validateUpgradeLifecycleMatrix(lifecycleJob));
 
   for (const [description, contract] of REQUIRED_WORKFLOW_CONTRACTS) {
     if (!workflow.includes(contract)) {

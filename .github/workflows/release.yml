@@ -154,6 +154,12 @@ jobs:
             cache_name: generated-application-check
           - lifecycle: identity-added
             cache_name: identity-added-application-check
+          - lifecycle: upgrade-default
+            cache_name: upgraded-application-default
+          - lifecycle: upgrade-minimal
+            cache_name: upgraded-application-minimal
+          - lifecycle: upgrade-identity-added
+            cache_name: upgraded-application-identity-added
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.96.1

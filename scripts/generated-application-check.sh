@@ -2,6 +2,16 @@
 set -eu
 
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+if [ "$#" -gt 1 ]; then
+  echo "only one generated application lifecycle is supported" >&2
+  exit 2
+fi
+# Released upgrades share the aggregate lifecycle gate, not its creation workspace.
+case "${1:-default}" in
+  upgrade-default|upgrade-minimal|upgrade-identity-added)
+    exec sh "$repo_root/scripts/upgraded-application-check.sh" "${1#upgrade-}"
+    ;;
+esac
 canonical_lock="$repo_root/templates/applications/layered/Cargo.lock"
 compose_file="$repo_root/scripts/generated-application-smoke.yml"
 . "$repo_root/scripts/validation-cache.sh"
@@ -17,13 +27,8 @@ case "$mode" in
     default_http_port=38082
     default_postgres_port=35433
     ;;
-  *) echo "usage: sh scripts/generated-application-check.sh [default|identity-added]" >&2; exit 2 ;;
+  *) echo "usage: sh scripts/generated-application-check.sh [default|identity-added|upgrade-default|upgrade-minimal|upgrade-identity-added]" >&2; exit 2 ;;
 esac
-if [ "$#" -gt 1 ]; then
-  echo "usage: sh scripts/generated-application-check.sh [default|identity-added]" >&2
-  exit 2
-fi
-
 phase_label=
 phase_started=
 phase_begin() {

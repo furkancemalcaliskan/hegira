@@ -59,6 +59,9 @@ cleanup() {
   set +e
   if [ "$status" -ne 0 ]; then
     echo "upgrade lifecycle failed: composition/provider=$case_id phase=$phase" >&2
+    if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+      printf '| `%s` | %s | failed/interrupted | - |\n' "$case_id" "$phase" >>"$GITHUB_STEP_SUMMARY"
+    fi
     compose ps --all
     compose logs --no-color postgres web
   fi
