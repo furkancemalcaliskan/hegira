@@ -143,3 +143,24 @@ only when the TCP peer is trusted.
 
 See [Deployment](deployment.md) for build profiles and [Operations](operations.md)
 for health, migrations, backup, and recovery.
+
+## Configuration And Application Upgrades
+
+`hegira.toml` records release, composition, adapter selection, and source
+ownership; it is not runtime configuration. The current authenticated
+v0.6.0-to-v0.7.0 source upgrade changes only that manifest, `Cargo.toml`, and
+`Cargo.lock`. It preserves application-owned `config/` profiles and does not
+read runtime secrets, connect to providers, execute SQL, or enable optional
+capabilities. Keeping the selected database/client in the manifest does not
+override runtime settings or bypass startup validation.
+
+After upgrading source, review runtime settings and compiled features for the
+application's intended environment. Structural, capability, and production
+validation still runs before external dependency initialization. An upgrade
+receipt is not proof of valid production configuration or successful startup.
+Production migration and seed defaults remain disabled; execute any pending
+application-owned migrations through the documented operations before rollout,
+with backups and the correct environment, not through the source-upgrade CLI.
+
+See [Post-upgrade checks](getting-started.md#after-an-application-upgrade) and
+[conflict and recovery guidance](getting-started.md#resolve-upgrade-conflicts-and-recovery).

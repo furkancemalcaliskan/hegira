@@ -13,6 +13,8 @@ Read the files relevant to the task before making changes:
   dependency direction, request boundaries, persistence, and runtime roles.
 - [Configuration](docs/configuration.md) for compile-time capabilities and
   runtime validation.
+- [Application upgrades](docs/getting-started.md#assess-application-upgrade-readiness)
+  for ownership, readiness, dry-run/apply, automation, and manual recovery.
 - [Contributing](CONTRIBUTING.md) for contribution availability and the
   issue/branch/pull-request contract.
 - [Maintainer workflow](docs/maintainers.md) for CI, integration, and release
@@ -170,6 +172,29 @@ Do not create future-facing directories, manifests, modules, tools, clients, or
 capabilities unless an accepted issue explicitly requires a working
 implementation.
 
+## Existing-Application Upgrade Boundaries
+
+The bundled direct edge supports only v0.6.0 → v0.7.0 default, minimal, and
+Identity-added applications with SQLite or PostgreSQL. It changes only
+`Cargo.toml`, `Cargo.lock`, and `hegira.toml`. Application-owned product code,
+generated-once scaffolding, and immutable migration history are preserved.
+Managed ownership is not blanket rewrite permission: the exact authenticated
+edge and observed digests must authorize each transition. Customized managed
+files fail closed; there is no automatic conflict merge or force-upgrade.
+
+- Use read-only `upgrade status` and review `upgrade --dry-run` before an
+  explicitly authorized apply. A preview is not a cached publication token.
+- Never change manifest versions, ownership claims, edge digests, or source
+  files just to bypass authentication, a precondition, or recovery blocking.
+- Preserve `.hegira-mutation.lock` and private staged files after interruption
+  or uncertain rollback. Follow the documented manual recovery workflow;
+  do not delete recovery state merely to enable another mutation.
+- Treat an applied receipt as source publication only. Lockfile review,
+  application tests, native/hydration checks, database migration execution,
+  and deployment approval remain separate application-owner responsibilities.
+- Do not run database operations, regenerate dependencies, start services, or
+  deploy as an inferred consequence of a source-upgrade request.
+
 ## Setup And Run
 
 Create the current canonical application with the source-runnable CLI, then
@@ -284,6 +309,8 @@ Rendered provider, upgrade, and production-container validation:
 
 ```sh
 sh scripts/generated-application-check.sh
+# Released-application upgrade lifecycle across all six profiles:
+sh scripts/upgraded-application-check.sh
 ```
 
 Focused release identity and source-first workflow validation:

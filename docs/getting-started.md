@@ -190,14 +190,21 @@ The generated root `hegira.toml` records generation state:
 | `upgrade.ownership.default` | Ownership for every unclaimed path; always `application-owned` |
 | `upgrade.ownership.claims` | Explicit, non-overlapping source ownership and managed-integration declarations |
 
-Schema 3 distinguishes four source classes. `application-owned` source remains
-under developer control. A `managed-integration` claim identifies a narrowly
-defined integration point by a stable integration identity; multiple distinct
-integration points may share one file. `generated-once` records scaffolding
-that becomes application-owned after creation. `immutable-history` records
-append-only history such as provider migrations. Claims use canonical relative
-paths within the application root. Undeclared paths are never inferred to be
-framework-managed.
+Schema 3 distinguishes four source classes:
+
+| Class | Application control and upgrade boundary |
+| --- | --- |
+| `application-owned` | Product code and every unclaimed path remain under developer control; an upgrade cannot adopt or overwrite them |
+| `managed-integration` | An explicit integration identity permits only a declared, digest-preconditioned transition; multiple distinct points may share a file |
+| `generated-once` | Scaffolding such as deployment files is written at creation and may then be customized; upgrades cannot overwrite or retire it |
+| `immutable-history` | Provider migration history is append-only; upgrades cannot edit or retire historical files |
+
+Claims use canonical relative paths within the application root. Undeclared
+paths are never inferred to be framework-managed. A claim is not blanket
+permission to rewrite a file: the authenticated edge must also declare the
+operation and its source/target digests. The current direct edge manages the
+whole contents of `Cargo.toml`, `Cargo.lock`, and `hegira.toml`, so custom edits
+to those files block that edge even if they appear outside a framework dependency.
 
 The renderer validates and writes this manifest during creation. Editing it
 does not regenerate files, change Cargo dependencies, switch the running
@@ -206,13 +213,16 @@ Runtime settings belong in `config/{APP_ENV}.yaml` and environment overrides;
 credentials never belong in `hegira.toml`. See
 [Configuration](configuration.md) for the separate runtime contract.
 Valid schema-1 and schema-2 manifests remain readable for inspection, but the
-current CLI will not mutate or serialize them until an explicit supported
-schema transition has been applied. Reading or validating the manifest does
-not access the network or modify application files.
+current CLI cannot treat them as writable schema-3 manifests by inference.
+The bundled v0.6.0-to-v0.7.0 edge supplies an explicit authenticated transition
+for its supported released states. Manually changing `schema` or ownership
+claims does not establish upgrade compatibility. Reading or validating the
+manifest does not access the network or modify application files.
 
 The CLI currently exposes application creation, read-only inspection, upgrade
-readiness and dry-run plans, a reviewable bundled-component addition boundary, complete layered resource
-generation, and application-owned migration scaffold generation. Component
+readiness, dry-run plans and explicit atomic apply, a reviewable bundled-component
+addition boundary, complete layered resource generation, and application-owned
+migration scaffold generation. Component
 addition accepts one bundled component identity, resolves the authenticated
 package graph, and uses the shared `--dry-run` and `--json` mutation contract.
 An already installed component, an unknown component, or a component without a
@@ -347,6 +357,25 @@ one direct v0.7.0 target. Compatible current v0.7.0 profiles report `no-upgrade`
 their managed-boundary check is `not-applicable` because there is no outgoing
 edge to assess.
 
+Use the target v0.7.0 source tree or source release archive to run these upgrade
+commands; the source application's v0.6.0 CLI does not acquire a new edge by
+reading its manifest. A prerelease checkout can exercise its bundled source
+contract, but does not prove that the target tag is published or resolvable.
+
+| Source composition | Databases | Direct target and preserved composition |
+| --- | --- | --- |
+| v0.6.0 default Identity | SQLite, PostgreSQL | v0.7.0 with Identity and authentication/authorization retained |
+| v0.6.0 minimal | SQLite, PostgreSQL | v0.7.0 without Identity, login, or protected resource generation |
+| v0.6.0 minimal plus installed Identity | SQLite, PostgreSQL | v0.7.0 with the installed Identity integrations retained |
+| Compatible v0.7.0 composition | SQLite, PostgreSQL | No outgoing upgrade; status/preview succeed, apply is unsupported |
+
+Each supported transition preserves the application identity, selected database
+and Leptos client, product customizations outside its managed files, and existing
+migration history. Other source versions, altered managed files, arbitrary
+component graphs, downgrades, skipped releases, client switches, and database
+switches are not supported transitions. There is no arbitrary three-way merge,
+dependency solver, or database migration runner in the upgrade command.
+
 The schema-1 JSON report contains `output_schema`, `status`, `source`, `target`,
 sorted `composition` components/modules/capabilities/adapters, `recovery`,
 `managed_boundaries`, and sorted content-redacted `diagnostics`. Release output
@@ -451,13 +480,85 @@ delete a marker merely to make the next command proceed. If output delivery
 fails after publication, inspect source and recovery state before assuming the
 upgrade failed or retrying.
 
-Hegira owns only the authenticated managed transitions. Review `Cargo.toml`,
-`Cargo.lock`, and `hegira.toml`, then apply application-owned database migrations
-through the application's documented operations and run native, hydration,
-test, and deployment validation. Apply does not regenerate the lockfile,
-execute database migrations, start services, access runtime secrets, or run
-network/subprocess operations. Product source and immutable history remain
-untouched.
+Hegira owns only the authenticated managed transitions. Apply does not regenerate
+the lockfile, execute database migrations, start services, access runtime secrets,
+or run network/subprocess operations. Product source and immutable history remain
+untouched. A receipt is not evidence that the application is ready to deploy.
+
+## After An Application Upgrade
+
+The application's owner, whether working directly or with an agent, completes
+these steps before starting or deploying the upgraded application:
+
+1. Review the plan, receipt, and source diff. For the bundled edge, only
+   `Cargo.toml`, `Cargo.lock`, and `hegira.toml` change. Confirm the exact target,
+   application identity, installed composition, and unchanged provider/client.
+2. Review the lockfile alongside the manifest. Upgrade publishes authenticated
+   lockfile bytes; it does not resolve registry or Git dependencies. Keep the
+   reviewed release-pinned lock and use locked builds. Do not blindly run
+   `cargo update` or regenerate the lockfile to hide a conflict. If the
+   application needs a different dependency graph, make that an explicit,
+   separately reviewed application change and validate its resulting lock.
+3. With backups and the correct environment, review pending migrations and use
+   the application's documented operation workflow. Source upgrade does not
+   execute SQL. Migration history remains append-only; repeating an unchanged
+   applied migration must not require editing its original bytes or checksum.
+   See [Operations](operations.md) for migration and recovery responsibilities.
+4. Run the application's tests, selected-provider native and WASM hydration
+   checks, and deployment validation. Recheck startup capability/production
+   validation and relevant authentication, authorization, health, and HTTP
+   policies. A compatible manifest or doctor result does not replace these checks.
+5. Deploy only after those checks succeed. Source publication rollback does not
+   restore a database or roll back a running deployment; use the application's
+   backup and deployment recovery procedure for those operations.
+
+From a version-controlled application root, these read-only review commands help
+inspect the source result without executing SQL or changing dependencies:
+
+```sh
+git status --short
+git diff -- Cargo.toml Cargo.lock hegira.toml
+```
+
+Use the selected application's documented build and deployment commands, not
+framework-repository validation scripts against a live application database.
+Production migrations, credentials, backups, and rollout authorization remain
+application-owned.
+
+## Resolve Upgrade Conflicts And Recovery
+
+| Outcome | Safe next action |
+| --- | --- |
+| Unsupported source/target or incompatible composition (exit 3) | Check the release tree, exact edge and recorded composition; do not fabricate a manifest version or ownership claim |
+| Managed-source conflict (exit 4) | Preserve custom work, compare the three managed files with the matching released state, and decide whether to retain the customization outside this supported transition |
+| Recovery marker present (exit 4) | Stop competing mutations, preserve the marker and staged files, and establish a consistent source state before authorizing another mutation |
+| Publication failure or uncertain rollback (exit 1) | Inspect source and recovery information; no success receipt was issued, but do not assume nothing changed |
+| Output delivery failure (exit 1) | Publication may have succeeded; inspect actual files and recovery state before deciding whether to retry |
+
+There is no force-upgrade, automatic conflict merge, recovery-cleanup, or
+downgrade command. Do not change edge digests, copy target files over a customized
+source, delete recovery state, or reclassify application-owned files just to
+obtain a ready result. A conflict means the bundled transition cannot preserve
+the observed custom state under its authenticated contract.
+
+For an interrupted or uncertain mutation:
+
+1. Stop processes that might mutate the application's source. Preserve a private
+   copy of the application, `.hegira-mutation.lock`, and any remaining private
+   transaction files before making a recovery decision. Do not publish their
+   contents or credentials in an issue or log.
+2. Compare affected paths with the reviewed pre-upgrade backup/version-control
+   state and expected plan digests. Determine whether they form the complete
+   source state, complete target state, or an incomplete publication. A marker
+   alone is not proof that a process has stopped or that rollback finished.
+3. Have the application owner approve manual recovery to one verified consistent
+   state, preserving product changes and migration history. Resolve retained
+   transaction/marker state only after that recovery is verified and no publisher
+   is active. The CLI does not provide a universal filesystem repair procedure.
+4. Re-run read-only `upgrade status --json` and `doctor`, review a fresh dry-run
+   where a direct edge still applies, and repeat application validation before
+   any apply or deployment. An already upgraded application has no remaining
+   direct edge; repeated apply exits 3 without writes.
 
 ## Upgrade Automation Contract
 
@@ -701,13 +802,26 @@ disposable state:
 
 ```sh
 sh scripts/generated-application-check.sh
+# Separate released-application upgrade lifecycle (all six profiles):
+sh scripts/upgraded-application-check.sh
 ```
 
-`scripts/cli-check.sh` owns focused inspection, compatibility, dry-run,
-conflict, recovery, and generator command contracts. The generated-application
+`scripts/cli-check.sh` owns focused inspection, compatibility, upgrade
+readiness/dry-run/apply, schemas, process outcomes, conflict, recovery, and
+generator command contracts. The generated-application
 gate creates both provider profiles through the public CLI, applies a generated
 resource only to disposable validation copies, and exercises its migration,
 authorization, HTTP, UI, and production-container behavior.
+The upgraded-application gate additionally checks all three released compositions
+with both providers, customized product source, immutable history/data,
+post-upgrade migrations, and production behavior. CI and release validation
+require both creation cells and all three upgrade composition cells.
+
+Validation owns bounded caches below `target/validation/`, not normal developer
+Cargo output. Use `sh scripts/clean-validation-cache.sh --status` to inspect
+usage and `--prune-dry-run` to preview budget reclamation. See
+[Maintainer cache ownership](maintainers.md#validation-build-cache-lifecycle) for
+the 64 GiB default budget, active-lock protection, pruning, and cleanup boundaries.
 
 See [Architecture](architecture.md), [Configuration](configuration.md), and
 [Deployment](deployment.md) before changing providers or production defaults.
