@@ -23,7 +23,7 @@ The framework is the reusable system, an official module is a layered capability
 such as Identity, and an application template is source consumed during generation.
 A generated application is the independent, application-owned result, not the
 framework repository itself. These terms describe ownership, not a promise of
-automatic module discovery, application upgrades, or registry distribution.
+automatic module discovery, unattended upgrades, or registry distribution.
 
 ```text
 .
@@ -35,7 +35,8 @@ automatic module discovery, application upgrades, or registry distribution.
 │   ├── applications/
 │   │   ├── layered/         recommended Identity-enabled application source
 │   │   └── layered-minimal/ explicit module-free outward-layer variant
-│   └── components/          typed application-component manifests
+│   ├── components/          typed application-component manifests
+│   └── upgrades/            authenticated data-only direct release edges
 ├── tools/
 │   ├── application_mutator/ existing-application change-plan core
 │   ├── hegira_cli/          source-runnable CLI command shell
@@ -75,7 +76,9 @@ are not an application-local module fork. Product rules belong in the generated
 DDD layers, while server and web composition explicitly select adapters.
 Changing an existing application's framework version, module composition, or
 database requires coordinated source, dependency, configuration, and migration
-review; the current CLI does not perform those changes.
+review. The CLI supports bundled additive component installation and the exact
+authenticated direct framework transition documented below. It does not switch
+database/client adapters or merge arbitrary application customizations.
 
 ## Components, Modules, And Composition
 
@@ -120,8 +123,10 @@ Installation is additive only. Dry-run and apply consume the same typed,
 content-redacted plan; apply publishes manifest, dependency, configuration,
 migration-source, server, HTTP, OpenAPI, and Leptos contributions through the
 application mutation transaction. The CLI currently provides no removal,
-automatic framework or application upgrade, remote package source, migration
-execution, or rollback. The application owner must review configuration,
+unattended upgrades, remote package source, or database migration execution or
+rollback. Explicit direct application upgrades are a separate command contract;
+publication rollback on recoverable source failures is not a public downgrade
+or database rollback command. The application owner must review configuration,
 regenerate `Cargo.lock`, apply the selected provider migrations, and validate
 the application after installation.
 
@@ -423,8 +428,10 @@ are modified; the contract does not claim universal filesystem transactions.
 
 `tools/hegira_cli` owns the `hegira` binary command shell. It defines top-level
 help, version reporting, guided and deterministic non-interactive application
-creation, read-only application inspection and direct-upgrade readiness, concise diagnostics, and stable
-process outcomes without reading a user home directory or global configuration.
+creation, read-only application inspection and direct-upgrade readiness,
+content-redacted upgrade preview and explicit atomic apply, concise diagnostics,
+and stable process outcomes without reading a user home directory or global
+configuration.
 It delegates new-application component planning and atomic publication to
 `template_renderer`, and existing-application publication to
 `application_mutator`. Application migration planning is delegated to
@@ -725,6 +732,14 @@ Product layers, runtime configuration values, generated resources, and migration
 history remain application-owned or immutable. The public CLI exposes this edge
 through read-only `upgrade status`, `upgrade --dry-run`, and explicit `upgrade`
 application through the existing mutation publisher.
+Authentication checks the edge-declared managed files, not byte equality of the
+entire application against the released fixture. Product source and generated
+resources may therefore evolve independently. For this edge, all three managed
+files must still match their authenticated source digests: even an unrelated
+dependency or lockfile customization is a conflict, not an instruction to merge.
+The general plan contract supports declared managed creates, edits, and
+retirements, but this bundled edge uses only edits. It does not remove components,
+skip releases, downgrade, run migration SQL, or supply another client adapter.
 Readiness authenticates the package, application ownership and managed boundary,
 then shares the planner's pure target-manifest validation without constructing
 a change plan. Recovery-marker inspection is anchored and no-follow; any marker
@@ -753,6 +768,10 @@ next steps; the assessment records pre-publication state. Failures do not
 emit a success receipt. Repeated apply rejects the absent direct edge without
 writes. Migration execution, lockfile regeneration, subprocesses, network
 access, and service startup remain outside upgrade publication.
+An applied receipt proves source publication, not a successful build, database
+migration, health check, or deployment. The application owner follows the
+[post-upgrade workflow](getting-started.md#after-an-application-upgrade) and
+[recovery guidance](getting-started.md#resolve-upgrade-conflicts-and-recovery).
 
 Committed readiness/execution v1 JSON schemas describe the closed public
 automation contract, including plan, receipt, and diagnostic definitions.

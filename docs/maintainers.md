@@ -466,10 +466,10 @@ output:
 - readiness, asset, security-header, authentication, authorization, or CRUD
   failures belong to the production container and generated runtime contract.
 
-The `quality` job must propagate a failure from either cell through the existing
+The `quality` job must propagate a failure from any cell through the existing
 stable `quality` status context. Release publication likewise depends on the
 whole matrix and cannot proceed after a skipped, cancelled, or failed lifecycle.
-Do not add either matrix display name as a protected status requirement.
+Do not add individual matrix display names as protected status requirements.
 
 ### Validation build-cache lifecycle
 
@@ -647,6 +647,33 @@ sh scripts/backend-check.sh
 
 Never point the ignored database tests at persistent or production data.
 
+## Application Upgrade Review
+
+The current public edge is exactly v0.6.0 → v0.7.0 for default, minimal, and
+Identity-added applications with SQLite or PostgreSQL. Its package-authenticated
+declaration is `templates/upgrades/v0-6-0-to-v0-7-0.toml`; its immutable source
+fixtures are under `test-fixtures/application-baselines/`. Do not rebuild those
+fixtures from current templates or assume a customized application matches a
+fixture in every application-owned path. Authentication binds the exact managed
+boundary; this edge changes only `Cargo.toml`, `Cargo.lock`, and `hegira.toml`.
+
+Review schema-3 ownership and the source/target composition together with the
+edge's declared manifest transitions and managed source/result digests. Package
+data cannot execute commands, and CLI apply cannot solve dependencies, execute
+SQL, switch providers/clients, merge custom managed source, or bypass recovery.
+Changes to authenticated package inputs require deliberate package-digest and
+regression review, not an automatic fingerprint acceptance. Preserve historical
+migration identities and bytes. A source-publication receipt is not evidence of
+runtime correctness; application owners complete the
+[post-upgrade checks](getting-started.md#after-an-application-upgrade).
+
+For conflicts and interrupted publication, follow the
+[application recovery guidance](getting-started.md#resolve-upgrade-conflicts-and-recovery).
+Do not remove `.hegira-mutation.lock` or retained transaction files merely to
+unblock CI. Use only disposable fixtures for publisher failure injection or
+database lifecycle tests; never inspect or reset a production database to
+validate framework source.
+
 ## Release Contract
 
 Hegira is an application framework distributed as source, including its official
@@ -655,6 +682,13 @@ of an immutable signed stable SemVer tag, a GitHub Release, versioned release no
 source archives, and a source-scoped SPDX JSON SBOM. It does not contain a
 platform executable, application bundle, published crate or CLI package,
 official container image, or deployment.
+
+The tagged source includes the authenticated component package and direct
+upgrade edge used by the source-runnable CLI. A generated manifest or successful
+source upgrade in an unreleased checkout is not evidence that its declared tag
+or pinned commit is publicly available. Verify canonical release-source and
+upgrade identities before publication; do not substitute local dependency paths
+or publish a tag while release-candidate metadata remains active.
 
 The `release` workflow supports manual release-candidate validation from
 `main` and publication from a pushed `vMAJOR.MINOR.PATCH` tag. Both paths:

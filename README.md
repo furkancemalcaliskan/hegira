@@ -73,7 +73,7 @@ ownership:
 | `templates/package.toml` | Versioned canonical component-package identity, framework compatibility, component graph, and source digest |
 | `templates/components/` | Typed data-only manifests for canonical rendering and trusted additive component contributions |
 | `tools/application_mutator/` | Typed additive component and general change plans, canonical file ownership, controlled Cargo/Rust/TOML integration, and failure-safe publication for coordinated existing-application changes |
-| `tools/hegira_cli/` | Source-runnable application creation and inspection plus reviewable layered resource and application-owned migration generation with stable diagnostics and exit outcomes |
+| `tools/hegira_cli/` | Source-runnable creation, inspection, direct-upgrade readiness/preview/apply, additive component installation, layered resource and migration generation with stable diagnostics and exit outcomes |
 | `tools/resource_generator/` | Typed layered resource specifications plus inward-layer, provider-specific SQLx persistence, explicit Axum/OpenAPI and Leptos UI composition, and append-only migration planning |
 | `tools/template_renderer/` | Reusable deterministic render core with no-follow, digest-verified package-source loading and a separate disposable repository-validation adapter; it is not a public CLI |
 | `tools/upgrade_test_support/` | Test-only authenticated access to immutable, content-addressed released-application baselines |
@@ -110,11 +110,14 @@ Leptos are supported for application creation. Identity remains the recommended
 default composition; an explicit module-free `minimal` composition is also
 available. The
 CLI also generates complete layered resources and application-owned migration
-scaffolds; it does not provide module management or automatic upgrades.
+scaffolds and applies explicitly reviewed, authenticated direct upgrades. It does
+not provide module management, arbitrary source merging, or unattended upgrades.
 
 Its stable process outcomes are success (`0`), internal error (`1`), usage
 error (`2`), validation error (`3`), and conflict (`4`). Human-readable help
-and version output use standard output; diagnostics use standard error.
+and version output use standard output; diagnostics use standard error except
+typed upgrade assessments and execution results, which use standard output even
+when unsuccessful.
 
 ## Quick Start
 
@@ -180,6 +183,17 @@ without changing application source. After review, `upgrade` applies one
 supported direct transition through the atomic mutation boundary. See
 [Upgrade readiness](docs/getting-started.md#assess-application-upgrade-readiness)
 for supported release states, recovery checks, and process outcomes.
+
+The bundled transition supports v0.6.0 → v0.7.0 for default, minimal, and
+Identity-added applications with either supported database. It changes only
+`Cargo.toml`, `Cargo.lock`, and `hegira.toml`; customized managed files fail
+closed rather than being merged. Application-owned product code, generated-once
+scaffolding, and immutable migration history are preserved. Review the
+[ownership contract](docs/getting-started.md#generated-ownership-and-hegiratoml),
+[post-upgrade checks](docs/getting-started.md#after-an-application-upgrade), and
+[conflict and recovery guidance](docs/getting-started.md#resolve-upgrade-conflicts-and-recovery)
+before applying a transition. Source upgrade does not execute database migrations
+or deploy the application.
 
 From a generated application, create an append-only migration scaffold for
 the database adapter selected in `hegira.toml`:
