@@ -16,6 +16,14 @@ complete notes are finalized during release preparation.
 - Pinned default and minimal application lockfiles to one reviewed framework
   source candidate while retaining the normal release-tag Git dependency.
 
+### Security
+
+- Removed the vulnerable `micromatch`/`braces` dependency chain from canonical
+  frontend build tooling with a scoped watcher override, without downgrading
+  Tailwind. Supply-chain and release validation audit both canonical npm locks.
+- Documented manual frontend remediation for existing applications; upgrades
+  preserve application-owned npm files and immutable released baselines.
+
 ## [0.6.0] - 2026-09-23
 
 ### Added

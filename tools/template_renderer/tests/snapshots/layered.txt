@@ -1,6 +1,6 @@
 package=hegira-canonical@v0.7.0
 framework=https://github.com/furkancemalcaliskan/hegira.git#v0.7.0
-digest=sha256:e80d6a643650708c7b623ab0516868c7606564b553929ad4814b190e89a905c9
+digest=sha256:34ddf6356d441791c93f306f5ea6aeb5927cab1062d2e6d7f8b8928ee198b053
 components=layered-base,layered-leptos-identity
 6986e1a96f1eaa98 .dockerignore
 4845a8e7ed4a8aa1 .env.example
@@ -26,8 +26,8 @@ bccc6ef21e0cc054 apps/web/src/app/providers.rs
 e76d30fbdb62c2d7 apps/web/src/app/topbar.rs
 b58033514afd0df2 apps/web/src/dashboard.rs
 4be5e3e4a4cb60f7 apps/web/src/lib.rs
-ac532067d9f7faa0 apps/web/src/package-lock.json
-51efa4ac55ad52e1 apps/web/src/package.json
+a93b3bac94422302 apps/web/src/package-lock.json
+d908f010cbdd6b8b apps/web/src/package.json
 370740627a45bc7c apps/web/src/public/assets/branding/hegira-logo.png
 2c5dbabcccc716da apps/web/src/root.rs
 b3d6c8b2db83731d apps/web/src/routes.rs

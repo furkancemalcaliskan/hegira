@@ -471,6 +471,31 @@ stable `quality` status context. Release publication likewise depends on the
 whole matrix and cannot proceed after a skipped, cancelled, or failed lifecycle.
 Do not add individual matrix display names as protected status requirements.
 
+### Frontend dependency validation
+
+Frontend dependencies have a separate, non-installing gate:
+
+```sh
+sh scripts/frontend-check.sh
+```
+
+It verifies the narrowly scoped Tailwind watcher override and both canonical
+npm locks, rejects reintroduced `micromatch`/`braces`, and audits all dependency
+classes with `--audit-level=high` and explicit dev, optional, and peer inclusion.
+The existing `supply-chain` job runs it with
+the pinned Node toolchain. Release `validate` runs it before SBOM generation,
+so publication cannot proceed after an audit failure. It writes no application
+files or node_modules and creates no Cargo cache. Policy and mocked-process
+tests reject removed, skipped or tolerated audits and assert failure propagation.
+The layered-template gate also checks native watcher events and glob ignores
+after clean installation, before the application and Tailwind release build.
+
+The current exact `@parcel/watcher` 2.6.0 override is scoped to Tailwind CLI;
+it does not downgrade Tailwind. Re-review the override and watcher compatibility
+when upstream Tailwind changes its pin. Existing applications own their frontend
+source; follow [manual remediation](getting-started.md#frontend-dependency-remediation)
+without changing authenticated upgrade ownership or released baselines.
+
 ### Validation build-cache lifecycle
 
 Every supported validation command owns its Cargo artifacts below

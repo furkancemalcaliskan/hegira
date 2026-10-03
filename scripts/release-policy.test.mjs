@@ -66,6 +66,10 @@ permissions:
 jobs:
   validate:
     steps:
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+      - run: sh scripts/frontend-check.sh
       - run: sh scripts/release-policy.sh
       - uses: anchore/sbom-action@v0
         with:
@@ -337,6 +341,19 @@ test("rejects missing versioned release notes", (context) => {
 
 test("accepts the source-only framework release workflow contract", () => {
   assert.deepEqual(validateReleaseWorkflow(validWorkflow), []);
+});
+
+test("release frontend audit cannot be removed, skipped or tolerated", () => {
+  for (const replacement of ["true", "sh scripts/frontend-check.sh || true"]) {
+    assert.ok(validateReleaseWorkflow(validWorkflow.replace(
+      "sh scripts/frontend-check.sh", replacement,
+    )).some(error => error.includes("frontend audit")));
+  }
+  for (const condition of ["    if: false\n", "    continue-on-error: true\n"]) {
+    assert.ok(validateReleaseWorkflow(validWorkflow.replace(
+      "  validate:\n", `  validate:\n${condition}`,
+    )).some(error => error.includes("frontend audit")));
+  }
 });
 
 for (const composition of ["default", "minimal", "identity-added"]) {
