@@ -799,6 +799,10 @@ Only separate validation copies receive local dependencies, test fixtures, and a
 post-upgrade application migration. Production HTTP probes retain authentication,
 authorization, cookie/Bearer, and minimal-composition boundaries. The gate never
 resets persistent data or modifies verified public upgrade output.
+CI runs its three composition selections as additional cells of the existing
+generated-application lifecycle matrix, each covering both providers. The stable
+quality aggregate and source-release publisher depend on the complete matrix;
+focused upgrade assertions remain in their framework, renderer, and CLI owners.
 
 The reusable renderer exposes typed composition request/result/diagnostic,
 render request, plan, publication-result, and error-category contracts. A

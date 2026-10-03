@@ -85,9 +85,11 @@ Keep these exact status checks required for both `develop` and `main`:
 
 The stable `quality` context is an aggregate gate. It reports failure unless
 the `framework`, `official-modules`, `tooling`, and `generated-application`
-jobs all succeed. `generated-application` is a two-cell lifecycle matrix;
-GitHub reports its dependency as successful only after both `default` and
-`identity-added` cells succeed. Generated-application database, release-build,
+jobs all succeed. `generated-application` is a five-cell lifecycle matrix:
+`default`, `identity-added`, `upgrade-default`, `upgrade-minimal`, and
+`upgrade-identity-added`. Each cell covers both providers and owns a separate
+bounded cache. GitHub reports its dependency as successful only after all
+five cells succeed. Generated-application database, release-build,
 production-container, and HTTP/security validation is therefore
 release-blocking without requiring another protected-branch context.
 
@@ -117,6 +119,10 @@ The repository validation workflow separates these responsibilities:
   minimal applications, verifies pre-install capability rejection, installs
   Identity through public dry-run and apply, and repeats provider, hydration,
   production-container, and authenticated CRUD coverage;
+- `generated-application (upgrade-default|upgrade-minimal|upgrade-identity-added)`
+  runs authenticated v0.6.0-to-v0.7.0 public upgrades and validates both providers
+  through migration history/data preservation, native/hydration and release
+  builds, production images, and HTTP/security contracts;
 - `quality` aggregates the four repository ownership gates under the existing
   required status context;
 - `supply-chain` runs dependency policy and vulnerability checks.
@@ -429,14 +435,14 @@ and rendered output on exit. Compose project and image names are assigned by
 the check rather than inherited from the caller. It never targets the
 maintainer's configured database.
 
-CI runs the `default` and `identity-added` commands as a non-fail-fast matrix so
-both lifecycle results remain observable and the previous sequential critical
+CI runs the `default` and `identity-added` commands alongside the three upgrade
+compositions in a non-fail-fast matrix so every lifecycle result remains observable and the sequential critical
 path is removed. Each cell owns a distinct bounded target, disposable workspace,
 Compose project, ports, database, image, and runtime credentials. Provider work
 within one lifecycle remains ordered because the gate compares provider
 lockfiles and pristine source identities before compiling them and uses the
 PostgreSQL render as the production-container subject; it shares no mutable
-state with the other matrix cell.
+state with other matrix cells.
 
 The optional remote Rust cache points at the same lifecycle-specific bounded
 target. Its key records the pinned Rust toolchain, native and WASM targets,
@@ -589,7 +595,17 @@ sh scripts/upgraded-application-check.sh minimal
 sh scripts/upgraded-application-check.sh identity-added
 ```
 
-This manually invoked gate materializes all six authenticated v0.6.0 baselines,
+The same validator runs in PR, integration-push, and release lifecycle matrix
+cells through `sh scripts/generated-application-check.sh upgrade-<composition>`.
+All five cells must succeed for `quality` or tag-triggered publication to succeed.
+There are no path filters, secret-bearing PR jobs, or optional upgrade cells.
+Focused manifest, renderer/package/planner, publisher/recovery, and CLI upgrade
+contracts remain owned by framework, layered-template, and CLI scripts; their
+complete test suites run without upgrade-only filters or duplicated status checks.
+Policy tests reject missing cells, wrong cache identities, skipped/tolerated
+failures, missing dispatch, and missing focused owner commands.
+
+This gate materializes all six authenticated v0.6.0 baselines,
 customizes application-owned source, and uses public readiness, preview, apply,
 inspect, doctor, and repeat-upgrade checks. Verified public source is never patched
 for local compilation. Separate validation copies add a post-upgrade application
@@ -617,7 +633,7 @@ resources, images, SQLite files, and workspaces are cleaned on success, failure,
 SIGINT, and SIGTERM; SIGKILL cannot run shell cleanup. Docker's shared builder cache
 is owned by the daemon, not the repository Cargo-cache budget, and is never globally
 pruned by this gate. Phase output names the composition, provider, and contract.
-The existing generated-application CI lifecycle remains unchanged by this command.
+The original creation/installation lifecycle cells remain required alongside upgrades.
 
 To include the framework and official-module gates' ignored PostgreSQL tests locally, provide
 a disposable PostgreSQL database and opt in explicitly:
@@ -655,7 +671,9 @@ The `release` workflow supports manual release-candidate validation from
 - validate typed rendering tooling, the independent layered workspace,
   hydration, and release output;
 - validate fresh SQLite and PostgreSQL generated applications, supported
-  v0.2.0 upgrades, and the rendered production container and HTTP contract.
+  v0.2.0 upgrades, and the rendered production container and HTTP contract;
+- validate released v0.6.0-to-v0.7.0 application upgrades across all three
+  compositions and both providers before publication.
 
 A manual run uploads the source SBOM as a short-lived workflow artifact but
 cannot execute the publication job. A push to `develop` or `main` never creates

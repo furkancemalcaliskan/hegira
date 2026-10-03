@@ -118,6 +118,72 @@ const GENERATED_JOB_CONTRACTS = [
   ["cache effectiveness diagnostic", "steps.generated-cache.outputs.cache-hit"],
 ];
 
+// Shared by PR quality and source-release policy: one owner, five lifecycle cells.
+export function validateUpgradeLifecycleMatrix(job) {
+  const errors = [];
+  for (const composition of ["default", "minimal", "identity-added"]) {
+    const entry = `- lifecycle: upgrade-${composition}\n            cache_name: upgraded-application-${composition}`;
+    if (!job.includes(entry)) {
+      errors.push(`upgrade lifecycle matrix entry/cache is missing: ${composition}`);
+    }
+  }
+  if (/^    if:/m.test(job) || job.includes("continue-on-error:")) {
+    errors.push("upgrade lifecycle validation may not be conditional or tolerate failures");
+  }
+  if (/^        exclude:/m.test(job)) {
+    errors.push("upgrade lifecycle validation may not exclude required matrix cells");
+  }
+  if (job.includes("secrets.") || job.includes("GH_TOKEN") || job.includes("GITHUB_TOKEN")) {
+    errors.push("upgrade lifecycle validation may not consume repository secrets");
+  }
+  return errors;
+}
+
+export function validateUpgradeScripts(root) {
+  const errors = [];
+  const contracts = [
+    ["scripts/framework-check.sh", "cargo test --locked -p application_manifest"],
+    ["scripts/layered-template-check.sh", "cargo test --locked -p template_renderer"],
+    ["scripts/cli-check.sh", "cargo test --locked -p upgrade_test_support"],
+    ["scripts/cli-check.sh", "cargo test --locked -p application_mutator"],
+    ["scripts/cli-check.sh", "cargo test --locked -p hegira_cli"],
+    ["scripts/generated-application-check.sh",
+      'exec sh "$repo_root/scripts/upgraded-application-check.sh" "${1#upgrade-}"'],
+    ["scripts/upgraded-application-check.sh", "for database in sqlite postgres; do"],
+    ["scripts/upgraded-application-check.sh", "--production"],
+    ["scripts/upgraded-application-check.sh", "composition/provider=$case_id phase=$phase"],
+    ["scripts/upgraded-application-check.sh", "failed/interrupted"],
+    ["scripts/upgraded-application-check.sh", "validation_cache_prepare"],
+    ["scripts/upgraded-application-check.sh", "validation_cache_release"],
+    ["scripts/upgraded-application-check.sh", "compose down --volumes --remove-orphans"],
+    ["scripts/upgraded-application-check.sh", "upgraded-application-http.mjs"],
+    ["scripts/upgraded-application-check.sh", "--test upgrade_lifecycle"],
+    ["scripts/upgraded-application-check.sh", 'docker build --tag "$UPGRADE_APP_IMAGE"'],
+    ["scripts/upgraded-application-http.mjs", "cookie BFF mutation requires the trusted Origin"],
+    ["scripts/upgrade-database-contract.rs", "released migration history changed"],
+    ["test-fixtures/upgrade-lifecycle/v0.6.0-identity-migrations.json", '"release": "v0.6.0"'],
+  ];
+  for (const [file, contract] of contracts) {
+    const location = path.join(root, file);
+    if (!fs.existsSync(location)) {
+      errors.push(`required upgrade validation source is missing: ${file}`);
+      continue;
+    }
+    const source = fs.readFileSync(location, "utf8");
+    if (file.endsWith(".sh") && !/^#!\/(?:usr\/bin\/env sh|bin\/sh)\nset -eu\n/.test(source)) {
+      errors.push(`upgrade validation must fail closed: ${file}`);
+    }
+    if (!source.includes(contract) ||
+        (contract.startsWith("cargo test ") && !source.includes(`${contract}\n`))) {
+      errors.push(`upgrade validation contract missing in ${file}: ${contract}`);
+    }
+    if (source.includes("${{ secrets.") || source.includes("continue-on-error:")) {
+      errors.push(`upgrade validation must be secret-free and fail closed: ${file}`);
+    }
+  }
+  return [...new Set(errors)];
+}
+
 const COMPATIBILITY_HOST_CONTRACTS = [
   "--package hegira",
   "-p hegira",
@@ -142,6 +208,9 @@ export function validateRepositoryValidationWorkflow(workflow) {
   if (workflow.includes("pull_request_target")) {
     errors.push("repository validation may not execute through pull_request_target");
   }
+  if (/^    paths(?:-ignore)?:/m.test(workflow)) {
+    errors.push("required upgrade validation may not be suppressed by path filters");
+  }
   if (workflow.includes("POSTGRES_PASSWORD")) {
     errors.push("disposable repository validation must not embed PostgreSQL passwords");
   }
@@ -154,6 +223,7 @@ export function validateRepositoryValidationWorkflow(workflow) {
   const generatedApplicationJob = workflow.match(
     /^  generated-application:\s*$([\s\S]*?)(?=^  [a-zA-Z0-9_-]+:\s*$|(?![\s\S]))/m,
   )?.[1] ?? "";
+  errors.push(...validateUpgradeLifecycleMatrix(generatedApplicationJob));
   for (const [description, contract] of GENERATED_JOB_CONTRACTS) {
     if (!generatedApplicationJob.includes(contract)) {
       errors.push(`generated application job is missing ${description}: ${contract}`);
@@ -243,6 +313,7 @@ export function validateGeneratedApplicationScript(script) {
 
 export function validateCIRepository(root) {
   const errors = [];
+  errors.push(...validateUpgradeScripts(root));
   const workflowPath = path.join(root, ".github", "workflows", "backend.yml");
   const generatedApplicationPath = path.join(
     root,

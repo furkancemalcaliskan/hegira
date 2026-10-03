@@ -29,6 +29,7 @@ fi
 
 cargo fmt --all -- --check
 sh "$repo_root/scripts/dx-audit.sh"
+echo "==> Renderer package authentication, upgrade graph, planner, and preservation contracts"
 cargo test --locked -p template_renderer
 cargo run --locked --quiet -p template_renderer \
   --example repository_validation_renderer -- render \
