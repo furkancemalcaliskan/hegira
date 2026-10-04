@@ -1,0 +1,14 @@
+Upgrade status: recovery-blocked
+Source: v0.6.0 (hegira-canonical v0.6.0)
+Direct target: v0.7.0 (hegira-canonical v0.7.0)
+Components: layered-base @ v0.6.0, layered-leptos-identity @ v0.6.0
+Modules: identity @ v0.6.0
+Capabilities: authentication, authorization
+Databases: sqlite
+Clients: leptos
+Recovery: blocked
+Managed boundaries: unverified
+recovery-pending: Inspect pending mutation recovery state before another operation. Preserve the marker and staged files; do not delete them or retry until recovery is verified.
+Upgrade result: unavailable (apply)
+Preserved: application-owned, generated-once, immutable-history boundaries.
+No successful upgrade receipt was issued. Inspect diagnostics and recovery state before retrying.

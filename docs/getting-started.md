@@ -19,6 +19,8 @@ cargo run --locked -p hegira_cli -- --help
 cargo run --locked -p hegira_cli -- new --help
 cargo run --locked -p hegira_cli -- inspect --help
 cargo run --locked -p hegira_cli -- doctor --help
+cargo run --locked -p hegira_cli -- upgrade status --help
+cargo run --locked -p hegira_cli -- upgrade --help
 cargo run --locked -p hegira_cli -- component add --help
 cargo run --locked -p hegira_cli -- generate resource --help
 cargo run --locked -p hegira_cli -- generate migration --help
@@ -52,18 +54,31 @@ selection; explicit flags are retained.
 
 - the Rust toolchain pinned by `rust-toolchain.toml`;
 - the `wasm32-unknown-unknown` target;
-- `cargo-leptos` (CI validates version `0.3.7`);
-- Node.js and npm for the Leptos stylesheet toolchain (CI uses Node.js 22);
-- Docker Compose when using the local PostgreSQL service or container checks.
+- `cargo-leptos` version `0.3.7`;
+- Node.js 22 or newer and npm 10 or newer for the Leptos stylesheet toolchain
+  (CI selects Node.js 22 through the committed `.node-version`);
+- Docker Engine 24 or newer and Docker Compose 2 or newer when using the local
+  PostgreSQL service or container checks.
 
 From the framework repository root:
 
 ```sh
 rustup target add wasm32-unknown-unknown
-cargo install cargo-leptos
+cargo install --locked cargo-leptos --version 0.3.7
 cargo run --locked -p hegira_cli -- new my-application \
   --destination ../my-application
+cd ../my-application
+tool_bin=$(sh scripts/prepare-wasm-bindgen.sh install Cargo.lock target/hegira-tools/wasm-bindgen/bin)
+export PATH="$tool_bin:$PATH"
+npm ci --prefix apps/web/src
 ```
+
+The preparation script reads the exact `wasm-bindgen` version from
+`Cargo.lock`, downloads only the declared official release asset with bounded
+retries, verifies its committed SHA-256 digest, and rejects a version mismatch
+before Cargo Leptos starts an application build. The production Dockerfile runs
+the same preparation contract before copying application source, so a missing
+tool cannot surface only after the expensive release compilation.
 
 The output is an independent Cargo workspace. Its normal dependencies use the
 framework repository and release tag declared by the template rather than
@@ -160,7 +175,7 @@ The generated root `hegira.toml` records generation state:
 
 | Field | Meaning |
 |---|---|
-| `schema` | Manifest format version, currently `2` |
+| `schema` | Manifest format version, currently `3` |
 | `application` | Validated project identity; does not rename the `app_*` crates |
 | `framework.repository` | Package-controlled HTTPS framework source |
 | `framework.version` | Package-controlled stable SemVer release tag |
@@ -170,6 +185,26 @@ The generated root `hegira.toml` records generation state:
 | `composition.capabilities` | Capabilities provided by the installed composition |
 | `selection.databases` | Selected database adapter |
 | `selection.clients` | Selected client adapter |
+| `upgrade.framework` | Exact framework repository and release recorded for upgrade planning; must match `framework` |
+| `upgrade.package` | Exact component-package identity and release recorded for upgrade planning; must match `composition.package` |
+| `upgrade.ownership.default` | Ownership for every unclaimed path; always `application-owned` |
+| `upgrade.ownership.claims` | Explicit, non-overlapping source ownership and managed-integration declarations |
+
+Schema 3 distinguishes four source classes:
+
+| Class | Application control and upgrade boundary |
+| --- | --- |
+| `application-owned` | Product code and every unclaimed path remain under developer control; an upgrade cannot adopt or overwrite them |
+| `managed-integration` | An explicit integration identity permits only a declared, digest-preconditioned transition; multiple distinct points may share a file |
+| `generated-once` | Scaffolding such as deployment files is written at creation and may then be customized; upgrades cannot overwrite or retire it |
+| `immutable-history` | Provider migration history is append-only; upgrades cannot edit or retire historical files |
+
+Claims use canonical relative paths within the application root. Undeclared
+paths are never inferred to be framework-managed. A claim is not blanket
+permission to rewrite a file: the authenticated edge must also declare the
+operation and its source/target digests. The current direct edge manages the
+whole contents of `Cargo.toml`, `Cargo.lock`, and `hegira.toml`, so custom edits
+to those files block that edge even if they appear outside a framework dependency.
 
 The renderer validates and writes this manifest during creation. Editing it
 does not regenerate files, change Cargo dependencies, switch the running
@@ -177,17 +212,24 @@ database, or upgrade an application. Keep it consistent with application source.
 Runtime settings belong in `config/{APP_ENV}.yaml` and environment overrides;
 credentials never belong in `hegira.toml`. See
 [Configuration](configuration.md) for the separate runtime contract.
+Valid schema-1 and schema-2 manifests remain readable for inspection, but the
+current CLI cannot treat them as writable schema-3 manifests by inference.
+The bundled v0.6.0-to-v0.7.0 edge supplies an explicit authenticated transition
+for its supported released states. Manually changing `schema` or ownership
+claims does not establish upgrade compatibility. Reading or validating the
+manifest does not access the network or modify application files.
 
-The CLI currently exposes application creation, read-only inspection, a
-reviewable bundled-component addition boundary, complete layered resource
-generation, and application-owned migration scaffold generation. Component
+The CLI currently exposes application creation, read-only inspection, upgrade
+readiness, dry-run plans and explicit atomic apply, a reviewable bundled-component
+addition boundary, complete layered resource generation, and application-owned
+migration scaffold generation. Component
 addition accepts one bundled component identity, resolves the authenticated
 package graph, and uses the shared `--dry-run` and `--json` mutation contract.
 An already installed component, an unknown component, or a component without a
 bundled additive contribution unit fails without changing the application. The
 command never downloads a package, executes component code, or interprets a
 remote coordinate. The CLI does not provide component removal, module
-management, migration execution or rollback, automatic upgrades, remote
+management, migration execution or rollback, unreviewed upgrades, remote
 component installation, or additional client templates. Optional runtime
 providers are configured explicitly in the application; they are not extra
 `new` selections.
@@ -296,6 +338,307 @@ read application source, runtime configuration, environment values, user-home
 state, or secrets; it exposes no machine-local framework path and does not
 write application files.
 
+## Assess Application Upgrade Readiness
+
+From an application root or descendant directory, invoke the source-built CLI:
+
+```sh
+cargo run --locked --manifest-path /path/to/hegira/Cargo.toml \
+  -p hegira_cli -- upgrade status --json
+```
+
+Omit `--json` for human output, or select `--application-root /path/to/application`
+explicitly. Discovery uses the same no-follow, ambiguity-rejecting contract as
+`inspect`. Assessment authenticates the bundled package, exact source and direct
+target release identities, composition, ownership, managed source digests, and
+the declared manifest transition. The supported source states are the immutable
+v0.6.0 default, minimal, and Identity-added SQLite/PostgreSQL profiles, each with
+one direct v0.7.0 target. Compatible current v0.7.0 profiles report `no-upgrade`;
+their managed-boundary check is `not-applicable` because there is no outgoing
+edge to assess.
+
+Use the target v0.7.0 source tree or source release archive to run these upgrade
+commands; the source application's v0.6.0 CLI does not acquire a new edge by
+reading its manifest. A prerelease checkout can exercise its bundled source
+contract, but does not prove that the target tag is published or resolvable.
+
+| Source composition | Databases | Direct target and preserved composition |
+| --- | --- | --- |
+| v0.6.0 default Identity | SQLite, PostgreSQL | v0.7.0 with Identity and authentication/authorization retained |
+| v0.6.0 minimal | SQLite, PostgreSQL | v0.7.0 without Identity, login, or protected resource generation |
+| v0.6.0 minimal plus installed Identity | SQLite, PostgreSQL | v0.7.0 with the installed Identity integrations retained |
+| Compatible v0.7.0 composition | SQLite, PostgreSQL | No outgoing upgrade; status/preview succeed, apply is unsupported |
+
+Each supported transition preserves the application identity, selected database
+and Leptos client, product customizations outside its managed files, and existing
+migration history. Other source versions, altered managed files, arbitrary
+component graphs, downgrades, skipped releases, client switches, and database
+switches are not supported transitions. There is no arbitrary three-way merge,
+dependency solver, or database migration runner in the upgrade command.
+
+The schema-1 JSON report contains `output_schema`, `status`, `source`, `target`,
+sorted `composition` components/modules/capabilities/adapters, `recovery`,
+`managed_boundaries`, and sorted content-redacted `diagnostics`. Release output
+contains framework versions and package identities, not machine-local paths or
+arbitrary recorded repository URLs. Human and JSON assessments are written to
+stdout, including unsuccessful assessments. Parser usage errors use stderr.
+
+| Status | Exit code | Meaning |
+| --- | --- | --- |
+| `ready` | 0 | The supported direct transition passed preflight |
+| `no-upgrade` | 0 | The current composition has no outgoing bundled upgrade |
+| `unsupported` | 3 | The source release or schema has no supported direct edge |
+| `incompatible` | 3 | Release source, composition, or manifest transition does not match |
+| `invalid-input` | 3 | Application discovery or manifest validation failed |
+| `conflict` | 4 | Application source cannot be safely authenticated |
+| `recovery-blocked` | 4 | A mutation recovery marker exists |
+| `internal-error` | 1 | The bundled package or CLI contract cannot be established |
+
+Malformed command syntax exits 2. Recovery checks only inspect marker presence;
+they do not read, remove, or follow the marker. Assessment creates no mutation
+plan or publication state and performs no source writes, network requests,
+database access, subprocess execution, or runtime configuration/secret reads.
+`ready` is an observation, not authorization to mutate: source must be
+reauthenticated for a subsequent operation. Review a complete plan with
+`upgrade --dry-run`; after review, `upgrade` applies the supported direct edge.
+
+## Preview An Application Upgrade
+
+From an application root or descendant, review the exact supported direct edge:
+
+```sh
+cargo run --locked --manifest-path /path/to/hegira/Cargo.toml \
+  -p hegira_cli -- upgrade --dry-run --json
+```
+
+Omit `--json` for human output. `--application-root` uses the same discovery
+contract as readiness. Optional `--target v0.7.0` must exactly match the
+authenticated direct edge; skipped releases, downgrades, arbitrary coordinates,
+and unprefixed versions are rejected without echoing the supplied value.
+Invoking `upgrade` without `status` or `--dry-run` applies the supported edge.
+Execution options cannot be combined with `status`.
+
+Schema-1 JSON contains `output_schema`, `mode: "dry-run"`, `outcome`,
+`assessment` (the readiness report), nullable `plan`, and `preserved_boundaries`.
+The plan is the renderer's schema-1 `UpgradePlanSummary`, not a second CLI plan:
+it identifies the edge, exact source/target release identities, authenticated
+source package and baseline digests, manifest transitions, framework dependency
+names, target components/modules, and ordered file changes. Each change records
+its application-relative path, operation, component owner, integration,
+managed ownership, absent/exact-digest precondition, and resulting digest or
+absence. Create, edit, and retirement use the same typed summary contract.
+Human output describes the same operations and conditions without file contents.
+
+`outcome` is `planned` when an authenticated plan exists, `no-upgrade` for a
+compatible current release without a requested target, and `unavailable` on a
+blocking assessment. Failures never contain an apparently applicable plan.
+Assessment exit codes and stdout/stderr behavior match `upgrade status`.
+Requesting a target when no direct edge exists is unsupported, not a no-op.
+
+Application-owned, generated-once, and immutable-history boundaries remain
+preserved. The current edge edits only `Cargo.lock`, `Cargo.toml`, and
+`hegira.toml`. Preview writes no file, cached plan, recovery marker, database,
+or application modification timestamp. It does not execute subprocesses,
+access runtime secrets, or contact a network. A preview is not a reusable
+authorization token; later publication must enforce the same in-memory plan's
+digest preconditions.
+
+## Apply An Application Upgrade
+
+Back up the application and database, stop competing source mutations, and
+review `upgrade --dry-run` before invoking:
+
+```sh
+cargo run --locked --manifest-path /path/to/hegira/Cargo.toml \
+  -p hegira_cli -- upgrade --target v0.7.0 --json
+```
+
+`--target` is optional but, when supplied, must exactly match the authenticated
+direct edge. `--application-root` and root/descendant discovery behave as in
+dry-run. Apply recomputes the same typed in-memory plan from authenticated
+source. The existing publisher serializes mutation through a private recovery
+marker and validates every digest precondition before the first publication
+and again at each mutation boundary. Publication is directory-anchored,
+no-follow, privately staged, and rolled back on recoverable failures under
+the documented filesystem contract; it is not a distributed transaction.
+
+Successful schema-1 output uses `mode: "apply"`, `outcome: "applied"`, and the
+exact plan summary used by dry-run. `assessment` records the pre-publication
+source state. A content-redacted `receipt` contains the changed-file count,
+edge, and resulting release identity. `next_steps` contains application-owner
+operations; human output reports the same receipt and steps. Failures emit
+`outcome: "unavailable"` without a plan or success receipt. Apply to an already
+current application exits 3 with no applicable direct edge and performs no
+write, rather than reporting a second upgrade. Preview still reports
+`no-upgrade` successfully for that state.
+
+Concurrent/recovery conflicts exit 4; publication errors and uncertain rollback
+exit 1. An interrupted or uncertain mutation retains recovery information and
+blocks later mutation. Preserve the marker and staging files; inspect the
+application and restore a verified consistent state before retrying. Never
+delete a marker merely to make the next command proceed. If output delivery
+fails after publication, inspect source and recovery state before assuming the
+upgrade failed or retrying.
+
+Hegira owns only the authenticated managed transitions. Apply does not regenerate
+the lockfile, execute database migrations, start services, access runtime secrets,
+or run network/subprocess operations. Product source and immutable history remain
+untouched. A receipt is not evidence that the application is ready to deploy.
+
+## After An Application Upgrade
+
+The application's owner, whether working directly or with an agent, completes
+these steps before starting or deploying the upgraded application:
+
+1. Review the plan, receipt, and source diff. For the bundled edge, only
+   `Cargo.toml`, `Cargo.lock`, and `hegira.toml` change. Confirm the exact target,
+   application identity, installed composition, and unchanged provider/client.
+2. Review the lockfile alongside the manifest. Upgrade publishes authenticated
+   lockfile bytes; it does not resolve registry or Git dependencies. Keep the
+   reviewed release-pinned lock and use locked builds. Do not blindly run
+   `cargo update` or regenerate the lockfile to hide a conflict. If the
+   application needs a different dependency graph, make that an explicit,
+   separately reviewed application change and validate its resulting lock.
+3. With backups and the correct environment, review pending migrations and use
+   the application's documented operation workflow. Source upgrade does not
+   execute SQL. Migration history remains append-only; repeating an unchanged
+   applied migration must not require editing its original bytes or checksum.
+   See [Operations](operations.md) for migration and recovery responsibilities.
+4. Run the application's tests, selected-provider native and WASM hydration
+   checks, and deployment validation. Recheck startup capability/production
+   validation and relevant authentication, authorization, health, and HTTP
+   policies. A compatible manifest or doctor result does not replace these checks.
+5. Deploy only after those checks succeed. Source publication rollback does not
+   restore a database or roll back a running deployment; use the application's
+   backup and deployment recovery procedure for those operations.
+
+From a version-controlled application root, these read-only review commands help
+inspect the source result without executing SQL or changing dependencies:
+
+```sh
+git status --short
+git diff -- Cargo.toml Cargo.lock hegira.toml
+```
+
+Use the selected application's documented build and deployment commands, not
+framework-repository validation scripts against a live application database.
+Production migrations, credentials, backups, and rollout authorization remain
+application-owned.
+
+### Frontend Dependency Remediation
+
+Source upgrade preserves application-owned `apps/web/src/package.json` and
+`package-lock.json`; it does not install the canonical template's updated
+frontend dependencies. Existing applications must review their own npm graph
+separately, including applications upgraded from v0.6.0.
+
+The canonical frontend keeps Tailwind CLI 4.3.3 and uses this narrowly scoped
+override while that CLI pins an older watcher:
+
+```json
+{
+  "overrides": {
+    "@tailwindcss/cli": {
+      "@parcel/watcher": "2.6.0"
+    }
+  }
+}
+```
+
+Watcher 2.6.0 removes the `micromatch`/`braces` dependency chain affected by
+[GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm).
+Merge this override with existing application overrides rather than replacing
+the whole manifest. If the application uses different frontend tooling, review
+its supported dependency graph instead of applying this configuration blindly.
+
+From the application root, after reviewing that manifest change:
+
+```sh
+npm install --package-lock-only --ignore-scripts --prefix apps/web/src
+git diff -- apps/web/src/package.json apps/web/src/package-lock.json
+npm ci --prefix apps/web/src
+npm audit --audit-level=high --include=dev --include=optional --include=peer \
+  --prefix apps/web/src
+```
+
+Review the changed lockfile and installation scripts, then validate CSS output,
+the development watcher, hydration, and the application build before deployment.
+Do not use `npm audit fix --force`, omit build dependencies from audit, or remove
+an audit finding merely to complete source upgrade. These are explicit
+application-owner dependency changes, not extra managed upgrade operations.
+
+## Resolve Upgrade Conflicts And Recovery
+
+| Outcome | Safe next action |
+| --- | --- |
+| Unsupported source/target or incompatible composition (exit 3) | Check the release tree, exact edge and recorded composition; do not fabricate a manifest version or ownership claim |
+| Managed-source conflict (exit 4) | Preserve custom work, compare the three managed files with the matching released state, and decide whether to retain the customization outside this supported transition |
+| Recovery marker present (exit 4) | Stop competing mutations, preserve the marker and staged files, and establish a consistent source state before authorizing another mutation |
+| Publication failure or uncertain rollback (exit 1) | Inspect source and recovery information; no success receipt was issued, but do not assume nothing changed |
+| Output delivery failure (exit 1) | Publication may have succeeded; inspect actual files and recovery state before deciding whether to retry |
+
+There is no force-upgrade, automatic conflict merge, recovery-cleanup, or
+downgrade command. Do not change edge digests, copy target files over a customized
+source, delete recovery state, or reclassify application-owned files just to
+obtain a ready result. A conflict means the bundled transition cannot preserve
+the observed custom state under its authenticated contract.
+
+For an interrupted or uncertain mutation:
+
+1. Stop processes that might mutate the application's source. Preserve a private
+   copy of the application, `.hegira-mutation.lock`, and any remaining private
+   transaction files before making a recovery decision. Do not publish their
+   contents or credentials in an issue or log.
+2. Compare affected paths with the reviewed pre-upgrade backup/version-control
+   state and expected plan digests. Determine whether they form the complete
+   source state, complete target state, or an incomplete publication. A marker
+   alone is not proof that a process has stopped or that rollback finished.
+3. Have the application owner approve manual recovery to one verified consistent
+   state, preserving product changes and migration history. Resolve retained
+   transaction/marker state only after that recovery is verified and no publisher
+   is active. The CLI does not provide a universal filesystem repair procedure.
+4. Re-run read-only `upgrade status --json` and `doctor`, review a fresh dry-run
+   where a direct edge still applies, and repeat application validation before
+   any apply or deployment. An already upgraded application has no remaining
+   direct edge; repeated apply exits 3 without writes.
+
+## Upgrade Automation Contract
+
+The committed Draft 2020-12 schemas are
+[readiness v1](../tools/hegira_cli/schemas/upgrade-status-v1.schema.json) and
+[execution v1](../tools/hegira_cli/schemas/upgrade-execution-v1.schema.json).
+Execution includes the typed plan, applied receipt, and failure shapes; its
+readiness reference resolves locally. Validation requires no remote schema
+lookup. Unknown fields, versions, diagnostic codes, and malformed digests are
+rejected by the current closed schemas. Applied outcomes require a receipt and
+owner steps; failed outcomes cannot contain an applicable plan or receipt.
+
+Use `output_schema`, `status`, `outcome`, and `diagnostics[].code`, not prose,
+for automation. Assessments and execution results, including failures, go to
+stdout as one JSON object with `--json`; stderr is empty for those outcomes.
+Command usage errors exit 2 with empty stdout and diagnostics on stderr.
+Output-delivery failures exit 1 and cannot guarantee a complete JSON result;
+inspect application state before retrying an apply.
+
+| Exit | Stable diagnostic codes |
+| --- | --- |
+| 0 | No blocker: ready, planned, applied, or no-upgrade preview/status |
+| 1 | `compatibility-policy`, `package-authentication`, `package-contract`, `receipt-mismatch`, `publication-plan`, `publication-failed`, `recovery-uncertain` |
+| 3 | `manifest-schema`, `manifest-composition`, `framework-source`, `composition-adapters`, `current-manifest`, `composition`, `direct-edge`, `manifest-transition`, `manifest`, `target`, `publication-platform` |
+| 4 | `manifest-changed`, `recovery-pending`, `recovery-inspection`, `ownership`, `managed-source-digest`, `managed-source-missing`, `managed-source-occupied`, `unsafe-source`, `source-limit`, `application-changed`, `publication-precondition` |
+| 3 or 4 | `application-context` (invalid input versus unsafe/conflicting discovery); `upgrade-plan` (unsupported/incompatible versus blocked/conflicting planning) |
+
+Diagnostics are sorted by code. Components and modules are sorted by identity;
+capabilities and adapters use stable typed order. Plans use application-relative
+path order. Filesystem creation order and declaration order do not determine
+output order. Digests identify content; source bytes, runtime values, staging
+paths, and machine-local roots are never output.
+
+Upgrade commands do not prompt or consume interactive answers. Closed stdin or
+supplied stdin produces the same command contract. Explicit flags, not stdin,
+select the root, target, and dry-run/apply mode. Human output is a reviewed
+presentation of the same state and plan, not the automation API.
+
 ## Diagnose An Existing Application
 
 From the application root, run the source-built CLI's read-only doctor:
@@ -331,7 +674,8 @@ but `component add`, `generate resource`, and `generate migration` fail with
 conflict exit code `4` unless the application is compatible with the running
 CLI. The current mutation policy requires:
 
-- manifest schema `2` and the canonical Hegira framework repository;
+- manifest schema `3`, valid source-ownership state, and the canonical Hegira
+  framework repository;
 - the exact framework release version compiled into the CLI;
 - the canonical component package and supported installed component, module,
   and capability composition generated by
@@ -500,13 +844,26 @@ disposable state:
 
 ```sh
 sh scripts/generated-application-check.sh
+# Separate released-application upgrade lifecycle (all six profiles):
+sh scripts/upgraded-application-check.sh
 ```
 
-`scripts/cli-check.sh` owns focused inspection, compatibility, dry-run,
-conflict, recovery, and generator command contracts. The generated-application
+`scripts/cli-check.sh` owns focused inspection, compatibility, upgrade
+readiness/dry-run/apply, schemas, process outcomes, conflict, recovery, and
+generator command contracts. The generated-application
 gate creates both provider profiles through the public CLI, applies a generated
 resource only to disposable validation copies, and exercises its migration,
 authorization, HTTP, UI, and production-container behavior.
+The upgraded-application gate additionally checks all three released compositions
+with both providers, customized product source, immutable history/data,
+post-upgrade migrations, and production behavior. CI and release validation
+require both creation cells and all three upgrade composition cells.
+
+Validation owns bounded caches below `target/validation/`, not normal developer
+Cargo output. Use `sh scripts/clean-validation-cache.sh --status` to inspect
+usage and `--prune-dry-run` to preview budget reclamation. See
+[Maintainer cache ownership](maintainers.md#validation-build-cache-lifecycle) for
+the 64 GiB default budget, active-lock protection, pruning, and cleanup boundaries.
 
 See [Architecture](architecture.md), [Configuration](configuration.md), and
 [Deployment](deployment.md) before changing providers or production defaults.

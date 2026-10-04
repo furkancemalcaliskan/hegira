@@ -1,0 +1,14 @@
+Upgrade status: unsupported
+Source: v0.7.0 (hegira-canonical v0.7.0)
+Direct target: none
+Components: layered-base @ v0.7.0, layered-leptos-identity @ v0.7.0
+Modules: identity @ v0.7.0
+Capabilities: authentication, authorization
+Databases: sqlite
+Clients: leptos
+Recovery: pass
+Managed boundaries: not-applicable
+direct-edge: No applicable direct upgrade remains; no application files were changed.
+Upgrade result: unavailable (apply)
+Preserved: application-owned, generated-once, immutable-history boundaries.
+No successful upgrade receipt was issued. Inspect diagnostics and recovery state before retrying.

@@ -1,0 +1,59 @@
+{
+  "output_schema": 1,
+  "mode": "apply",
+  "outcome": "unavailable",
+  "assessment": {
+    "output_schema": 1,
+    "status": "unsupported",
+    "source": {
+      "framework_version": "v0.7.0",
+      "package": {
+        "id": "hegira-canonical",
+        "version": "v0.7.0"
+      }
+    },
+    "target": null,
+    "composition": {
+      "components": [
+        {
+          "id": "layered-base",
+          "version": "v0.7.0"
+        },
+        {
+          "id": "layered-leptos-identity",
+          "version": "v0.7.0"
+        }
+      ],
+      "modules": [
+        {
+          "id": "identity",
+          "version": "v0.7.0"
+        }
+      ],
+      "capabilities": [
+        "authentication",
+        "authorization"
+      ],
+      "databases": [
+        "sqlite"
+      ],
+      "clients": [
+        "leptos"
+      ]
+    },
+    "recovery": "pass",
+    "managed_boundaries": "not-applicable",
+    "diagnostics": [
+      {
+        "code": "direct-edge",
+        "message": "No applicable direct upgrade remains; no application files were changed."
+      }
+    ]
+  },
+  "plan": null,
+  "preserved_boundaries": [
+    "application-owned",
+    "generated-once",
+    "immutable-history"
+  ]
+}

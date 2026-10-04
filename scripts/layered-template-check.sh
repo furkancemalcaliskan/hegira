@@ -4,7 +4,11 @@ set -eu
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 template_root="$repo_root/templates/applications/layered"
 . "$repo_root/scripts/validation-cache.sh"
-validation_cache_prepare "$repo_root" layered-template-check
+generated_tool_bin=$(sh "$repo_root/scripts/generated-toolchain.sh" prepare \
+  templates/applications/layered/Cargo.lock)
+PATH="$generated_tool_bin:$PATH"
+export PATH
+validation_cache_prepare "$repo_root" "layered-template-check"
 staging_parent="$HEGIRA_VALIDATION_WORKSPACE"
 staging_root="$staging_parent/application"
 export CARGO_TARGET_DIR="$HEGIRA_VALIDATION_TARGET"
@@ -25,6 +29,7 @@ fi
 
 cargo fmt --all -- --check
 sh "$repo_root/scripts/dx-audit.sh"
+echo "==> Renderer package authentication, upgrade graph, planner, and preservation contracts"
 cargo test --locked -p template_renderer
 cargo run --locked --quiet -p template_renderer \
   --example repository_validation_renderer -- render \
@@ -32,6 +37,11 @@ cargo run --locked --quiet -p template_renderer \
   --template layered \
   --output "$staging_root" \
   --framework-root "$repo_root"
+
+generated_tool_bin=$(sh "$repo_root/scripts/generated-toolchain.sh" application \
+  "$staging_root")
+PATH="$generated_tool_bin:$PATH"
+export PATH
 
 if find "$staging_root" -name Cargo.toml -exec grep -nE 'git[[:space:]]*=[[:space:]]*"https://github.com/furkancemalcaliskan/hegira.git"' {} + |
   grep . >/dev/null; then
@@ -42,9 +52,9 @@ fi
 (
   cd "$staging_root"
   npm ci --prefix apps/web/src
+  node "$repo_root/scripts/frontend-watcher-smoke.mjs" "$staging_root/apps/web/src"
   PATH="$staging_root/apps/web/src/node_modules/.bin:$PATH"
   export PATH
-  cargo generate-lockfile
   test -f Cargo.lock
   cargo check --locked --workspace --all-targets --all-features
   node "$repo_root/scripts/architecture-boundaries.mjs" \
@@ -57,5 +67,30 @@ fi
     --bin-features ssr,db-postgres --lib-features hydrate \
     --bin-cargo-args=--locked --lib-cargo-args=--locked
 )
+
+echo "==> Public CLI released-application upgrade matrix and preservation"
+cargo build --locked -p hegira_cli --bin hegira
+cargo run --locked --quiet -p template_renderer --example upgrade_preservation -- \
+  "$repo_root" "$staging_parent/upgrade-preservation" "$CARGO_TARGET_DIR/debug/hegira"
+for composition in default minimal identity-added; do
+  for database in sqlite postgres; do
+    echo "==> Customized upgrade compilation: $composition/$database"
+    # These workspaces intentionally share package names. Use one stable source
+    # path, copied after the preceding build, so Cargo observes changed local
+    # source instead of reusing artifacts from another fixture tree.
+    compile_root="$staging_parent/upgrade-preservation/compile-application"
+    rm -rf "$compile_root"
+    cp -R "$staging_parent/upgrade-preservation/$composition-$database" "$compile_root"
+    (
+      cd "$compile_root"
+      # Resolve only the separate local-source compile copy, then require its lock.
+      cargo generate-lockfile
+      cargo check --locked --workspace --all-targets --no-default-features \
+        --features "app_server/ssr,app_server/db-$database"
+      cargo check --locked -p app_server --no-default-features --features hydrate \
+        --target wasm32-unknown-unknown
+    )
+  done
+done
 
 echo "canonical layered application template: ok"

@@ -8,14 +8,15 @@ use std::{
     collections::BTreeSet,
     fmt::{Display, Formatter},
     fs,
-    path::Path,
+    path::{Component, Path},
 };
 
 use semver::Version;
 use serde::{Deserialize, Serialize};
 use url::{Host, Url};
 
-pub const APPLICATION_MANIFEST_SCHEMA: u32 = 2;
+pub const APPLICATION_MANIFEST_SCHEMA: u32 = 3;
+pub const COMPOSITION_APPLICATION_MANIFEST_SCHEMA: u32 = 2;
 pub const LEGACY_APPLICATION_MANIFEST_SCHEMA: u32 = 1;
 pub const HEGIRA_FRAMEWORK_REPOSITORY: &str = "https://github.com/furkancemalcaliskan/hegira.git";
 pub const HEGIRA_COMPONENT_PACKAGE: &str = "hegira-canonical";
@@ -41,6 +42,8 @@ pub struct ApplicationManifest {
     pub selection: ApplicationSelection,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub composition: Option<ApplicationComposition>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub upgrade: Option<ApplicationUpgradeState>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -74,6 +77,40 @@ pub struct ApplicationComposition {
     pub modules: Vec<InstalledModule>,
     #[serde(default)]
     pub capabilities: BTreeSet<ApplicationCapability>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ApplicationUpgradeState {
+    pub framework: FrameworkContract,
+    pub package: PackageIdentity,
+    pub ownership: SourceOwnership,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SourceOwnership {
+    pub default: SourceOwnershipClass,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub claims: Vec<SourceOwnershipClaim>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum SourceOwnershipClass {
+    ApplicationOwned,
+    ManagedIntegration,
+    GeneratedOnce,
+    ImmutableHistory,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SourceOwnershipClaim {
+    pub path: String,
+    pub class: SourceOwnershipClass,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub integration: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -268,7 +305,21 @@ pub enum ManifestError {
     InvalidPackage(String),
     UnsupportedComponent(String),
     MissingComposition,
-    LegacyManifestReadOnly,
+    MissingUpgradeState,
+    OlderManifestReadOnly(u32),
+    InvalidOwnershipDefault,
+    InvalidOwnershipPath(String),
+    InvalidOwnershipIntegration(String),
+    InvalidOwnershipClaim(String),
+    DuplicateOwnership {
+        path: String,
+        integration: Option<String>,
+    },
+    OverlappingOwnership {
+        first: String,
+        second: String,
+    },
+    InconsistentUpgradeState(String),
     DuplicateIdentity {
         kind: &'static str,
         identity: String,
@@ -292,8 +343,8 @@ impl ApplicationManifest {
     }
 
     pub fn to_toml(&self) -> Result<String, ManifestError> {
-        if self.schema == LEGACY_APPLICATION_MANIFEST_SCHEMA {
-            return Err(ManifestError::LegacyManifestReadOnly);
+        if self.schema != APPLICATION_MANIFEST_SCHEMA {
+            return Err(ManifestError::OlderManifestReadOnly(self.schema));
         }
         let mut manifest = self.clone();
         manifest.normalize();
@@ -310,30 +361,55 @@ impl ApplicationManifest {
         validate_framework_contract(&self.framework)?;
         match self.schema {
             LEGACY_APPLICATION_MANIFEST_SCHEMA => {
-                if self.composition.is_some() {
+                if self.composition.is_some() || self.upgrade.is_some() {
                     return Err(ManifestError::IncompatibleSelection(
-                        "legacy manifests cannot contain composition state".to_owned(),
+                        "schema-1 manifests cannot contain composition or upgrade state".to_owned(),
                     ));
                 }
                 validate_legacy_selection(&self.selection)
             }
-            APPLICATION_MANIFEST_SCHEMA => {
-                if !self.selection.components.is_empty() {
+            COMPOSITION_APPLICATION_MANIFEST_SCHEMA => {
+                if self.upgrade.is_some() {
                     return Err(ManifestError::IncompatibleSelection(
-                        "current manifests record components only in composition.components"
-                            .to_owned(),
+                        "schema-2 manifests cannot contain upgrade state".to_owned(),
                     ));
                 }
-                validate_current_selection(&self.selection)?;
-                validate_composition(
+                self.validate_composed_state()?;
+                Ok(())
+            }
+            APPLICATION_MANIFEST_SCHEMA => {
+                self.validate_composed_state()?;
+                validate_upgrade_state(
+                    self.upgrade
+                        .as_ref()
+                        .ok_or(ManifestError::MissingUpgradeState)?,
+                    &self.framework,
                     self.composition
                         .as_ref()
                         .ok_or(ManifestError::MissingComposition)?,
-                    &self.framework,
                 )
             }
             schema => Err(ManifestError::UnsupportedSchema(schema)),
         }
+    }
+
+    fn validate_composed_state(&self) -> Result<(), ManifestError> {
+        self.validate_composed_structure()?;
+        validate_current_selection(&self.selection)
+    }
+
+    fn validate_composed_structure(&self) -> Result<(), ManifestError> {
+        if !self.selection.components.is_empty() {
+            return Err(ManifestError::IncompatibleSelection(
+                "composed manifests record components only in composition.components".to_owned(),
+            ));
+        }
+        validate_composition(
+            self.composition
+                .as_ref()
+                .ok_or(ManifestError::MissingComposition)?,
+            &self.framework,
+        )
     }
 
     pub fn installed_component_ids(&self) -> BTreeSet<String> {
@@ -374,6 +450,15 @@ impl ApplicationManifest {
                 .modules
                 .sort_by(|left, right| left.id.cmp(&right.id));
         }
+        if let Some(upgrade) = &mut self.upgrade {
+            upgrade.ownership.claims.sort_by(|left, right| {
+                (&left.path, left.class, &left.integration).cmp(&(
+                    &right.path,
+                    right.class,
+                    &right.integration,
+                ))
+            });
+        }
     }
 
     pub fn mutation_compatibility(
@@ -392,16 +477,15 @@ impl ApplicationManifest {
 
         validate_application_name(&self.application)?;
         validate_framework_contract(&self.framework)?;
-        if !self.selection.components.is_empty() {
-            return Err(ManifestError::IncompatibleSelection(
-                "current manifests record components only in composition.components".to_owned(),
-            ));
-        }
-        validate_composition(
+        self.validate_composed_structure()?;
+        validate_upgrade_state(
+            self.upgrade
+                .as_ref()
+                .ok_or(ManifestError::MissingUpgradeState)?,
+            &self.framework,
             self.composition
                 .as_ref()
                 .ok_or(ManifestError::MissingComposition)?,
-            &self.framework,
         )?;
 
         if self.framework.repository != policy.framework.repository {
@@ -864,6 +948,145 @@ fn validate_composition(
     Ok(())
 }
 
+fn validate_upgrade_state(
+    upgrade: &ApplicationUpgradeState,
+    framework: &FrameworkContract,
+    composition: &ApplicationComposition,
+) -> Result<(), ManifestError> {
+    validate_framework_contract(&upgrade.framework)?;
+    if upgrade.framework != *framework {
+        return Err(ManifestError::InconsistentUpgradeState(
+            "upgrade framework identity does not match framework".to_owned(),
+        ));
+    }
+
+    validate_component_identifier(&upgrade.package.id)
+        .map_err(|_| ManifestError::InvalidPackage(upgrade.package.id.clone()))?;
+    validate_release_version(&upgrade.package.version)
+        .map_err(|_| ManifestError::InvalidPackage(upgrade.package.version.clone()))?;
+    if upgrade.package != composition.package {
+        return Err(ManifestError::InconsistentUpgradeState(
+            "upgrade package identity does not match composition.package".to_owned(),
+        ));
+    }
+
+    upgrade.ownership.validate()
+}
+
+impl SourceOwnership {
+    pub fn validate(&self) -> Result<(), ManifestError> {
+        if self.default != SourceOwnershipClass::ApplicationOwned {
+            return Err(ManifestError::InvalidOwnershipDefault);
+        }
+        if self.claims.len() > 4096 {
+            return Err(ManifestError::InvalidOwnershipClaim(
+                "source ownership may contain at most 4096 explicit claims".to_owned(),
+            ));
+        }
+
+        let mut identities = BTreeSet::new();
+        for claim in &self.claims {
+            validate_ownership_path(&claim.path)?;
+            match (claim.class, claim.integration.as_deref()) {
+                (SourceOwnershipClass::ManagedIntegration, Some(integration)) => {
+                    validate_ownership_integration(integration)?;
+                }
+                (SourceOwnershipClass::ManagedIntegration, None) => {
+                    return Err(ManifestError::InvalidOwnershipClaim(format!(
+                        "managed integration claim {} has no integration identity",
+                        claim.path
+                    )));
+                }
+                (_, Some(_)) => {
+                    return Err(ManifestError::InvalidOwnershipClaim(format!(
+                        "non-managed ownership claim {} cannot name an integration",
+                        claim.path
+                    )));
+                }
+                (_, None) => {}
+            }
+
+            if !identities.insert((claim.path.clone(), claim.integration.clone())) {
+                return Err(ManifestError::DuplicateOwnership {
+                    path: claim.path.clone(),
+                    integration: claim.integration.clone(),
+                });
+            }
+        }
+
+        for (index, left) in self.claims.iter().enumerate() {
+            for right in self.claims.iter().skip(index + 1) {
+                if left.path == right.path
+                    && left.class == SourceOwnershipClass::ManagedIntegration
+                    && right.class == SourceOwnershipClass::ManagedIntegration
+                {
+                    continue;
+                }
+                if ownership_paths_overlap(&left.path, &right.path) {
+                    return Err(ManifestError::OverlappingOwnership {
+                        first: left.path.clone(),
+                        second: right.path.clone(),
+                    });
+                }
+            }
+        }
+
+        Ok(())
+    }
+}
+
+fn validate_ownership_path(value: &str) -> Result<(), ManifestError> {
+    let path = Path::new(value);
+    if value.is_empty()
+        || value.len() > 4096
+        || value.contains('\\')
+        || value.chars().any(char::is_control)
+        || path.is_absolute()
+    {
+        return Err(ManifestError::InvalidOwnershipPath(value.to_owned()));
+    }
+
+    let mut normalized = Vec::new();
+    for component in path.components() {
+        let Component::Normal(segment) = component else {
+            return Err(ManifestError::InvalidOwnershipPath(value.to_owned()));
+        };
+        let Some(segment) = segment.to_str() else {
+            return Err(ManifestError::InvalidOwnershipPath(value.to_owned()));
+        };
+        if segment.is_empty()
+            || segment.len() > 255
+            || !segment
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
+        {
+            return Err(ManifestError::InvalidOwnershipPath(value.to_owned()));
+        }
+        normalized.push(segment);
+    }
+    if normalized.join("/") != value {
+        return Err(ManifestError::InvalidOwnershipPath(value.to_owned()));
+    }
+    Ok(())
+}
+
+fn validate_ownership_integration(value: &str) -> Result<(), ManifestError> {
+    if value.len() > 128 || validate_component_identifier(value).is_err() {
+        return Err(ManifestError::InvalidOwnershipIntegration(value.to_owned()));
+    }
+    Ok(())
+}
+
+fn ownership_paths_overlap(left: &str, right: &str) -> bool {
+    left == right
+        || left
+            .strip_prefix(right)
+            .is_some_and(|suffix| suffix.starts_with('/'))
+        || right
+            .strip_prefix(left)
+            .is_some_and(|suffix| suffix.starts_with('/'))
+}
+
 fn validate_module_identifier(module: &str) -> Result<(), ManifestError> {
     validate_component_identifier(module)
         .map_err(|_| ManifestError::InvalidModule(module.to_owned()))
@@ -931,9 +1154,43 @@ impl Display for ManifestError {
             Self::MissingComposition => {
                 formatter.write_str("current application manifest has no composition state")
             }
-            Self::LegacyManifestReadOnly => formatter.write_str(
-                "legacy application manifests are readable but cannot be serialized for mutation",
+            Self::MissingUpgradeState => {
+                formatter.write_str("schema-3 application manifest has no upgrade state")
+            }
+            Self::OlderManifestReadOnly(schema) => write!(
+                formatter,
+                "application manifest schema {schema} is readable but requires an explicit supported transition before mutation"
             ),
+            Self::InvalidOwnershipDefault => {
+                formatter.write_str("source ownership default must be application-owned")
+            }
+            Self::InvalidOwnershipPath(path) => {
+                write!(formatter, "invalid source ownership path: {path}")
+            }
+            Self::InvalidOwnershipIntegration(integration) => write!(
+                formatter,
+                "invalid managed integration identity: {integration}"
+            ),
+            Self::InvalidOwnershipClaim(reason) => {
+                write!(formatter, "invalid source ownership claim: {reason}")
+            }
+            Self::DuplicateOwnership { path, integration } => {
+                write!(formatter, "duplicate source ownership claim for {path}")?;
+                if let Some(integration) = integration {
+                    write!(formatter, " integration {integration}")?;
+                }
+                Ok(())
+            }
+            Self::OverlappingOwnership { first, second } => write!(
+                formatter,
+                "overlapping source ownership paths: {first} and {second}"
+            ),
+            Self::InconsistentUpgradeState(reason) => {
+                write!(
+                    formatter,
+                    "inconsistent application upgrade state: {reason}"
+                )
+            }
             Self::DuplicateIdentity { kind, identity } => {
                 write!(formatter, "duplicate {kind} identity: {identity}")
             }
@@ -956,7 +1213,7 @@ impl std::error::Error for ManifestError {}
 mod tests {
     use super::*;
 
-    const CANONICAL: &str = r#"schema = 2
+    const CANONICAL: &str = r#"schema = 3
 application = "application"
 
 [framework]
@@ -985,6 +1242,30 @@ version = "v0.3.0"
 [[composition.modules]]
 id = "identity"
 version = "v0.3.0"
+
+[upgrade.framework]
+repository = "https://github.com/furkancemalcaliskan/hegira.git"
+version = "v0.3.0"
+
+[upgrade.package]
+id = "hegira-canonical"
+version = "v0.3.0"
+
+[upgrade.ownership]
+default = "application-owned"
+
+[[upgrade.ownership.claims]]
+path = "crates/domain/src/lib.rs"
+class = "managed-integration"
+integration = "generated-modules"
+
+[[upgrade.ownership.claims]]
+path = "Dockerfile"
+class = "generated-once"
+
+[[upgrade.ownership.claims]]
+path = "crates/infrastructure/migrations"
+class = "immutable-history"
 "#;
 
     const LEGACY_V1: &str = r#"schema = 1
@@ -1004,6 +1285,14 @@ clients = ["leptos"]
         CANONICAL.replace("v0.3.0", version)
     }
 
+    fn composition_v2_manifest(version: &str) -> String {
+        let current = mutable_manifest(version);
+        let (composition, _) = current
+            .split_once("\n[upgrade.framework]")
+            .expect("canonical manifest contains upgrade state");
+        format!("{}\n", composition.replace("schema = 3", "schema = 2"))
+    }
+
     #[test]
     fn canonical_manifest_round_trips_deterministically() {
         let parsed = ApplicationManifest::from_toml(CANONICAL).expect("manifest should parse");
@@ -1015,6 +1304,9 @@ clients = ["leptos"]
         assert_eq!(first, second);
         assert!(
             first.find("layered-base").unwrap() < first.find("layered-leptos-identity").unwrap()
+        );
+        assert!(
+            first.find("Dockerfile").unwrap() < first.find("crates/domain/src/lib.rs").unwrap()
         );
     }
 
@@ -1039,7 +1331,7 @@ clients = ["leptos"]
     #[test]
     fn rejects_invalid_identity_framework_and_schema_values() {
         for invalid in [
-            CANONICAL.replace("schema = 2", "schema = 3"),
+            CANONICAL.replace("schema = 3", "schema = 4"),
             CANONICAL.replace("application = \"application\"", "application = \"../app\""),
             CANONICAL.replace(
                 "https://github.com/furkancemalcaliskan/hegira.git",
@@ -1135,19 +1427,19 @@ clients = ["leptos"]
     #[test]
     fn unknown_schema_is_unsupported_without_relaxing_normal_parsing() {
         let policy = MutationCompatibilityPolicy::for_framework_version("v0.6.0").unwrap();
-        let source = mutable_manifest("v0.6.0").replace("schema = 2", "schema = 3");
+        let source = mutable_manifest("v0.6.0").replace("schema = 3", "schema = 4");
 
         assert_eq!(
             assess_mutation_compatibility(&source, &policy).unwrap(),
             MutationCompatibility::Unsupported(MutationCompatibilityIssue {
                 field: MutationManifestField::Schema,
-                actual: "3".to_owned(),
-                expected: "2".to_owned(),
+                actual: "4".to_owned(),
+                expected: "3".to_owned(),
             })
         );
         assert!(matches!(
             ApplicationManifest::from_toml(&source),
-            Err(ManifestError::UnsupportedSchema(3))
+            Err(ManifestError::UnsupportedSchema(4))
         ));
     }
 
@@ -1162,12 +1454,114 @@ clients = ["leptos"]
             MutationCompatibility::Unsupported(MutationCompatibilityIssue {
                 field: MutationManifestField::Schema,
                 actual: "1".to_owned(),
-                expected: "2".to_owned(),
+                expected: "3".to_owned(),
             })
         );
         assert!(matches!(
             manifest.to_toml(),
-            Err(ManifestError::LegacyManifestReadOnly)
+            Err(ManifestError::OlderManifestReadOnly(1))
+        ));
+    }
+
+    #[test]
+    fn schema_two_manifest_is_readable_but_requires_an_explicit_transition() {
+        let source = composition_v2_manifest("v0.6.0");
+        let policy = MutationCompatibilityPolicy::for_framework_version("v0.6.0").unwrap();
+        let manifest = ApplicationManifest::from_toml(&source)
+            .expect("schema-2 composition should remain readable");
+
+        assert_eq!(
+            assess_mutation_compatibility(&source, &policy).unwrap(),
+            MutationCompatibility::Unsupported(MutationCompatibilityIssue {
+                field: MutationManifestField::Schema,
+                actual: "2".to_owned(),
+                expected: "3".to_owned(),
+            })
+        );
+        assert!(matches!(
+            manifest.to_toml(),
+            Err(ManifestError::OlderManifestReadOnly(2))
+        ));
+    }
+
+    #[test]
+    fn ownership_claims_are_relative_non_overlapping_and_unambiguous() {
+        for invalid_path in [
+            "/tmp/domain.rs",
+            "../domain.rs",
+            "crates//domain",
+            "crates\\\\domain",
+        ] {
+            let source = CANONICAL.replace("crates/domain/src/lib.rs", invalid_path);
+            assert!(matches!(
+                ApplicationManifest::from_toml(&source),
+                Err(ManifestError::InvalidOwnershipPath(_))
+            ));
+        }
+
+        let duplicate = CANONICAL.replace(
+            "[[upgrade.ownership.claims]]\npath = \"Dockerfile\"",
+            "[[upgrade.ownership.claims]]\npath = \"Dockerfile\"\nclass = \"generated-once\"\n\n[[upgrade.ownership.claims]]\npath = \"Dockerfile\"",
+        );
+        assert!(matches!(
+            ApplicationManifest::from_toml(&duplicate),
+            Err(ManifestError::DuplicateOwnership { .. })
+        ));
+
+        let overlap = CANONICAL.replace("path = \"Dockerfile\"", "path = \"crates/domain\"");
+        assert!(matches!(
+            ApplicationManifest::from_toml(&overlap),
+            Err(ManifestError::OverlappingOwnership { .. })
+        ));
+    }
+
+    #[test]
+    fn ownership_class_contracts_fail_closed() {
+        let managed_without_integration =
+            CANONICAL.replace("integration = \"generated-modules\"\n", "");
+        assert!(matches!(
+            ApplicationManifest::from_toml(&managed_without_integration),
+            Err(ManifestError::InvalidOwnershipClaim(_))
+        ));
+
+        let integration_on_generated_once = CANONICAL.replace(
+            "path = \"Dockerfile\"\nclass = \"generated-once\"",
+            "path = \"Dockerfile\"\nclass = \"generated-once\"\nintegration = \"dockerfile\"",
+        );
+        assert!(matches!(
+            ApplicationManifest::from_toml(&integration_on_generated_once),
+            Err(ManifestError::InvalidOwnershipClaim(_))
+        ));
+
+        let managed_default = CANONICAL.replace(
+            "default = \"application-owned\"",
+            "default = \"managed-integration\"",
+        );
+        assert!(matches!(
+            ApplicationManifest::from_toml(&managed_default),
+            Err(ManifestError::InvalidOwnershipDefault)
+        ));
+    }
+
+    #[test]
+    fn upgrade_release_state_must_match_the_installed_composition() {
+        let framework_mismatch = CANONICAL.replacen(
+            "[upgrade.framework]\nrepository = \"https://github.com/furkancemalcaliskan/hegira.git\"\nversion = \"v0.3.0\"",
+            "[upgrade.framework]\nrepository = \"https://github.com/example/hegira.git\"\nversion = \"v0.3.0\"",
+            1,
+        );
+        assert!(matches!(
+            ApplicationManifest::from_toml(&framework_mismatch),
+            Err(ManifestError::InconsistentUpgradeState(_))
+        ));
+
+        let package_mismatch = CANONICAL.replace(
+            "[upgrade.package]\nid = \"hegira-canonical\"\nversion = \"v0.3.0\"",
+            "[upgrade.package]\nid = \"hegira-canonical\"\nversion = \"v0.3.1\"",
+        );
+        assert!(matches!(
+            ApplicationManifest::from_toml(&package_mismatch),
+            Err(ManifestError::InconsistentUpgradeState(_))
         ));
     }
 

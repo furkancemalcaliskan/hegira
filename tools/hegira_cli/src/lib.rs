@@ -41,6 +41,7 @@ mod component;
 mod doctor;
 mod identity_installation;
 mod mutation;
+mod upgrade;
 
 use component::ComponentCommand;
 use doctor::DoctorCommand;
@@ -90,6 +91,8 @@ enum CliCommand {
     Inspect(InspectCommand),
     /// Diagnose application composition and local prerequisites without modifying it.
     Doctor(DoctorCommand),
+    /// Inspect application upgrade readiness without modifying source.
+    Upgrade(upgrade::UpgradeCommand),
     /// Manage bundled additive application components.
     Component(ComponentCommand),
     /// Generate application-owned source through validated change plans.
@@ -423,6 +426,13 @@ fn run_command(
             diagnostics,
         ),
         CliCommand::Doctor(command) => doctor::run(
+            command,
+            repository_root,
+            working_directory,
+            output,
+            diagnostics,
+        ),
+        CliCommand::Upgrade(command) => upgrade::run(
             command,
             repository_root,
             working_directory,
@@ -896,7 +906,7 @@ fn planned_content<'a>(plan: &'a ChangePlan, path: &str) -> Result<&'a [u8], Cli
     plan.changes()
         .iter()
         .find(|change| change.path().as_str() == path)
-        .map(PlannedFileChange::resulting_content)
+        .and_then(PlannedFileChange::resulting_content)
         .ok_or_else(|| {
             CliDiagnostic::internal(format!(
                 "resource emitter omitted required intermediate source `{path}`"

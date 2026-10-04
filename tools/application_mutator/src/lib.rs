@@ -10,6 +10,7 @@ use std::{
     path::{Component, Path},
 };
 
+use application_manifest::{SourceOwnership, SourceOwnershipClass};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
@@ -20,8 +21,9 @@ mod publisher;
 pub use editor::{
     CargoDependency, CargoDependencySection, CargoDependencySource, RUST_MODULES_END,
     RUST_MODULES_START, StructuredEditError, StructuredEditErrorKind, StructuredEditKind,
-    StructuredEditOutcome, plan_cargo_dependency, plan_rust_managed_entry, plan_rust_module,
-    plan_toml_array_string, plan_toml_identity_entry, plan_toml_table_string,
+    StructuredEditOutcome, plan_cargo_dependency, plan_cargo_dependency_transition,
+    plan_rust_managed_entry, plan_rust_module, plan_toml_array_string, plan_toml_identity_entry,
+    plan_toml_table_string,
 };
 pub use installation::{
     ApplicationFileOwner, COMPONENT_INSTALLATION_SUMMARY_SCHEMA, ComponentArtifact,
@@ -134,6 +136,7 @@ impl Display for ContentDigest {
 pub enum ChangeOperation {
     Create,
     Edit,
+    Retire,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -211,10 +214,63 @@ impl StructuredFileEdit {
     }
 }
 
+/// A digest-preconditioned retirement of one explicitly managed integration.
+///
+/// The path and owner are taken from an application-manifest claim so callers
+/// cannot independently name a file and assert unrelated ownership.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ManagedFileRetirement {
+    path: ChangePath,
+    original_digest: ContentDigest,
+    integration: String,
+}
+
+impl ManagedFileRetirement {
+    pub fn new(
+        ownership: &SourceOwnership,
+        path: impl AsRef<Path>,
+        integration: &str,
+        observed_content: &[u8],
+    ) -> Result<Self, ChangePlanError> {
+        let path = ChangePath::new(path)?;
+        ownership.validate().map_err(|_| {
+            ChangePlanError::invalid_ownership(
+                path.clone(),
+                "file retirement requires a valid source-ownership contract",
+            )
+        })?;
+        let declared = ownership.claims.iter().any(|claim| {
+            claim.path == path.as_str()
+                && claim.class == SourceOwnershipClass::ManagedIntegration
+                && claim.integration.as_deref() == Some(integration)
+        });
+        if !declared {
+            return Err(ChangePlanError::invalid_ownership(
+                path,
+                "file retirement requires an exact managed-integration ownership claim",
+            ));
+        }
+        Ok(Self {
+            path,
+            original_digest: ContentDigest::calculate(observed_content),
+            integration: integration.to_owned(),
+        })
+    }
+
+    pub fn path(&self) -> &ChangePath {
+        &self.path
+    }
+
+    pub fn integration(&self) -> &str {
+        &self.integration
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PlannedFileChange {
     Create(FileCreation),
     Edit(StructuredFileEdit),
+    Retire(ManagedFileRetirement),
 }
 
 impl PlannedFileChange {
@@ -222,6 +278,7 @@ impl PlannedFileChange {
         match self {
             Self::Create(change) => &change.path,
             Self::Edit(change) => &change.path,
+            Self::Retire(change) => &change.path,
         }
     }
 
@@ -229,6 +286,7 @@ impl PlannedFileChange {
         match self {
             Self::Create(_) => ChangeOperation::Create,
             Self::Edit(_) => ChangeOperation::Edit,
+            Self::Retire(_) => ChangeOperation::Retire,
         }
     }
 
@@ -236,20 +294,35 @@ impl PlannedFileChange {
         match self {
             Self::Create(_) => FilePrecondition::Absent,
             Self::Edit(change) => FilePrecondition::MatchesDigest(change.original_digest),
+            Self::Retire(change) => FilePrecondition::MatchesDigest(change.original_digest),
         }
     }
 
-    pub fn resulting_content(&self) -> &[u8] {
+    pub fn resulting_content(&self) -> Option<&[u8]> {
         match self {
-            Self::Create(change) => &change.content,
-            Self::Edit(change) => &change.content,
+            Self::Create(change) => Some(&change.content),
+            Self::Edit(change) => Some(&change.content),
+            Self::Retire(_) => None,
         }
     }
 
-    pub fn result_digest(&self) -> ContentDigest {
+    pub fn result_digest(&self) -> Option<ContentDigest> {
         match self {
-            Self::Create(change) => change.result_digest,
-            Self::Edit(change) => change.result_digest,
+            Self::Create(change) => Some(change.result_digest),
+            Self::Edit(change) => Some(change.result_digest),
+            Self::Retire(_) => None,
+        }
+    }
+
+    fn result_precondition(&self) -> FilePrecondition {
+        self.result_digest()
+            .map_or(FilePrecondition::Absent, FilePrecondition::MatchesDigest)
+    }
+
+    fn managed_by(&self) -> Option<&str> {
+        match self {
+            Self::Retire(change) => Some(&change.integration),
+            Self::Create(_) | Self::Edit(_) => None,
         }
     }
 }
@@ -263,6 +336,12 @@ impl From<FileCreation> for PlannedFileChange {
 impl From<StructuredFileEdit> for PlannedFileChange {
     fn from(change: StructuredFileEdit) -> Self {
         Self::Edit(change)
+    }
+}
+
+impl From<ManagedFileRetirement> for PlannedFileChange {
+    fn from(change: ManagedFileRetirement) -> Self {
+        Self::Retire(change)
     }
 }
 
@@ -311,27 +390,47 @@ impl ChangePlan {
                     composed.insert(path, change);
                     continue;
                 };
-                if change.precondition()
-                    != FilePrecondition::MatchesDigest(previous.result_digest())
-                {
+                if change.precondition() != previous.result_precondition() {
                     return Err(ChangePlanError::at_path(
                         ChangePlanErrorKind::ConflictingOperations,
                         path,
                     ));
                 }
-                let chained = match previous {
-                    PlannedFileChange::Create(mut creation) => {
-                        creation.content = change.resulting_content().to_vec();
-                        creation.result_digest = change.result_digest();
-                        PlannedFileChange::Create(creation)
+                let chained = match (previous, change) {
+                    (PlannedFileChange::Create(mut creation), PlannedFileChange::Edit(edit)) => {
+                        creation.content = edit.content;
+                        creation.result_digest = edit.result_digest;
+                        Some(PlannedFileChange::Create(creation))
                     }
-                    PlannedFileChange::Edit(mut edit) => {
-                        edit.content = change.resulting_content().to_vec();
-                        edit.result_digest = change.result_digest();
-                        PlannedFileChange::Edit(edit)
+                    (PlannedFileChange::Create(_), PlannedFileChange::Retire(_)) => None,
+                    (PlannedFileChange::Edit(mut first), PlannedFileChange::Edit(second)) => {
+                        first.content = second.content;
+                        first.result_digest = second.result_digest;
+                        Some(PlannedFileChange::Edit(first))
+                    }
+                    (PlannedFileChange::Edit(first), PlannedFileChange::Retire(mut retirement)) => {
+                        retirement.original_digest = first.original_digest;
+                        Some(PlannedFileChange::Retire(retirement))
+                    }
+                    (
+                        PlannedFileChange::Retire(retirement),
+                        PlannedFileChange::Create(creation),
+                    ) => Some(PlannedFileChange::Edit(StructuredFileEdit {
+                        path: retirement.path,
+                        original_digest: retirement.original_digest,
+                        content: creation.content,
+                        result_digest: creation.result_digest,
+                    })),
+                    _ => {
+                        return Err(ChangePlanError::at_path(
+                            ChangePlanErrorKind::ConflictingOperations,
+                            path,
+                        ));
                     }
                 };
-                composed.insert(path, chained);
+                if let Some(chained) = chained {
+                    composed.insert(path, chained);
+                }
             }
         }
         let plan = Self {
@@ -354,7 +453,16 @@ impl ChangePlan {
                     change.path().clone(),
                 ));
             }
-            if ContentDigest::calculate(change.resulting_content()) != change.result_digest() {
+            if let (Some(content), Some(digest)) =
+                (change.resulting_content(), change.result_digest())
+            {
+                if ContentDigest::calculate(content) != digest {
+                    return Err(ChangePlanError::at_path(
+                        ChangePlanErrorKind::InvalidDigest,
+                        change.path().clone(),
+                    ));
+                }
+            } else if change.operation() != ChangeOperation::Retire {
                 return Err(ChangePlanError::at_path(
                     ChangePlanErrorKind::InvalidDigest,
                     change.path().clone(),
@@ -382,7 +490,8 @@ impl ChangePlan {
                             }
                         }
                     },
-                    result_sha256: change.result_digest().to_hex(),
+                    result_sha256: change.result_digest().map(ContentDigest::to_hex),
+                    managed_by: change.managed_by().map(str::to_owned),
                 })
                 .collect(),
         }
@@ -400,7 +509,10 @@ pub struct PlannedChangeSummary {
     pub path: String,
     pub operation: ChangeOperation,
     pub precondition: PreconditionSummary,
-    pub result_sha256: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub result_sha256: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub managed_by: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -413,6 +525,7 @@ pub enum PreconditionSummary {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ChangePlanErrorKind {
     InvalidPath,
+    InvalidOwnership,
     DuplicatePath,
     ConflictingOperations,
     UnchangedEdit,
@@ -452,6 +565,14 @@ impl ChangePlanError {
         }
     }
 
+    fn invalid_ownership(path: ChangePath, message: impl Into<String>) -> Self {
+        Self {
+            kind: ChangePlanErrorKind::InvalidOwnership,
+            path: Some(path),
+            message: message.into(),
+        }
+    }
+
     fn at_path(kind: ChangePlanErrorKind, path: ChangePath) -> Self {
         let message = match kind {
             ChangePlanErrorKind::DuplicatePath => {
@@ -466,7 +587,9 @@ impl ChangePlanError {
             ChangePlanErrorKind::InvalidDigest => {
                 format!("change plan result digest does not match content for `{path}`")
             }
-            ChangePlanErrorKind::InvalidPath | ChangePlanErrorKind::UnchangedEdit => {
+            ChangePlanErrorKind::InvalidPath
+            | ChangePlanErrorKind::InvalidOwnership
+            | ChangePlanErrorKind::UnchangedEdit => {
                 unreachable!("these errors use their dedicated constructors")
             }
         };
@@ -489,6 +612,7 @@ impl std::error::Error for ChangePlanError {}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use application_manifest::SourceOwnershipClaim;
 
     fn create(path: &str, content: &str) -> PlannedFileChange {
         FileCreation::new(path, content.as_bytes().to_vec())
@@ -500,6 +624,29 @@ mod tests {
         StructuredFileEdit::new(path, original.as_bytes(), result.as_bytes().to_vec())
             .unwrap()
             .into()
+    }
+
+    fn ownership(path: &str, class: SourceOwnershipClass) -> SourceOwnership {
+        SourceOwnership {
+            default: SourceOwnershipClass::ApplicationOwned,
+            claims: vec![SourceOwnershipClaim {
+                path: path.to_owned(),
+                class,
+                integration: (class == SourceOwnershipClass::ManagedIntegration)
+                    .then(|| "server-routes".to_owned()),
+            }],
+        }
+    }
+
+    fn retire(path: &str, content: &str) -> PlannedFileChange {
+        ManagedFileRetirement::new(
+            &ownership(path, SourceOwnershipClass::ManagedIntegration),
+            path,
+            "server-routes",
+            content.as_bytes(),
+        )
+        .unwrap()
+        .into()
     }
 
     #[test]
@@ -557,6 +704,54 @@ mod tests {
     }
 
     #[test]
+    fn retirement_requires_exact_declared_managed_ownership() {
+        for class in [
+            SourceOwnershipClass::ApplicationOwned,
+            SourceOwnershipClass::GeneratedOnce,
+            SourceOwnershipClass::ImmutableHistory,
+        ] {
+            let error = ManagedFileRetirement::new(
+                &ownership("apps/server/src/routes.rs", class),
+                "apps/server/src/routes.rs",
+                "server-routes",
+                b"managed source",
+            )
+            .unwrap_err();
+            assert_eq!(error.kind(), ChangePlanErrorKind::InvalidOwnership);
+        }
+
+        let managed = ownership(
+            "apps/server/src/routes.rs",
+            SourceOwnershipClass::ManagedIntegration,
+        );
+        for (path, integration) in [
+            ("apps/server/src/other.rs", "server-routes"),
+            ("apps/server/src/routes.rs", "other-integration"),
+        ] {
+            let error = ManagedFileRetirement::new(&managed, path, integration, b"managed source")
+                .unwrap_err();
+            assert_eq!(error.kind(), ChangePlanErrorKind::InvalidOwnership);
+        }
+    }
+
+    #[test]
+    fn retirement_summary_is_deterministic_and_content_redacted() {
+        let plan = ChangePlan::new([
+            create("crates/domain/src/new.rs", "created source"),
+            retire("apps/server/src/routes.rs", "retired super-secret source"),
+        ])
+        .unwrap();
+        let summary = serde_json::to_string(&plan.summary()).unwrap();
+
+        assert_eq!(plan.changes()[0].operation(), ChangeOperation::Retire);
+        assert_eq!(plan.changes()[0].result_digest(), None);
+        assert!(summary.contains("\"operation\":\"retire\""));
+        assert!(summary.contains("\"managed_by\":\"server-routes\""));
+        assert!(!summary.contains("retired super-secret source"));
+        assert!(!summary.contains("result_sha256\":null"));
+    }
+
+    #[test]
     fn duplicate_and_conflicting_paths_have_distinct_diagnostics() {
         let duplicate = ChangePlan::new([
             create("crates/domain/src/order.rs", "one"),
@@ -593,7 +788,7 @@ mod tests {
         );
         assert_eq!(
             composed.changes()[0].resulting_content(),
-            b"domain with adapter"
+            Some(b"domain with adapter".as_slice())
         );
     }
 
@@ -611,7 +806,42 @@ mod tests {
             composed.changes()[0].precondition(),
             FilePrecondition::MatchesDigest(ContentDigest::calculate(b"base"))
         );
-        assert_eq!(composed.changes()[0].resulting_content(), b"http and web");
+        assert_eq!(
+            composed.changes()[0].resulting_content(),
+            Some(b"http and web".as_slice())
+        );
+    }
+
+    #[test]
+    fn ordered_plans_compose_retirement_to_their_net_effect() {
+        let edited = ChangePlan::new([edit(
+            "apps/server/src/routes.rs",
+            "original",
+            "managed revision",
+        )])
+        .unwrap();
+        let retired =
+            ChangePlan::new([retire("apps/server/src/routes.rs", "managed revision")]).unwrap();
+        let composed = ChangePlan::compose([edited, retired]).unwrap();
+        assert_eq!(composed.changes()[0].operation(), ChangeOperation::Retire);
+        assert_eq!(
+            composed.changes()[0].precondition(),
+            FilePrecondition::MatchesDigest(ContentDigest::calculate(b"original"))
+        );
+
+        let created = ChangePlan::new([create("apps/server/src/routes.rs", "temporary")]).unwrap();
+        let retired = ChangePlan::new([retire("apps/server/src/routes.rs", "temporary")]).unwrap();
+        assert!(ChangePlan::compose([created, retired]).unwrap().is_empty());
+
+        let retired = ChangePlan::new([retire("apps/server/src/routes.rs", "original")]).unwrap();
+        let replacement =
+            ChangePlan::new([create("apps/server/src/routes.rs", "replacement")]).unwrap();
+        let composed = ChangePlan::compose([retired, replacement]).unwrap();
+        assert_eq!(composed.changes()[0].operation(), ChangeOperation::Edit);
+        assert_eq!(
+            composed.changes()[0].resulting_content(),
+            Some(b"replacement".as_slice())
+        );
     }
 
     #[test]

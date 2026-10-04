@@ -4,6 +4,79 @@ All notable changes are documented here. Releases follow Semantic Versioning.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-04
+
+### Added
+
+- Added schema-3 application manifests with exact release state and explicit
+  application-owned, managed, generated-once, and immutable-history boundaries.
+- Added authenticated, data-only direct upgrade edges with exact source,
+  target, composition, ownership, baseline, and managed-file digest identities.
+- Added immutable, content-addressed v0.6.0 application baselines covering
+  default, minimal, and Identity-added SQLite and PostgreSQL applications.
+- Added digest-preconditioned managed-file retirement to the existing atomic
+  mutation publisher, including staged rollback and recovery blocking.
+- Added one typed upgrade plan for coordinated framework dependencies,
+  component-package state, installed components, and manifest transitions.
+- Added read-only `hegira upgrade status`, content-redacted
+  `hegira upgrade --dry-run`, and atomic `hegira upgrade` execution with
+  deterministic receipts and application-owner next steps.
+- Added versioned upgrade JSON schemas, human/JSON snapshots, stable process
+  outcomes, and conflict, rollback, interruption, and repeated-apply contracts.
+- Added the supported v0.6.0 to v0.7.0 direct transition for all three released
+  compositions across both database providers.
+
+### Changed
+
+- Isolated validation builds below `target/validation/` with stable locked
+  workspaces, reusable caches, and automatic inactive-cache LRU pruning under a
+  configurable 64 GiB default budget. Normal developer Cargo output is excluded.
+- Disabled incremental compilation and development/test debug information for
+  repository validation without changing normal developer build profiles.
+- Split generated-application CI into five parallel lifecycle cells; the
+  aggregate quality gate requires every fresh and released-upgrade cell.
+- Extended upgrade validation to native and WASM hydration builds, migration
+  history and product-data preservation, and production-container HTTP and
+  security behavior for both providers.
+- Documented source ownership, upgrade readiness, preview/apply, automation,
+  conflict handling, manual recovery, and post-upgrade responsibilities.
+- Aligned framework, official-module, tooling, component-package, and canonical
+  application source identities to v0.7.0.
+- Pinned default and minimal application lockfiles to one reviewed framework
+  source candidate while retaining the normal release-tag Git dependency.
+
+### Fixed
+
+- Made generated release tooling deterministic by selecting wasm-bindgen from
+  the reviewed application lockfile and verifying its installed version.
+- Eliminated unbounded accumulation of repository-owned validation build
+  artifacts through explicit cache ownership, budgeting, and lifecycle checks.
+
+### Security
+
+- Authenticated upgrade packages, released baselines, and existing managed
+  source through directory-anchored no-follow reads and exact digests before
+  planning or publishing a transition.
+- Restricted managed retirement to edge-authorized integrations; application
+  product source, generated-once scaffolding, and immutable history cannot be
+  retired through this mechanism.
+- Removed the vulnerable `micromatch`/`braces` dependency chain from canonical
+  frontend build tooling with a scoped watcher override, without downgrading
+  Tailwind. Supply-chain and release validation audit both canonical npm locks.
+- Documented manual frontend remediation for existing applications; upgrades
+  preserve application-owned npm files and immutable released baselines.
+
+### Upgrade And Distribution Notes
+
+- The bundled direct edge changes only `Cargo.toml`, `Cargo.lock`, and
+  `hegira.toml`. Customized managed files fail closed; there is no automatic
+  merge, downgrade, skipped-release upgrade, or database/client switch.
+- Upgrade applies source only. Dependency review, application validation,
+  database migrations, backups, and deployment remain application-owned.
+- Distribution remains an immutable source-only GitHub Release with source
+  archives, an SPDX SBOM, and GitHub's release attestation. Workspace packages
+  remain non-publishable; no executable, container image, or preview is shipped.
+
 ## [0.6.0] - 2026-09-23
 
 ### Added

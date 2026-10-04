@@ -17,13 +17,15 @@ const REQUIRED_CONTRACTS = [
   ["official module validation", "sh scripts/official-modules-check.sh"],
   ["tooling validation", "sh scripts/layered-template-check.sh"],
   ["CLI validation", "sh scripts/cli-check.sh"],
+  ["pinned Node selection", "node-version-file: .node-version"],
+  ["pinned Cargo Leptos selection", "cargo-leptos@0.3.7"],
   [
-    "generated application validation",
-    "run: sh scripts/generated-application-check.sh\n",
+    "parallel generated lifecycle context",
+    "name: generated-application (${{ matrix.lifecycle }})",
   ],
   [
-    "component lifecycle validation",
-    "sh scripts/generated-application-check.sh identity-added",
+    "matrix lifecycle validation",
+    'run: sh scripts/generated-application-check.sh "${{ matrix.lifecycle }}"',
   ],
   ["explicit disposable PostgreSQL authentication", "POSTGRES_HOST_AUTH_METHOD: trust"],
   ["dependency policy", "EmbarkStudios/cargo-deny-action@v2"],
@@ -38,6 +40,18 @@ const QUALITY_DEPENDENCIES = [
 ];
 
 const GENERATED_APPLICATION_CONTRACTS = [
+  [
+    "early generated tooling preparation",
+    'generated_tool_bin=$(sh "$repo_root/scripts/generated-toolchain.sh" prepare',
+  ],
+  [
+    "container tooling preflight",
+    '"$canonical_lock" --container',
+  ],
+  [
+    "resolved generated application tooling",
+    'generated-toolchain.sh" application',
+  ],
   ["public SQLite application creation", "-- new sqlite-application"],
   ["public PostgreSQL application creation", "-- new postgres-application"],
   ["canonical application lockfile", 'test -f "$staging_parent/sqlite-source/Cargo.lock"'],
@@ -65,7 +79,110 @@ const GENERATED_APPLICATION_CONTRACTS = [
   ["production container build", 'docker build --tag "$GENERATED_APP_IMAGE" "$generated_root"'],
   ["production readiness probe", '"$base_url/readyz"'],
   ["generated resource HTTP contract", '"$base_url/api/validation-records"'],
+  ["major phase timing", 'phase_begin "public application creation"'],
+  ["provider phase timing", 'phase_begin "$database provider lifecycle"'],
+  ["job summary timing output", '"$GITHUB_STEP_SUMMARY"'],
+  ["bounded cache footprint output", "generated-application cache footprint"],
+  ["default lifecycle HTTP port", "default_http_port=38081"],
+  ["Identity-added lifecycle HTTP port", "default_http_port=38082"],
+  ["default lifecycle PostgreSQL port", "default_postgres_port=35432"],
+  ["Identity-added lifecycle PostgreSQL port", "default_postgres_port=35433"],
+  ["lifecycle-bound runtime credentials", 'GENERATED_APP_DB_PASSWORD="generated-$mode-'],
 ];
+
+const GENERATED_JOB_CONTRACTS = [
+  ["non-cancelling lifecycle matrix", "fail-fast: false"],
+  ["default lifecycle matrix entry", "- lifecycle: default"],
+  ["Identity-added lifecycle matrix entry", "- lifecycle: identity-added"],
+  ["default bounded cache identity", "cache_name: generated-application-check"],
+  [
+    "Identity-added bounded cache identity",
+    "cache_name: identity-added-application-check",
+  ],
+  [
+    "isolated bounded cache workspace",
+    "target/validation/build/${{ matrix.cache_name }}",
+  ],
+  ["immutable source tree identity", "git rev-parse 'HEAD^{tree}'"],
+  ["lifecycle-bound cache identity", "generated-${{ matrix.lifecycle }}"],
+  [
+    "source-bound cache identity",
+    "source-${{ steps.source-identity.outputs.tree }}",
+  ],
+  ["lockfile cache identity", "hashFiles('Cargo.lock', 'templates/applications/layered/Cargo.lock')"],
+  ["native and WASM target cache identity", "targets-native-wasm32"],
+  ["development, test, and release profile cache identity", "profiles-dev-test-release"],
+  ["SQLite and PostgreSQL cache identity", "providers-sqlite-postgres"],
+  ["compiled feature cache identity", "features-ssr-db-sqlite-db-postgres-hydrate"],
+  ["failure-safe cache publication", "cache-on-failure: false"],
+  ["cache effectiveness diagnostic", "steps.generated-cache.outputs.cache-hit"],
+];
+
+// Shared by PR quality and source-release policy: one owner, five lifecycle cells.
+export function validateUpgradeLifecycleMatrix(job) {
+  const errors = [];
+  for (const composition of ["default", "minimal", "identity-added"]) {
+    const entry = `- lifecycle: upgrade-${composition}\n            cache_name: upgraded-application-${composition}`;
+    if (!job.includes(entry)) {
+      errors.push(`upgrade lifecycle matrix entry/cache is missing: ${composition}`);
+    }
+  }
+  if (/^    if:/m.test(job) || job.includes("continue-on-error:")) {
+    errors.push("upgrade lifecycle validation may not be conditional or tolerate failures");
+  }
+  if (/^        exclude:/m.test(job)) {
+    errors.push("upgrade lifecycle validation may not exclude required matrix cells");
+  }
+  if (job.includes("secrets.") || job.includes("GH_TOKEN") || job.includes("GITHUB_TOKEN")) {
+    errors.push("upgrade lifecycle validation may not consume repository secrets");
+  }
+  return errors;
+}
+
+export function validateUpgradeScripts(root) {
+  const errors = [];
+  const contracts = [
+    ["scripts/framework-check.sh", "cargo test --locked -p application_manifest"],
+    ["scripts/layered-template-check.sh", "cargo test --locked -p template_renderer"],
+    ["scripts/cli-check.sh", "cargo test --locked -p upgrade_test_support"],
+    ["scripts/cli-check.sh", "cargo test --locked -p application_mutator"],
+    ["scripts/cli-check.sh", "cargo test --locked -p hegira_cli"],
+    ["scripts/generated-application-check.sh",
+      'exec sh "$repo_root/scripts/upgraded-application-check.sh" "${1#upgrade-}"'],
+    ["scripts/upgraded-application-check.sh", "for database in sqlite postgres; do"],
+    ["scripts/upgraded-application-check.sh", "--production"],
+    ["scripts/upgraded-application-check.sh", "composition/provider=$case_id phase=$phase"],
+    ["scripts/upgraded-application-check.sh", "failed/interrupted"],
+    ["scripts/upgraded-application-check.sh", "validation_cache_prepare"],
+    ["scripts/upgraded-application-check.sh", "validation_cache_release"],
+    ["scripts/upgraded-application-check.sh", "compose down --volumes --remove-orphans"],
+    ["scripts/upgraded-application-check.sh", "upgraded-application-http.mjs"],
+    ["scripts/upgraded-application-check.sh", "--test upgrade_lifecycle"],
+    ["scripts/upgraded-application-check.sh", 'docker build --tag "$UPGRADE_APP_IMAGE"'],
+    ["scripts/upgraded-application-http.mjs", "cookie BFF mutation requires the trusted Origin"],
+    ["scripts/upgrade-database-contract.rs", "released migration history changed"],
+    ["test-fixtures/upgrade-lifecycle/v0.6.0-identity-migrations.json", '"release": "v0.6.0"'],
+  ];
+  for (const [file, contract] of contracts) {
+    const location = path.join(root, file);
+    if (!fs.existsSync(location)) {
+      errors.push(`required upgrade validation source is missing: ${file}`);
+      continue;
+    }
+    const source = fs.readFileSync(location, "utf8");
+    if (file.endsWith(".sh") && !/^#!\/(?:usr\/bin\/env sh|bin\/sh)\nset -eu\n/.test(source)) {
+      errors.push(`upgrade validation must fail closed: ${file}`);
+    }
+    if (!source.includes(contract) ||
+        (contract.startsWith("cargo test ") && !source.includes(`${contract}\n`))) {
+      errors.push(`upgrade validation contract missing in ${file}: ${contract}`);
+    }
+    if (source.includes("${{ secrets.") || source.includes("continue-on-error:")) {
+      errors.push(`upgrade validation must be secret-free and fail closed: ${file}`);
+    }
+  }
+  return [...new Set(errors)];
+}
 
 const COMPATIBILITY_HOST_CONTRACTS = [
   "--package hegira",
@@ -73,6 +190,20 @@ const COMPATIBILITY_HOST_CONTRACTS = [
   "compatibility host",
   "host composition",
 ];
+
+export function validateFrontendAuditJob(job) {
+  const errors = [];
+  if (!/^\s+(?:-\s+)?run: sh scripts\/frontend-check\.sh\s*$/m.test(job)) {
+    errors.push("frontend audit must run as an unconditional standalone gate");
+  }
+  if (!job.includes("node-version-file: .node-version")) {
+    errors.push("frontend audit requires the pinned Node toolchain");
+  }
+  if (/^\s+(?:-\s+)?(?:if:|continue-on-error:)/m.test(job)) {
+    errors.push("frontend audit job must not skip or tolerate failures");
+  }
+  return errors;
+}
 
 export function validateRepositoryValidationWorkflow(workflow) {
   const errors = [];
@@ -91,6 +222,9 @@ export function validateRepositoryValidationWorkflow(workflow) {
   if (workflow.includes("pull_request_target")) {
     errors.push("repository validation may not execute through pull_request_target");
   }
+  if (/^    paths(?:-ignore)?:/m.test(workflow)) {
+    errors.push("required upgrade validation may not be suppressed by path filters");
+  }
   if (workflow.includes("POSTGRES_PASSWORD")) {
     errors.push("disposable repository validation must not embed PostgreSQL passwords");
   }
@@ -98,6 +232,16 @@ export function validateRepositoryValidationWorkflow(workflow) {
     errors.push(
       "component lifecycle validation must remain in the existing generated-application job",
     );
+  }
+
+  const generatedApplicationJob = workflow.match(
+    /^  generated-application:\s*$([\s\S]*?)(?=^  [a-zA-Z0-9_-]+:\s*$|(?![\s\S]))/m,
+  )?.[1] ?? "";
+  errors.push(...validateUpgradeLifecycleMatrix(generatedApplicationJob));
+  for (const [description, contract] of GENERATED_JOB_CONTRACTS) {
+    if (!generatedApplicationJob.includes(contract)) {
+      errors.push(`generated application job is missing ${description}: ${contract}`);
+    }
   }
   if (!/pull_request:\s*\n    branches:\s*\n      - develop\s*\n      - main/m.test(workflow)) {
     errors.push("repository validation must run for pull requests to develop and main");
@@ -128,6 +272,11 @@ export function validateRepositoryValidationWorkflow(workflow) {
       errors.push(`repository validation is missing ${description}: ${contract}`);
     }
   }
+
+  const supplyChainJob = workflow.match(
+    /^  supply-chain:\s*$([\s\S]*?)(?=^  [a-zA-Z0-9_-]+:\s*$|(?![\s\S]))/m,
+  )?.[1] ?? "";
+  errors.push(...validateFrontendAuditJob(supplyChainJob));
 
   const qualityJob = workflow.match(
     /^  quality:\s*$([\s\S]*?)(?=^  [a-zA-Z0-9_-]+:\s*$|(?![\s\S]))/m,
@@ -183,6 +332,7 @@ export function validateGeneratedApplicationScript(script) {
 
 export function validateCIRepository(root) {
   const errors = [];
+  errors.push(...validateUpgradeScripts(root));
   const workflowPath = path.join(root, ".github", "workflows", "backend.yml");
   const generatedApplicationPath = path.join(
     root,

@@ -1,0 +1,25 @@
+schema = 2
+application = "baseline-application"
+
+[framework]
+repository = "https://github.com/furkancemalcaliskan/hegira.git"
+version = "v0.6.0"
+
+[selection]
+databases = ["sqlite"]
+clients = ["leptos"]
+
+[composition]
+capabilities = []
+
+[composition.package]
+id = "hegira-canonical"
+version = "v0.6.0"
+
+[[composition.components]]
+id = "layered-base"
+version = "v0.6.0"
+
+[[composition.components]]
+id = "layered-leptos-minimal"
+version = "v0.6.0"

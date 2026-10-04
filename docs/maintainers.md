@@ -85,9 +85,13 @@ Keep these exact status checks required for both `develop` and `main`:
 
 The stable `quality` context is an aggregate gate. It reports failure unless
 the `framework`, `official-modules`, `tooling`, and `generated-application`
-jobs all succeed. Generated-application database, release-build, production
-container, and HTTP/security validation is therefore release-blocking without
-requiring a new protected-branch context.
+jobs all succeed. `generated-application` is a five-cell lifecycle matrix:
+`default`, `identity-added`, `upgrade-default`, `upgrade-minimal`, and
+`upgrade-identity-added`. Each cell covers both providers and owns a separate
+bounded cache. GitHub reports its dependency as successful only after all
+five cells succeed. Generated-application database, release-build,
+production-container, and HTTP/security validation is therefore
+release-blocking without requiring another protected-branch context.
 
 A plain push to an issue branch does not trigger the push-based validation
 workflows. Updating an open pull request triggers its `pull_request` checks.
@@ -106,14 +110,19 @@ The repository validation workflow separates these responsibilities:
 - `tooling` validates the DX baseline, source-runnable CLI, rendering tool,
   component manifests, workspace-external layered application, locked
   dependency boundaries, hydration, and release output;
-- `generated-application` validates untouched public CLI output, then mutates
-  separate SQLite and PostgreSQL validation copies through the public resource
-  command and exercises their locked dependency boundaries, supported v0.2.0
-  upgrades, generated HTTP contract, and rendered production container. A
-  second step in this same job creates explicit minimal applications, verifies
-  pre-install capability rejection, installs Identity through public dry-run
-  and apply, and repeats provider, hydration, production-container, and
-  authenticated CRUD coverage;
+- `generated-application (default)` validates untouched default public CLI
+  output, then mutates separate SQLite and PostgreSQL validation copies through
+  the public resource command and exercises their locked dependency boundaries,
+  supported v0.2.0 upgrades, generated HTTP contract, and rendered production
+  container;
+- `generated-application (identity-added)` independently creates explicit
+  minimal applications, verifies pre-install capability rejection, installs
+  Identity through public dry-run and apply, and repeats provider, hydration,
+  production-container, and authenticated CRUD coverage;
+- `generated-application (upgrade-default|upgrade-minimal|upgrade-identity-added)`
+  runs authenticated v0.6.0-to-v0.7.0 public upgrades and validates both providers
+  through migration history/data preservation, native/hydration and release
+  builds, production images, and HTTP/security contracts;
 - `quality` aggregates the four repository ownership gates under the existing
   required status context;
 - `supply-chain` runs dependency policy and vulnerability checks.
@@ -123,8 +132,8 @@ GitHub-hosted runners. They contain disposable test data, expose no repository
 secret, and are destroyed after validation.
 
 The former compatibility-host full-stack and production-container workflows and
-scripts are retired. The generated-application job is the single integration
-owner for those contracts.
+scripts are retired. The generated-application lifecycle matrix is the single
+integration owner for those contracts.
 
 `deny.toml` explicitly rejects the `event-listener` and `lru` version ranges
 affected by RUSTSEC-2026-0221 and RUSTSEC-2026-0253. These informational
@@ -179,11 +188,10 @@ smoke. The repository-validation adapter stages the CLI-mutated application in
 a disposable copy and rewrites only declared framework dependencies to the
 current source tree. The default application's historical v0.2.0 upgrade test
 does not apply to the newly created minimal composition, whose migration
-history starts later. Repository validation and release validation run this
-lifecycle mode as an explicit step in the existing generated-application job.
-The stable `generated-application` ownership job and aggregated `quality`
-context therefore cover both paths without introducing another protected
-branch status context.
+history starts later. Repository and release validation run the default and
+Identity-added modes as isolated cells of the same generated-application
+matrix. The stable aggregated `quality` context therefore covers both paths
+without introducing another protected-branch status requirement.
 
 The CLI process tests use disposable working and home directories and an empty
 command search path rather than the maintainer's global configuration. They
@@ -202,6 +210,24 @@ output, and missing local tools as warnings. Additional isolated PATH and home
 fixtures pin JSON field and check order, success/warning/failure exit outcomes,
 and ensure the Rustup probe does not inherit application runtime secrets.
 
+Upgrade outputs are validated against the committed closed schemas in
+`tools/hegira_cli/schemas/`, with negative tests for unknown fields/versions,
+malformed digests, and missing or contradictory receipts. The test-only schema
+checker implements only the keywords used by these offline schemas and fails
+on unrecognized keywords; it is not a general-purpose schema engine.
+Human/JSON snapshots in `tools/hegira_cli/tests/snapshots/upgrade/` cover
+readiness, plans, receipts, no-upgrade, repeated apply, invalid input,
+unsupported source, incompatible composition, conflict, and recovery.
+Typed state/exit/diagnostic mapping tests cover internal and publisher failures.
+
+Snapshot mismatches fail with an explicit review message and the actual
+content-redacted outputs. There is no automatic snapshot-update or acceptance
+flag. Inspect the semantic and security change, update the schema contract if
+needed, and edit only intentionally reviewed snapshots. Do not bless changed
+output merely to obtain a green gate. A breaking public shape requires a new
+output-schema version and corresponding schemas/tests. All upgrade contract
+checks run in `sh scripts/cli-check.sh`.
+
 SQLite and PostgreSQL requests have committed whole-tree fingerprints covering
 file paths and bytes, including binary assets, and are compared with equivalent
 interactive requests. Review generated content before updating these regression
@@ -211,6 +237,16 @@ On Linux, a child-only file-size limit exercises actual renderer write failure,
 staging cleanup, sentinel preservation, and a successful retry. Catalog failure
 is tested through the CLI dispatcher with a disposable missing source. These
 tests neither build generated applications nor require network access.
+
+Before the mutation and CLI suites, the same tooling gate authenticates the
+closed v0.6.0 released-application baseline matrix through
+`upgrade_test_support`. It verifies the pinned tag object, commit, source tree,
+package digest, generated lock revision, every sorted tree manifest, and every
+referenced content object. Default, minimal, and Identity-added applications
+are covered for SQLite and PostgreSQL. Normal validation reads only committed
+data, executes no fixture content, and performs no Git or network operation.
+The maintainer-only importer writes an absent destination so a regenerated
+fixture can be recursively compared before an intentional baseline update.
 
 The same gate validates `application_mutator` plan ordering, explicit absent and
 content-digest preconditions, duplicate and conflicting path diagnostics,
@@ -366,8 +402,23 @@ pristine SQLite output runs the documented non-release Cargo Leptos development
 build without starting a persistent watcher or server. Each provider copy then
 runs native workspace checks and tests, WASM hydration checks, and a Cargo-Leptos
 release build.
-This requires Node/npm, `cargo-leptos`, and the `wasm32-unknown-unknown` target;
-the generated-application CI jobs install these prerequisites explicitly.
+This requires the generated application's pinned Rust toolchain and WASM target,
+Node.js 22 or newer, npm 10 or newer, `cargo-leptos` `0.3.7`, Docker Engine 24
+or newer, and Docker Compose 2 or newer. Repository validation runs
+`scripts/generated-toolchain.sh` before creating or compiling an application.
+That preflight validates the local tool contract, derives the exact
+`wasm-bindgen-cli` version from the canonical application `Cargo.lock`, and
+prepares the authenticated official binary under `target/validation/tools/`.
+The download uses a committed platform checksum and bounded retries. A missing,
+unsupported, or mismatched tool therefore fails before the expensive native,
+WASM, or production-container build begins.
+
+The canonical production Dockerfile applies the same lockfile-derived
+`wasm-bindgen-cli` contract in an early cached builder layer before application
+source is copied. CI selects Node through the committed `.node-version`; the
+generated application carries the matching Node selection and
+`rust-toolchain.toml`. Updating Rust, Node, Cargo Leptos, or the lockfile's
+`wasm-bindgen` version requires updating and validating this contract together.
 
 The check runs SQLite fresh-install and upgrade tests in memory, and starts an
 ephemeral PostgreSQL container for the equivalent PostgreSQL contracts. It then
@@ -384,7 +435,25 @@ and rendered output on exit. Compose project and image names are assigned by
 the check rather than inherited from the caller. It never targets the
 maintainer's configured database.
 
-Failures in this job are owned by the contract boundary named in the output:
+CI runs the `default` and `identity-added` commands alongside the three upgrade
+compositions in a non-fail-fast matrix so every lifecycle result remains observable and the sequential critical
+path is removed. Each cell owns a distinct bounded target, disposable workspace,
+Compose project, ports, database, image, and runtime credentials. Provider work
+within one lifecycle remains ordered because the gate compares provider
+lockfiles and pristine source identities before compiling them and uses the
+PostgreSQL render as the production-container subject; it shares no mutable
+state with other matrix cells.
+
+The optional remote Rust cache points at the same lifecycle-specific bounded
+target. Its key records the pinned Rust toolchain, native and WASM targets,
+development/test/release profiles, SQLite and PostgreSQL providers, compiled
+features, canonical lockfiles, and immutable Git tree. Failed jobs do not
+publish caches, and a cache miss always falls back to a complete build. Every
+major phase reports elapsed seconds, the cache action reports exact-hit state,
+and cleanup reports the final local cache footprint in the job summary.
+
+Failures in either matrix cell are owned by the contract boundary named in the
+output:
 
 - public creation or canonical verification failures belong to the CLI render
   and template-package contract;
@@ -397,44 +466,105 @@ Failures in this job are owned by the contract boundary named in the output:
 - readiness, asset, security-header, authentication, authorization, or CRUD
   failures belong to the production container and generated runtime contract.
 
-The `quality` job must propagate any such failure through the existing stable
-`quality` status context. Do not split this scenario into a second protected
-branch check merely to diagnose one of its internal stages.
+The `quality` job must propagate a failure from any cell through the existing
+stable `quality` status context. Release publication likewise depends on the
+whole matrix and cannot proceed after a skipped, cancelled, or failed lifecycle.
+Do not add individual matrix display names as protected status requirements.
+
+### Frontend dependency validation
+
+Frontend dependencies have a separate, non-installing gate:
+
+```sh
+sh scripts/frontend-check.sh
+```
+
+It verifies the narrowly scoped Tailwind watcher override and both canonical
+npm locks, rejects reintroduced `micromatch`/`braces`, and audits all dependency
+classes with `--audit-level=high` and explicit dev, optional, and peer inclusion.
+The existing `supply-chain` job runs it with
+the pinned Node toolchain. Release `validate` runs it before SBOM generation,
+so publication cannot proceed after an audit failure. It writes no application
+files or node_modules and creates no Cargo cache. Policy and mocked-process
+tests reject removed, skipped or tolerated audits and assert failure propagation.
+The layered-template gate also checks native watcher events and glob ignores
+after clean installation, before the application and Tailwind release build.
+
+The current exact `@parcel/watcher` 2.6.0 override is scoped to Tailwind CLI;
+it does not downgrade Tailwind. Re-review the override and watcher compatibility
+when upstream Tailwind changes its pin. Existing applications own their frontend
+source; follow [manual remediation](getting-started.md#frontend-dependency-remediation)
+without changing authenticated upgrade ownership or released baselines.
 
 ### Validation build-cache lifecycle
 
-The layered-template, generated-feature, and generated-application checks use
-repository-owned state below `target/validation/`:
+Every supported validation command owns its Cargo artifacts below
+`target/validation/`. Validation exports `CARGO_INCREMENTAL=0` and disables
+development and test debug information because these caches are used for
+correctness checks, not interactive debugging. Normal developer builds keep
+Cargo defaults and remain outside this lifecycle.
 
-- `workspaces/<check>` is a stable staging path. Its contents are recreated for
-  each invocation and removed on success, failure, interruption, and supported
-  termination signals. Keeping the path stable prevents each disposable render
-  from becoming a new Cargo package source identity.
-- `build/<check>` is that check's persistent Cargo target directory. It is
-  intentionally separate from normal `target/debug` developer output and may
-  be reused by later equivalent validations.
-- `locks/<check>` prevents two local invocations from sharing the same staging
-  workspace. A remaining lock after an uncatchable process termination must be
-  removed only after confirming that no matching validation process is active.
+| Path | Owner and identity | Lifecycle |
+|---|---|---|
+| `build/framework-check` | Framework packages; native dev/test profiles; minimal and all features; workspace toolchain and lock | Stable LRU cache |
+| `build/official-modules-check` | Official Identity packages; native dev/test profiles; all features and optional disposable PostgreSQL contracts; workspace toolchain and lock | Stable LRU cache |
+| `build/cli-check` | Renderer, mutator, resource generator, and CLI packages; native dev/test profiles; workspace toolchain and lock | Stable LRU cache |
+| `build/layered-template-check` | Canonical layered render; native and WASM dev/test/release profiles; PostgreSQL and all features; pinned application toolchain and generated lock | Stable LRU cache |
+| `build/generated-feature-check` | Canonical external-consumer render; native or WASM check profile; requested provider/capability set; generated lock | Stable LRU cache |
+| `build/generated-application-check` | Default public CLI output; native, WASM, test, and release profiles; SQLite and PostgreSQL lifecycle contracts; generated lock | Stable LRU cache |
+| `build/identity-added-application-check` | Minimal public CLI output plus Identity; native, WASM, test, and release profiles; SQLite and PostgreSQL lifecycle contracts; generated lock | Stable LRU cache |
+| `build/composition-matrix-check` | Minimal and Identity-added compositions; native and WASM check profiles; SQLite and PostgreSQL; generated lock | Stable LRU cache |
+| `build/upgraded-application-{all,default,minimal,identity-added}` | Authenticated released applications; native, WASM, test, and release profiles; selected compositions and both database providers; disposable owner-reviewed lock | Stable LRU cache |
+| `workspaces/<check>` | Stable disposable source identity for its named check | Recreated per invocation and removed by its exit trap |
+| `locks/<check>` | Exclusive ownership of the named workspace and build cache | Exists only while that validation is active |
+| `state/<check>` | Last cache access time used for deterministic LRU ordering | Updated on prepare and release; removed with its build cache |
+| `tools/wasm-bindgen` | Authenticated lockfile-selected official CLI | Shared repository-owned tool cache |
 
-Inspect the cleanup operation, then remove all repository-owned validation
-build caches and the three legacy pre-v0.5.0 validation target directories:
+The default repository-owned budget is 65,536 MiB. The baseline that introduced
+this policy measured approximately 14.6 GiB for one warm canonical layered
+cache and 3.0 GiB of separate developer-owned output; repeated provider and
+profile validation had previously accumulated beyond 120 GiB. The default
+retains several expensive warm graphs while placing a firm lifecycle boundary
+well below that observed growth. It is a repository default rather than a
+machine assumption: constrained or dedicated machines may set a positive
+`HEGIRA_VALIDATION_CACHE_MAX_MIB` value explicitly.
+
+A representative cold `framework-check` under the bounded settings occupied
+2,476,676 KiB. An immediate equivalent warm run completed in 4.91 seconds and
+left the cache at exactly 2,476,676 KiB, demonstrating zero second-run disk
+growth for that graph.
+
+Preparation and release automatically prune the least-recently-used inactive
+build caches until the budget is satisfied. Active caches are protected by
+their check locks. If active or shared state alone exceeds the budget,
+validation stops with an actionable diagnostic instead of deleting live state
+or continuing uncontrolled growth. Pruning is serialized by a maintenance
+lock, rejects symlinks, non-directory owned entries, unsafe names, malformed
+state, and paths outside the declared namespace, and never removes Cargo
+registry data, Git checkouts, Docker storage, or normal developer output.
+
+Inspect current ownership and the largest caches, preview budget reclamation,
+or request it immediately:
+
+```sh
+sh scripts/clean-validation-cache.sh --status
+sh scripts/clean-validation-cache.sh --prune-dry-run
+sh scripts/clean-validation-cache.sh --prune
+```
+
+A complete manual removal remains available for troubleshooting. It refuses to
+run during validation or cache maintenance and includes only repository-owned
+validation state and the legacy pre-v0.5.0 validation directories:
 
 ```sh
 sh scripts/clean-validation-cache.sh --dry-run
 sh scripts/clean-validation-cache.sh
 ```
 
-Cleanup refuses to run while a validation lock exists and rejects symlinked or
-non-directory cache roots. It does not remove normal Cargo output such as
-`target/debug`, Cargo registry downloads, or Git dependency checkouts. Use
-`cargo clean` separately only when normal developer build output should also be
-discarded. Provider, feature, native, WebAssembly, release, and Cargo Leptos
-profiles legitimately occupy separate artifact sets; this lifecycle bounds
-growth caused by changing disposable source paths rather than weakening that
-matrix. Checks that compile only packages from the framework repository continue
-to use Cargo's normal target selection and are not owned by this cleanup
-contract.
+Use `cargo clean` separately only when normal developer `target/debug` or
+`target/release` output should also be discarded. Generated production images
+and Compose state retain their existing explicit cleanup lifecycle outside the
+Cargo cache budget.
 
 To reproduce pull request metadata validation with a saved GitHub
 `pull_request` event:
@@ -460,6 +590,76 @@ sh scripts/layered-template-check.sh
 sh scripts/cli-check.sh
 ```
 
+The layered-template gate also verifies source preservation and native/hydration
+compilation for customized v0.6.0-to-v0.7.0 default, minimal, and Identity-added
+applications with both providers. It materializes authenticated released
+baselines, customizes them through the typed generators, and runs the source-built
+public CLI through readiness, dry-run, apply, repeated apply, inspect, and doctor.
+The shared matrix contract verifies exact release identities, unchanged provider
+and client selection, compatible composition, and protected-resource capability
+gating (including minimal rejection without writes). Empty prerequisite PATH
+keeps doctor deterministic; missing tools and unprobed PostgreSQL produce warnings,
+not permission to ignore failed manifest or integration checks. The gate fingerprints
+the upgrade output and stages separate local-framework compile copies under its
+existing bounded validation workspace. It does not connect to a database or
+execute migrations. Focused offline preservation and conflict tests run with
+`cargo test --locked -p template_renderer --test upgrade_preservation`.
+The same public-process matrix runs against untouched immutable baselines with
+`cargo test --locked -p hegira_cli --test upgrade_status public_upgrade_matrix`.
+All six customized results reuse one sequential compile location to prevent Cargo
+from confusing equal package names across fixture trees; each result receives both
+locked native and WASM hydration checks without duplicating the compile matrix.
+
+The separate released-application production lifecycle gate is:
+
+```sh
+sh scripts/upgraded-application-check.sh
+# Focused composition runs (each still covers SQLite and PostgreSQL):
+sh scripts/upgraded-application-check.sh default
+sh scripts/upgraded-application-check.sh minimal
+sh scripts/upgraded-application-check.sh identity-added
+```
+
+The same validator runs in PR, integration-push, and release lifecycle matrix
+cells through `sh scripts/generated-application-check.sh upgrade-<composition>`.
+All five cells must succeed for `quality` or tag-triggered publication to succeed.
+There are no path filters, secret-bearing PR jobs, or optional upgrade cells.
+Focused manifest, renderer/package/planner, publisher/recovery, and CLI upgrade
+contracts remain owned by framework, layered-template, and CLI scripts; their
+complete test suites run without upgrade-only filters or duplicated status checks.
+Policy tests reject missing cells, wrong cache identities, skipped/tolerated
+failures, missing dispatch, and missing focused owner commands.
+
+This gate materializes all six authenticated v0.6.0 baselines,
+customizes application-owned source, and uses public readiness, preview, apply,
+inspect, doctor, and repeat-upgrade checks. Verified public source is never patched
+for local compilation. Separate validation copies add a post-upgrade application
+migration and database tests, use local framework dependencies, and resolve their
+own reviewed lockfiles. Source fingerprints are checked again after production smoke.
+
+Released application migration bytes come from the immutable baseline. Identity
+SQL is checked against the committed SHA-256 inventory extracted from the reviewed
+v0.6.0 commit, not assumed to match the current module. New module migrations cannot
+silently enter the released database fixture. Both fresh and upgrade databases must
+be empty and explicitly authorized; tests perform no database reset. The upgrade
+scenario records migration checksums, seeds product data before applying the current
+plan, verifies history/data preservation and the post-upgrade migration, and proves
+that repeating migrations is a no-op. PostgreSQL runs in an isolated Compose project;
+SQLite files live only in the bounded validation workspace.
+
+Each selected profile receives native/hydration checks, existing application tests,
+locked release assets, and a production image compiled by the canonical Debian
+builder. Only the selected provider feature is changed in the disposable Dockerfile;
+host-linked binaries are not substituted. Production probes check health, assets,
+headers, preserved product data, CRUD, user creation/login, denied unprivileged
+access, and cookie/Bearer isolation. Minimal profiles expose neither Identity nor
+protected-resource APIs. Ephemeral credentials are generated in memory. Compose
+resources, images, SQLite files, and workspaces are cleaned on success, failure,
+SIGINT, and SIGTERM; SIGKILL cannot run shell cleanup. Docker's shared builder cache
+is owned by the daemon, not the repository Cargo-cache budget, and is never globally
+pruned by this gate. Phase output names the composition, provider, and contract.
+The original creation/installation lifecycle cells remain required alongside upgrades.
+
 To include the framework and official-module gates' ignored PostgreSQL tests locally, provide
 a disposable PostgreSQL database and opt in explicitly:
 
@@ -472,6 +672,33 @@ sh scripts/backend-check.sh
 
 Never point the ignored database tests at persistent or production data.
 
+## Application Upgrade Review
+
+The current public edge is exactly v0.6.0 → v0.7.0 for default, minimal, and
+Identity-added applications with SQLite or PostgreSQL. Its package-authenticated
+declaration is `templates/upgrades/v0-6-0-to-v0-7-0.toml`; its immutable source
+fixtures are under `test-fixtures/application-baselines/`. Do not rebuild those
+fixtures from current templates or assume a customized application matches a
+fixture in every application-owned path. Authentication binds the exact managed
+boundary; this edge changes only `Cargo.toml`, `Cargo.lock`, and `hegira.toml`.
+
+Review schema-3 ownership and the source/target composition together with the
+edge's declared manifest transitions and managed source/result digests. Package
+data cannot execute commands, and CLI apply cannot solve dependencies, execute
+SQL, switch providers/clients, merge custom managed source, or bypass recovery.
+Changes to authenticated package inputs require deliberate package-digest and
+regression review, not an automatic fingerprint acceptance. Preserve historical
+migration identities and bytes. A source-publication receipt is not evidence of
+runtime correctness; application owners complete the
+[post-upgrade checks](getting-started.md#after-an-application-upgrade).
+
+For conflicts and interrupted publication, follow the
+[application recovery guidance](getting-started.md#resolve-upgrade-conflicts-and-recovery).
+Do not remove `.hegira-mutation.lock` or retained transaction files merely to
+unblock CI. Use only disposable fixtures for publisher failure injection or
+database lifecycle tests; never inspect or reset a production database to
+validate framework source.
+
 ## Release Contract
 
 Hegira is an application framework distributed as source, including its official
@@ -480,6 +707,13 @@ of an immutable signed stable SemVer tag, a GitHub Release, versioned release no
 source archives, and a source-scoped SPDX JSON SBOM. It does not contain a
 platform executable, application bundle, published crate or CLI package,
 official container image, or deployment.
+
+The tagged source includes the authenticated component package and direct
+upgrade edge used by the source-runnable CLI. A generated manifest or successful
+source upgrade in an unreleased checkout is not evidence that its declared tag
+or pinned commit is publicly available. Verify canonical release-source and
+upgrade identities before publication; do not substitute local dependency paths
+or publish a tag while release-candidate metadata remains active.
 
 The `release` workflow supports manual release-candidate validation from
 `main` and publication from a pushed `vMAJOR.MINOR.PATCH` tag. Both paths:
@@ -496,7 +730,9 @@ The `release` workflow supports manual release-candidate validation from
 - validate typed rendering tooling, the independent layered workspace,
   hydration, and release output;
 - validate fresh SQLite and PostgreSQL generated applications, supported
-  v0.2.0 upgrades, and the rendered production container and HTTP contract.
+  v0.2.0 upgrades, and the rendered production container and HTTP contract;
+- validate released v0.6.0-to-v0.7.0 application upgrades across all three
+  compositions and both providers before publication.
 
 A manual run uploads the source SBOM as a short-lived workflow artifact but
 cannot execute the publication job. A push to `develop` or `main` never creates

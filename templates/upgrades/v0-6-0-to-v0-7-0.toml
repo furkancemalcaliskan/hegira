@@ -1,0 +1,471 @@
+schema = 1
+id = "v0-6-0-to-v0-7-0"
+source_package_digest = "sha256:cff6969dadc6e0155af7b944877dba5c61b6e0c4c3ea041d9a8a2665949c285e"
+
+[source.framework]
+repository = "https://github.com/furkancemalcaliskan/hegira.git"
+version = "v0.6.0"
+
+[source.package]
+id = "hegira-canonical"
+version = "v0.6.0"
+
+[target.framework]
+repository = "https://github.com/furkancemalcaliskan/hegira.git"
+version = "v0.7.0"
+
+[target.package]
+id = "hegira-canonical"
+version = "v0.7.0"
+
+[[compositions]]
+id = "default-postgres"
+source_baseline_digest = "sha256:8049682250ecdfec397f9c16c9dd05b1779e6c1d4add6636a36b8b20b03eabda"
+manifest_transitions = ["schema", "framework", "package", "components", "modules", "ownership"]
+
+[compositions.source_ownership]
+default = "application-owned"
+claims = [
+  { path = "Cargo.lock", class = "managed-integration", integration = "framework-lockfile" },
+  { path = "Cargo.toml", class = "managed-integration", integration = "framework-dependencies" },
+  { path = "hegira.toml", class = "managed-integration", integration = "application-manifest" },
+]
+
+[compositions.target_ownership]
+default = "application-owned"
+claims = [
+  { path = "Cargo.lock", class = "managed-integration", integration = "framework-lockfile" },
+  { path = "Cargo.toml", class = "managed-integration", integration = "framework-dependencies" },
+  { path = "Dockerfile", class = "generated-once" },
+  { path = "apps/server/src/server.rs", class = "managed-integration", integration = "resource-bearer-routes" },
+  { path = "apps/server/src/server.rs", class = "managed-integration", integration = "resource-leptos-contexts" },
+  { path = "apps/web/src/lib.rs", class = "managed-integration", integration = "generated-modules" },
+  { path = "apps/web/src/routes.rs", class = "managed-integration", integration = "resource-routes-native" },
+  { path = "crates/application/src/lib.rs", class = "managed-integration", integration = "generated-modules" },
+  { path = "crates/application_contracts/src/lib.rs", class = "managed-integration", integration = "generated-modules" },
+  { path = "crates/domain/src/lib.rs", class = "managed-integration", integration = "generated-modules" },
+  { path = "crates/infrastructure/migrations/postgres", class = "immutable-history" },
+  { path = "crates/infrastructure/migrations/sqlite", class = "immutable-history" },
+  { path = "crates/infrastructure/src/config.rs", class = "managed-integration", integration = "module-config-fields" },
+  { path = "crates/infrastructure/src/lib.rs", class = "managed-integration", integration = "generated-modules" },
+  { path = "crates/infrastructure/src/operations.rs", class = "managed-integration", integration = "module-migrations-postgres" },
+  { path = "crates/infrastructure/src/operations.rs", class = "managed-integration", integration = "module-migrations-sqlite" },
+  { path = "crates/presentation/src/lib.rs", class = "managed-integration", integration = "generated-modules" },
+  { path = "docker-compose.yml", class = "generated-once" },
+  { path = "hegira.toml", class = "managed-integration", integration = "application-manifest" },
+]
+
+[compositions.source]
+database = "postgres"
+client = "leptos"
+components = ["layered-base", "layered-leptos-identity"]
+modules = ["identity"]
+capabilities = ["authentication", "authorization"]
+
+[compositions.target]
+database = "postgres"
+client = "leptos"
+components = ["layered-base", "layered-leptos-identity"]
+modules = ["identity"]
+capabilities = ["authentication", "authorization"]
+
+[[compositions.managed_integrations]]
+component = "layered-leptos-identity"
+path = "Cargo.lock"
+integration = "framework-lockfile"
+kind = "edit"
+source_sha256 = "sha256:c6cb0aec5f366a1015b3549d174cb56fb60cb6acb8df1e587f6f5e43b8c492ff"
+target_sha256 = "sha256:e10876086dddb27e5c931ae5512c937ac226e954a845492d9dcac15debbb0e00"
+
+[[compositions.managed_integrations]]
+component = "layered-leptos-identity"
+path = "Cargo.toml"
+integration = "framework-dependencies"
+kind = "edit"
+source_sha256 = "sha256:1ba1cd11d85c189fc0f1a1f31bae34531ec3b50d53f32add603cf8fb7dc6e152"
+target_sha256 = "sha256:5d9f1f0cdd63dc676cd73aaa07902a4e7491fc7fffa29333aa6766154cecbbee"
+
+[[compositions.managed_integrations]]
+component = "layered-base"
+path = "hegira.toml"
+integration = "application-manifest"
+kind = "edit"
+source_sha256 = "sha256:0a821670896bb1667613857c57169369379d97eb8cff59b49f741f57f133c4b0"
+target_sha256 = "sha256:1b6a7f0c631d092118e23005cb2399700592db0f142a5fe4f908771d9e1b5a95"
+
+[[compositions]]
+id = "default-sqlite"
+source_baseline_digest = "sha256:9e4ac33b3a0307234eb971806484076b99692ef2457fa2efb5a96267500ea261"
+manifest_transitions = ["schema", "framework", "package", "components", "modules", "ownership"]
+
+[compositions.source_ownership]
+default = "application-owned"
+claims = [
+  { path = "Cargo.lock", class = "managed-integration", integration = "framework-lockfile" },
+  { path = "Cargo.toml", class = "managed-integration", integration = "framework-dependencies" },
+  { path = "hegira.toml", class = "managed-integration", integration = "application-manifest" },
+]
+
+[compositions.target_ownership]
+default = "application-owned"
+claims = [
+  { path = "Cargo.lock", class = "managed-integration", integration = "framework-lockfile" },
+  { path = "Cargo.toml", class = "managed-integration", integration = "framework-dependencies" },
+  { path = "Dockerfile", class = "generated-once" },
+  { path = "apps/server/src/server.rs", class = "managed-integration", integration = "resource-bearer-routes" },
+  { path = "apps/server/src/server.rs", class = "managed-integration", integration = "resource-leptos-contexts" },
+  { path = "apps/web/src/lib.rs", class = "managed-integration", integration = "generated-modules" },
+  { path = "apps/web/src/routes.rs", class = "managed-integration", integration = "resource-routes-native" },
+  { path = "crates/application/src/lib.rs", class = "managed-integration", integration = "generated-modules" },
+  { path = "crates/application_contracts/src/lib.rs", class = "managed-integration", integration = "generated-modules" },
+  { path = "crates/domain/src/lib.rs", class = "managed-integration", integration = "generated-modules" },
+  { path = "crates/infrastructure/migrations/postgres", class = "immutable-history" },
+  { path = "crates/infrastructure/migrations/sqlite", class = "immutable-history" },
+  { path = "crates/infrastructure/src/config.rs", class = "managed-integration", integration = "module-config-fields" },
+  { path = "crates/infrastructure/src/lib.rs", class = "managed-integration", integration = "generated-modules" },
+  { path = "crates/infrastructure/src/operations.rs", class = "managed-integration", integration = "module-migrations-postgres" },
+  { path = "crates/infrastructure/src/operations.rs", class = "managed-integration", integration = "module-migrations-sqlite" },
+  { path = "crates/presentation/src/lib.rs", class = "managed-integration", integration = "generated-modules" },
+  { path = "docker-compose.yml", class = "generated-once" },
+  { path = "hegira.toml", class = "managed-integration", integration = "application-manifest" },
+]
+
+[compositions.source]
+database = "sqlite"
+client = "leptos"
+components = ["layered-base", "layered-leptos-identity"]
+modules = ["identity"]
+capabilities = ["authentication", "authorization"]
+
+[compositions.target]
+database = "sqlite"
+client = "leptos"
+components = ["layered-base", "layered-leptos-identity"]
+modules = ["identity"]
+capabilities = ["authentication", "authorization"]
+
+[[compositions.managed_integrations]]
+component = "layered-leptos-identity"
+path = "Cargo.lock"
+integration = "framework-lockfile"
+kind = "edit"
+source_sha256 = "sha256:c6cb0aec5f366a1015b3549d174cb56fb60cb6acb8df1e587f6f5e43b8c492ff"
+target_sha256 = "sha256:e10876086dddb27e5c931ae5512c937ac226e954a845492d9dcac15debbb0e00"
+
+[[compositions.managed_integrations]]
+component = "layered-leptos-identity"
+path = "Cargo.toml"
+integration = "framework-dependencies"
+kind = "edit"
+source_sha256 = "sha256:1ba1cd11d85c189fc0f1a1f31bae34531ec3b50d53f32add603cf8fb7dc6e152"
+target_sha256 = "sha256:5d9f1f0cdd63dc676cd73aaa07902a4e7491fc7fffa29333aa6766154cecbbee"
+
+[[compositions.managed_integrations]]
+component = "layered-base"
+path = "hegira.toml"
+integration = "application-manifest"
+kind = "edit"
+source_sha256 = "sha256:4d4048a4403bfb5ab53c6c0b082773ccbae5e9acb2f1e9319007f5c648d5334d"
+target_sha256 = "sha256:1b6a7f0c631d092118e23005cb2399700592db0f142a5fe4f908771d9e1b5a95"
+
+[[compositions]]
+id = "identity-added-postgres"
+source_baseline_digest = "sha256:a4e2d637d3586aab7b224241a0816d1b1ab1f8ec112044ae2aa19a38a9f0fad4"
+manifest_transitions = ["schema", "framework", "package", "components", "modules", "ownership"]
+
+[compositions.source_ownership]
+default = "application-owned"
+claims = [
+  { path = "Cargo.lock", class = "managed-integration", integration = "framework-lockfile" },
+  { path = "Cargo.toml", class = "managed-integration", integration = "framework-dependencies" },
+  { path = "hegira.toml", class = "managed-integration", integration = "application-manifest" },
+]
+
+[compositions.target_ownership]
+default = "application-owned"
+claims = [
+  { path = "Cargo.lock", class = "managed-integration", integration = "framework-lockfile" },
+  { path = "Cargo.toml", class = "managed-integration", integration = "framework-dependencies" },
+  { path = "Dockerfile", class = "generated-once" },
+  { path = "apps/server/src/server.rs", class = "managed-integration", integration = "resource-bearer-routes" },
+  { path = "apps/server/src/server.rs", class = "managed-integration", integration = "resource-leptos-contexts" },
+  { path = "apps/web/src/lib.rs", class = "managed-integration", integration = "generated-modules" },
+  { path = "apps/web/src/routes.rs", class = "managed-integration", integration = "resource-routes-native" },
+  { path = "crates/application/src/lib.rs", class = "managed-integration", integration = "generated-modules" },
+  { path = "crates/application_contracts/src/lib.rs", class = "managed-integration", integration = "generated-modules" },
+  { path = "crates/domain/src/lib.rs", class = "managed-integration", integration = "generated-modules" },
+  { path = "crates/infrastructure/migrations/postgres", class = "immutable-history" },
+  { path = "crates/infrastructure/migrations/sqlite", class = "immutable-history" },
+  { path = "crates/infrastructure/src/config.rs", class = "managed-integration", integration = "module-config-fields" },
+  { path = "crates/infrastructure/src/lib.rs", class = "managed-integration", integration = "generated-modules" },
+  { path = "crates/infrastructure/src/operations.rs", class = "managed-integration", integration = "module-migrations-postgres" },
+  { path = "crates/infrastructure/src/operations.rs", class = "managed-integration", integration = "module-migrations-sqlite" },
+  { path = "crates/presentation/src/lib.rs", class = "managed-integration", integration = "generated-modules" },
+  { path = "docker-compose.yml", class = "generated-once" },
+  { path = "hegira.toml", class = "managed-integration", integration = "application-manifest" },
+]
+
+[compositions.source]
+database = "postgres"
+client = "leptos"
+components = ["identity", "layered-base", "layered-leptos-minimal"]
+modules = ["identity"]
+capabilities = ["authentication", "authorization"]
+
+[compositions.target]
+database = "postgres"
+client = "leptos"
+components = ["identity", "layered-base", "layered-leptos-minimal"]
+modules = ["identity"]
+capabilities = ["authentication", "authorization"]
+
+[[compositions.managed_integrations]]
+component = "layered-leptos-minimal"
+path = "Cargo.lock"
+integration = "framework-lockfile"
+kind = "edit"
+source_sha256 = "sha256:c6cb0aec5f366a1015b3549d174cb56fb60cb6acb8df1e587f6f5e43b8c492ff"
+target_source_component = "layered-leptos-identity"
+target_sha256 = "sha256:e10876086dddb27e5c931ae5512c937ac226e954a845492d9dcac15debbb0e00"
+
+[[compositions.managed_integrations]]
+component = "layered-leptos-minimal"
+path = "Cargo.toml"
+integration = "framework-dependencies"
+kind = "edit"
+source_sha256 = "sha256:c701265208e8a0d77720bed8a8684508f836c72af8579d28e79261eec7a34c96"
+target_sha256 = "sha256:7be5c7bddd612a83a0d1f615668581aaea01568c59bf032fe37a519c8ecd5427"
+
+[[compositions.managed_integrations]]
+component = "layered-base"
+path = "hegira.toml"
+integration = "application-manifest"
+kind = "edit"
+source_sha256 = "sha256:c6cf70a6573d7d4233a3b6ea83469bcac8f6b8fed00a243a306fd615167996d7"
+target_sha256 = "sha256:1b6a7f0c631d092118e23005cb2399700592db0f142a5fe4f908771d9e1b5a95"
+
+[[compositions]]
+id = "identity-added-sqlite"
+source_baseline_digest = "sha256:145cfb928d7858c6086176fab3d9840084d452366509a03651bc86563807208a"
+manifest_transitions = ["schema", "framework", "package", "components", "modules", "ownership"]
+
+[compositions.source_ownership]
+default = "application-owned"
+claims = [
+  { path = "Cargo.lock", class = "managed-integration", integration = "framework-lockfile" },
+  { path = "Cargo.toml", class = "managed-integration", integration = "framework-dependencies" },
+  { path = "hegira.toml", class = "managed-integration", integration = "application-manifest" },
+]
+
+[compositions.target_ownership]
+default = "application-owned"
+claims = [
+  { path = "Cargo.lock", class = "managed-integration", integration = "framework-lockfile" },
+  { path = "Cargo.toml", class = "managed-integration", integration = "framework-dependencies" },
+  { path = "Dockerfile", class = "generated-once" },
+  { path = "apps/server/src/server.rs", class = "managed-integration", integration = "resource-bearer-routes" },
+  { path = "apps/server/src/server.rs", class = "managed-integration", integration = "resource-leptos-contexts" },
+  { path = "apps/web/src/lib.rs", class = "managed-integration", integration = "generated-modules" },
+  { path = "apps/web/src/routes.rs", class = "managed-integration", integration = "resource-routes-native" },
+  { path = "crates/application/src/lib.rs", class = "managed-integration", integration = "generated-modules" },
+  { path = "crates/application_contracts/src/lib.rs", class = "managed-integration", integration = "generated-modules" },
+  { path = "crates/domain/src/lib.rs", class = "managed-integration", integration = "generated-modules" },
+  { path = "crates/infrastructure/migrations/postgres", class = "immutable-history" },
+  { path = "crates/infrastructure/migrations/sqlite", class = "immutable-history" },
+  { path = "crates/infrastructure/src/config.rs", class = "managed-integration", integration = "module-config-fields" },
+  { path = "crates/infrastructure/src/lib.rs", class = "managed-integration", integration = "generated-modules" },
+  { path = "crates/infrastructure/src/operations.rs", class = "managed-integration", integration = "module-migrations-postgres" },
+  { path = "crates/infrastructure/src/operations.rs", class = "managed-integration", integration = "module-migrations-sqlite" },
+  { path = "crates/presentation/src/lib.rs", class = "managed-integration", integration = "generated-modules" },
+  { path = "docker-compose.yml", class = "generated-once" },
+  { path = "hegira.toml", class = "managed-integration", integration = "application-manifest" },
+]
+
+[compositions.source]
+database = "sqlite"
+client = "leptos"
+components = ["identity", "layered-base", "layered-leptos-minimal"]
+modules = ["identity"]
+capabilities = ["authentication", "authorization"]
+
+[compositions.target]
+database = "sqlite"
+client = "leptos"
+components = ["identity", "layered-base", "layered-leptos-minimal"]
+modules = ["identity"]
+capabilities = ["authentication", "authorization"]
+
+[[compositions.managed_integrations]]
+component = "layered-leptos-minimal"
+path = "Cargo.lock"
+integration = "framework-lockfile"
+kind = "edit"
+source_sha256 = "sha256:c6cb0aec5f366a1015b3549d174cb56fb60cb6acb8df1e587f6f5e43b8c492ff"
+target_source_component = "layered-leptos-identity"
+target_sha256 = "sha256:e10876086dddb27e5c931ae5512c937ac226e954a845492d9dcac15debbb0e00"
+
+[[compositions.managed_integrations]]
+component = "layered-leptos-minimal"
+path = "Cargo.toml"
+integration = "framework-dependencies"
+kind = "edit"
+source_sha256 = "sha256:c701265208e8a0d77720bed8a8684508f836c72af8579d28e79261eec7a34c96"
+target_sha256 = "sha256:7be5c7bddd612a83a0d1f615668581aaea01568c59bf032fe37a519c8ecd5427"
+
+[[compositions.managed_integrations]]
+component = "layered-base"
+path = "hegira.toml"
+integration = "application-manifest"
+kind = "edit"
+source_sha256 = "sha256:097ccbc4ac762ea231646e2967a2ff0e6e441c3c8f038ae104ae2fb1073d9c19"
+target_sha256 = "sha256:1b6a7f0c631d092118e23005cb2399700592db0f142a5fe4f908771d9e1b5a95"
+
+[[compositions]]
+id = "minimal-postgres"
+source_baseline_digest = "sha256:6743da82012e83de070b3b69ff22fe5b7763d7a33972598929adb09263bf4ebc"
+manifest_transitions = ["schema", "framework", "package", "components", "ownership"]
+
+[compositions.source_ownership]
+default = "application-owned"
+claims = [
+  { path = "Cargo.lock", class = "managed-integration", integration = "framework-lockfile" },
+  { path = "Cargo.toml", class = "managed-integration", integration = "framework-dependencies" },
+  { path = "hegira.toml", class = "managed-integration", integration = "application-manifest" },
+]
+
+[compositions.target_ownership]
+default = "application-owned"
+claims = [
+  { path = "Cargo.lock", class = "managed-integration", integration = "framework-lockfile" },
+  { path = "Cargo.toml", class = "managed-integration", integration = "framework-dependencies" },
+  { path = "Dockerfile", class = "generated-once" },
+  { path = "apps/server/src/server.rs", class = "managed-integration", integration = "resource-bearer-routes" },
+  { path = "apps/server/src/server.rs", class = "managed-integration", integration = "resource-leptos-contexts" },
+  { path = "apps/web/src/lib.rs", class = "managed-integration", integration = "generated-modules" },
+  { path = "apps/web/src/routes.rs", class = "managed-integration", integration = "resource-routes-native" },
+  { path = "crates/application/src/lib.rs", class = "managed-integration", integration = "generated-modules" },
+  { path = "crates/application_contracts/src/lib.rs", class = "managed-integration", integration = "generated-modules" },
+  { path = "crates/domain/src/lib.rs", class = "managed-integration", integration = "generated-modules" },
+  { path = "crates/infrastructure/migrations/postgres", class = "immutable-history" },
+  { path = "crates/infrastructure/migrations/sqlite", class = "immutable-history" },
+  { path = "crates/infrastructure/src/config.rs", class = "managed-integration", integration = "module-config-fields" },
+  { path = "crates/infrastructure/src/lib.rs", class = "managed-integration", integration = "generated-modules" },
+  { path = "crates/infrastructure/src/operations.rs", class = "managed-integration", integration = "module-migrations-postgres" },
+  { path = "crates/infrastructure/src/operations.rs", class = "managed-integration", integration = "module-migrations-sqlite" },
+  { path = "crates/presentation/src/lib.rs", class = "managed-integration", integration = "generated-modules" },
+  { path = "docker-compose.yml", class = "generated-once" },
+  { path = "hegira.toml", class = "managed-integration", integration = "application-manifest" },
+]
+
+[compositions.source]
+database = "postgres"
+client = "leptos"
+components = ["layered-base", "layered-leptos-minimal"]
+modules = []
+capabilities = []
+
+[compositions.target]
+database = "postgres"
+client = "leptos"
+components = ["layered-base", "layered-leptos-minimal"]
+modules = []
+capabilities = []
+
+[[compositions.managed_integrations]]
+component = "layered-leptos-minimal"
+path = "Cargo.lock"
+integration = "framework-lockfile"
+kind = "edit"
+source_sha256 = "sha256:43414991706a33058cd961cc419270e43b191cd82ab4be86c91e3627a764f2d2"
+target_sha256 = "sha256:b44f46d0ae38d38b1388d51d2130f3eeb2ee454dbf2e1890f3ad649211db5377"
+
+[[compositions.managed_integrations]]
+component = "layered-leptos-minimal"
+path = "Cargo.toml"
+integration = "framework-dependencies"
+kind = "edit"
+source_sha256 = "sha256:6ad56c1425dc2798600448cd3055b3c50511dfcc965cbc75753966127df9d7cf"
+target_sha256 = "sha256:7be5c7bddd612a83a0d1f615668581aaea01568c59bf032fe37a519c8ecd5427"
+
+[[compositions.managed_integrations]]
+component = "layered-base"
+path = "hegira.toml"
+integration = "application-manifest"
+kind = "edit"
+source_sha256 = "sha256:dfaf81ed63917c9435c5048036feba7d4c736f7c852605209a29d6d8ff97a37a"
+target_sha256 = "sha256:1b6a7f0c631d092118e23005cb2399700592db0f142a5fe4f908771d9e1b5a95"
+
+[[compositions]]
+id = "minimal-sqlite"
+source_baseline_digest = "sha256:a7fa1d9f2f7d53d1590be1c2499762b60c2325a40333df6265ed992f47ba64c2"
+manifest_transitions = ["schema", "framework", "package", "components", "ownership"]
+
+[compositions.source_ownership]
+default = "application-owned"
+claims = [
+  { path = "Cargo.lock", class = "managed-integration", integration = "framework-lockfile" },
+  { path = "Cargo.toml", class = "managed-integration", integration = "framework-dependencies" },
+  { path = "hegira.toml", class = "managed-integration", integration = "application-manifest" },
+]
+
+[compositions.target_ownership]
+default = "application-owned"
+claims = [
+  { path = "Cargo.lock", class = "managed-integration", integration = "framework-lockfile" },
+  { path = "Cargo.toml", class = "managed-integration", integration = "framework-dependencies" },
+  { path = "Dockerfile", class = "generated-once" },
+  { path = "apps/server/src/server.rs", class = "managed-integration", integration = "resource-bearer-routes" },
+  { path = "apps/server/src/server.rs", class = "managed-integration", integration = "resource-leptos-contexts" },
+  { path = "apps/web/src/lib.rs", class = "managed-integration", integration = "generated-modules" },
+  { path = "apps/web/src/routes.rs", class = "managed-integration", integration = "resource-routes-native" },
+  { path = "crates/application/src/lib.rs", class = "managed-integration", integration = "generated-modules" },
+  { path = "crates/application_contracts/src/lib.rs", class = "managed-integration", integration = "generated-modules" },
+  { path = "crates/domain/src/lib.rs", class = "managed-integration", integration = "generated-modules" },
+  { path = "crates/infrastructure/migrations/postgres", class = "immutable-history" },
+  { path = "crates/infrastructure/migrations/sqlite", class = "immutable-history" },
+  { path = "crates/infrastructure/src/config.rs", class = "managed-integration", integration = "module-config-fields" },
+  { path = "crates/infrastructure/src/lib.rs", class = "managed-integration", integration = "generated-modules" },
+  { path = "crates/infrastructure/src/operations.rs", class = "managed-integration", integration = "module-migrations-postgres" },
+  { path = "crates/infrastructure/src/operations.rs", class = "managed-integration", integration = "module-migrations-sqlite" },
+  { path = "crates/presentation/src/lib.rs", class = "managed-integration", integration = "generated-modules" },
+  { path = "docker-compose.yml", class = "generated-once" },
+  { path = "hegira.toml", class = "managed-integration", integration = "application-manifest" },
+]
+
+[compositions.source]
+database = "sqlite"
+client = "leptos"
+components = ["layered-base", "layered-leptos-minimal"]
+modules = []
+capabilities = []
+
+[compositions.target]
+database = "sqlite"
+client = "leptos"
+components = ["layered-base", "layered-leptos-minimal"]
+modules = []
+capabilities = []
+
+[[compositions.managed_integrations]]
+component = "layered-leptos-minimal"
+path = "Cargo.lock"
+integration = "framework-lockfile"
+kind = "edit"
+source_sha256 = "sha256:43414991706a33058cd961cc419270e43b191cd82ab4be86c91e3627a764f2d2"
+target_sha256 = "sha256:b44f46d0ae38d38b1388d51d2130f3eeb2ee454dbf2e1890f3ad649211db5377"
+
+[[compositions.managed_integrations]]
+component = "layered-leptos-minimal"
+path = "Cargo.toml"
+integration = "framework-dependencies"
+kind = "edit"
+source_sha256 = "sha256:6ad56c1425dc2798600448cd3055b3c50511dfcc965cbc75753966127df9d7cf"
+target_sha256 = "sha256:7be5c7bddd612a83a0d1f615668581aaea01568c59bf032fe37a519c8ecd5427"
+
+[[compositions.managed_integrations]]
+component = "layered-base"
+path = "hegira.toml"
+integration = "application-manifest"
+kind = "edit"
+source_sha256 = "sha256:eb403909d279b9b6172af91359b3951f05c0321000eba887583e6af0e0610ba0"
+target_sha256 = "sha256:1b6a7f0c631d092118e23005cb2399700592db0f142a5fe4f908771d9e1b5a95"

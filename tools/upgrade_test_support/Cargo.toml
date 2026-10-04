@@ -1,0 +1,13 @@
+[package]
+name = "upgrade_test_support"
+description = "Authenticated released-application baselines for Hegira upgrade tests"
+version = "0.7.0"
+edition = "2024"
+license = "Apache-2.0"
+publish = false
+rust-version = "1.96"
+
+[dependencies]
+serde = { version = "1.0.228", features = ["derive"] }
+sha2 = "0.10.9"
+toml = "1.1.2"

@@ -1,6 +1,6 @@
 schema = 3
 id = "identity"
-version = "v0.6.0"
+version = "v0.7.0"
 source = "applications/layered-minimal"
 include = []
 requires = ["layered-leptos-minimal"]

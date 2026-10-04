@@ -23,7 +23,7 @@ The framework is the reusable system, an official module is a layered capability
 such as Identity, and an application template is source consumed during generation.
 A generated application is the independent, application-owned result, not the
 framework repository itself. These terms describe ownership, not a promise of
-automatic module discovery, application upgrades, or registry distribution.
+automatic module discovery, unattended upgrades, or registry distribution.
 
 ```text
 .
@@ -35,12 +35,16 @@ automatic module discovery, application upgrades, or registry distribution.
 │   ├── applications/
 │   │   ├── layered/         recommended Identity-enabled application source
 │   │   └── layered-minimal/ explicit module-free outward-layer variant
-│   └── components/          typed application-component manifests
+│   ├── components/          typed application-component manifests
+│   └── upgrades/            authenticated data-only direct release edges
 ├── tools/
 │   ├── application_mutator/ existing-application change-plan core
 │   ├── hegira_cli/          source-runnable CLI command shell
 │   ├── resource_generator/  layered resource generation and composition core
-│   └── template_renderer/   render core and repository-validation adapter
+│   ├── template_renderer/   render core and repository-validation adapter
+│   └── upgrade_test_support/ authenticated released-application test data
+├── test-fixtures/
+│   └── application-baselines/ immutable content-addressed upgrade baselines
 ├── docs/                    current technical and maintainer documentation
 ├── scripts/                 validation and release helpers
 ├── Cargo.toml               virtual framework workspace manifest
@@ -72,7 +76,9 @@ are not an application-local module fork. Product rules belong in the generated
 DDD layers, while server and web composition explicitly select adapters.
 Changing an existing application's framework version, module composition, or
 database requires coordinated source, dependency, configuration, and migration
-review; the current CLI does not perform those changes.
+review. The CLI supports bundled additive component installation and the exact
+authenticated direct framework transition documented below. It does not switch
+database/client adapters or merge arbitrary application customizations.
 
 ## Components, Modules, And Composition
 
@@ -117,8 +123,10 @@ Installation is additive only. Dry-run and apply consume the same typed,
 content-redacted plan; apply publishes manifest, dependency, configuration,
 migration-source, server, HTTP, OpenAPI, and Leptos contributions through the
 application mutation transaction. The CLI currently provides no removal,
-automatic framework or application upgrade, remote package source, migration
-execution, or rollback. The application owner must review configuration,
+unattended upgrades, remote package source, or database migration execution or
+rollback. Explicit direct application upgrades are a separate command contract;
+publication rollback on recoverable source failures is not a public downgrade
+or database rollback command. The application owner must review configuration,
 regenerate `Cargo.lock`, apply the selected provider migrations, and validate
 the application after installation.
 
@@ -171,10 +179,11 @@ The direct local dependency allowlist is enforced from locked Cargo metadata by
 | `identity_sqlx` | `background_jobs`, `identity_application`, `identity_application_contracts`, `identity_domain`, `identity_domain_shared`, `persistence`, `search` |
 | `identity_http` | `http_support`, `identity_application`, `identity_application_contracts`, `leptos_support` |
 | `identity_leptos` | `identity_application`, `identity_application_contracts`, `identity_domain_shared`, `leptos_support` |
-| `application_mutator` | None |
-| `hegira_cli` | `application_manifest`, `application_mutator`, `resource_generator`, `template_renderer` |
+| `application_mutator` | `application_manifest` |
+| `hegira_cli` | `application_manifest`, `application_mutator`, `resource_generator`, `template_renderer`; test-only `upgrade_test_support` |
 | `resource_generator` | `application_manifest`, `application_mutator` |
-| `template_renderer` | `application_manifest` |
+| `template_renderer` | `application_manifest`, `application_mutator`; test-only `resource_generator`, `upgrade_test_support` |
+| `upgrade_test_support` | None |
 
 Normal, optional, development, and build dependencies use the same ownership
 checks. The retired package names `hegira`, `domain_shared`, `domain`,
@@ -339,15 +348,22 @@ revert migrations, accept arbitrary SQL input, or infer runtime configuration.
 `tools/application_mutator` owns the internal typed contract for coordinated
 changes to an existing validated application. New-file operations require the
 target path to be absent. Structured edits carry the SHA-256 digest of the
-observed content as an explicit publication precondition. Every result also
-carries its digest. Application-relative canonical paths and a sorted complete
-plan make validation and summaries deterministic; duplicate paths and mixed
-operations against one path are typed conflicts.
+observed content as an explicit publication precondition. Managed-file
+retirement additionally requires a matching `managed-integration` ownership
+claim from the application manifest and an exact observed digest; application-
+owned, generated-once, and immutable-history paths cannot be retired. Present
+results carry their digest, while retirement has an explicit absent result.
+Application-relative canonical paths and a sorted complete plan make validation
+and summaries deterministic; duplicate paths and incompatible operations
+against one path are typed conflicts.
 
-Plan summaries expose only relative paths, operation identities, preconditions,
-and digests. They never expose source or resulting file content. The crate does
-not execute generated code or provide the repository-validation dependency
-rewriting available to maintainer tooling.
+Plan summaries expose only relative paths, operation and managed-integration
+identities, preconditions, and digests. They never expose source, resulting, or
+retired file content. Publication moves a retired file to a private transaction
+name atomically, preserving its bytes and metadata until the transaction is
+durable; a later failure restores it through the same anchored no-follow
+boundary. The crate does not execute generated code or provide the repository-
+validation dependency rewriting available to maintainer tooling.
 
 Additive component installation has a separate typed plan over the same change
 contract. A request names one not-yet-installed component and supplies only
@@ -389,7 +405,9 @@ change runtime configuration by themselves.
 Failure-safe publication is a separate stage over the validated plan. The
 publisher opens the real application root and every change parent without
 following symlinks, creates an exclusive `.hegira-mutation.lock` recovery
-marker, and stages private files on each target filesystem. Required exclusive
+marker, and stages private files on each target filesystem. Staged result
+files remain private until their atomic rename; their final permissions are
+applied and verified on the published file. Required exclusive
 rename and atomic-exchange behavior is probed before application files change.
 All target identities and absent or digest preconditions are then rechecked
 immediately before publication. Edits exchange the staged result with the
@@ -410,15 +428,18 @@ are modified; the contract does not claim universal filesystem transactions.
 
 `tools/hegira_cli` owns the `hegira` binary command shell. It defines top-level
 help, version reporting, guided and deterministic non-interactive application
-creation, read-only application inspection, concise diagnostics, and stable
-process outcomes without reading a user home directory or global configuration.
+creation, read-only application inspection and direct-upgrade readiness,
+content-redacted upgrade preview and explicit atomic apply, concise diagnostics,
+and stable process outcomes without reading a user home directory or global
+configuration.
 It delegates new-application component planning and atomic publication to
 `template_renderer`, and existing-application publication to
 `application_mutator`. Application migration planning is delegated to
 `resource_generator`; repository-local dependency rewrites remain unavailable
 to the public command. Help, version information, successful creation
 instructions, inspection results, and mutation plans are written to standard
-output; usage and failure diagnostics are written to standard error.
+output; usage and failure diagnostics are written to standard error, except
+upgrade assessments, whose typed unsuccessful outcomes also remain on stdout.
 
 The process outcomes are `0` for success, `1` for an internal error, `2` for
 invalid usage, `3` for validation failure, and `4` for a destination or state
@@ -608,7 +629,7 @@ produce content-redacted diagnostics, and package loading performs no network
 or process execution. Safe package-source access currently fails closed outside
 Linux and Apple platforms.
 
-The schema-2 package manifest and schema-3 component manifests form a closed
+The schema-3 package manifest and schema-3 component manifests form a closed
 composition graph. Schema-3 distinguishes rendered components from additive
 installation units. An installation unit cannot include or vendor source; it
 declares exactly one owned module, compatible database and client adapters,
@@ -629,6 +650,178 @@ framework, package, module, or recorded capability state return sorted typed
 diagnostics. Resolution reads data already loaded into the catalog and performs
 no write, process execution, network access, source resolution, or runtime
 configuration lookup.
+
+The package manifest may also declare schema-1 upgrade-edge manifests directly
+below `templates/upgrades/`. Their exact bytes and package-relative paths are
+part of the package content digest and the closed package file set. Each edge
+is inert data: it identifies one exact, direct, forward stable-SemVer release
+transition into the authenticated package release; enumerates exact source and
+target component, module, capability, database, and client states; and records
+the manifest fields and managed integration points that the transition permits.
+The edge also binds the exact source package and released baseline digests,
+declares source and target ownership for each composition, and supplies
+direction-correct source and target SHA-256 digests for every managed
+integration. Create operations have only a target digest, edits have both
+digests, and retirements have only a source digest. Managed file digests and
+manifest transition sets may be scoped to a specific composition when provider
+or module profiles differ; shared declarations apply to every selected
+composition. A managed integration may explicitly take its target bytes from
+another declared package component at the same path. Its ownership stays with
+the installed component, while the target path and digest must match the
+authenticated package snapshot. This lets an Identity-added application use
+the canonical Identity lockfile without installing the default UI component.
+Edges cannot contain executable commands or change the framework source,
+package identity, database adapter, or client adapter.
+
+Upgrade-graph loading normalizes declaration order and rejects duplicate edge
+or composition identities, a source composition mapped more than once,
+downgrades, skipped releases, mismatched target releases, unsupported adapters,
+and component, module, capability, or managed-path references outside the
+closed component graph. Every applicable managed transition must have an exact
+managed-integration claim in the ownership contract for the state where it
+exists: creates in the target, retirements in the source, and edits in both.
+Target digests for creates and edits must match bytes in the package snapshot.
+Rejections expose a stable typed diagnostic containing only a bounded
+kind and structural subject; graph, composition, and managed integration counts
+are bounded before semantic traversal. A target composition must resolve
+through the same component graph used by rendering.
+
+Existing-application authentication opens the application root and declared
+parents through anchored no-follow directory handles. It validates
+`hegira.toml`, resolves exactly one release and composition edge, and observes
+only applicable managed paths. Creates require absence; edits and retirements
+require regular bounded files with the edge-declared digest. Schema-3 local
+ownership must agree with the authenticated edge ownership, while an explicitly
+supported older schema obtains its ownership proof from that edge rather than
+from the local manifest. Root replacement, symlinks, special files, oversized
+inputs, path aliases, ownership disagreement, and digest mismatch fail before a
+plan exists. The returned in-memory boundary contains authenticated source and
+target bytes for later planning; diagnostics are versioned and content-redacted.
+Authentication performs no write, network access, process execution, dependency
+initialization, or application mutation.
+
+An authenticated direct edge is resolved against the target component graph and
+converted into one complete `application_mutator::ChangePlan`. The planner
+requires exact target component, module, and capability state; preserves the
+selected database and client; moves authenticated framework dependencies to the
+target release without changing their feature policy; and constructs the target
+`hegira.toml` from typed composition data. Declared manifest transitions must
+match the fields that actually change, and neither the manifest nor dependency
+state can advance without its required managed source transition. Edge-declared
+creates use absent preconditions, edits retain the observed source digest, and
+retirements retain the observed digest plus the exact managed integration
+owner. The planner sorts the complete plan by canonical application path,
+rejects duplicate or conflicting operations, and never edits or retires
+application migration history. Its versioned summary binds the exact source and
+target releases, package and baseline digests, target components, modules,
+framework dependencies and manifest transitions, and component and integration
+owners, preconditions, and result digests without exposing source or resulting
+content.
+Blocked, unsupported, incompatible, and conflicting inputs are distinct typed,
+content-redacted outcomes. Planning performs no publication, database, network,
+or process operation.
+
+The bundled package declares one direct v0.6.0-to-v0.7.0 edge for default,
+minimal, and Identity-added layered applications with SQLite or PostgreSQL.
+It authenticates the released baseline and changes only `hegira.toml`, the
+workspace `Cargo.toml`, and `Cargo.lock`. Default and later-installed Identity
+compositions retain their explicit server, HTTP, migration-source, configuration,
+and Leptos integrations because these application files do not change across
+this release edge; the version-pinned official packages advance together.
+Product layers, runtime configuration values, generated resources, and migration
+history remain application-owned or immutable. The public CLI exposes this edge
+through read-only `upgrade status`, `upgrade --dry-run`, and explicit `upgrade`
+application through the existing mutation publisher.
+Authentication checks the edge-declared managed files, not byte equality of the
+entire application against the released fixture. Product source and generated
+resources may therefore evolve independently. For this edge, all three managed
+files must still match their authenticated source digests: even an unrelated
+dependency or lockfile customization is a conflict, not an instruction to merge.
+The general plan contract supports declared managed creates, edits, and
+retirements, but this bundled edge uses only edits. It does not remove components,
+skip releases, downgrade, run migration SQL, or supply another client adapter.
+Readiness authenticates the package, application ownership and managed boundary,
+then shares the planner's pure target-manifest validation without constructing
+a change plan. Recovery-marker inspection is anchored and no-follow; any marker
+blocks readiness without reading its contents. Sorted schema-1 JSON and human
+reports redact source content and machine-local paths and distinguish unsupported,
+incompatible, conflicting, and recovery-blocked states. Compatible current
+compositions report no upgrade. Assessment does not authorize later mutation.
+
+Dry-run reauthenticates the observed application and builds the renderer's
+`UpgradePlan` directly. Its schema-1 CLI envelope includes the same readiness
+assessment, nullable typed plan summary, outcome, and preserved ownership
+classes. Explicit targets must match the authenticated direct edge exactly.
+Human and JSON output retain ordered changes, owners, integrations, manifest
+transitions, component/dependency identities, preconditions, and resulting
+digests without source contents. Conflicts and recovery markers suppress the
+plan. Preview neither creates publication state nor persists a cached plan;
+the typed in-memory plan remains the contract for subsequent publication.
+
+Apply uses that same preparation path and passes its plan directly to
+`application_mutator::publish_change_plan`. The publisher owns marker
+serialization, whole-plan and per-change digest preconditions, directory
+anchoring, private staging, rollback, and retained recovery state. The CLI
+does not implement a parallel filesystem mutation path. Successful schema-1
+apply output binds the exact plan to a deterministic receipt and application-owner
+next steps; the assessment records pre-publication state. Failures do not
+emit a success receipt. Repeated apply rejects the absent direct edge without
+writes. Migration execution, lockfile regeneration, subprocesses, network
+access, and service startup remain outside upgrade publication.
+An applied receipt proves source publication, not a successful build, database
+migration, health check, or deployment. The application owner follows the
+[post-upgrade workflow](getting-started.md#after-an-application-upgrade) and
+[recovery guidance](getting-started.md#resolve-upgrade-conflicts-and-recovery).
+
+Committed readiness/execution v1 JSON schemas describe the closed public
+automation contract, including plan, receipt, and diagnostic definitions.
+Structural validation, negative schema tests, typed exit/diagnostic mapping,
+and reviewed human/JSON snapshots enforce separate aspects of the contract.
+Filesystem creation order, reversed current component declarations, and supplied
+versus closed stdin do not change deterministic output. Snapshot mismatches
+require explicit review; they are not auto-accepted and are not the sole API
+test. Upgrade commands have no interactive prompt protocol.
+
+Upgrade tests obtain v0.6.0 application source from committed, content-addressed
+release baselines rather than current templates or mutable remote content. One
+release manifest pins the annotated tag object, commit, source tree, package
+digest, and generated lock revision. Sorted tree manifests cover default,
+minimal, and Identity-added SQLite and PostgreSQL states while a shared SHA-256
+object store avoids duplicate bytes. The test-only `upgrade_test_support` tool
+authenticates the complete closed fixture set before exposing an in-memory
+snapshot or materializing it into a previously absent disposable directory; it
+does not invoke Git, execute fixture content, or access the network.
+
+Focused preservation tests customize these released baselines with product
+code in every application layer, provider-specific generated resources where
+Identity is installed, runtime configuration values, and append-only application
+migrations. Sorted path/SHA-256 fingerprints prove that every file outside the
+three declared release-managed files and every historical migration remains
+unchanged. Minimal applications retain their capability boundary and reject
+protected resource generation. Conflicting managed edits block planning, and
+edits made after planning block publication without changing product files.
+Fixed product-tree fingerprints also prevent later generator changes from
+silently replacing the customized source used to exercise released applications.
+The layered-template gate additionally compiles all six customized upgraded
+profiles natively and with hydration. Only separate disposable compile copies
+replace release dependencies with local framework paths; verified upgrade
+output retains its release-pinned sources and lockfile.
+Profile compilation is serialized through one stable application source path
+to prevent Cargo from confusing same-named local packages across fixture trees
+while reusing compatible framework artifacts.
+
+The separate upgraded-application lifecycle validator extends those public-source
+checks to disposable fresh and released-schema databases, migration checksum/data
+preservation, release assets, and production images for both providers and all three
+compositions. Released Identity SQL is verified against its v0.6.0 source inventory.
+Only separate validation copies receive local dependencies, test fixtures, and a
+post-upgrade application migration. Production HTTP probes retain authentication,
+authorization, cookie/Bearer, and minimal-composition boundaries. The gate never
+resets persistent data or modifies verified public upgrade output.
+CI runs its three composition selections as additional cells of the existing
+generated-application lifecycle matrix, each covering both providers. The stable
+quality aggregate and source-release publisher depend on the complete matrix;
+focused upgrade assertions remain in their framework, renderer, and CLI owners.
 
 The reusable renderer exposes typed composition request/result/diagnostic,
 render request, plan, publication-result, and error-category contracts. A
@@ -663,17 +856,24 @@ normal render cannot replace its compatible release source through a variable
 override. Both normal rendering and the repository-validation adapter load and
 verify this same canonical package contract.
 
-Every render includes schema-versioned `hegira.toml`. It records the
+Every render includes schema-versioned `hegira.toml`. Schema 3 records the
 application identifier, HTTPS framework repository and stable SemVer tag,
 installed component-package, component and module identities with their
-versions, provided capabilities, and selected database and client adapters.
+versions, provided capabilities, selected database and client adapters, exact
+framework/package upgrade state, and explicit source-ownership claims.
+Unclaimed paths are application-owned. Managed integration points carry stable
+integration identities, generated-once scaffolding is not adopted as managed
+source, and immutable history can be represented without authorizing rewrites.
 The parser rejects unknown fields, duplicate identities, unsupported values,
-inconsistent composition state, credentials, local framework paths, and
-mismatches between the recorded and actually rendered component sets.
+inconsistent composition or upgrade state, invalid or overlapping ownership
+paths, credentials, local framework paths, and mismatches between the recorded
+and actually rendered component sets.
 Deterministic serialization records the validated generation contract; it is
 not a runtime configuration or secret store. Editing it does not trigger
-regeneration or upgrades. Schema-1 manifests remain readable for inspection,
-but cannot be serialized or mutated as schema 2 without an explicit upgrade.
+regeneration or upgrades. Schema-1 and schema-2 manifests remain readable for
+inspection, but cannot be serialized or mutated as schema 3 without an
+explicit supported transition. Manifest parsing, validation, and compatibility
+assessment perform no network access or filesystem mutation.
 The field-level contract is documented in
 [Getting started](getting-started.md#generated-ownership-and-hegiratoml).
 

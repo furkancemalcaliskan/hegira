@@ -3,6 +3,7 @@ import path from "node:path";
 import process from "node:process";
 import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
+import { validateFrontendAuditJob, validateUpgradeLifecycleMatrix } from "./ci-policy.mjs";
 
 const STABLE_RELEASE_REF =
   /^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/;
@@ -14,13 +15,47 @@ const REQUIRED_WORKFLOW_CONTRACTS = [
   ["tooling validation", "scripts/layered-template-check.sh"],
   ["CLI validation", "scripts/cli-check.sh"],
   [
-    "generated application validation",
-    "run: sh scripts/generated-application-check.sh\n",
+    "parallel generated lifecycle context",
+    "name: generated-application (${{ matrix.lifecycle }})",
   ],
   [
-    "component lifecycle validation",
-    "scripts/generated-application-check.sh identity-added",
+    "matrix lifecycle validation",
+    'run: sh scripts/generated-application-check.sh "${{ matrix.lifecycle }}"',
   ],
+  ["non-cancelling lifecycle matrix", "fail-fast: false"],
+  ["default lifecycle matrix entry", "- lifecycle: default"],
+  ["Identity-added lifecycle matrix entry", "- lifecycle: identity-added"],
+  ["default bounded cache identity", "cache_name: generated-application-check"],
+  [
+    "Identity-added bounded cache identity",
+    "cache_name: identity-added-application-check",
+  ],
+  [
+    "isolated bounded cache workspace",
+    "target/validation/build/${{ matrix.cache_name }}",
+  ],
+  ["immutable source tree identity", "git rev-parse 'HEAD^{tree}'"],
+  ["lifecycle-bound cache identity", "generated-${{ matrix.lifecycle }}"],
+  [
+    "source-bound cache identity",
+    "source-${{ steps.source-identity.outputs.tree }}",
+  ],
+  [
+    "lockfile cache identity",
+    "hashFiles('Cargo.lock', 'templates/applications/layered/Cargo.lock')",
+  ],
+  ["native and WASM target cache identity", "targets-native-wasm32"],
+  [
+    "development, test, and release profile cache identity",
+    "profiles-dev-test-release",
+  ],
+  ["SQLite and PostgreSQL cache identity", "providers-sqlite-postgres"],
+  [
+    "compiled feature cache identity",
+    "features-ssr-db-sqlite-db-postgres-hydrate",
+  ],
+  ["failure-safe cache publication", "cache-on-failure: false"],
+  ["cache effectiveness diagnostic", "steps.generated-cache.outputs.cache-hit"],
   ["source SBOM generation", "anchore/sbom-action@v0"],
   ["disabled implicit SBOM publication", "upload-release-assets: false"],
   [
@@ -415,6 +450,14 @@ export function validateReleaseFiles(root, releaseRef) {
 
 export function validateReleaseWorkflow(workflow) {
   const errors = [];
+  const validationJob = workflow.match(
+    /^  validate:\s*$([\s\S]*?)(?=^  [a-zA-Z0-9_-]+:\s*$|(?![\s\S]))/m,
+  )?.[1] ?? "";
+  errors.push(...validateFrontendAuditJob(validationJob));
+  const lifecycleJob = workflow.match(
+    /^  generated-application:\s*$([\s\S]*?)(?=^  [a-zA-Z0-9_-]+:\s*$|(?![\s\S]))/m,
+  )?.[1] ?? "";
+  errors.push(...validateUpgradeLifecycleMatrix(lifecycleJob));
 
   for (const [description, contract] of REQUIRED_WORKFLOW_CONTRACTS) {
     if (!workflow.includes(contract)) {

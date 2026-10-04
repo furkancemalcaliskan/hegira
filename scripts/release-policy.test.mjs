@@ -66,6 +66,10 @@ permissions:
 jobs:
   validate:
     steps:
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+      - run: sh scripts/frontend-check.sh
       - run: sh scripts/release-policy.sh
       - uses: anchore/sbom-action@v0
         with:
@@ -81,9 +85,31 @@ jobs:
       - run: sh scripts/layered-template-check.sh
       - run: sh scripts/cli-check.sh
   generated-application:
+    name: generated-application (\${{ matrix.lifecycle }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - lifecycle: default
+            cache_name: generated-application-check
+          - lifecycle: identity-added
+            cache_name: identity-added-application-check
+          - lifecycle: upgrade-default
+            cache_name: upgraded-application-default
+          - lifecycle: upgrade-minimal
+            cache_name: upgraded-application-minimal
+          - lifecycle: upgrade-identity-added
+            cache_name: upgraded-application-identity-added
     steps:
-      - run: sh scripts/generated-application-check.sh
-      - run: sh scripts/generated-application-check.sh identity-added
+      - id: source-identity
+        run: echo "tree=$(git rev-parse 'HEAD^{tree}')"
+      - id: generated-cache
+        with:
+          workspaces: . -> target/validation/build/\${{ matrix.cache_name }}
+          cache-on-failure: false
+          key: generated-\${{ matrix.lifecycle }}-targets-native-wasm32-profiles-dev-test-release-providers-sqlite-postgres-features-ssr-db-sqlite-db-postgres-hydrate-lock-\${{ hashFiles('Cargo.lock', 'templates/applications/layered/Cargo.lock') }}-source-\${{ steps.source-identity.outputs.tree }}
+      - run: echo "\${{ steps.generated-cache.outputs.cache-hit }}"
+      - run: sh scripts/generated-application-check.sh "\${{ matrix.lifecycle }}"
   publish:
     if: github.event_name == 'push'
     needs:
@@ -317,6 +343,36 @@ test("accepts the source-only framework release workflow contract", () => {
   assert.deepEqual(validateReleaseWorkflow(validWorkflow), []);
 });
 
+test("release frontend audit cannot be removed, skipped or tolerated", () => {
+  for (const replacement of ["true", "sh scripts/frontend-check.sh || true"]) {
+    assert.ok(validateReleaseWorkflow(validWorkflow.replace(
+      "sh scripts/frontend-check.sh", replacement,
+    )).some(error => error.includes("frontend audit")));
+  }
+  for (const condition of ["    if: false\n", "    continue-on-error: true\n"]) {
+    assert.ok(validateReleaseWorkflow(validWorkflow.replace(
+      "  validate:\n", `  validate:\n${condition}`,
+    )).some(error => error.includes("frontend audit")));
+  }
+});
+
+for (const composition of ["default", "minimal", "identity-added"]) {
+  test(`release requires the complete upgrade matrix: ${composition}`, () => {
+    assert.ok(validateReleaseWorkflow(validWorkflow.replace(
+      `- lifecycle: upgrade-${composition}`,
+      "- lifecycle: unrelated",
+    )).some(error => error.includes(`missing: ${composition}`)));
+  });
+}
+
+test("release rejects tolerated or skipped upgrade lifecycle validation", () => {
+  for (const condition of ["    continue-on-error: true\n", "    if: false\n"]) {
+    assert.ok(validateReleaseWorkflow(validWorkflow.replace(
+      "  generated-application:\n", `  generated-application:\n${condition}`,
+    )).some(error => error.includes("may not be conditional")));
+  }
+});
+
 test("rejects a prefixed GitHub Release title", () => {
   const errors = validateReleaseWorkflow(
     validWorkflow.replace(
@@ -353,19 +409,19 @@ test("rejects a missing generated application gate", () => {
     validWorkflow.replace("sh scripts/generated-application-check.sh", "true"),
   );
   assert.ok(
-    errors.some((error) => error.includes("generated application validation")),
+    errors.some((error) => error.includes("matrix lifecycle validation")),
   );
 });
 
 test("rejects a missing component lifecycle gate", () => {
   const errors = validateReleaseWorkflow(
     validWorkflow.replace(
-      "sh scripts/generated-application-check.sh identity-added",
-      "true",
+      "- lifecycle: identity-added",
+      "- lifecycle: unrelated",
     ),
   );
   assert.ok(
-    errors.some((error) => error.includes("component lifecycle validation")),
+    errors.some((error) => error.includes("Identity-added lifecycle matrix entry")),
   );
 });
 

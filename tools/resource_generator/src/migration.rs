@@ -555,6 +555,7 @@ mod tests {
             .find(|change| change.path().as_str() == path)
             .unwrap()
             .resulting_content()
+            .expect("generated migration changes have resulting content")
     }
 
     #[test]

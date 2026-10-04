@@ -142,6 +142,7 @@ fn render_human_mutation(
         let operation = match change.operation {
             ChangeOperation::Create => "create",
             ChangeOperation::Edit => "edit",
+            ChangeOperation::Retire => "retire",
         };
         output.push_str("  ");
         output.push_str(operation);
@@ -159,7 +160,9 @@ fn render_human_mutation(
 /// Convert plan-construction failures into stable CLI outcomes.
 pub fn change_plan_diagnostic(error: ChangePlanError) -> CliDiagnostic {
     match error.kind() {
-        ChangePlanErrorKind::InvalidPath => CliDiagnostic::validation(error.to_string()),
+        ChangePlanErrorKind::InvalidPath | ChangePlanErrorKind::InvalidOwnership => {
+            CliDiagnostic::validation(error.to_string())
+        }
         ChangePlanErrorKind::DuplicatePath
         | ChangePlanErrorKind::ConflictingOperations
         | ChangePlanErrorKind::UnchangedEdit => CliDiagnostic::conflict(error.to_string()),
@@ -187,7 +190,10 @@ fn mutation_diagnostic(error: MutationError) -> CliDiagnostic {
 mod tests {
     use std::fs;
 
-    use application_mutator::{FileCreation, PlannedFileChange, StructuredFileEdit};
+    use application_manifest::{SourceOwnership, SourceOwnershipClaim, SourceOwnershipClass};
+    use application_mutator::{
+        FileCreation, ManagedFileRetirement, PlannedFileChange, StructuredFileEdit,
+    };
     use clap::Parser;
 
     use super::*;
@@ -399,5 +405,58 @@ mod tests {
             fs::read(root.0.join("crates/domain/src/lib.rs")).unwrap(),
             b"secret edited"
         );
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
+    #[test]
+    fn retirement_dry_run_and_apply_report_the_identical_redacted_plan() {
+        let root = TestDirectory::new("retirement-apply");
+        fs::create_dir_all(root.0.join("apps/server/src")).unwrap();
+        let path = "apps/server/src/managed.rs";
+        let content = b"secret managed source";
+        fs::write(root.0.join(path), content).unwrap();
+        let ownership = SourceOwnership {
+            default: SourceOwnershipClass::ApplicationOwned,
+            claims: vec![SourceOwnershipClaim {
+                path: path.to_owned(),
+                class: SourceOwnershipClass::ManagedIntegration,
+                integration: Some("server-routes".to_owned()),
+            }],
+        };
+        let plan = ChangePlan::new([PlannedFileChange::from(
+            ManagedFileRetirement::new(&ownership, path, "server-routes", content).unwrap(),
+        )])
+        .unwrap();
+        let mut dry_run = Vec::new();
+        let mut applied = Vec::new();
+
+        assert_eq!(
+            execute_mutation_plan(
+                &root.0,
+                &plan,
+                MutationOptions::new(true, true),
+                &mut dry_run,
+                &mut Vec::new(),
+            ),
+            CliExit::Success
+        );
+        assert_eq!(
+            execute_mutation_plan(
+                &root.0,
+                &plan,
+                MutationOptions::new(false, true),
+                &mut applied,
+                &mut Vec::new(),
+            ),
+            CliExit::Success
+        );
+
+        let dry_run: serde_json::Value = serde_json::from_slice(&dry_run).unwrap();
+        let applied: serde_json::Value = serde_json::from_slice(&applied).unwrap();
+        assert_eq!(dry_run["plan"], applied["plan"]);
+        assert_eq!(applied["changed_files"], 1);
+        assert_eq!(applied["plan"]["changes"][0]["operation"], "retire");
+        assert!(!applied.to_string().contains("secret managed source"));
+        assert!(!root.0.join(path).exists());
     }
 }

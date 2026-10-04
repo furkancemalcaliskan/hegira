@@ -1,0 +1,60 @@
+schema = 1
+tag = "v0.6.0"
+tag_object = "9cb1f4aa01a16cc762653a8b170d0c4fcdb412b8"
+commit = "91c522b0dcfa71502ef5b4f0beed2ac6fb676dd3"
+source_tree = "65cdcaf0bd0dbebfd81c657ea8424b044d2e81e2"
+framework_repository = "https://github.com/furkancemalcaliskan/hegira.git"
+package_id = "hegira-canonical"
+package_version = "v0.6.0"
+package_digest = "sha256:cff6969dadc6e0155af7b944877dba5c61b6e0c4c3ea041d9a8a2665949c285e"
+lock_revision = "67d0708e135a233335969752890c23d5bb1fb3c6"
+application = "baseline-application"
+
+
+[[baselines]]
+id = "default-postgres"
+composition = "default"
+database = "postgres"
+client = "leptos"
+tree = "trees/default-postgres.toml"
+tree_digest = "sha256:8049682250ecdfec397f9c16c9dd05b1779e6c1d4add6636a36b8b20b03eabda"
+
+[[baselines]]
+id = "default-sqlite"
+composition = "default"
+database = "sqlite"
+client = "leptos"
+tree = "trees/default-sqlite.toml"
+tree_digest = "sha256:9e4ac33b3a0307234eb971806484076b99692ef2457fa2efb5a96267500ea261"
+
+[[baselines]]
+id = "identity-added-postgres"
+composition = "identity-added"
+database = "postgres"
+client = "leptos"
+tree = "trees/identity-added-postgres.toml"
+tree_digest = "sha256:a4e2d637d3586aab7b224241a0816d1b1ab1f8ec112044ae2aa19a38a9f0fad4"
+
+[[baselines]]
+id = "identity-added-sqlite"
+composition = "identity-added"
+database = "sqlite"
+client = "leptos"
+tree = "trees/identity-added-sqlite.toml"
+tree_digest = "sha256:145cfb928d7858c6086176fab3d9840084d452366509a03651bc86563807208a"
+
+[[baselines]]
+id = "minimal-postgres"
+composition = "minimal"
+database = "postgres"
+client = "leptos"
+tree = "trees/minimal-postgres.toml"
+tree_digest = "sha256:6743da82012e83de070b3b69ff22fe5b7763d7a33972598929adb09263bf4ebc"
+
+[[baselines]]
+id = "minimal-sqlite"
+composition = "minimal"
+database = "sqlite"
+client = "leptos"
+tree = "trees/minimal-sqlite.toml"
+tree_digest = "sha256:a7fa1d9f2f7d53d1590be1c2499762b60c2325a40333df6265ed992f47ba64c2"

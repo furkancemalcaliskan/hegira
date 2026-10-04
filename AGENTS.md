@@ -13,6 +13,8 @@ Read the files relevant to the task before making changes:
   dependency direction, request boundaries, persistence, and runtime roles.
 - [Configuration](docs/configuration.md) for compile-time capabilities and
   runtime validation.
+- [Application upgrades](docs/getting-started.md#assess-application-upgrade-readiness)
+  for ownership, readiness, dry-run/apply, automation, and manual recovery.
 - [Contributing](CONTRIBUTING.md) for contribution availability and the
   issue/branch/pull-request contract.
 - [Maintainer workflow](docs/maintainers.md) for CI, integration, and release
@@ -57,10 +59,12 @@ commands change. Never describe planned work as implemented.
   outward-layer variant. It preserves the server, Leptos client, selected SQLx
   provider, configuration, and deployment boundaries while recording no
   official module or authentication/authorization capabilities.
-  Each render owns a validated `hegira.toml` containing only application
-  identity, framework source/version, installed component-package, component,
-  module and capability composition, and selected database/client adapters.
-  Runtime configuration and secrets do not belong in that manifest.
+  Each render owns a validated schema-3 `hegira.toml` containing only
+  application identity, exact framework and component-package release state,
+  installed component, module and capability composition, selected
+  database/client adapters, and explicit source-ownership claims. Unclaimed
+  paths remain application-owned; runtime configuration and secrets do not
+  belong in that manifest.
 - `templates/package.toml` identifies the versioned canonical, data-only
   component package, its compatible framework release source, contained
   templates/components and official modules, and locked source digest.
@@ -73,6 +77,9 @@ commands change. Never describe planned work as implemented.
   records its supported adapters, release-pinned dependencies, provider
   migration sources, configuration, security transports, OpenAPI, and Leptos
   contributions without executing code or vendoring module source.
+  Schema-3 package manifests may additionally declare digest-authenticated,
+  data-only direct upgrade edges with exact release and composition states;
+  resolving an edge performs no source mutation or external operation.
   Package-controlled
   framework source variables cannot be overridden by a normal render.
 - `tools/template_renderer/` contains the reusable deterministic and atomic
@@ -81,13 +88,24 @@ commands change. Never describe planned work as implemented.
   maintainer checks may select the adapter that rewrites them. Package loading
   snapshots source through directory-anchored no-follow reads, authenticates
   the bundled package and framework identity, rejects graph-undeclared files,
-  and renders only from the digest-verified snapshot. It is not the public
-  Hegira CLI.
+  and renders only from the digest-verified snapshot. Upgrade edges bind exact
+  source package and baseline identities, composition-specific ownership, and
+  direction-correct managed source/target digests. Existing applications are
+  authenticated read-only through anchored no-follow reads before a plan can
+  exist; only edge-declared managed paths are observed and diagnostics remain
+  versioned and content-redacted. Authenticated direct edges become one sorted,
+  digest-preconditioned `application_mutator` plan whose versioned summary
+  records exact release, owner, integration, precondition, and result identities
+  without source content. It is not the public Hegira CLI.
 - `tools/application_mutator/` contains the deterministic, content-redacted
-  existing-application change-plan contract. Its additive component plan maps
-  canonically owned artifacts and integrations to ordered relative creates and
-  digest-preconditioned edits, rejects historical migration edits, and exposes
-  only versioned content-redacted summaries. Typed component editors constrain
+  existing-application change-plan contract. It supports ordered absent-file
+  creation, digest-preconditioned edits, and exact-digest retirement restricted
+  to manifest-declared managed integrations. Retirement is atomically staged
+  for rollback and cannot target application-owned, generated-once, or
+  immutable-history source. Its additive component plan maps canonically owned
+  artifacts and integrations to creates and edits, rejects historical migration
+  edits, and exposes only versioned content-redacted summaries. Typed component
+  editors constrain
   Cargo dependencies, features, module roots, routes, provider migrations,
   configuration, and client contributions to explicit managed points; chained
   edits preserve their first observed digest. Publication is serialized by an
@@ -97,7 +115,10 @@ commands change. Never describe planned work as implemented.
 - `tools/hegira_cli/` contains the source-runnable `hegira` command shell,
   deterministic interactive and non-interactive layered application creation,
   read-only existing-application inspection with human and versioned JSON
-  composition status and sorted graph diagnostics, complete layered resource
+  composition status and sorted graph diagnostics, authenticated read-only
+  direct-upgrade readiness with recovery and managed-source preflight,
+  content-redacted upgrade dry-run and atomic direct-upgrade application using
+  the renderer's typed plan and existing mutation publisher, complete layered resource
   generation, application-owned migration generation, and a shared
   dry-run/apply mutation contract.
   Mutation output is deterministic, versioned, content-redacted, and derived
@@ -131,20 +152,48 @@ commands change. Never describe planned work as implemented.
   The same tool independently plans
   provider-specific, append-only application migration scaffolds without
   connecting to a database or changing historical migrations.
+- `tools/upgrade_test_support/` authenticates and materializes immutable
+  content-addressed v0.6.0 application baselines for upgrade tests. The closed
+  fixture matrix covers default, minimal, and Identity-added SQLite and
+  PostgreSQL states without consulting current templates, Git, or the network.
 - `scripts/` contains local validation and release helpers.
   The generated-application gate uses public CLI output for both database
   profiles, verifies it before staging local dependencies in a separate copy,
   generates an application-owned migration through the public mutation command,
   and exercises native, hydration, disposable-database upgrade, and
-  production-container contracts. Rendered-application validations use stable,
-  locked workspaces and isolated repository-owned build caches under
-  `target/validation/`; their cleanup command does not own normal developer
-  Cargo output.
+  production-container contracts. All Cargo-based validation commands use
+  stable, locked workspaces and isolated repository-owned build caches below
+  `target/validation/`. Their 64 GiB default LRU budget is enforced before and
+  after validation, active locks are protected, and status, prune, and complete
+  cleanup commands never own normal developer Cargo output.
 - `.github/workflows/` contains validation and release automation.
 
 Do not create future-facing directories, manifests, modules, tools, clients, or
 capabilities unless an accepted issue explicitly requires a working
 implementation.
+
+## Existing-Application Upgrade Boundaries
+
+The bundled direct edge supports only v0.6.0 → v0.7.0 default, minimal, and
+Identity-added applications with SQLite or PostgreSQL. It changes only
+`Cargo.toml`, `Cargo.lock`, and `hegira.toml`. Application-owned product code,
+generated-once scaffolding, and immutable migration history are preserved.
+Managed ownership is not blanket rewrite permission: the exact authenticated
+edge and observed digests must authorize each transition. Customized managed
+files fail closed; there is no automatic conflict merge or force-upgrade.
+
+- Use read-only `upgrade status` and review `upgrade --dry-run` before an
+  explicitly authorized apply. A preview is not a cached publication token.
+- Never change manifest versions, ownership claims, edge digests, or source
+  files just to bypass authentication, a precondition, or recovery blocking.
+- Preserve `.hegira-mutation.lock` and private staged files after interruption
+  or uncertain rollback. Follow the documented manual recovery workflow;
+  do not delete recovery state merely to enable another mutation.
+- Treat an applied receipt as source publication only. Lockfile review,
+  application tests, native/hydration checks, database migration execution,
+  and deployment approval remain separate application-owner responsibilities.
+- Do not run database operations, regenerate dependencies, start services, or
+  deploy as an inferred consequence of a source-upgrade request.
 
 ## Setup And Run
 
@@ -156,7 +205,9 @@ cargo run --locked -p hegira_cli -- new my-application \
   --destination ../my-application
 cd ../my-application
 rustup target add wasm32-unknown-unknown
-cargo install cargo-leptos
+cargo install --locked cargo-leptos --version 0.3.7
+tool_bin=$(sh scripts/prepare-wasm-bindgen.sh install Cargo.lock target/hegira-tools/wasm-bindgen/bin)
+export PATH="$tool_bin:$PATH"
 npm ci --prefix apps/web/src
 ```
 
@@ -258,6 +309,8 @@ Rendered provider, upgrade, and production-container validation:
 
 ```sh
 sh scripts/generated-application-check.sh
+# Released-application upgrade lifecycle across all six profiles:
+sh scripts/upgraded-application-check.sh
 ```
 
 Focused release identity and source-first workflow validation:

@@ -384,7 +384,7 @@ mod tests {
 
     fn manifest(version: &str) -> String {
         format!(
-            r#"schema = 2
+            r#"schema = 3
 application = "context-app"
 
 [framework]
@@ -413,6 +413,17 @@ version = "{version}"
 [[composition.modules]]
 id = "identity"
 version = "{version}"
+
+[upgrade.framework]
+repository = "https://github.com/furkancemalcaliskan/hegira.git"
+version = "{version}"
+
+[upgrade.package]
+id = "hegira-canonical"
+version = "{version}"
+
+[upgrade.ownership]
+default = "application-owned"
 "#
         )
     }

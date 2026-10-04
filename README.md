@@ -73,9 +73,11 @@ ownership:
 | `templates/package.toml` | Versioned canonical component-package identity, framework compatibility, component graph, and source digest |
 | `templates/components/` | Typed data-only manifests for canonical rendering and trusted additive component contributions |
 | `tools/application_mutator/` | Typed additive component and general change plans, canonical file ownership, controlled Cargo/Rust/TOML integration, and failure-safe publication for coordinated existing-application changes |
-| `tools/hegira_cli/` | Source-runnable application creation and inspection plus reviewable layered resource and application-owned migration generation with stable diagnostics and exit outcomes |
+| `tools/hegira_cli/` | Source-runnable creation, inspection, direct-upgrade readiness/preview/apply, additive component installation, layered resource and migration generation with stable diagnostics and exit outcomes |
 | `tools/resource_generator/` | Typed layered resource specifications plus inward-layer, provider-specific SQLx persistence, explicit Axum/OpenAPI and Leptos UI composition, and append-only migration planning |
 | `tools/template_renderer/` | Reusable deterministic render core with no-follow, digest-verified package-source loading and a separate disposable repository-validation adapter; it is not a public CLI |
+| `tools/upgrade_test_support/` | Test-only authenticated access to immutable, content-addressed released-application baselines |
+| `test-fixtures/application-baselines/` | Closed released-source baseline data for deterministic offline application-upgrade tests |
 
 The canonical rendered application is an independent Cargo workspace, consumes framework
 packages from a pinned release source, and records its generation identity, installed
@@ -108,11 +110,14 @@ Leptos are supported for application creation. Identity remains the recommended
 default composition; an explicit module-free `minimal` composition is also
 available. The
 CLI also generates complete layered resources and application-owned migration
-scaffolds; it does not provide module management or automatic upgrades.
+scaffolds and applies explicitly reviewed, authenticated direct upgrades. It does
+not provide module management, arbitrary source merging, or unattended upgrades.
 
 Its stable process outcomes are success (`0`), internal error (`1`), usage
 error (`2`), validation error (`3`), and conflict (`4`). Human-readable help
-and version output use standard output; diagnostics use standard error.
+and version output use standard output; diagnostics use standard error except
+typed upgrade assessments and execution results, which use standard output even
+when unsuccessful.
 
 ## Quick Start
 
@@ -136,12 +141,14 @@ Use a new destination under an existing real parent directory. Existing entries
 are never overwritten. See [Getting started](docs/getting-started.md) for identity,
 path, and safe-publication platform requirements.
 
-Install the Rust WASM target, `cargo-leptos`, and lockfile-pinned frontend
-tooling:
+Install the pinned Cargo Leptos release, the lockfile-matched WebAssembly
+binding tool, and frontend dependencies:
 
 ```sh
 rustup target add wasm32-unknown-unknown
-cargo install cargo-leptos
+cargo install --locked cargo-leptos --version 0.3.7
+tool_bin=$(sh scripts/prepare-wasm-bindgen.sh install Cargo.lock target/hegira-tools/wasm-bindgen/bin)
+export PATH="$tool_bin:$PATH"
 npm ci --prefix apps/web/src
 ```
 
@@ -169,6 +176,24 @@ Run the command from anywhere below the application root, or pass
 `--application-root <path>` explicitly. Add `--json` for the deterministic,
 versioned machine-readable contract. See [Inspecting an existing application](docs/getting-started.md#inspect-an-existing-application)
 for discovery, compatibility, and safety behavior.
+
+Use `upgrade status` (optionally `--json`) to assess the authenticated direct
+upgrade target, and `upgrade --dry-run` to review its content-redacted plan
+without changing application source. After review, `upgrade` applies one
+supported direct transition through the atomic mutation boundary. See
+[Upgrade readiness](docs/getting-started.md#assess-application-upgrade-readiness)
+for supported release states, recovery checks, and process outcomes.
+
+The bundled transition supports v0.6.0 → v0.7.0 for default, minimal, and
+Identity-added applications with either supported database. It changes only
+`Cargo.toml`, `Cargo.lock`, and `hegira.toml`; customized managed files fail
+closed rather than being merged. Application-owned product code, generated-once
+scaffolding, and immutable migration history are preserved. Review the
+[ownership contract](docs/getting-started.md#generated-ownership-and-hegiratoml),
+[post-upgrade checks](docs/getting-started.md#after-an-application-upgrade), and
+[conflict and recovery guidance](docs/getting-started.md#resolve-upgrade-conflicts-and-recovery)
+before applying a transition. Source upgrade does not execute database migrations
+or deploy the application.
 
 From a generated application, create an append-only migration scaffold for
 the database adapter selected in `hegira.toml`:
@@ -227,6 +252,14 @@ source-runnable CLI ownership:
 sh scripts/backend-check.sh
 ```
 
+Audit both canonical frontend lockfiles, including build dependencies:
+
+```sh
+sh scripts/frontend-check.sh
+```
+
+This gate also runs in the existing supply-chain and release validation jobs.
+
 Validate CLI-generated and resource-mutated SQLite and PostgreSQL
 applications, including their fresh and upgrade migration paths, production
 image, and HTTP contract, with disposable Docker state:
@@ -235,18 +268,27 @@ image, and HTTP contract, with disposable Docker state:
 sh scripts/generated-application-check.sh
 ```
 
-Repository-owned validation builds use stable workspaces and isolated caches
-under `target/validation/`. Inspect or remove only those caches without touching
-normal `target/debug` development output:
+Repository-owned validation builds use stable workspaces and automatically
+bounded LRU caches under `target/validation/`. Inspect ownership and usage,
+preview budget reclamation, or remove only those caches without touching normal
+`target/debug` development output:
 
 ```sh
+sh scripts/clean-validation-cache.sh --status
+sh scripts/clean-validation-cache.sh --prune-dry-run
+sh scripts/clean-validation-cache.sh --prune
 sh scripts/clean-validation-cache.sh --dry-run
 sh scripts/clean-validation-cache.sh
 ```
 
 The CI official-module job sets `WITH_IGNORED_DB_TESTS=true` and supplies a
-disposable PostgreSQL database. The generated-application job is the sole owner of application
-database, provider, upgrade, container, hydration, and HTTP integration coverage.
+disposable PostgreSQL database. The generated-application lifecycle matrix is
+the sole owner of application database, provider, upgrade, container,
+hydration, and HTTP integration coverage. Its isolated default and
+Identity-added cells and released-upgrade default, minimal, and Identity-added
+cells run in parallel while the stable `quality` result waits for all five.
+Each upgrade cell validates both providers through the public v0.6.0-to-v0.7.0
+workflow, preserved migrations/data, and production behavior.
 
 PostgreSQL tests marked `ignored` require a disposable `DATABASE_URL` because
 they reset the target database.

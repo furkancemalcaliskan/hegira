@@ -1,0 +1,250 @@
+schema = 1
+id = "minimal-sqlite"
+composition = "minimal"
+database = "sqlite"
+client = "leptos"
+
+[[files]]
+path = ".dockerignore"
+digest = "sha256:6abe0178e1c6f6c43b5a9643c1a67eff02a10d78212aadcc5bad0bb55d62a6b0"
+executable = false
+
+[[files]]
+path = ".env.example"
+digest = "sha256:789eb25a8cebb91c2e7048137e2a9284b5c3324774c6984239a175a01542e875"
+executable = false
+
+[[files]]
+path = ".gitignore"
+digest = "sha256:85c39bdf835ec2903f585372701dfce15846ec13e1f7297fa5613e949bf36012"
+executable = false
+
+[[files]]
+path = "Cargo.lock"
+digest = "sha256:43414991706a33058cd961cc419270e43b191cd82ab4be86c91e3627a764f2d2"
+executable = false
+
+[[files]]
+path = "Cargo.toml"
+digest = "sha256:6ad56c1425dc2798600448cd3055b3c50511dfcc965cbc75753966127df9d7cf"
+executable = false
+
+[[files]]
+path = "Dockerfile"
+digest = "sha256:5de470094ee614125984053b8cac0b35bdf94106712665e222765a8e6e5ef175"
+executable = false
+
+[[files]]
+path = "apps/server/Cargo.toml"
+digest = "sha256:3811c8a9a4a3a2c73925fd327217eb4ed458b3b4fc99a7a4b401ce6fc508922d"
+executable = false
+
+[[files]]
+path = "apps/server/src/lib.rs"
+digest = "sha256:1fe1e06c1b00f13601785e2b2c42130069db0215b63c6d4385e6a93a0ce66b6d"
+executable = false
+
+[[files]]
+path = "apps/server/src/main.rs"
+digest = "sha256:3d8ebfca0fdb1d9d950fefb62c7131802ea09a4ecc0d32d25921d31e53c00c80"
+executable = false
+
+[[files]]
+path = "apps/server/src/server.rs"
+digest = "sha256:2f132e9b72463d6dbbb4ae5f505c706192d5e6fba315b0ff1f0996e442e9f8c8"
+executable = false
+
+[[files]]
+path = "apps/web/Cargo.toml"
+digest = "sha256:90349d6e4a11e1fe90cdacbb8bba0b9c28cb603c8e7eff42255b4cf78f6ecccf"
+executable = false
+
+[[files]]
+path = "apps/web/src/dashboard.rs"
+digest = "sha256:52e3f7b7a5346f56d04aaa7f20a035f67e7ce33ff171b55466ece24896ad980d"
+executable = false
+
+[[files]]
+path = "apps/web/src/lib.rs"
+digest = "sha256:5c39fbb53c15464f25128b2cc529984a5e0d1e246933625578646cbb908d8630"
+executable = false
+
+[[files]]
+path = "apps/web/src/package-lock.json"
+digest = "sha256:eddf49e43be0b87ee3dfdb02778cd452e0ea3f58e203693f277759742342f699"
+executable = false
+
+[[files]]
+path = "apps/web/src/package.json"
+digest = "sha256:d3dc4ef9da7ebbfeffd8618acc947538f2d99557950e711f79aa57d321010bc8"
+executable = false
+
+[[files]]
+path = "apps/web/src/public/assets/branding/hegira-logo.png"
+digest = "sha256:aa36776013d47a0fb28722bebb4da0514d15d0d7cd392d906553dbbf5c3b5b49"
+executable = false
+
+[[files]]
+path = "apps/web/src/root.rs"
+digest = "sha256:f6c09b79b57e67f9d9cd11ba202c16154af08f6d54cfdf5fc55ccd2da137e214"
+executable = false
+
+[[files]]
+path = "apps/web/src/routes.rs"
+digest = "sha256:37675b2d2ceef1a5a9ef07ea49d83ddf2fe24597178dc9919590d079bfb1db66"
+executable = false
+
+[[files]]
+path = "apps/web/src/style/main.css"
+digest = "sha256:84de75710f562ed812a16b65f09871116697a74c844cd5edc167e8d54dd2800c"
+executable = false
+
+[[files]]
+path = "apps/web/src/style/tailwind.css"
+digest = "sha256:b713aa061c2bf58965c6f59e1bebb770a4fc4e2dad949e55a3b283d7fddd849a"
+executable = false
+
+[[files]]
+path = "config/development.yaml"
+digest = "sha256:131302fc5a6e7adcec8567fd364fe95ccdcdac3331bd7ffbbe88da1464705a0f"
+executable = false
+
+[[files]]
+path = "config/production.yaml"
+digest = "sha256:014f8b86c1e5172bdeec32c80c0632fbda9a9a7934c50211e26f6aa06f7e8e51"
+executable = false
+
+[[files]]
+path = "config/sqlite.yaml"
+digest = "sha256:45014f8cccc3d23a79a95d2d62c23b70ac691bf547af19d9949b6d15b0150cb6"
+executable = false
+
+[[files]]
+path = "config/test.yaml"
+digest = "sha256:23c71089a12290a0c65f06391c9cc32d1af1cb477d704032eae14d89b09f0012"
+executable = false
+
+[[files]]
+path = "crates/application/Cargo.toml"
+digest = "sha256:34797471db002cf95c8921f4e3724c946fd8a3f75174a85f366ab3e5059d7636"
+executable = false
+
+[[files]]
+path = "crates/application/src/lib.rs"
+digest = "sha256:b7adcbd8584d44d1f883bc8bc7385e2b4f25316e16ef9347f7ec02a344048a89"
+executable = false
+
+[[files]]
+path = "crates/application_contracts/Cargo.toml"
+digest = "sha256:15a9e6d632275facd820804c54afb3a3f167871fcd01ef1b6d42302339dc11e3"
+executable = false
+
+[[files]]
+path = "crates/application_contracts/src/lib.rs"
+digest = "sha256:8ba0074eb22ae6be1e4051f220ff6942ee3b3ee2de56c51e1f1664608186e78f"
+executable = false
+
+[[files]]
+path = "crates/domain/Cargo.toml"
+digest = "sha256:74faf6a3f760ca34918b27461c9bb3dc09b3ae901ceacd1b98adfde6ad1a26d6"
+executable = false
+
+[[files]]
+path = "crates/domain/src/lib.rs"
+digest = "sha256:c0cef47c14e12052e75ee2afe594d87a4eef36eed4f3ad53decef9c5d6bd1bcd"
+executable = false
+
+[[files]]
+path = "crates/domain_shared/Cargo.toml"
+digest = "sha256:e87802df49ad4cd524287fa9a6fcb3db193784013e7897aa32da56c01912c07e"
+executable = false
+
+[[files]]
+path = "crates/domain_shared/src/lib.rs"
+digest = "sha256:7398d3526846d906a91dd95a3558703c8c2f01c2964a852bbc2abd1e78849629"
+executable = false
+
+[[files]]
+path = "crates/infrastructure/Cargo.toml"
+digest = "sha256:135baec2bc8f8337acbc323e545e148c3819558a778c61a24c4ac12a7c848ea3"
+executable = false
+
+[[files]]
+path = "crates/infrastructure/migrations/postgres/1000000_application.sql"
+digest = "sha256:da022a4303bac2d943f5c296f40ae7aeced442eb8f928d63a8ba339d2482a638"
+executable = false
+
+[[files]]
+path = "crates/infrastructure/migrations/sqlite/1000000_application.sql"
+digest = "sha256:da022a4303bac2d943f5c296f40ae7aeced442eb8f928d63a8ba339d2482a638"
+executable = false
+
+[[files]]
+path = "crates/infrastructure/src/audit/.gitkeep"
+digest = "sha256:9842529f83830cb3d5a196dee3dd1bb866e86935d329a5ef10093faf0812fc01"
+executable = false
+
+[[files]]
+path = "crates/infrastructure/src/config.rs"
+digest = "sha256:0b81806d6a680ea4ee17379498012c00d5ec65135767b16dc7e544794bc68c61"
+executable = false
+
+[[files]]
+path = "crates/infrastructure/src/identity/.gitkeep"
+digest = "sha256:9842529f83830cb3d5a196dee3dd1bb866e86935d329a5ef10093faf0812fc01"
+executable = false
+
+[[files]]
+path = "crates/infrastructure/src/identity/authorization/.gitkeep"
+digest = "sha256:9842529f83830cb3d5a196dee3dd1bb866e86935d329a5ef10093faf0812fc01"
+executable = false
+
+[[files]]
+path = "crates/infrastructure/src/identity/oauth/.gitkeep"
+digest = "sha256:9842529f83830cb3d5a196dee3dd1bb866e86935d329a5ef10093faf0812fc01"
+executable = false
+
+[[files]]
+path = "crates/infrastructure/src/identity/sessions/.gitkeep"
+digest = "sha256:9842529f83830cb3d5a196dee3dd1bb866e86935d329a5ef10093faf0812fc01"
+executable = false
+
+[[files]]
+path = "crates/infrastructure/src/lib.rs"
+digest = "sha256:60013eb4319d12f80ba0937699c35162653e61e92e886f3fe1a39988328e386c"
+executable = false
+
+[[files]]
+path = "crates/infrastructure/src/operations.rs"
+digest = "sha256:be8f4e43abd8c625242c5d01952b0b1df8989b613c925e64b705e864912a10d9"
+executable = false
+
+[[files]]
+path = "crates/infrastructure/src/security/.gitkeep"
+digest = "sha256:9842529f83830cb3d5a196dee3dd1bb866e86935d329a5ef10093faf0812fc01"
+executable = false
+
+[[files]]
+path = "crates/presentation/Cargo.toml"
+digest = "sha256:8f876cf90ba528f1a73744568c7f528dea869904887651e3e5a806eb2e54be2f"
+executable = false
+
+[[files]]
+path = "crates/presentation/src/http.rs"
+digest = "sha256:f61d85fc3fa95a9f0e4821e985f31ac2cc5328183ee449279d307140a7dad298"
+executable = false
+
+[[files]]
+path = "crates/presentation/src/lib.rs"
+digest = "sha256:1537d2afe625af095a0dbf968b914851c1cab48eb46c523c8683a37c7f3e8607"
+executable = false
+
+[[files]]
+path = "docker-compose.yml"
+digest = "sha256:db8b421c5ef119dd7f369f6c14683ca5265b87b0105baa9b1fb3342f69564ae8"
+executable = false
+
+[[files]]
+path = "hegira.toml"
+digest = "sha256:eb403909d279b9b6172af91359b3951f05c0321000eba887583e6af0e0610ba0"
+executable = false

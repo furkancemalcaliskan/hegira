@@ -26,7 +26,7 @@ esac
 
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 . "$repo_root/scripts/validation-cache.sh"
-validation_cache_prepare "$repo_root" generated-feature-check
+validation_cache_prepare "$repo_root" "generated-feature-check"
 staging_parent="$HEGIRA_VALIDATION_WORKSPACE"
 generated_root="$staging_parent/application"
 export CARGO_TARGET_DIR="$HEGIRA_VALIDATION_TARGET"

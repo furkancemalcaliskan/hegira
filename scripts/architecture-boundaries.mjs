@@ -66,15 +66,17 @@ export const WORKSPACE_DEPENDENCY_POLICY = Object.freeze({
     "identity_domain_shared",
     "leptos_support",
   ],
-  application_mutator: [],
+  application_mutator: ["application_manifest"],
   hegira_cli: [
     "application_manifest",
     "application_mutator",
     "resource_generator",
     "template_renderer",
+    "upgrade_test_support",
   ],
   resource_generator: ["application_manifest", "application_mutator"],
-  template_renderer: ["application_manifest"],
+  template_renderer: ["application_manifest", "application_mutator", "resource_generator", "upgrade_test_support"],
+  upgrade_test_support: [],
 });
 
 const packageContract = (role, disposition, issues = []) =>
@@ -109,6 +111,7 @@ export const WORKSPACE_PACKAGE_POLICY = Object.freeze({
   hegira_cli: packageContract("tool", "retain"),
   resource_generator: packageContract("tool", "retain"),
   template_renderer: packageContract("tool", "refactor-and-retain", [148]),
+  upgrade_test_support: packageContract("tool", "retain"),
 });
 
 export const REPOSITORY_OWNERSHIP_POLICY = Object.freeze({

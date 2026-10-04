@@ -1,0 +1,15 @@
+{
+  "output_schema": 1,
+  "status": "invalid-input",
+  "source": null,
+  "target": null,
+  "composition": null,
+  "recovery": "unverified",
+  "managed_boundaries": "unverified",
+  "diagnostics": [
+    {
+      "code": "application-context",
+      "message": "Cannot safely discover or validate the application manifest."
+    }
+  ]
+}
