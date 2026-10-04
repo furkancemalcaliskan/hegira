@@ -252,6 +252,14 @@ source-runnable CLI ownership:
 sh scripts/backend-check.sh
 ```
 
+Audit both canonical frontend lockfiles, including build dependencies:
+
+```sh
+sh scripts/frontend-check.sh
+```
+
+This gate also runs in the existing supply-chain and release validation jobs.
+
 Validate CLI-generated and resource-mutated SQLite and PostgreSQL
 applications, including their fresh and upgrade migration paths, production
 image, and HTTP contract, with disposable Docker state:

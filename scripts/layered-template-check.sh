@@ -52,6 +52,7 @@ fi
 (
   cd "$staging_root"
   npm ci --prefix apps/web/src
+  node "$repo_root/scripts/frontend-watcher-smoke.mjs" "$staging_root/apps/web/src"
   PATH="$staging_root/apps/web/src/node_modules/.bin:$PATH"
   export PATH
   test -f Cargo.lock

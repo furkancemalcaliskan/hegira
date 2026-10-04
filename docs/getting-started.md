@@ -525,6 +525,48 @@ framework-repository validation scripts against a live application database.
 Production migrations, credentials, backups, and rollout authorization remain
 application-owned.
 
+### Frontend Dependency Remediation
+
+Source upgrade preserves application-owned `apps/web/src/package.json` and
+`package-lock.json`; it does not install the canonical template's updated
+frontend dependencies. Existing applications must review their own npm graph
+separately, including applications upgraded from v0.6.0.
+
+The canonical frontend keeps Tailwind CLI 4.3.3 and uses this narrowly scoped
+override while that CLI pins an older watcher:
+
+```json
+{
+  "overrides": {
+    "@tailwindcss/cli": {
+      "@parcel/watcher": "2.6.0"
+    }
+  }
+}
+```
+
+Watcher 2.6.0 removes the `micromatch`/`braces` dependency chain affected by
+[GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm).
+Merge this override with existing application overrides rather than replacing
+the whole manifest. If the application uses different frontend tooling, review
+its supported dependency graph instead of applying this configuration blindly.
+
+From the application root, after reviewing that manifest change:
+
+```sh
+npm install --package-lock-only --ignore-scripts --prefix apps/web/src
+git diff -- apps/web/src/package.json apps/web/src/package-lock.json
+npm ci --prefix apps/web/src
+npm audit --audit-level=high --include=dev --include=optional --include=peer \
+  --prefix apps/web/src
+```
+
+Review the changed lockfile and installation scripts, then validate CSS output,
+the development watcher, hydration, and the application build before deployment.
+Do not use `npm audit fix --force`, omit build dependencies from audit, or remove
+an audit finding merely to complete source upgrade. These are explicit
+application-owner dependency changes, not extra managed upgrade operations.
+
 ## Resolve Upgrade Conflicts And Recovery
 
 | Outcome | Safe next action |

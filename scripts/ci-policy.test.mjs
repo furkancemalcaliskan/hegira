@@ -111,6 +111,10 @@ jobs:
           test "$GENERATED_APPLICATION_RESULT" = success
   supply-chain:
     steps:
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+      - run: sh scripts/frontend-check.sh
       - uses: EmbarkStudios/cargo-deny-action@v2
       - run: cargo audit --file Cargo.lock
 `;
@@ -156,6 +160,19 @@ curl "$base_url/api/validation-records"
 
 test("accepts separated repository ownership gates", () => {
   assert.deepEqual(validateRepositoryValidationWorkflow(validWorkflow), []);
+});
+
+test("frontend audit cannot be removed, skipped or tolerated in supply-chain", () => {
+  for (const replacement of ["true", "sh scripts/frontend-check.sh || true"]) {
+    assert.ok(validateRepositoryValidationWorkflow(validWorkflow.replace(
+      "sh scripts/frontend-check.sh", replacement,
+    )).some(error => error.includes("frontend audit")));
+  }
+  for (const condition of ["    if: false\n", "    continue-on-error: true\n"]) {
+    assert.ok(validateRepositoryValidationWorkflow(validWorkflow.replace(
+      "  supply-chain:\n", `  supply-chain:\n${condition}`,
+    )).some(error => error.includes("frontend audit")));
+  }
 });
 
 for (const composition of ["default", "minimal", "identity-added"]) {
