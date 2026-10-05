@@ -124,6 +124,13 @@ commands change. Never describe planned work as implemented.
   Mutation output is deterministic, versioned, content-redacted, and derived
   from the same typed plan used for publication. The CLI also owns stable
   process outcomes and its user-facing diagnostic contract.
+  Its `operations` library additionally derives read-only typed development,
+  check, test, release-build, and database-operation plans from a safely resolved
+  current application and authenticated bundled composition. These plans do
+  not probe tools, load runtime configuration, execute commands, or grant
+  execution authority. Database steps declare an application-owned entry-point
+  requirement, not a currently available executable. Operation execution is not
+  a public CLI capability.
   Generation validates project identity and destination before rendering and
   requires a new destination under an existing parent without symlinks. Safe
   atomic publication fails closed on unsupported platforms.

@@ -41,6 +41,7 @@ mod component;
 mod doctor;
 mod identity_installation;
 mod mutation;
+pub mod operations;
 mod upgrade;
 
 use component::ComponentCommand;
