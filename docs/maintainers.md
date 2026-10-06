@@ -174,6 +174,14 @@ contracts together with deterministic existing-application change planning:
 sh scripts/cli-check.sh
 ```
 
+The CLI suite also tests the `operations` planning library against all six
+default, minimal, and Identity-added SQLite/PostgreSQL states. It verifies
+ordered locked arguments, provider/profile selection, explicit production
+migration approval requirements, deterministic redacted summaries, invalid
+composition and path rejection, and unchanged application trees after planning.
+These are planning contracts, not operation execution or database integration
+tests: the library spawns no process, probes no tool, and connects to no service.
+
 The complementary composition matrix can be run with
 `sh scripts/composition-matrix-check.sh`. It exercises the explicit minimal
 application and the minimal-to-Identity transition for SQLite and PostgreSQL,

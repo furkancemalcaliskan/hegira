@@ -513,6 +513,48 @@ sources without reading runtime configuration or connecting to a provider.
 Its local tool checks and selected-provider requirements are diagnostics, not
 startup preflight or application mutation.
 
+### Application operation planning library
+
+`hegira_cli::operations::plan_application_operation` accepts the source
+repository root and an `OperationRequest` containing the existing
+`ApplicationContextRequest` and a closed `OperationIntent`. It reuses the
+no-follow context resolver, current release compatibility policy, and
+authenticated bundled composition graph. Missing, ambiguous, unsafe, legacy,
+unsupported, or graph-inconsistent application state fails before a plan is
+returned. It reads no application source, runtime profile, environment value,
+or credential, and does not execute a tool or connect to a provider.
+
+The privately constructed `OperationPlan` retains the resolved root for a
+caller but excludes its machine-local path from Debug, human review text, and
+the deterministic schema-1 `OperationPlanSummary`. Summaries record exact
+component/module versions and capabilities, selected adapters, potential
+execution effects, ordered steps, unprobed prerequisites, and execution
+requirements. Tool steps use a closed program identity and separate arguments,
+not shell scripts. Native check/test steps select only the recorded database
+feature, disable defaults, and preserve Cargo locks; a separate hydration check
+selects only `hydrate`. Development and release-bundle plans delegate to the
+existing locked Cargo Leptos contract. Required frontend dependencies,
+lockfile-selected Tailwind/wasm-bindgen tools, and toolchain versions are
+declarations, not installed or probed by the planner.
+
+Database intents carry a typed status/forward-migrate request and an explicit
+baseline profile. They require an application-owned operation entry point;
+current templates do not yet provide that executable and the planner invents
+neither a binary path nor a CLI SQL engine. Baseline profile/provider mismatches
+are rejected: `sqlite` selects SQLite; `development` and `production` select
+PostgreSQL; `test` selects PostgreSQL for the default Identity template and
+SQLite for minimal or Identity-added applications. User runtime overrides are
+not read or validated by planning. Production migration plans additionally
+declare explicit approval as an execution requirement.
+
+Planning is read-only, but planned check/test/build execution would still run
+trusted application and toolchain code; development execution can initialize
+the application's configured dependencies. A summary is not execution
+authority, a readiness certificate, a cached publication token, or a sandbox.
+The library exposes no executor and adds no public operation commands to the
+`hegira` binary. Static schema-1 errors preserve validation/conflict/internal
+outcomes without echoing input, parser excerpts, or source paths.
+
 When an application name or destination is omitted in an interactive terminal,
 the same command gathers missing values through a guided workflow, displays the
 implemented selections and defaults, and requires confirmation after a final
