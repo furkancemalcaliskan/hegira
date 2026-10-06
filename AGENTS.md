@@ -129,8 +129,14 @@ commands change. Never describe planned work as implemented.
   current application and authenticated bundled composition. These plans do
   not probe tools, load runtime configuration, execute commands, or grant
   execution authority. Database steps declare an application-owned entry-point
-  requirement, not a currently available executable. Operation execution is not
-  a public CLI capability.
+  requirement, not a currently available executable. Its separate Linux native
+  check/test execution library requires explicit trust consent, an absolute trusted Cargo
+  selection, and trusted auxiliary tool directories. It anchors the approved
+  root and executable, re-authenticates composition, rejects pending recovery
+  and concurrent operations, and owns child-group termination and reaping.
+  Inherited environment and application/tool output are not sanitized; this is
+  not a sandbox. Leptos execution is blocked without a verified frontend
+  tooling preflight. Operation execution is not a public CLI capability.
   Generation validates project identity and destination before rendering and
   requires a new destination under an existing parent without symlinks. Safe
   atomic publication fails closed on unsupported platforms.

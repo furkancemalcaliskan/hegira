@@ -179,8 +179,19 @@ default, minimal, and Identity-added SQLite/PostgreSQL states. It verifies
 ordered locked arguments, provider/profile selection, explicit production
 migration approval requirements, deterministic redacted summaries, invalid
 composition and path rejection, and unchanged application trees after planning.
-These are planning contracts, not operation execution or database integration
-tests: the library spawns no process, probes no tool, and connects to no service.
+These planning tests spawn no operation process, probe no tool, and connect to
+no service. A separate Linux execution suite builds a small native controlled
+Cargo substitute and tests the explicit-consent library without compiling or
+running a generated application. It covers exact argument arrays and anchored
+working directories, explicit tool selection and substitution rejection,
+missing/unsafe prerequisite paths, recovery blocking, concurrent execution,
+spawn failure, nonzero exit, external signals, cancellation/termination,
+SIGKILL escalation for a stopped child, descendant cleanup, and direct-child
+reaping. No database, provider, Docker service, or public operation command is
+used. Leptos plans are tested as non-executable without a frontend tooling
+preflight, even when a dependency directory exists. See the
+[execution boundary](architecture.md#trusted-application-process-execution-library)
+for inherited environment/output limits and Linux support.
 
 The complementary composition matrix can be run with
 `sh scripts/composition-matrix-check.sh`. It exercises the explicit minimal

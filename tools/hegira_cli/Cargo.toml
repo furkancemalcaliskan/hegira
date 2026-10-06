@@ -31,4 +31,4 @@ template_renderer = { path = "../template_renderer" }
 upgrade_test_support = { path = "../upgrade_test_support" }
 
 [target.'cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))'.dependencies]
-rustix = { version = "1.1.4", features = ["fs"] }
+rustix = { version = "1.1.4", features = ["fs", "process"] }
