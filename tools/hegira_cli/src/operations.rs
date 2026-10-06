@@ -1,8 +1,12 @@
-//! Read-only application operation planning. Plans are not execution authority.
+//! Application operation planning and explicitly consented execution.
+//! Plans are not execution authority.
 //!
-//! This module reads only the application manifest and authenticated bundled
+//! Planning reads only the application manifest and authenticated bundled
 //! composition. It never probes tools, reads runtime configuration, executes a
 //! process, resolves dependencies, connects to a database, or publishes source.
+//! The separate executor requires explicit consent and trusted tool selection.
+
+pub mod execution;
 
 use std::{
     collections::BTreeMap,
@@ -96,6 +100,7 @@ pub struct OperationRequest {
 #[derive(Clone, PartialEq, Eq)]
 pub struct OperationPlan {
     root: PathBuf,
+    anchor: execution::RootAnchor,
     summary: OperationPlanSummary,
 }
 
@@ -387,8 +392,11 @@ pub fn plan_application_operation(
         .contains(application_manifest::LAYERED_LEPTOS_IDENTITY_COMPONENT);
     let (effect, prerequisites, steps) =
         operation_steps(request.intent, database, default_identity)?;
+    let anchor = execution::RootAnchor::capture(&context.root)?;
+    anchor.matches_manifest(manifest)?;
     Ok(OperationPlan {
         root: context.root,
+        anchor,
         summary: OperationPlanSummary {
             output_schema: OPERATION_PLAN_SCHEMA,
             application: manifest.application.clone(),

@@ -524,8 +524,9 @@ unsupported, or graph-inconsistent application state fails before a plan is
 returned. It reads no application source, runtime profile, environment value,
 or credential, and does not execute a tool or connect to a provider.
 
-The privately constructed `OperationPlan` retains the resolved root for a
-caller but excludes its machine-local path from Debug, human review text, and
+The privately constructed `OperationPlan` retains an open root directory and
+the observed manifest privately for later precondition checks, but excludes
+machine-local paths and source content from Debug, human review text, and
 the deterministic schema-1 `OperationPlanSummary`. Summaries record exact
 component/module versions and capabilities, selected adapters, potential
 execution effects, ordered steps, unprobed prerequisites, and execution
@@ -551,9 +552,88 @@ Planning is read-only, but planned check/test/build execution would still run
 trusted application and toolchain code; development execution can initialize
 the application's configured dependencies. A summary is not execution
 authority, a readiness certificate, a cached publication token, or a sandbox.
-The library exposes no executor and adds no public operation commands to the
-`hegira` binary. Static schema-1 errors preserve validation/conflict/internal
+The planner adds no public operation commands to the `hegira` binary.
+Static schema-1 errors preserve validation/conflict/internal
 outcomes without echoing input, parser excerpts, or source paths.
+
+### Trusted application process execution library
+
+`hegira_cli::operations::execution::execute_application_operation` is separate
+from inspection and planning. It requires a privately constructed plan,
+`ExecutionConsent::ExecuteTrustedApplicationAndToolchain`, an explicitly
+resolved `TrustedToolchain`, an `ExecutionControl`, and a child-output policy.
+There are no public CLI operation commands yet. Database steps fail before
+spawning: the application-owned entry-point contract is not implemented.
+Only native check/test steps currently execute through this boundary. Leptos
+watch/build plans fail with `execution-readiness` before any child starts:
+they need a verified, lockfile-matched frontend tooling preflight. The executor
+does not treat directory presence as tool readiness or delegate missing-tool
+installation to Cargo Leptos.
+
+Execution currently supports Linux with accessible `/proc/self/fd`; other
+platforms fail closed. The application root and manifest are checked again,
+and the current release and authenticated bundled composition must still match
+the reviewed plan. A separate open description acquires a nonblocking advisory
+lock on the application directory, so concurrent executors fail without creating
+or deleting lock files. Any existing `.hegira-mutation.lock`, including a
+directory or dangling symlink, blocks execution without being read or removed.
+This coordination applies to Hegira executors, not arbitrary editors or source
+mutation publishers. Owners must not publish mutations while operations run.
+
+The primary Cargo executable is selected by an explicit absolute path, not
+ambient `PATH`. Normal rustup proxy symlinks are resolved once to a native ELF
+file; scripts and set-id executables are rejected. Its open file descriptor and
+the root's open directory descriptor provide the executable and working
+directory through verified `/proc/self/fd` paths. Root, manifest, executable,
+and auxiliary-directory identity changes fail preconditions before each step.
+Auxiliary tools use only explicitly trusted, absolute directories outside the
+application. Empty and application-relative search entries are rejected; the
+primary executable must also be outside the application. The executor never
+interpolates a shell command or accepts arbitrary operation arguments.
+
+Basic native prerequisite paths (`Cargo.toml`, `Cargo.lock`, and
+`rust-toolchain.toml`) must be real regular files reached without following
+symlinks. This is not a tool-version or
+provider-readiness certificate: missing WASM targets, tool versions, dependencies,
+or runtime services can still cause child failure. The executor installs nothing
+and sets `RUSTUP_AUTO_INSTALL=0`, disabling rustup's automatic toolchain
+installation. It removes an inherited `RUSTUP_TOOLCHAIN` override so the
+application's toolchain file remains effective; ordered Cargo arguments remain
+locked. Cargo may still download locked dependencies when executing an explicitly
+approved build. Application-controlled Cargo configuration, build scripts,
+tests, and tools execute with the owner's privileges.
+Trusted source must remain trusted: descriptor anchoring prevents pathname
+substitution, not malicious in-place writes to approved tool files or arbitrary
+replacement of tools that Cargo itself invokes.
+
+Apart from that toolchain policy and the plan's explicit environment overrides,
+the child inherits the caller's environment, including runtime overrides and
+possibly credentials. Trust approval must cover this environment and Cargo
+configuration as well as application and toolchain source. Credentials are not
+copied into arguments, plan summaries, execution reports, or framework errors.
+Child output is either inherited unchanged or discarded, not captured in
+schema-1 framework reports; arbitrary tool/application output is **not
+redacted**. Child stdin is closed. Execution is a trust decision, not an OS
+sandbox, network isolation, or a promise of secret-output sanitization.
+
+Each child owns a new process group. Cancellation or termination requested
+through `ExecutionControl` sends SIGTERM, allows a 250 ms grace period, then
+SIGKILLs remaining group members and waits for the direct child. The leader is
+observed without reaping until group cleanup finishes, preventing PID reuse
+during cleanup. Normal leader exit also stops leftover group members. The
+child guard kills and reaps on errors or unwinding. Callers are responsible for
+forwarding their OS signal handling to `ExecutionControl`; the library installs
+no global handlers. SIGKILL of the parent, detached descendants that deliberately
+leave the group, and uninterruptible kernel waits cannot be handled as a sandbox
+guarantee. Orphaned grandchildren are ultimately reaped by the host's init or
+subreaper, not by the executor.
+
+Versioned, content-redacted reports distinguish success, child failure, child
+signal, cancellation, and termination and record only completed successful
+steps. Spawn and lifecycle errors remain non-success diagnostics. A successful
+report is produced only after all steps and owned direct-child cleanup finish.
+`ExecutionReport::exit()` maps only success to zero; every other outcome maps
+to the CLI's existing nonzero internal outcome while retaining its typed status.
 
 When an application name or destination is omitted in an interactive terminal,
 the same command gathers missing values through a guided workflow, displays the

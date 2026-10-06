@@ -73,7 +73,7 @@ ownership:
 | `templates/package.toml` | Versioned canonical component-package identity, framework compatibility, component graph, and source digest |
 | `templates/components/` | Typed data-only manifests for canonical rendering and trusted additive component contributions |
 | `tools/application_mutator/` | Typed additive component and general change plans, canonical file ownership, controlled Cargo/Rust/TOML integration, and failure-safe publication for coordinated existing-application changes |
-| `tools/hegira_cli/` | Source-runnable creation, inspection, direct-upgrade readiness/preview/apply, additive component installation, layered resource and migration generation; read-only typed application-operation planning library with stable diagnostics |
+| `tools/hegira_cli/` | Source-runnable creation, inspection, direct-upgrade readiness/preview/apply, additive component installation, layered resource and migration generation; typed application-operation planning and explicitly trusted Linux native check/test execution libraries with stable diagnostics (no public operation commands yet) |
 | `tools/resource_generator/` | Typed layered resource specifications plus inward-layer, provider-specific SQLx persistence, explicit Axum/OpenAPI and Leptos UI composition, and append-only migration planning |
 | `tools/template_renderer/` | Reusable deterministic render core with no-follow, digest-verified package-source loading and a separate disposable repository-validation adapter; it is not a public CLI |
 | `tools/upgrade_test_support/` | Test-only authenticated access to immutable, content-addressed released-application baselines |
