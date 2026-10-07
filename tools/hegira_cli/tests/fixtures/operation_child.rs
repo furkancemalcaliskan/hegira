@@ -15,7 +15,7 @@ fn main() {
         .unwrap()
         .to_str()
         .unwrap();
-    if name == "cargo-leptos" || name == "wasm-bindgen" || name == "rustc" || name == "node" {
+    if ["cargo-leptos", "wasm-bindgen", "wasm-opt", "rustc", "node"].contains(&name) {
         let mode = fs::read_to_string("probe-mode").unwrap_or_default();
         if mode.trim() == "hang" {
             fs::write("probe.pid", std::process::id().to_string()).unwrap();
@@ -26,6 +26,10 @@ fn main() {
             return;
         }
         match name {
+            "wasm-opt" => println!(
+                "wasm-opt version {}",
+                if mode.trim() == "optimizer" { 122 } else { 123 }
+            ),
             "cargo-leptos" => println!(
                 "cargo-leptos {}",
                 if mode.trim() == "leptos" {
@@ -100,6 +104,60 @@ fn main() {
     .unwrap();
     if args.first().map(String::as_str) == Some("leptos") {
         assert_eq!(std::env::var("LEPTOS_BIN_CARGO_COMMAND").unwrap(), "cargo");
+        if args.get(1).map(String::as_str) == Some("build") {
+            assert!(args.iter().any(|arg| arg == "--release"));
+            let target = std::env::var("CARGO_TARGET_DIR").unwrap();
+            assert_eq!(target, "target/hegira/release-build");
+            assert_eq!(std::env::var("LEPTOS_BIN_TARGET_DIR").unwrap(), target);
+            assert_eq!(
+                std::env::var("LEPTOS_SITE_ROOT").unwrap(),
+                "CARGO_TARGET_DIR/site"
+            );
+            assert_eq!(
+                std::env::var("LEPTOS_ASSETS_DIR").unwrap(),
+                "../web/src/public"
+            );
+            for args in [
+                vec!["metadata", "--format-version", "1"],
+                vec!["build", "--locked"],
+            ] {
+                assert!(
+                    Command::new(std::env::var_os("CARGO").unwrap())
+                        .args(args)
+                        .status()
+                        .unwrap()
+                        .success()
+                );
+            }
+            if mode.trim() == "failure" {
+                std::process::exit(23);
+            }
+            if mode.trim() == "wait" {
+                wait_forever();
+            }
+            if mode.trim() == "rewrite-lock" {
+                fs::write("Cargo.lock", "unreviewed fixture lock").unwrap();
+                return;
+            }
+            if mode.trim() == "incomplete" {
+                return;
+            }
+            fs::create_dir_all(format!("{target}/release")).unwrap();
+            fs::create_dir_all(format!("{target}/site/pkg")).unwrap();
+            fs::copy(
+                std::env::current_exe().unwrap(),
+                format!("{target}/release/app_server"),
+            )
+            .unwrap();
+            fs::write(format!("{target}/site/pkg/app_bg.wasm"), b"\0asm\x01\0\0\0").unwrap();
+            fs::write(format!("{target}/site/pkg/app.js"), "controlled JavaScript").unwrap();
+            fs::write(
+                format!("{target}/site/pkg/app.css"),
+                "controlled stylesheet",
+            )
+            .unwrap();
+            return;
+        }
         fs::write("child.profile", std::env::var("APP_ENV").unwrap()).unwrap();
         fs::write(
             "child.backend",

@@ -29,6 +29,28 @@ use crate::{
 pub const OPERATION_PLAN_SCHEMA: u32 = 1;
 pub const OPERATION_DIAGNOSTIC_SCHEMA: u32 = 1;
 
+/// Closed, application-relative output locations; not arbitrary destinations.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ReleaseBuildArtifacts {
+    pub owner: &'static str,
+    pub root: &'static str,
+    pub server: &'static str,
+    pub site: &'static str,
+    pub browser_wasm: &'static str,
+}
+
+impl Default for ReleaseBuildArtifacts {
+    fn default() -> Self {
+        Self {
+            owner: "hegira-release-build",
+            root: "target/hegira/release-build",
+            server: "target/hegira/release-build/release/app_server",
+            site: "target/hegira/release-build/site",
+            browser_wasm: "target/hegira/release-build/site/pkg/app_bg.wasm",
+        }
+    }
+}
+
 /// Closed intents, not arbitrary executable names or user-supplied arguments.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(
@@ -146,6 +168,9 @@ impl OperationPlan {
         for requirement in &self.summary.prerequisites {
             lines.push(format!("Required (not probed): {requirement:?}"));
         }
+        if let Some(artifacts) = &self.summary.artifacts {
+            lines.push(format!("Expected artifacts (not built): {artifacts:?}"));
+        }
         if self.summary.policy.production_migration_approval_required {
             lines.push(
                 "Production migration requires additional explicit approval before execution."
@@ -181,6 +206,8 @@ pub struct OperationPlanSummary {
     pub policy: ExecutionRequirements,
     pub prerequisites: Vec<OperationPrerequisite>,
     pub steps: Vec<OperationStep>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub artifacts: Option<ReleaseBuildArtifacts>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -232,6 +259,9 @@ pub enum OperationPrerequisite {
     },
     LockfileTailwindCli {
         lockfile: &'static str,
+    },
+    WasmOpt {
+        version: &'static str,
     },
     RuntimeConfiguration {
         profile: RuntimeProfile,
@@ -423,6 +453,8 @@ pub fn plan_application_operation(
             },
             prerequisites,
             steps,
+            artifacts: (request.intent == OperationIntent::ReleaseBuild)
+                .then(ReleaseBuildArtifacts::default),
         },
     })
 }
@@ -513,6 +545,9 @@ fn operation_steps(
                 },
             ]);
             let development = intent == OperationIntent::Develop;
+            if !development {
+                requirements.push(OperationPrerequisite::WasmOpt { version: "123" });
+            }
             let mut arguments = vec![
                 "leptos".to_owned(),
                 if development { "watch" } else { "build" }.to_owned(),
@@ -571,7 +606,42 @@ fn operation_steps(
                     }
                     step
                 } else {
-                    tool(arguments, profile)
+                    let mut step = tool(arguments, profile);
+                    if let OperationStep::Tool { environment, .. } = &mut step {
+                        environment.extend([
+                            (
+                                "CARGO_TARGET_DIR".to_owned(),
+                                "target/hegira/release-build".to_owned(),
+                            ),
+                            (
+                                "CARGO_BUILD_TARGET_DIR".to_owned(),
+                                "target/hegira/release-build".to_owned(),
+                            ),
+                            (
+                                "LEPTOS_BIN_TARGET_DIR".to_owned(),
+                                "target/hegira/release-build".to_owned(),
+                            ),
+                            (
+                                "LEPTOS_SITE_ROOT".to_owned(),
+                                "CARGO_TARGET_DIR/site".to_owned(),
+                            ),
+                            ("LEPTOS_SITE_PKG_DIR".to_owned(), "pkg".to_owned()),
+                            ("LEPTOS_OUTPUT_NAME".to_owned(), "app".to_owned()),
+                            ("LEPTOS_BIN_EXE_NAME".to_owned(), "app_server".to_owned()),
+                            ("LEPTOS_BIN_TARGET".to_owned(), "app_server".to_owned()),
+                            ("LEPTOS_BIN_CARGO_COMMAND".to_owned(), "cargo".to_owned()),
+                            (
+                                "LEPTOS_STYLE_FILE".to_owned(),
+                                "../web/src/style/main.css".to_owned(),
+                            ),
+                            (
+                                "LEPTOS_ASSETS_DIR".to_owned(),
+                                "../web/src/public".to_owned(),
+                            ),
+                            ("LEPTOS_HASH_FILES".to_owned(), "false".to_owned()),
+                        ]);
+                    }
+                    step
                 }],
             ))
         }

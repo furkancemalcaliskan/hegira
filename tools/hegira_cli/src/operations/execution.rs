@@ -1,6 +1,6 @@
 //! Explicit, trusted operation execution; not an application sandbox.
 //!
-//! Public dev/check/test commands use this library. Callers must acknowledge
+//! Public dev/check/test/build commands use this library. Callers must acknowledge
 //! trusted application, toolchain, Cargo configuration, and inherited environment.
 //! Child output is inherited or discarded, never captured in framework summaries.
 
@@ -77,6 +77,9 @@ pub struct ExecutionReport {
     pub intent: OperationIntent,
     pub completed_steps: usize,
     pub outcome: ExecutionOutcome,
+    /// Verified output locations only after a successful release build.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub artifacts: Option<super::ReleaseBuildArtifacts>,
 }
 
 impl ExecutionReport {
@@ -95,9 +98,9 @@ impl ExecutionReport {
     }
 }
 
-/// Re-authenticates the plan and executes native check/test Cargo steps.
-/// Leptos tooling readiness and database entry points remain unavailable and
-/// fail before any child is started; plans alone must not bootstrap those tools.
+/// Re-authenticates the plan and executes explicitly trusted application steps.
+/// Leptos operations require installed frontend tools and an explicit selection;
+/// database entry points remain unavailable. Plans never authorize installation.
 pub fn execute_application_operation(
     repository_root: &Path,
     plan: &OperationPlan,
@@ -340,6 +343,7 @@ mod anchors {
 
 #[cfg(target_os = "linux")]
 mod platform {
+    mod artifacts;
     mod leptos;
     use super::{anchors::*, *};
     use crate::{ApplicationContextRequest, operations::*};
@@ -372,6 +376,7 @@ mod platform {
         search_directories: Vec<Directory>,
         search_path: std::ffi::OsString,
         development_tools: Option<(PathBuf, PathBuf)>,
+        release_optimizer: Option<PathBuf>,
     }
 
     impl fmt::Debug for TrustedToolchain {
@@ -427,6 +432,7 @@ mod platform {
                 search_directories: directories,
                 search_path,
                 development_tools: None,
+                release_optimizer: None,
             })
         }
 
@@ -441,6 +447,15 @@ mod platform {
                 return Err(unsafe_path());
             }
             self.development_tools = Some((wasm_bindgen.to_owned(), cargo_proxy.to_owned()));
+            Ok(self)
+        }
+
+        /// Select an already installed, explicitly trusted native Binaryen optimizer.
+        pub fn with_release_optimizer(mut self, wasm_opt: &Path) -> Result<Self, OperationError> {
+            if !wasm_opt.is_absolute() {
+                return Err(unsafe_path());
+            }
+            self.release_optimizer = Some(wasm_opt.to_owned());
             Ok(self)
         }
 
@@ -510,12 +525,15 @@ mod platform {
         }
         if !matches!(
             plan.summary.intent,
-            OperationIntent::Check | OperationIntent::Test | OperationIntent::Develop
+            OperationIntent::Check
+                | OperationIntent::Test
+                | OperationIntent::Develop
+                | OperationIntent::ReleaseBuild
         ) {
             return Err(failure(
                 OperationErrorKind::Validation,
                 "execution-readiness",
-                "Release-bundle execution is unavailable; the current executor supports check, test, and explicitly prepared development only.",
+                "This operation is unavailable; the executor supports check, test, and explicitly prepared Leptos development/release builds only.",
             ));
         }
         if let Some(outcome) = control.outcome() {
@@ -558,7 +576,10 @@ mod platform {
         let root_path = descriptor_path(&plan.anchor.directory.fd);
         verify_descriptor(&cargo_path, &toolchain.cargo)?;
         verify_descriptor(&root_path, &plan.anchor.directory.fd)?;
-        let development = if plan.summary.intent == OperationIntent::Develop {
+        let development = if matches!(
+            plan.summary.intent,
+            OperationIntent::Develop | OperationIntent::ReleaseBuild
+        ) {
             match leptos::Session::prepare(plan, toolchain, control) {
                 Ok(session) => Some(session),
                 Err(error) => {
@@ -568,6 +589,11 @@ mod platform {
                     return Err(error);
                 }
             }
+        } else {
+            None
+        };
+        let build_outputs = if plan.summary.intent == OperationIntent::ReleaseBuild {
+            Some(artifacts::BuildOutputs::prepare(plan)?)
         } else {
             None
         };
@@ -582,6 +608,9 @@ mod platform {
             toolchain.verify(plan)?;
             if let Some(session) = &development {
                 session.verify(plan, toolchain)?;
+            }
+            if let Some(outputs) = &build_outputs {
+                outputs.verify(plan)?;
             }
             let OperationStep::Tool {
                 arguments,
@@ -621,6 +650,14 @@ mod platform {
                 return Ok(report(plan, index, outcome));
             }
         }
+        if let Some(outputs) = &build_outputs {
+            // Trusted builders must not silently rewrite reviewed dependency locks.
+            development
+                .as_ref()
+                .expect("release frontend preflight")
+                .verify(plan, toolchain)?;
+            outputs.complete(plan)?;
+        }
         // A cancellation arriving during the final cleanup still is not success.
         Ok(report(
             plan,
@@ -634,11 +671,15 @@ mod platform {
         completed_steps: usize,
         outcome: ExecutionOutcome,
     ) -> ExecutionReport {
+        let artifacts = (plan.summary.intent == OperationIntent::ReleaseBuild
+            && outcome == ExecutionOutcome::Succeeded)
+            .then(ReleaseBuildArtifacts::default);
         ExecutionReport {
             output_schema: OPERATION_EXECUTION_SCHEMA,
             intent: plan.summary.intent,
             completed_steps,
             outcome,
+            artifacts,
         }
     }
 
@@ -793,6 +834,9 @@ mod platform {
             Err(unsupported())
         }
         pub fn with_development_tools(self, _: &Path, _: &Path) -> Result<Self, OperationError> {
+            Err(unsupported())
+        }
+        pub fn with_release_optimizer(self, _: &Path) -> Result<Self, OperationError> {
             Err(unsupported())
         }
     }

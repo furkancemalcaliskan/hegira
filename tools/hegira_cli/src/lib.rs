@@ -98,6 +98,8 @@ enum CliCommand {
     Test(operations::command::ValidationCommand),
     /// Preview or explicitly run the local foreground Leptos development workflow.
     Dev(operations::command::DevelopmentCommand),
+    /// Preview or explicitly build a locked application release bundle (no deployment).
+    Build(operations::command::BuildCommand),
     /// Inspect application upgrade readiness without modifying source.
     Upgrade(upgrade::UpgradeCommand),
     /// Manage bundled additive application components.
@@ -456,6 +458,13 @@ fn run_command(
             diagnostics,
         ),
         CliCommand::Dev(command) => operations::command::run_development(
+            command,
+            repository_root,
+            working_directory,
+            output,
+            diagnostics,
+        ),
+        CliCommand::Build(command) => operations::command::run_build(
             command,
             repository_root,
             working_directory,

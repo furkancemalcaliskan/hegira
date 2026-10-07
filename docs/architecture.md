@@ -553,8 +553,8 @@ Planning is read-only, but planned check/test/build execution would still run
 trusted application and toolchain code; development execution can initialize
 the application's configured dependencies. A summary is not execution
 authority, a readiness certificate, a cached publication token, or a sandbox.
-Public `dev`, `check`, and `test` commands reuse this planner; build and database
-operations remain library plans rather than public commands. Development plans
+Public `dev`, `check`, `test`, and `build --release` commands reuse this planner;
+database operations remain library plans rather than public commands. Development plans
 explicitly select the recorded backend and development profile, localhost site
 and server address, reload port, canonical CSS input, and standard Cargo
 server-build command without reading runtime
@@ -568,12 +568,14 @@ outcomes without echoing input, parser excerpts, or source paths.
 from inspection and planning. It requires a privately constructed plan,
 `ExecutionConsent::ExecuteTrustedApplicationAndToolchain`, an explicitly
 resolved `TrustedToolchain`, an `ExecutionControl`, and a child-output policy.
-Public `dev`, `check`, and `test` commands delegate to this library. Database steps fail
+Public `dev`, `check`, `test`, and `build --release` commands delegate to this library. Database steps fail
 before spawning: the application-owned entry-point contract is not implemented.
 Check/test plans execute native provider validation and a hydration check.
 Development plans require explicit lock-matched wasm-bindgen selection plus a
 verified frontend/toolchain preflight before foreground Cargo Leptos watch/serve.
-Release-build execution remains unavailable. Directory presence alone never
+Release builds additionally require explicit native Binaryen `wasm-opt` 123
+selection, canonical host/profile metadata, and a separately claimed output
+root before compilation. Directory presence alone never
 establishes tool readiness; no missing-tool installation is delegated to Leptos.
 
 Execution currently supports Linux with accessible `/proc/self/fd`; other
@@ -612,7 +614,7 @@ Trusted source must remain trusted: descriptor anchoring prevents pathname
 substitution, not malicious in-place writes to approved tool files or arbitrary
 replacement of tools that Cargo itself invokes.
 
-Development additionally verifies the pinned Rust version and WASM core target,
+Leptos development and release builds verify the pinned Rust version and WASM core target,
 Cargo Leptos 0.3.7, Node.js 22+, the exact Cargo-lock wasm-bindgen version, npm
 installed receipts, and the lock-selected Tailwind entry point/version. Probes
 have bounded output and deadlines and use owned process-group cleanup.
@@ -623,7 +625,7 @@ canonical Tailwind input and disabled native/hydration defaults are required;
 customized tool composition fails closed rather than being reinterpreted.
 
 A private 0700 temporary directory places only the reviewed Cargo proxy,
-Cargo Leptos, Rust, Node, wasm-bindgen, and Tailwind names ahead of trusted
+Cargo Leptos, Rust, Node, wasm-bindgen, Tailwind, and (for release) wasm-opt names ahead of trusted
 external auxiliary directories. The general application `node_modules/.bin`
 is never trusted. The separately selected wasm-bindgen executable may reside
 under the application's explicitly prepared tool directory. The native proxy
@@ -705,6 +707,43 @@ execution: the selected profile does not certify disposable data. Other
 inherited settings remain effective; this is trusted execution, not network
 isolation. No Docker, deployment, tool installation, source mutation, or
 lockfile regeneration is performed by Hegira. See [Application development](getting-started.md#develop-an-application).
+
+### Public application release build command
+
+`hegira build --release` exposes preview or explicit Linux execution through
+the same typed plan, trust consent, frontend preflight, locked Cargo proxy,
+signal lifecycle, and schema-1 envelope. It delegates native release and
+`wasm-release` hydration compilation to Cargo Leptos, selecting only the
+recorded provider. Binaryen `wasm-opt` 123 is explicitly selected and probed
+before compilation so missing release optimization cannot trigger an automatic
+download. Hegira loads no runtime profile and starts neither application nor
+provider. Build code and inherited environment remain trusted, not sandboxed.
+
+The release plan records closed application-relative artifact identities and
+explicit output overrides. The executor creates only a new
+`target/hegira/release-build` root or reuses its exact application-bound ownership
+claim. It never adopts an existing unclaimed root. Bounded no-follow metadata
+walks reject symlinks, special files, external hard links, and unsupported deep
+trees. Internal Cargo hard links are allowed only when every link is observed
+inside the claimed root. This is a root-specific claim, not adoption of normal
+developer Cargo output or a cache size/cleanup policy. The builder can clear
+its owned site subtree; users must not put unrelated data there or forge the
+ownership marker to bypass rejection.
+
+Native output, the site, browser WASM, JavaScript, and CSS stay inside the
+claimed root. Canonical host/profile metadata and explicit Cargo target,
+site, package-name, standard Cargo command, and asset-path overrides constrain
+the supported layout; customized cross-target/intermediate paths fail closed.
+Frontend sources and locks are rechecked after the builder. Only successful
+execution with verified ELF, WASM, JS, and CSS outputs adds verified artifact
+locations to the execution report. Preview artifact paths are expectations,
+not existing outputs. Failure/cancellation never grants an artifact receipt,
+even if older or partial output remains. Trusted builder changes are not
+silently reverted. A receipt certifies source-build output only, not secret-free
+assets, runtime correctness, tests, container validation, signing, or deployment.
+See [Application release builds](getting-started.md#build-an-application-release-bundle).
+
+### Application creation and source publication
 
 When an application name or destination is omitted in an interactive terminal,
 the same command gathers missing values through a guided workflow, displays the
