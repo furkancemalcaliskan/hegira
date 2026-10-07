@@ -5,6 +5,9 @@ use std::{
 };
 
 fn main() -> ExitCode {
+    if let Some(code) = hegira_cli::operations::execution::development_cargo_proxy() {
+        return ExitCode::from(code);
+    }
     let stdout = io::stdout();
     let stderr = io::stderr();
     let stdin = io::stdin();

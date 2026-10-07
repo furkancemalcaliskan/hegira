@@ -96,6 +96,8 @@ enum CliCommand {
     Check(operations::command::ValidationCommand),
     /// Preview or explicitly run native tests and a hydration check (no ignored tests).
     Test(operations::command::ValidationCommand),
+    /// Preview or explicitly run the local foreground Leptos development workflow.
+    Dev(operations::command::DevelopmentCommand),
     /// Inspect application upgrade readiness without modifying source.
     Upgrade(upgrade::UpgradeCommand),
     /// Manage bundled additive application components.
@@ -448,6 +450,13 @@ fn run_command(
         CliCommand::Test(command) => operations::command::run(
             command,
             operations::OperationIntent::Test,
+            repository_root,
+            working_directory,
+            output,
+            diagnostics,
+        ),
+        CliCommand::Dev(command) => operations::command::run_development(
+            command,
             repository_root,
             working_directory,
             output,

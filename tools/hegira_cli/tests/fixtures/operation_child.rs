@@ -9,6 +9,67 @@ fn wait_forever() -> ! {
 
 fn main() {
     let args: Vec<_> = std::env::args().skip(1).collect();
+    let name = std::env::args().next().unwrap();
+    let name = std::path::Path::new(&name)
+        .file_name()
+        .unwrap()
+        .to_str()
+        .unwrap();
+    if name == "cargo-leptos" || name == "wasm-bindgen" || name == "rustc" || name == "node" {
+        let mode = fs::read_to_string("probe-mode").unwrap_or_default();
+        if mode.trim() == "hang" {
+            fs::write("probe.pid", std::process::id().to_string()).unwrap();
+            wait_forever();
+        }
+        if mode.trim() == "oversize" {
+            println!("{}", "x".repeat(20_000));
+            return;
+        }
+        match name {
+            "cargo-leptos" => println!(
+                "cargo-leptos {}",
+                if mode.trim() == "leptos" {
+                    "0.3.6"
+                } else {
+                    "0.3.7"
+                }
+            ),
+            "wasm-bindgen" => println!(
+                "wasm-bindgen {}",
+                if mode.trim() == "wasm" {
+                    "0.0.0".to_owned()
+                } else {
+                    fs::read_to_string("probe-wasm-version").unwrap()
+                }
+            ),
+            "rustc" if args.first().map(String::as_str) == Some("--print") => {
+                println!("{}", fs::read_to_string("probe-target").unwrap())
+            }
+            "rustc" => println!(
+                "rustc {}",
+                fs::read_to_string("probe-rust-version").unwrap()
+            ),
+            "node" if args.first().map(String::as_str) == Some("--version") => {
+                println!("v{}.0.0", if mode.trim() == "node" { 20 } else { 22 })
+            }
+            "node" => println!(
+                "tailwindcss v{}",
+                fs::read_to_string("probe-tailwind-version").unwrap()
+            ),
+            _ => unreachable!(),
+        }
+        return;
+    }
+    if matches!(args.first().map(String::as_str), Some("metadata" | "build")) {
+        assert_eq!(args.iter().filter(|arg| *arg == "--locked").count(), 1);
+        let mut log = fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open("proxy.log")
+            .unwrap();
+        writeln!(log, "{args:?}").unwrap();
+        return;
+    }
     if args.first().map(String::as_str) == Some("descendant") {
         fs::write("descendant.pid", std::process::id().to_string()).unwrap();
         wait_forever();
@@ -37,6 +98,33 @@ fn main() {
         std::env::var("RUSTUP_TOOLCHAIN").unwrap_or_default(),
     )
     .unwrap();
+    if args.first().map(String::as_str) == Some("leptos") {
+        assert_eq!(std::env::var("LEPTOS_BIN_CARGO_COMMAND").unwrap(), "cargo");
+        fs::write("child.profile", std::env::var("APP_ENV").unwrap()).unwrap();
+        fs::write(
+            "child.backend",
+            std::env::var("APP__DATABASE__BACKEND").unwrap(),
+        )
+        .unwrap();
+        fs::write("child.bind", std::env::var("APP__SERVER__ADDR").unwrap()).unwrap();
+        fs::write(
+            "child.leptos-bind",
+            std::env::var("LEPTOS_SITE_ADDR").unwrap(),
+        )
+        .unwrap();
+        for args in [
+            vec!["metadata", "--format-version", "1"],
+            vec!["build", "--locked"],
+        ] {
+            assert!(
+                Command::new(std::env::var_os("CARGO").unwrap())
+                    .args(args)
+                    .status()
+                    .unwrap()
+                    .success()
+            );
+        }
+    }
     match mode.trim() {
         "success" => {}
         "noisy" => {

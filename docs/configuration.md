@@ -15,6 +15,14 @@ APP__RUNTIME__ROLE=web
 Profiles are `development`, `sqlite`, `test`, and `production`. Treat committed
 YAML values as defaults, not a secret store.
 
+The public `hegira dev` workflow explicitly selects `sqlite` or `development`
+from the recorded provider, overrides the database backend to match compiled
+features, and binds the application/site to `127.0.0.1:3000`. It does not load
+runtime configuration while previewing or certify the configured database as
+disposable. Other inherited overrides, including `APP__DATABASE__URL`, remain
+effective; review them before explicitly authorized startup, which may migrate
+and seed. See [Application development](getting-started.md#develop-an-application).
+
 Startup validates configuration before initializing telemetry, the database,
 or another external dependency. Validation runs in this order:
 

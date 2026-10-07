@@ -547,7 +547,32 @@ fn operation_steps(
                     OperationEffect::ProductionBundle
                 },
                 requirements,
-                vec![tool(arguments, profile)],
+                vec![if development {
+                    let mut step = tool(arguments, profile);
+                    if let OperationStep::Tool { environment, .. } = &mut step {
+                        environment.extend([
+                            (
+                                "APP__DATABASE__BACKEND".to_owned(),
+                                match database {
+                                    DatabaseAdapter::Sqlite => "sqlite",
+                                    DatabaseAdapter::Postgres => "postgres",
+                                }
+                                .to_owned(),
+                            ),
+                            ("APP__SERVER__ADDR".to_owned(), "127.0.0.1:3000".to_owned()),
+                            ("LEPTOS_SITE_ADDR".to_owned(), "127.0.0.1:3000".to_owned()),
+                            ("LEPTOS_RELOAD_PORT".to_owned(), "3001".to_owned()),
+                            ("LEPTOS_BIN_CARGO_COMMAND".to_owned(), "cargo".to_owned()),
+                            (
+                                "LEPTOS_STYLE_FILE".to_owned(),
+                                "../web/src/style/main.css".to_owned(),
+                            ),
+                        ]);
+                    }
+                    step
+                } else {
+                    tool(arguments, profile)
+                }],
             ))
         }
         OperationIntent::DatabaseStatus { profile }

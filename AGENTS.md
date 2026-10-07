@@ -130,20 +130,26 @@ commands change. Never describe planned work as implemented.
   not probe tools, load runtime configuration, execute commands, or grant
   execution authority. Database steps declare an application-owned entry-point
   requirement, not a currently available executable. Its separate Linux native
-  check/test execution library requires explicit trust consent, an absolute trusted Cargo
+  check/test/development execution library requires explicit trust consent, an absolute trusted Cargo
   selection, and trusted auxiliary tool directories. It anchors the approved
   root and executable, re-authenticates composition, rejects pending recovery
   and concurrent operations, and owns child-group termination and reaping.
   Inherited environment and application/tool output are not sanitized; this is
-  not a sandbox. Leptos watch/build execution is blocked without a verified frontend
-  tooling preflight. Public `check` and `test` commands expose read-only
+  not a sandbox. Development verifies pinned Rust/WASM, Cargo Leptos, Node,
+  npm receipts, and Tailwind before foreground watch/serve; release-build
+  execution remains blocked. Public `dev`, `check`, and `test` expose read-only
   `--dry-run` or explicitly trusted `--execute` through the same typed plan.
   Execution additionally requires `--trust-application`, absolute `--cargo`
   and `--tool-directory` selections, and Linux. CLI signal handlers forward
   SIGINT/SIGTERM into owned group cleanup; ignored database tests never run by
   default. JSON execution discards child output; human execution inherits it
-  without redaction. Development, build, and database operation commands are
-  not public CLI capabilities.
+  without redaction. `dev` additionally requires explicit lock-matched
+  `--wasm-bindgen` and uses a private allowlisted tool PATH and locked Cargo
+  proxy without installing tools or rewriting source. It explicitly selects a
+  development provider/profile and localhost bind, but trusted startup can
+  migrate, seed, and access configured dependencies. Review runtime settings
+  and inherited database overrides before execution. Build and database
+  operation commands are not public CLI capabilities.
   Generation validates project identity and destination before rendering and
   requires a new destination under an existing parent without symlinks. Safe
   atomic publication fails closed on unsupported platforms.

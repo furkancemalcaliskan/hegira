@@ -553,8 +553,12 @@ Planning is read-only, but planned check/test/build execution would still run
 trusted application and toolchain code; development execution can initialize
 the application's configured dependencies. A summary is not execution
 authority, a readiness certificate, a cached publication token, or a sandbox.
-Public `check` and `test` commands reuse this planner; development, build, and
-database operations remain library plans rather than public commands.
+Public `dev`, `check`, and `test` commands reuse this planner; build and database
+operations remain library plans rather than public commands. Development plans
+explicitly select the recorded backend and development profile, localhost site
+and server address, reload port, canonical CSS input, and standard Cargo
+server-build command without reading runtime
+configuration or certifying the intended database target.
 Static schema-1 errors preserve validation/conflict/internal
 outcomes without echoing input, parser excerpts, or source paths.
 
@@ -564,14 +568,13 @@ outcomes without echoing input, parser excerpts, or source paths.
 from inspection and planning. It requires a privately constructed plan,
 `ExecutionConsent::ExecuteTrustedApplicationAndToolchain`, an explicitly
 resolved `TrustedToolchain`, an `ExecutionControl`, and a child-output policy.
-Public `check` and `test` commands delegate to this library. Database steps fail
+Public `dev`, `check`, and `test` commands delegate to this library. Database steps fail
 before spawning: the application-owned entry-point contract is not implemented.
-Only check/test plans (native provider validation and a hydration check)
-currently execute through this boundary. Leptos watch/build plans fail with
-`execution-readiness` before any child starts:
-they need a verified, lockfile-matched frontend tooling preflight. The executor
-does not treat directory presence as tool readiness or delegate missing-tool
-installation to Cargo Leptos.
+Check/test plans execute native provider validation and a hydration check.
+Development plans require explicit lock-matched wasm-bindgen selection plus a
+verified frontend/toolchain preflight before foreground Cargo Leptos watch/serve.
+Release-build execution remains unavailable. Directory presence alone never
+establishes tool readiness; no missing-tool installation is delegated to Leptos.
 
 Execution currently supports Linux with accessible `/proc/self/fd`; other
 platforms fail closed. The application root and manifest are checked again,
@@ -608,6 +611,28 @@ tests, and tools execute with the owner's privileges.
 Trusted source must remain trusted: descriptor anchoring prevents pathname
 substitution, not malicious in-place writes to approved tool files or arbitrary
 replacement of tools that Cargo itself invokes.
+
+Development additionally verifies the pinned Rust version and WASM core target,
+Cargo Leptos 0.3.7, Node.js 22+, the exact Cargo-lock wasm-bindgen version, npm
+installed receipts, and the lock-selected Tailwind entry point/version. Probes
+have bounded output and deadlines and use owned process-group cleanup.
+Consistency checks do not authenticate every installed dependency's contents;
+the installed application frontend remains trusted code. Required metadata and
+frontend sources are rechecked before startup through no-follow reads. The
+canonical Tailwind input and disabled native/hydration defaults are required;
+customized tool composition fails closed rather than being reinterpreted.
+
+A private 0700 temporary directory places only the reviewed Cargo proxy,
+Cargo Leptos, Rust, Node, wasm-bindgen, and Tailwind names ahead of trusted
+external auxiliary directories. The general application `node_modules/.bin`
+is never trusted. The separately selected wasm-bindgen executable may reside
+under the application's explicitly prepared tool directory. The native proxy
+uses the source-built Hegira executable and the approved Cargo inode, accepts
+only the required Cargo operations, and adds `--locked` when absent; this
+includes Cargo Leptos 0.3.7's otherwise unlocked initial metadata call. It
+exec-replaces itself, preserving the owned process group. Hegira removes its
+private tool directory on ordinary completion/error/unwinding, not after
+SIGKILL or a crash; it never recursively removes application directories.
 
 Apart from that toolchain policy and the plan's explicit environment overrides,
 the child inherits the caller's environment, including runtime overrides and
@@ -659,6 +684,27 @@ optional execution outcome, and static diagnostics. Preview and execution
 consume the same plan within one invocation; a serialized preview cannot be
 submitted as execution authority. See [Application checks and tests](getting-started.md#check-and-test-an-application)
 for arguments, output channels, exit codes, and trust limitations.
+
+### Public application development command
+
+`hegira dev` uses the same explicit preview/execution, consent, JSON envelope,
+exit outcomes, scoped signal handling, and recovery/concurrency boundaries as
+validation commands. Execution additionally requires `--wasm-bindgen`; preview
+does not probe installed tools or start a server. All six compositions select
+their recorded provider, `APP_ENV=sqlite` or `development`, `ssr,db-<provider>`
+for native code and `hydrate` for the browser. Server/site bind is explicitly
+`127.0.0.1:3000`, with reload port `3001`; the canonical CSS path is relative to
+the server package's Cargo Leptos metadata. No production-profile/public-bind
+flag or arbitrary command passthrough is provided.
+
+After preflight, the existing executor delegates foreground watch/serve to
+Cargo Leptos, not a new runtime or daemon. Configured application startup may
+connect to providers, create/open a database, migrate, and seed. Review the
+development configuration and inherited database URL overrides before explicit
+execution: the selected profile does not certify disposable data. Other
+inherited settings remain effective; this is trusted execution, not network
+isolation. No Docker, deployment, tool installation, source mutation, or
+lockfile regeneration is performed by Hegira. See [Application development](getting-started.md#develop-an-application).
 
 When an application name or destination is omitted in an interactive terminal,
 the same command gathers missing values through a guided workflow, displays the

@@ -170,10 +170,71 @@ impl Fixture {
             .arg(self.tools.join("cargo"))
             .arg("--tool-directory")
             .arg(&self.tools);
+        if operation == "dev" {
+            command
+                .arg("--wasm-bindgen")
+                .arg(self.tools.join("wasm-bindgen"));
+        }
         if json {
             command.arg("--json");
         }
         command
+    }
+
+    fn development_tools(&self, root: &Path) {
+        for name in ["cargo-leptos", "rustc", "node", "wasm-bindgen"] {
+            fs::copy(self.tools.join("cargo"), self.tools.join(name)).unwrap();
+        }
+        let target = self.tools.join("wasm-target");
+        fs::create_dir_all(&target).unwrap();
+        fs::write(target.join("libcore-fixture.rlib"), "controlled target").unwrap();
+        fs::write(root.join("probe-target"), target.to_str().unwrap()).unwrap();
+        let rust: toml::Value =
+            toml::from_str(&fs::read_to_string(root.join("rust-toolchain.toml")).unwrap()).unwrap();
+        fs::write(
+            root.join("probe-rust-version"),
+            rust["toolchain"]["channel"].as_str().unwrap(),
+        )
+        .unwrap();
+        let lock: toml::Value =
+            toml::from_str(&fs::read_to_string(root.join("Cargo.lock")).unwrap()).unwrap();
+        let wasm = lock["package"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|package| package["name"].as_str() == Some("wasm-bindgen"))
+            .unwrap();
+        fs::write(
+            root.join("probe-wasm-version"),
+            wasm["version"].as_str().unwrap(),
+        )
+        .unwrap();
+        let lock: serde_json::Value =
+            serde_json::from_slice(&fs::read(root.join("apps/web/src/package-lock.json")).unwrap())
+                .unwrap();
+        let version = lock["packages"]["node_modules/@tailwindcss/cli"]["version"]
+            .as_str()
+            .unwrap();
+        fs::write(root.join("probe-tailwind-version"), version).unwrap();
+        let modules = root.join("apps/web/src/node_modules");
+        let cli = modules.join("@tailwindcss/cli");
+        fs::create_dir_all(cli.join("dist")).unwrap();
+        fs::write(
+            modules.join(".package-lock.json"),
+            serde_json::to_vec(&lock).unwrap(),
+        )
+        .unwrap();
+        fs::write(cli.join("package.json"), serde_json::to_vec(&serde_json::json!({"name":"@tailwindcss/cli", "version":version, "bin":{"tailwindcss":"./dist/index.mjs"}})).unwrap()).unwrap();
+        let script = cli.join("dist/index.mjs");
+        fs::write(
+            &script,
+            "#!/usr/bin/env node\n// Controlled fixture, never a real compiler.\n",
+        )
+        .unwrap();
+        fs::set_permissions(script, fs::Permissions::from_mode(0o755)).unwrap();
+        // A general npm tool directory must never enter the trusted PATH.
+        fs::create_dir(modules.join(".bin")).unwrap();
+        fs::write(modules.join(".bin/cargo"), "untrusted fixture").unwrap();
     }
 }
 
@@ -212,6 +273,11 @@ fn application_source_tree(root: &Path) -> Vec<(PathBuf, Vec<u8>)> {
                     "child.path",
                     "child.auto-install",
                     "child.override",
+                    "child.profile",
+                    "child.backend",
+                    "child.bind",
+                    "child.leptos-bind",
+                    "proxy.log",
                 ]
                 .iter()
                 .any(|name| relative == Path::new(name))
@@ -230,7 +296,7 @@ fn application_source_tree(root: &Path) -> Vec<(PathBuf, Vec<u8>)> {
 #[test]
 fn public_help_and_parser_require_explicit_mode_consent_and_tool_selection() {
     let fixture = Fixture::new();
-    for operation in ["check", "test"] {
+    for operation in ["check", "test", "dev"] {
         let result = fixture
             .public_command(operation)
             .arg("--help")
@@ -270,6 +336,16 @@ fn public_help_and_parser_require_explicit_mode_consent_and_tool_selection() {
             assert_eq!(result.status.code(), Some(2));
             assert!(result.stdout.is_empty());
         }
+        if operation == "dev" {
+            // Check the additional dev-only parser requirement separately.
+            let mut command = fixture.public_command("dev");
+            command
+                .args(["--execute", "--trust-application", "--cargo"])
+                .arg(fixture.tools.join("cargo"))
+                .arg("--tool-directory")
+                .arg(&fixture.tools);
+            assert_eq!(command.output().unwrap().status.code(), Some(2));
+        }
         assert!(!fixture.root.join("child.log").exists());
         assert!(!fixture.root.join("target").exists());
     }
@@ -304,8 +380,9 @@ fn public_preview_and_execution_share_plans_across_all_six_compositions() {
                 );
             }
             fs::write(root.join("child-mode"), "success").unwrap();
+            fixture.development_tools(&root);
             let before = application_source_tree(&root);
-            for operation in ["check", "test"] {
+            for operation in ["check", "test", "dev"] {
                 let preview = fixture
                     .public_command(operation)
                     .current_dir(root.join("apps/web/src"))
@@ -335,7 +412,11 @@ fn public_preview_and_execution_share_plans_across_all_six_compositions() {
                 assert!(human.stderr.is_empty());
                 let human = String::from_utf8(human.stdout).unwrap();
                 assert!(human.contains("Planning only"));
-                assert!(human.contains("wasm32-unknown-unknown"));
+                assert!(human.contains(if operation == "dev" {
+                    "leptos"
+                } else {
+                    "wasm32-unknown-unknown"
+                }));
                 assert!(!human.contains(root.to_str().unwrap()));
                 assert!(!root.join("target").exists());
                 assert!(!root.join("child.log").exists());
@@ -343,13 +424,22 @@ fn public_preview_and_execution_share_plans_across_all_six_compositions() {
                 let executed = fixture
                     .public_execute(operation, true)
                     .current_dir(&root)
+                    .env("APP_ENV", "production")
+                    .env("APP__DATABASE__BACKEND", "incorrect-inherited-provider")
+                    .env("APP__SERVER__ADDR", "0.0.0.0:9000")
+                    .env("LEPTOS_SITE_ADDR", "0.0.0.0:9000")
+                    .env("LEPTOS_STYLE_FILE", "inherited.scss")
+                    .env("LEPTOS_BIN_CARGO_COMMAND", "untrusted-inherited-command")
                     .output()
                     .unwrap();
                 let executed = public_json(&executed, 0);
                 assert_eq!(executed["mode"], "execute");
                 assert_eq!(executed["plan"], preview["plan"]);
                 assert_eq!(executed["execution"]["outcome"]["status"], "succeeded");
-                assert_eq!(executed["execution"]["completed_steps"], 2);
+                assert_eq!(
+                    executed["execution"]["completed_steps"],
+                    if operation == "dev" { 1 } else { 2 }
+                );
                 assert_eq!(executed["diagnostics"], serde_json::json!([]));
                 let expected: Vec<_> = executed["plan"]["steps"]
                     .as_array()
@@ -367,16 +457,51 @@ fn public_preview_and_execution_share_plans_across_all_six_compositions() {
                         .map(|args| format!("{args:?}"))
                         .collect::<Vec<_>>()
                 );
-                assert_eq!(expected[0][0], operation);
-                assert!(expected[0].contains(&format!("app_server/ssr,app_server/db-{database}")));
-                assert_eq!(expected[1][0], "check");
-                assert!(expected[1].contains(&"wasm32-unknown-unknown".to_owned()));
-                assert!(
-                    expected
-                        .iter()
-                        .all(|args| args.contains(&"--locked".to_owned())
-                            && !args.contains(&"--ignored".to_owned()))
-                );
+                if operation == "dev" {
+                    assert_eq!(expected[0][..2], ["leptos", "watch"]);
+                    assert!(expected[0].contains(&format!("ssr,db-{database}")));
+                    assert_eq!(
+                        fs::read_to_string(root.join("child.profile")).unwrap(),
+                        if database == "sqlite" {
+                            "sqlite"
+                        } else {
+                            "development"
+                        }
+                    );
+                    assert_eq!(
+                        fs::read_to_string(root.join("child.backend")).unwrap(),
+                        database
+                    );
+                    for path in ["child.bind", "child.leptos-bind"] {
+                        assert_eq!(
+                            fs::read_to_string(root.join(path)).unwrap(),
+                            "127.0.0.1:3000"
+                        );
+                    }
+                    let path = fs::read_to_string(root.join("child.path")).unwrap();
+                    assert!(!path.contains("node_modules/.bin"));
+                    let shim = std::env::split_paths(&path).next().unwrap();
+                    assert!(
+                        !shim.exists(),
+                        "private development tool selection should be cleaned"
+                    );
+                    let proxy = fs::read_to_string(root.join("proxy.log")).unwrap();
+                    assert_eq!(proxy.lines().count(), 2);
+                    assert!(proxy.lines().all(|line| line.contains("--locked")));
+                } else {
+                    assert_eq!(expected[0][0], operation);
+                    assert!(
+                        expected[0].contains(&format!("app_server/ssr,app_server/db-{database}"))
+                    );
+                    assert_eq!(expected[1][0], "check");
+                    assert!(expected[1].contains(&"wasm32-unknown-unknown".to_owned()));
+                    assert!(
+                        expected
+                            .iter()
+                            .all(|args| args.contains(&"--locked".to_owned())
+                                && !args.contains(&"--ignored".to_owned()))
+                    );
+                }
                 fs::remove_file(root.join("child.log")).unwrap();
                 assert_eq!(application_source_tree(&root), before);
                 assert!(!root.join(".hegira-mutation.lock").exists());
@@ -399,6 +524,145 @@ fn public_json_discards_child_output_while_human_execution_inherits_it() {
     assert!(String::from_utf8_lossy(&human.stdout).contains("fixture-child-output-only"));
     assert!(String::from_utf8_lossy(&human.stderr).contains("fixture-child-diagnostic-only"));
     assert!(String::from_utf8_lossy(&human.stdout).contains("Completed steps: 2/2"));
+}
+
+#[test]
+fn development_preflight_is_explicit_actionable_and_never_starts_a_server_on_failure() {
+    for (mode, diagnostic) in [
+        ("leptos", "development-leptos-version"),
+        ("wasm", "development-wasm-version"),
+        ("node", "development-node-version"),
+        ("oversize", "development-probe"),
+        ("target", "development-wasm-target"),
+        ("receipt", "development-frontend-lock"),
+        ("metadata", "development-metadata"),
+        ("frontend", "development-frontend-lock"),
+    ] {
+        let fixture = Fixture::new();
+        fixture.development_tools(&fixture.root);
+        fs::write(fixture.root.join("probe-mode"), mode).unwrap();
+        match mode {
+            "target" => {
+                fs::remove_file(fixture.tools.join("wasm-target/libcore-fixture.rlib")).unwrap()
+            }
+            "receipt" => fs::write(
+                fixture
+                    .root
+                    .join("apps/web/src/node_modules/.package-lock.json"),
+                r#"{"lockfileVersion":3,"packages":{}}"#,
+            )
+            .unwrap(),
+            "metadata" => {
+                let path = fixture.root.join("apps/server/Cargo.toml");
+                let text = fs::read_to_string(&path).unwrap().replace(
+                    "../web/src/style/tailwind.css",
+                    "../web/src/style/custom.scss",
+                );
+                fs::write(path, text).unwrap();
+            }
+            "frontend" => fs::remove_file(
+                fixture
+                    .root
+                    .join("apps/web/src/node_modules/.package-lock.json"),
+            )
+            .unwrap(),
+            _ => {}
+        }
+        let before = application_source_tree(&fixture.root);
+        // Preview does not inspect installed frontend/tools or run probes.
+        public_json(
+            &fixture
+                .public_command("dev")
+                .args(["--dry-run", "--json"])
+                .output()
+                .unwrap(),
+            0,
+        );
+        let output = fixture.public_execute("dev", true).output().unwrap();
+        let result = public_json(&output, 3);
+        assert_eq!(result["diagnostics"][0]["code"], diagnostic);
+        assert!(result["execution"].is_null());
+        assert!(
+            !String::from_utf8_lossy(&output.stdout).contains(fixture.parent.to_str().unwrap())
+        );
+        assert!(!fixture.root.join("child.pid").exists());
+        assert!(!fixture.root.join("proxy.log").exists());
+        assert_eq!(application_source_tree(&fixture.root), before);
+    }
+}
+
+#[test]
+fn development_preflight_cancellation_reaps_the_probe() {
+    let fixture = Fixture::new();
+    fixture.development_tools(&fixture.root);
+    fs::write(fixture.root.join("probe-mode"), "hang").unwrap();
+    let child = fixture
+        .public_execute("dev", true)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let probe = pid(&fixture.root, "probe.pid");
+    kill_process(
+        Pid::from_raw(child.id().try_into().unwrap()).unwrap(),
+        Signal::INT,
+    )
+    .unwrap();
+    let report = public_json(&child.wait_with_output().unwrap(), 1);
+    assert_eq!(report["execution"]["outcome"]["status"], "cancelled");
+    assert_stopped(probe);
+    assert!(!fixture.root.join("child.pid").exists());
+}
+
+#[test]
+fn development_runtime_failure_and_signals_clean_foreground_groups() {
+    for mode in ["failure", "int", "term"] {
+        let fixture = Fixture::new();
+        fixture.development_tools(&fixture.root);
+        fixture.mode(if mode == "failure" {
+            "failure"
+        } else {
+            "descendant"
+        });
+        let child = fixture
+            .public_execute("dev", true)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let leader = pid(&fixture.root, "child.pid");
+        let descendant = if mode != "failure" {
+            let descendant = pid(&fixture.root, "descendant.pid");
+            kill_process(
+                Pid::from_raw(child.id().try_into().unwrap()).unwrap(),
+                if mode == "int" {
+                    Signal::INT
+                } else {
+                    Signal::TERM
+                },
+            )
+            .unwrap();
+            Some(descendant)
+        } else {
+            None
+        };
+        let report = public_json(&child.wait_with_output().unwrap(), 1);
+        assert_eq!(report["execution"]["completed_steps"], 0);
+        assert_eq!(
+            report["execution"]["outcome"]["status"],
+            match mode {
+                "failure" => "child-failed",
+                "int" => "cancelled",
+                _ => "terminated",
+            }
+        );
+        assert_stopped(leader);
+        if let Some(descendant) = descendant {
+            assert_stopped(descendant);
+        }
+        let path = fs::read_to_string(fixture.root.join("child.path")).unwrap();
+        assert!(!std::env::split_paths(&path).next().unwrap().exists());
+    }
 }
 
 #[test]
