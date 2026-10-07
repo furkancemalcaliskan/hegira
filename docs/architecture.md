@@ -439,7 +439,8 @@ It delegates new-application component planning and atomic publication to
 to the public command. Help, version information, successful creation
 instructions, inspection results, and mutation plans are written to standard
 output; usage and failure diagnostics are written to standard error, except
-upgrade assessments, whose typed unsuccessful outcomes also remain on stdout.
+upgrade assessments and JSON check/test reports, whose typed unsuccessful
+outcomes also remain on stdout.
 
 The process outcomes are `0` for success, `1` for an internal error, `2` for
 invalid usage, `3` for validation failure, and `4` for a destination or state
@@ -552,7 +553,8 @@ Planning is read-only, but planned check/test/build execution would still run
 trusted application and toolchain code; development execution can initialize
 the application's configured dependencies. A summary is not execution
 authority, a readiness certificate, a cached publication token, or a sandbox.
-The planner adds no public operation commands to the `hegira` binary.
+Public `check` and `test` commands reuse this planner; development, build, and
+database operations remain library plans rather than public commands.
 Static schema-1 errors preserve validation/conflict/internal
 outcomes without echoing input, parser excerpts, or source paths.
 
@@ -562,10 +564,11 @@ outcomes without echoing input, parser excerpts, or source paths.
 from inspection and planning. It requires a privately constructed plan,
 `ExecutionConsent::ExecuteTrustedApplicationAndToolchain`, an explicitly
 resolved `TrustedToolchain`, an `ExecutionControl`, and a child-output policy.
-There are no public CLI operation commands yet. Database steps fail before
-spawning: the application-owned entry-point contract is not implemented.
-Only native check/test steps currently execute through this boundary. Leptos
-watch/build plans fail with `execution-readiness` before any child starts:
+Public `check` and `test` commands delegate to this library. Database steps fail
+before spawning: the application-owned entry-point contract is not implemented.
+Only check/test plans (native provider validation and a hydration check)
+currently execute through this boundary. Leptos watch/build plans fail with
+`execution-readiness` before any child starts:
 they need a verified, lockfile-matched frontend tooling preflight. The executor
 does not treat directory presence as tool readiness or delegate missing-tool
 installation to Cargo Leptos.
@@ -634,6 +637,28 @@ steps. Spawn and lifecycle errors remain non-success diagnostics. A successful
 report is produced only after all steps and owned direct-child cleanup finish.
 `ExecutionReport::exit()` maps only success to zero; every other outcome maps
 to the CLI's existing nonzero internal outcome while retaining its typed status.
+
+### Public application validation commands
+
+`hegira check` and `hegira test` require either `--dry-run` or `--execute`.
+Preview constructs the existing privately typed plan without probing tools or
+running code. Execution builds that same plan type and requires
+`--trust-application`, an absolute `--cargo`, and explicit absolute
+`--tool-directory` selections; it does not infer consent from an earlier preview.
+The commands accept no arbitrary Cargo arguments or ignored-database-test flag.
+The existing steps cover locked native/provider validation followed by hydration
+checking for all six supported compositions. These are trusted application
+tests/builds, not guaranteed read-only or service-free code execution.
+
+The CLI installs scoped SIGINT/SIGTERM actions only for explicit execution,
+forwarding cancellation/termination directly into the executor's atomic control;
+it unregisters its actions before returning. The library still installs no
+handlers on its own. Human execution inherits raw child output. JSON execution
+discards it and emits one schema-1 envelope with mode, the reviewed plan,
+optional execution outcome, and static diagnostics. Preview and execution
+consume the same plan within one invocation; a serialized preview cannot be
+submitted as execution authority. See [Application checks and tests](getting-started.md#check-and-test-an-application)
+for arguments, output channels, exit codes, and trust limitations.
 
 When an application name or destination is omitted in an interactive terminal,
 the same command gathers missing values through a guided workflow, displays the

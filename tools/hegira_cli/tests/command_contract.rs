@@ -54,8 +54,40 @@ fn top_level_help_is_human_readable_output() {
     assert!(output.contains("new"));
     assert!(output.contains("inspect"));
     assert!(output.contains("doctor"));
+    assert!(output.contains("check"));
+    assert!(output.contains("test"));
     assert!(output.contains("component"));
     assert!(output.contains("generate"));
+}
+
+#[test]
+fn validation_operation_help_and_modes_are_available_without_tools_on_every_platform() {
+    for operation in ["check", "test"] {
+        let help = hegira(&[operation, "--help"]);
+        assert!(help.status.success());
+        assert!(help.stderr.is_empty());
+        let text = String::from_utf8(help.stdout).unwrap();
+        assert!(text.contains("--dry-run"));
+        assert!(text.contains("--execute"));
+        assert!(text.contains("--trust-application"));
+        assert!(text.contains("--cargo"));
+        assert!(text.contains("--tool-directory"));
+        for args in [
+            vec![operation],
+            vec![operation, "--execute"],
+            vec![operation, "--dry-run", "--execute"],
+        ] {
+            let invalid = hegira(&args);
+            assert_eq!(invalid.status.code(), Some(2));
+            assert!(invalid.stdout.is_empty());
+        }
+        let missing = hegira(&[operation, "--dry-run", "--json"]);
+        assert_eq!(missing.status.code(), Some(3));
+        assert!(missing.stderr.is_empty());
+        let value: serde_json::Value = serde_json::from_slice(&missing.stdout).unwrap();
+        assert_eq!(value["output_schema"], 1);
+        assert_eq!(value["diagnostics"][0]["code"], "application-context");
+    }
 }
 
 #[test]

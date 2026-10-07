@@ -6,6 +6,7 @@
 //! process, resolves dependencies, connects to a database, or publishes source.
 //! The separate executor requires explicit consent and trusted tool selection.
 
+pub(crate) mod command;
 pub mod execution;
 
 use std::{

@@ -135,8 +135,15 @@ commands change. Never describe planned work as implemented.
   root and executable, re-authenticates composition, rejects pending recovery
   and concurrent operations, and owns child-group termination and reaping.
   Inherited environment and application/tool output are not sanitized; this is
-  not a sandbox. Leptos execution is blocked without a verified frontend
-  tooling preflight. Operation execution is not a public CLI capability.
+  not a sandbox. Leptos watch/build execution is blocked without a verified frontend
+  tooling preflight. Public `check` and `test` commands expose read-only
+  `--dry-run` or explicitly trusted `--execute` through the same typed plan.
+  Execution additionally requires `--trust-application`, absolute `--cargo`
+  and `--tool-directory` selections, and Linux. CLI signal handlers forward
+  SIGINT/SIGTERM into owned group cleanup; ignored database tests never run by
+  default. JSON execution discards child output; human execution inherits it
+  without redaction. Development, build, and database operation commands are
+  not public CLI capabilities.
   Generation validates project identity and destination before rendering and
   requires a new destination under an existing parent without symlinks. Safe
   atomic publication fails closed on unsupported platforms.

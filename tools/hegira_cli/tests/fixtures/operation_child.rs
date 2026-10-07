@@ -39,7 +39,15 @@ fn main() {
     .unwrap();
     match mode.trim() {
         "success" => {}
+        "noisy" => {
+            println!("fixture-child-output-only");
+            eprintln!("fixture-child-diagnostic-only");
+        }
         "failure" => std::process::exit(23),
+        "failure-hydration" if args.iter().any(|arg| arg == "wasm32-unknown-unknown") => {
+            std::process::exit(24);
+        }
+        "failure-hydration" => {}
         "wait" => wait_forever(),
         "release" => {
             while !std::path::Path::new("child-release").exists() {

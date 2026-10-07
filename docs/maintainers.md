@@ -187,9 +187,13 @@ working directories, explicit tool selection and substitution rejection,
 missing/unsafe prerequisite paths, recovery blocking, concurrent execution,
 spawn failure, nonzero exit, external signals, cancellation/termination,
 SIGKILL escalation for a stopped child, descendant cleanup, and direct-child
-reaping. No database, provider, Docker service, or public operation command is
-used. Leptos plans are tested as non-executable without a frontend tooling
-preflight, even when a dependency directory exists. See the
+reaping. The same controlled fixture also invokes public `check`/`test`
+commands: all six compositions preserve the preview's plan during explicit
+execution; parsing, help, JSON output, child-output suppression, prerequisite
+failures, exact completed-step counts, and actual SIGINT/SIGTERM delivery are
+tested. No generated application is compiled and no database, provider, or
+Docker service is used. Leptos plans are tested as non-executable without a
+frontend tooling preflight, even when a dependency directory exists. See the
 [execution boundary](architecture.md#trusted-application-process-execution-library)
 for inherited environment/output limits and Linux support.
 
