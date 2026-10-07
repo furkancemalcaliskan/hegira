@@ -191,7 +191,18 @@ fn six_compositions_have_deterministic_read_only_plans_for_every_intent() {
                             || arg == "--ignored"
                             || arg == "--all-features"));
                         assert!(arguments.iter().any(|arg| arg.contains("--locked")));
-                        assert!(environment.keys().all(|key| key == "APP_ENV"));
+                        assert!(environment.keys().all(|key| {
+                            [
+                                "APP_ENV",
+                                "APP__DATABASE__BACKEND",
+                                "APP__SERVER__ADDR",
+                                "LEPTOS_SITE_ADDR",
+                                "LEPTOS_RELOAD_PORT",
+                                "LEPTOS_BIN_CARGO_COMMAND",
+                                "LEPTOS_STYLE_FILE",
+                            ]
+                            .contains(&key.as_str())
+                        }));
                     }
                 }
             }
@@ -272,6 +283,17 @@ fn features_profiles_and_locked_arguments_match_the_current_application_contract
             } else {
                 "development"
             }
+        );
+        assert_eq!(environment["APP__DATABASE__BACKEND"], database);
+        assert_eq!(environment["APP__SERVER__ADDR"], "127.0.0.1:3000");
+        assert_eq!(environment["LEPTOS_SITE_ADDR"], "127.0.0.1:3000");
+        assert_eq!(environment["LEPTOS_RELOAD_PORT"], "3001");
+        assert_eq!(environment["LEPTOS_BIN_CARGO_COMMAND"], "cargo");
+        // Cargo Leptos resolves this relative to apps/server/Cargo.toml,
+        // not the workspace root.
+        assert_eq!(
+            environment["LEPTOS_STYLE_FILE"],
+            "../web/src/style/main.css"
         );
         let build = plan_application_operation(
             &repository(),

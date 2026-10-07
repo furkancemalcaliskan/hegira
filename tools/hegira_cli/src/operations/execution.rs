@@ -1,6 +1,6 @@
 //! Explicit, trusted operation execution; not an application sandbox.
 //!
-//! Public check/test commands use this library. Callers must acknowledge
+//! Public dev/check/test commands use this library. Callers must acknowledge
 //! trusted application, toolchain, Cargo configuration, and inherited environment.
 //! Child output is inherited or discarded, never captured in framework summaries.
 
@@ -124,6 +124,19 @@ fn unsupported() -> OperationError {
 
 pub(super) use anchors::RootAnchor;
 pub use platform::TrustedToolchain;
+
+/// Internal binary entry point for the private development Cargo proxy.
+#[doc(hidden)]
+pub fn development_cargo_proxy() -> Option<u8> {
+    #[cfg(target_os = "linux")]
+    {
+        platform::development_cargo_proxy()
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        None
+    }
+}
 
 #[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
 mod anchors {
@@ -327,9 +340,11 @@ mod anchors {
 
 #[cfg(target_os = "linux")]
 mod platform {
+    mod leptos;
     use super::{anchors::*, *};
     use crate::{ApplicationContextRequest, operations::*};
     use application_mutator::MUTATION_MARKER;
+    pub(super) use leptos::cargo_proxy as development_cargo_proxy;
     use rustix::{
         fd::{AsRawFd, OwnedFd},
         fs::{self, AtFlags, FlockOperation, Mode},
@@ -356,6 +371,7 @@ mod platform {
         cargo: OwnedFd,
         search_directories: Vec<Directory>,
         search_path: std::ffi::OsString,
+        development_tools: Option<(PathBuf, PathBuf)>,
     }
 
     impl fmt::Debug for TrustedToolchain {
@@ -410,7 +426,22 @@ mod platform {
                 cargo: fd,
                 search_directories: directories,
                 search_path,
+                development_tools: None,
             })
+        }
+
+        /// Explicitly trust the lock-matched wasm CLI and source-built Hegira
+        /// native Cargo proxy. Resolution/probes happen only during execution.
+        pub fn with_development_tools(
+            mut self,
+            wasm_bindgen: &Path,
+            cargo_proxy: &Path,
+        ) -> Result<Self, OperationError> {
+            if !wasm_bindgen.is_absolute() || !cargo_proxy.is_absolute() {
+                return Err(unsafe_path());
+            }
+            self.development_tools = Some((wasm_bindgen.to_owned(), cargo_proxy.to_owned()));
+            Ok(self)
         }
 
         fn verify(&self, plan: &OperationPlan) -> Result<(), OperationError> {
@@ -479,12 +510,12 @@ mod platform {
         }
         if !matches!(
             plan.summary.intent,
-            OperationIntent::Check | OperationIntent::Test
+            OperationIntent::Check | OperationIntent::Test | OperationIntent::Develop
         ) {
             return Err(failure(
                 OperationErrorKind::Validation,
                 "execution-readiness",
-                "Leptos execution requires a lockfile-matched frontend tooling preflight; only native check/test execution is available here.",
+                "Release-bundle execution is unavailable; the current executor supports check, test, and explicitly prepared development only.",
             ));
         }
         if let Some(outcome) = control.outcome() {
@@ -527,6 +558,19 @@ mod platform {
         let root_path = descriptor_path(&plan.anchor.directory.fd);
         verify_descriptor(&cargo_path, &toolchain.cargo)?;
         verify_descriptor(&root_path, &plan.anchor.directory.fd)?;
+        let development = if plan.summary.intent == OperationIntent::Develop {
+            match leptos::Session::prepare(plan, toolchain, control) {
+                Ok(session) => Some(session),
+                Err(error) => {
+                    if let Some(outcome) = control.outcome() {
+                        return Ok(report(plan, 0, outcome));
+                    }
+                    return Err(error);
+                }
+            }
+        } else {
+            None
+        };
 
         for (index, step) in plan.summary.steps.iter().enumerate() {
             if let Some(outcome) = control.outcome() {
@@ -536,6 +580,9 @@ mod platform {
             ensure_no_recovery(plan)?;
             validate_prerequisite_paths(plan)?;
             toolchain.verify(plan)?;
+            if let Some(session) = &development {
+                session.verify(plan, toolchain)?;
+            }
             let OperationStep::Tool {
                 arguments,
                 environment,
@@ -555,6 +602,9 @@ mod platform {
                 .envs(environment)
                 .stdin(Stdio::null())
                 .process_group(0);
+            if let Some(session) = &development {
+                session.configure(&mut command)?;
+            }
             match output {
                 ChildOutput::Inherit => {
                     command.stdout(Stdio::inherit()).stderr(Stdio::inherit());
@@ -740,6 +790,9 @@ mod platform {
     pub struct TrustedToolchain;
     impl TrustedToolchain {
         pub fn resolve(_: &Path, _: &[PathBuf]) -> Result<Self, OperationError> {
+            Err(unsupported())
+        }
+        pub fn with_development_tools(self, _: &Path, _: &Path) -> Result<Self, OperationError> {
             Err(unsupported())
         }
     }

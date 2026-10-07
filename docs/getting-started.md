@@ -3,8 +3,9 @@
 Hegira currently ships framework source, official modules, a canonical layered
 application base, and a source-runnable CLI with guided and non-interactive
 application creation. The CLI writes the selected source tree and next-step
-instructions; it does not install dependencies, run migrations, initialize a
-Git repository, or execute generated code.
+instructions. Application creation does not install dependencies, run migrations,
+initialize a Git repository, or execute generated code. The separate operation
+commands run trusted application code only with explicit execution consent.
 
 ## Build And Invoke The CLI
 
@@ -21,6 +22,7 @@ cargo run --locked -p hegira_cli -- inspect --help
 cargo run --locked -p hegira_cli -- doctor --help
 cargo run --locked -p hegira_cli -- check --help
 cargo run --locked -p hegira_cli -- test --help
+cargo run --locked -p hegira_cli -- dev --help
 cargo run --locked -p hegira_cli -- upgrade status --help
 cargo run --locked -p hegira_cli -- upgrade --help
 cargo run --locked -p hegira_cli -- component add --help
@@ -108,6 +110,73 @@ through the existing executor. Pending mutation recovery blocks execution
 without deleting recovery state. Do not mutate application source while an
 operation runs. See the [execution boundary](architecture.md#trusted-application-process-execution-library)
 for process-group, environment, tool trust, and Linux limitations.
+
+## Develop An Application
+
+Review the selected development workflow without probing tools or starting a
+server:
+
+```sh
+cargo run --locked --manifest-path /path/to/hegira/Cargo.toml \
+  -p hegira_cli -- dev --dry-run --json
+```
+
+`dev` derives `ssr,db-sqlite` with `APP_ENV=sqlite`, or `ssr,db-postgres` with
+`APP_ENV=development`, from `hegira.toml`. Hydration selects `hydrate` with no
+default features. Default, minimal, and Identity-added applications use the
+same provider selection. The plan explicitly selects the database backend,
+the canonical CSS input, the standard Cargo server-build command,
+`127.0.0.1:3000` for the server/site, and reload port
+`3001`. It does not offer a production profile, public bind, arbitrary features,
+or Cargo argument passthrough.
+
+After the [documented prerequisite setup](#application-prerequisites-and-non-interactive-creation),
+run the foreground workflow on Linux with explicitly reviewed tools:
+
+```sh
+cargo run --locked --manifest-path /path/to/hegira/Cargo.toml \
+  -p hegira_cli -- dev --execute --trust-application \
+  --cargo /absolute/trusted/bin/cargo \
+  --tool-directory /absolute/trusted/bin \
+  --tool-directory /usr/bin \
+  --wasm-bindgen /absolute/my-application/target/hegira-tools/wasm-bindgen/bin/wasm-bindgen
+```
+
+Replace all example paths with your reviewed locations. Trusted auxiliary
+directories must contain native `cargo-leptos` 0.3.7, the pinned `rustc`, and
+Node.js 22+, plus tools needed by the linker. The separately selected native
+`--wasm-bindgen` must exactly match the application's Cargo lock; this explicit
+selection may reside in the application's prepared tools directory. No general
+application directory or `node_modules/.bin` is added to trusted `PATH`.
+
+Before watch/serve starts, bounded, cancellable probes check these versions and
+the installed WASM core target. The executor checks npm lock-matched installed
+receipts, the canonical Tailwind CLI entry point, and its runnable version.
+Missing, mismatched, unsafe, or unsupported prerequisites fail with instructions;
+Hegira installs nothing. Customized Tailwind/default-feature metadata requires a
+manually reviewed workflow rather than silently accepting different tooling.
+Installed receipts are consistency checks, not a sandbox or package-content
+attestation: application source, installed dependencies, tools, and environment
+must already be trusted.
+
+Watch/serve remains Cargo Leptos's responsibility. A private, temporary
+allowlisted tool directory selects the reviewed frontend tools and a native
+Cargo proxy that preserves `--locked`, including Leptos's initial metadata
+call. No source or lockfile is rewritten by Hegira. Graceful completion,
+failure, Ctrl-C, and SIGTERM clean up that private directory and owned process
+groups; SIGKILL/crashes cannot guarantee cleanup. No daemon, Docker startup,
+deployment, automatic dependency update, or Hegira-owned application build-cache
+cleanup is implied.
+
+**Review runtime configuration and inherited database URL overrides before
+execution.** Selecting a development profile does not certify that its data is
+disposable. Startup can create/open a database, migrate, seed Identity, and
+initialize configured providers; `--execute --trust-application` authorizes
+this foreground application startup. Use only an intended development target.
+Other inherited settings and credentials remain effective. Human mode inherits
+raw tool/application output; JSON mode discards it and emits the same schema-1
+envelope and exit outcomes as `check`/`test` after the foreground operation ends.
+Preview has no startup or tool-probe side effects.
 
 ## Guided Creation
 
@@ -874,6 +943,11 @@ conflicts instead of silently replacing migration history.
 The generated `Cargo.lock` is part of the release-verified application source.
 Keep it in version control and use explicit `cargo update` operations when the
 application intentionally adopts a different dependency graph.
+
+The [public development command](#develop-an-application) selects the profile
+and features automatically after explicit prerequisite setup and trust approval.
+The existing direct Cargo Leptos workflow remains available for owner-reviewed
+manual operation:
 
 ```sh
 cd ../my-application

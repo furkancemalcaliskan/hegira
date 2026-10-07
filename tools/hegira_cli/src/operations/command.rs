@@ -1,4 +1,4 @@
-//! Public validation operations; previews never acquire execution authority.
+//! Public application operations; previews never acquire execution authority.
 
 use std::{io::Write, path::PathBuf};
 
@@ -22,7 +22,7 @@ pub(crate) struct ValidationCommand {
     #[arg(long, value_name = "PATH")]
     application_root: Option<PathBuf>,
 
-    /// Review the typed plan without probing tools, compiling, or running tests.
+    /// Review the typed plan without probing tools, compiling, testing, or starting a server.
     #[arg(long, required_unless_present = "execute", conflicts_with = "execute")]
     dry_run: bool,
 
@@ -45,6 +45,21 @@ pub(crate) struct ValidationCommand {
     /// Emit a versioned redacted report; discard arbitrary child output during execution.
     #[arg(long)]
     json: bool,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct DevelopmentCommand {
+    #[command(flatten)]
+    options: ValidationCommand,
+
+    /// Absolute, explicitly trusted wasm-bindgen CLI matching the application's Cargo.lock.
+    #[arg(
+        long,
+        value_name = "PATH",
+        required_if_eq("execute", "true"),
+        requires = "execute"
+    )]
+    wasm_bindgen: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize)]
@@ -73,6 +88,44 @@ pub(crate) fn run(
     output: &mut impl Write,
     diagnostics: &mut impl Write,
 ) -> CliExit {
+    run_operation(
+        command,
+        intent,
+        None,
+        repository,
+        working_directory,
+        output,
+        diagnostics,
+    )
+}
+
+pub(crate) fn run_development(
+    command: DevelopmentCommand,
+    repository: PathBuf,
+    working_directory: PathBuf,
+    output: &mut impl Write,
+    diagnostics: &mut impl Write,
+) -> CliExit {
+    run_operation(
+        command.options,
+        OperationIntent::Develop,
+        command.wasm_bindgen,
+        repository,
+        working_directory,
+        output,
+        diagnostics,
+    )
+}
+
+fn run_operation(
+    command: ValidationCommand,
+    intent: OperationIntent,
+    wasm_bindgen: Option<PathBuf>,
+    repository: PathBuf,
+    working_directory: PathBuf,
+    output: &mut impl Write,
+    diagnostics: &mut impl Write,
+) -> CliExit {
     let request = OperationRequest {
         application: ApplicationContextRequest {
             working_directory,
@@ -87,7 +140,7 @@ pub(crate) fn run(
     if command.dry_run {
         return emit(&command, Some(&plan), Ok(None), output, diagnostics);
     }
-    let result = execute(&command, &repository, &plan).map(Some);
+    let result = execute(&command, &repository, &plan, wasm_bindgen.as_deref()).map(Some);
     emit(&command, Some(&plan), result, output, diagnostics)
 }
 
@@ -95,6 +148,7 @@ fn execute(
     command: &ValidationCommand,
     repository: &std::path::Path,
     plan: &OperationPlan,
+    wasm_bindgen: Option<&std::path::Path>,
 ) -> Result<ExecutionReport, OperationError> {
     // Defense in depth for callers other than Clap. No default or preview grants consent.
     if !command.execute || !command.trust_application || command.dry_run {
@@ -111,7 +165,22 @@ fn execute(
             "Select an absolute trusted --cargo executable and --tool-directory entries.",
         )
     })?;
-    let toolchain = TrustedToolchain::resolve(cargo, &command.tool_directory)?;
+    let mut toolchain = TrustedToolchain::resolve(cargo, &command.tool_directory)?;
+    if plan.summary().intent == OperationIntent::Develop {
+        let wasm_bindgen = wasm_bindgen.ok_or_else(|| OperationError::new(
+            OperationErrorKind::Validation,
+            "development-tool-selection",
+            "Development execution requires an absolute trusted --wasm-bindgen matching Cargo.lock.",
+        ))?;
+        let proxy = std::env::current_exe().map_err(|_| {
+            OperationError::new(
+                OperationErrorKind::Internal,
+                "development-cargo-proxy",
+                "Cannot resolve the source-built Hegira Cargo proxy.",
+            )
+        })?;
+        toolchain = toolchain.with_development_tools(wasm_bindgen, &proxy)?;
+    }
     let control = ExecutionControl::default();
     let _signals = CommandSignals::register(&control)?;
     execute_application_operation(

@@ -187,13 +187,19 @@ working directories, explicit tool selection and substitution rejection,
 missing/unsafe prerequisite paths, recovery blocking, concurrent execution,
 spawn failure, nonzero exit, external signals, cancellation/termination,
 SIGKILL escalation for a stopped child, descendant cleanup, and direct-child
-reaping. The same controlled fixture also invokes public `check`/`test`
+reaping. The same controlled fixture also invokes public `dev`/`check`/`test`
 commands: all six compositions preserve the preview's plan during explicit
 execution; parsing, help, JSON output, child-output suppression, prerequisite
 failures, exact completed-step counts, and actual SIGINT/SIGTERM delivery are
 tested. No generated application is compiled and no database, provider, or
-Docker service is used. Leptos plans are tested as non-executable without a
-frontend tooling preflight, even when a dependency directory exists. See the
+Docker service is used. Development tests additionally cover pinned tool
+versions, installed npm receipts, missing WASM/frontend prerequisites,
+metadata rejection, bounded probe output, cancellation during preflight,
+loopback/profile selection, locked nested Cargo metadata/build invocations,
+exclusion of general npm tool directories, foreground signals/failure, and
+private tool-directory cleanup. Leptos plans remain non-executable without
+an explicit frontend/toolchain preflight, even when a dependency directory
+exists; release-build execution is still unavailable. See the
 [execution boundary](architecture.md#trusted-application-process-execution-library)
 for inherited environment/output limits and Linux support.
 
