@@ -890,6 +890,77 @@ review the reported action before attempting another mutation.
 The local `rustup` target probe receives only tool-discovery and Rustup-specific
 environment settings, not application runtime secrets.
 
+### Diagnose Operation Prerequisites
+
+Select an operation to diagnose its current application requirements without
+executing it:
+
+```sh
+cargo run --locked --manifest-path /path/to/hegira/Cargo.toml \
+  -p hegira_cli -- doctor --operation check --json
+```
+
+Supported selections are `dev`, `check`, `test`, `build`, `database-status`,
+and `database-migrate`. Operation-specific readiness currently requires Linux;
+the default doctor command retains its existing behavior. The two database
+selections require `--profile sqlite`,
+`development`, `test`, or `production`, matching the recorded provider and
+composition. No other operation accepts a profile. Database diagnostics
+explicitly report that the current executable entry-point contract is
+unavailable; selecting this diagnostic does not introduce a public database
+command or grant production migration approval.
+
+Operation mode reuses the authenticated plan and checks required real files,
+toolchain/Cargo metadata, locked frontend receipts and assets, runtime-profile
+presence (never its values), recovery/concurrent-operation blocking, and release
+output ownership. An absent release root is valid; an existing root needs its
+matching safe claim. Doctor never creates or repairs that claim or clears output.
+All six default, minimal, and Identity-added provider compositions are covered.
+
+By default operation mode starts **no process**, including tool probes. After
+reviewing the selected native tools, explicitly request narrow probes:
+
+```sh
+cargo run --locked --manifest-path /path/to/hegira/Cargo.toml \
+  -p hegira_cli -- doctor --operation build --probe-tools \
+  --cargo /absolute/trusted/bin/cargo \
+  --tool-directory /absolute/trusted/bin \
+  --tool-directory /usr/bin \
+  --wasm-bindgen /absolute/trusted/bin/wasm-bindgen \
+  --wasm-opt /absolute/trusted/bin/wasm-opt \
+  --json
+```
+
+`--probe-tools` requires absolute Cargo and trusted external tool directories.
+The wasm-bindgen selection is relevant to `dev`/`build`; the optimizer selection
+is relevant only to `build`. Missing selections produce warnings, not automatic
+discovery or installation. The documented application-owned prepared
+wasm-bindgen location is also accepted when explicitly selected. Native tools
+are checked against the application-pinned Rust/Cargo release, installed WASM
+core library, Cargo Leptos 0.3.7, Node.js 22+, lock-matched wasm-bindgen, and
+Binaryen 123 as required by the selected operation.
+
+Probes use closed version/target arguments from `/`, with no application hooks,
+Cargo metadata, build, tests, npm, or Tailwind script execution. Their environment
+is cleared except trusted PATH and Rustup home/toolchain discovery settings;
+runtime credentials and preload/wrapper variables are not forwarded. Each probe
+has a 10-second and 16-KiB stdout bound; raw output is never printed. A failed,
+over-limit, or interrupted probe stops further probes and cleans owned children.
+Selected native tools must themselves be trusted: executable anchoring and
+environment filtering do not sandbox malicious code.
+
+The schema-1 human/JSON diagnostic contract is preserved, with an additional
+typed `operation` field only in operation mode. Invalid/unsafe application state
+is reported before any probe. Codes and check order are deterministic; source,
+runtime values, tool output, and machine-local paths are omitted. JSON reports,
+including failures, go to stdout. Failures return `3`; warnings alone return `0`.
+Usage errors return `2` with stderr diagnostics. **A zero exit does not certify
+executable readiness.** Report/output delivery failures retain exit `1`.
+Frontend execution and database reachability remain
+unprobed warnings; actual authorized execution must repeat its preflight.
+Doctor installs nothing, starts no application/service/database, changes no
+application source, and neither grants execution consent nor cleans recovery.
+
 ## Compatibility And Mutation Safety
 
 `inspect` can report an incompatible or unsupported application successfully,

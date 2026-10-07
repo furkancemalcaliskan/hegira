@@ -15,6 +15,87 @@ fn main() {
         .unwrap()
         .to_str()
         .unwrap();
+    if std::env::current_dir().unwrap() == std::path::Path::new("/") {
+        // Doctor probes must never enter an application or inherit hook/secrets.
+        let executable = std::env::current_exe().unwrap();
+        let tools = executable.parent().unwrap();
+        let mode = fs::read_to_string(tools.join("doctor-mode")).unwrap_or_default();
+        for key in [
+            "APP__DATABASE__URL",
+            "APP__SECURITY__JWT_SECRET",
+            "NODE_OPTIONS",
+            "RUSTC_WRAPPER",
+            "HEGIRA_OPERATION_PROXY",
+        ] {
+            assert!(std::env::var_os(key).is_none());
+        }
+        assert_eq!(std::env::var("RUSTUP_AUTO_INSTALL").unwrap(), "0");
+        let mut log = fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(tools.join("doctor-probes.log"))
+            .unwrap();
+        writeln!(log, "{name}: {args:?}").unwrap();
+        if mode.trim() == "hang" {
+            fs::write(
+                tools.join("doctor-probe.pid"),
+                std::process::id().to_string(),
+            )
+            .unwrap();
+            wait_forever();
+        }
+        if mode.trim() == "oversize" {
+            println!("{}", "private-tool-output-must-not-appear".repeat(1000));
+            return;
+        }
+        assert!(
+            args == ["--version"]
+                || (name == "cargo-leptos" && args == ["leptos", "--version"])
+                || (name == "rustc"
+                    && args
+                        == [
+                            "--print",
+                            "target-libdir",
+                            "--target",
+                            "wasm32-unknown-unknown"
+                        ])
+        );
+        let rust = fs::read_to_string(tools.join("doctor-rust-version")).unwrap();
+        assert_eq!(std::env::var("RUSTUP_TOOLCHAIN").unwrap(), rust);
+        match name {
+            "cargo" | "rustc" if args == ["--version"] => println!(
+                "{name} {}",
+                if mode.trim() == name { "0.0.0" } else { &rust }
+            ),
+            "rustc" => println!(
+                "{}",
+                fs::read_to_string(tools.join("doctor-target")).unwrap()
+            ),
+            "cargo-leptos" => println!(
+                "cargo-leptos {}",
+                if mode.trim() == "leptos" {
+                    "0.3.6"
+                } else {
+                    "0.3.7"
+                }
+            ),
+            "node" => println!("v{}.0.0", if mode.trim() == "node" { 20 } else { 22 }),
+            "wasm-bindgen" => println!(
+                "wasm-bindgen {}",
+                if mode.trim() == "wasm" {
+                    "0.0.0".to_owned()
+                } else {
+                    fs::read_to_string(tools.join("doctor-wasm-version")).unwrap()
+                }
+            ),
+            "wasm-opt" => println!(
+                "wasm-opt version {}",
+                if mode.trim() == "optimizer" { 122 } else { 123 }
+            ),
+            _ => panic!("unexpected doctor tool"),
+        }
+        return;
+    }
     if ["cargo-leptos", "wasm-bindgen", "wasm-opt", "rustc", "node"].contains(&name) {
         let mode = fs::read_to_string("probe-mode").unwrap_or_default();
         if mode.trim() == "hang" {

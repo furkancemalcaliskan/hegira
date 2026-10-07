@@ -119,6 +119,12 @@ and version output use standard output; diagnostics use standard error except
 typed upgrade assessments and execution results, and JSON operation reports,
 which use standard output even when unsuccessful.
 
+`hegira doctor --operation check` diagnoses an operation's application files
+and declared prerequisites without running it. Narrow native tool-version
+probes require explicit `--probe-tools` and trusted tool selections; no
+application hook, frontend script, installation, or provider connection is
+performed. See [Operation diagnostics](docs/getting-started.md#diagnose-operation-prerequisites).
+
 Use `hegira check --dry-run` or `hegira test --dry-run` to inspect the current
 application's locked native/provider and hydration steps. Execution requires
 `--execute --trust-application`, an absolute `--cargo` selection, and explicit

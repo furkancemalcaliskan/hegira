@@ -8,6 +8,7 @@
 
 pub(crate) mod command;
 pub mod execution;
+pub(crate) mod readiness;
 
 use std::{
     collections::BTreeMap,

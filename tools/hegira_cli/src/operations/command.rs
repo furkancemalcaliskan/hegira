@@ -322,11 +322,11 @@ fn emit(
 // and trusted tool resolution. Both SIGINT and SIGTERM use the executor's
 // existing group cleanup. Dropping unregisters our actions on every return path.
 #[cfg(target_os = "linux")]
-struct CommandSignals(Vec<signal_hook::SigId>);
+pub(crate) struct CommandSignals(Vec<signal_hook::SigId>);
 
 #[cfg(target_os = "linux")]
 impl CommandSignals {
-    fn register(control: &ExecutionControl) -> Result<Self, OperationError> {
+    pub(crate) fn register(control: &ExecutionControl) -> Result<Self, OperationError> {
         let mut guard = Self(Vec::new());
         for (signal, state) in [
             (signal_hook::consts::SIGINT, 1),
