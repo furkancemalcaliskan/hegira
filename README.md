@@ -73,7 +73,7 @@ ownership:
 | `templates/package.toml` | Versioned canonical component-package identity, framework compatibility, component graph, and source digest |
 | `templates/components/` | Typed data-only manifests for canonical rendering and trusted additive component contributions |
 | `tools/application_mutator/` | Typed additive component and general change plans, canonical file ownership, controlled Cargo/Rust/TOML integration, and failure-safe publication for coordinated existing-application changes |
-| `tools/hegira_cli/` | Source-runnable creation, inspection, direct-upgrade readiness/preview/apply, additive component installation, layered resource and migration generation; typed application-operation planning and explicitly trusted Linux native check/test execution libraries with stable diagnostics (no public operation commands yet) |
+| `tools/hegira_cli/` | Source-runnable creation, inspection, direct-upgrade readiness/preview/apply, additive component installation, layered resource and migration generation; public application check/test previews and explicitly trusted Linux execution, backed by typed operation planning and process-lifecycle libraries |
 | `tools/resource_generator/` | Typed layered resource specifications plus inward-layer, provider-specific SQLx persistence, explicit Axum/OpenAPI and Leptos UI composition, and append-only migration planning |
 | `tools/template_renderer/` | Reusable deterministic render core with no-follow, digest-verified package-source loading and a separate disposable repository-validation adapter; it is not a public CLI |
 | `tools/upgrade_test_support/` | Test-only authenticated access to immutable, content-addressed released-application baselines |
@@ -116,8 +116,15 @@ not provide module management, arbitrary source merging, or unattended upgrades.
 Its stable process outcomes are success (`0`), internal error (`1`), usage
 error (`2`), validation error (`3`), and conflict (`4`). Human-readable help
 and version output use standard output; diagnostics use standard error except
-typed upgrade assessments and execution results, which use standard output even
-when unsuccessful.
+typed upgrade assessments and execution results, and JSON check/test reports,
+which use standard output even when unsuccessful.
+
+Use `hegira check --dry-run` or `hegira test --dry-run` to inspect the current
+application's locked native/provider and hydration steps. Execution requires
+`--execute --trust-application`, an absolute `--cargo` selection, and explicit
+`--tool-directory` entries. It runs trusted code, not a sandbox; ignored database
+tests are never selected. See [Application checks and tests](docs/getting-started.md#check-and-test-an-application)
+for trust, output, and prerequisite boundaries.
 
 ## Quick Start
 

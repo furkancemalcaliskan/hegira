@@ -19,6 +19,8 @@ cargo run --locked -p hegira_cli -- --help
 cargo run --locked -p hegira_cli -- new --help
 cargo run --locked -p hegira_cli -- inspect --help
 cargo run --locked -p hegira_cli -- doctor --help
+cargo run --locked -p hegira_cli -- check --help
+cargo run --locked -p hegira_cli -- test --help
 cargo run --locked -p hegira_cli -- upgrade status --help
 cargo run --locked -p hegira_cli -- upgrade --help
 cargo run --locked -p hegira_cli -- component add --help
@@ -31,6 +33,81 @@ loaded from the source tree recorded at compilation, not downloaded from a
 registry. Keep that tree available at its original location; copying the binary
 alone is not a standalone installation. Rebuild after relocating the source.
 Node, Docker, and `cargo-leptos` are not needed just to generate files.
+
+## Check And Test An Application
+
+From an existing application or one of its subdirectories, review the current
+composition's validation plan using the compatible framework source checkout:
+
+```sh
+cargo run --locked --manifest-path /path/to/hegira/Cargo.toml \
+  -p hegira_cli -- check --dry-run
+cargo run --locked --manifest-path /path/to/hegira/Cargo.toml \
+  -p hegira_cli -- test --dry-run --json
+```
+
+Alternatively pass `--application-root <path>`. A preview reads the manifest
+and authenticated bundled composition only. It does not probe tools, load runtime
+configuration, compile code, create a build cache, or connect to a database.
+Prerequisites are requirements, not a readiness certificate. Previewing does
+not authorize a later execution, which constructs and authenticates a new plan.
+
+On Linux, explicitly trusted execution uses the same typed plan:
+
+```sh
+cargo run --locked --manifest-path /path/to/hegira/Cargo.toml \
+  -p hegira_cli -- check --execute --trust-application \
+  --cargo /absolute/trusted/bin/cargo \
+  --tool-directory /absolute/trusted/bin \
+  --tool-directory /usr/bin
+```
+
+Replace the example paths with your reviewed tool locations; `--cargo` does not
+search ambient `PATH`. Repeat `--tool-directory` for trusted auxiliary tool
+directories needed by Rust and the linker. Tools and search directories must
+be absolute and outside the application. Ordinary rustup proxies are supported;
+scripts and set-id Cargo executables are not. Missing/unsafe prerequisite files
+fail before spawning; missing WASM targets or Rust dependencies can still fail
+in Cargo. Tools are not installed automatically. `RUSTUP_AUTO_INSTALL=0`
+disables automatic toolchain installation, and an inherited `RUSTUP_TOOLCHAIN`
+override is removed so the application's pinned toolchain remains effective.
+Other platforms fail execution closed rather than silently relaxing these checks.
+
+Use `test` in place of `check` for native tests. Both operations disable default
+features, select the provider from `hegira.toml`, and preserve `--locked`.
+`check` checks native workspace targets; `test` runs native workspace tests.
+Both then check `app_server` hydration for `wasm32-unknown-unknown`; browser tests
+are not executed. There is no arbitrary Cargo argument passthrough and no
+`--ignored` option. Ignored/destructive database tests remain a separate manual
+workflow requiring explicit opt-in and a verified disposable target; these
+commands never grant database reset, seed, migration, or Docker authority.
+
+Trust includes application code, build scripts, tests, Cargo configuration,
+toolchain, and inherited environment. This is **not a sandbox**. Approved code
+can access configured services, credentials, and files with your privileges;
+application tests may themselves have side effects. Hegira performs no source or
+lockfile rewrite, but cannot make arbitrary trusted code read-only. Cargo may
+fetch already locked dependencies and write ordinary developer build output.
+No Hegira-owned application cache or cleanup policy is implied.
+
+Choose exactly one of `--dry-run` and `--execute`; execution also requires
+`--trust-application`, `--cargo`, and at least one `--tool-directory`. There are
+no interactive execution prompts. Human execution inherits raw child stdout and
+stderr, which are **not redacted**. With `--json`, child output is discarded and
+stdout contains one deterministic schema-1 envelope: `output_schema`, `mode`
+(`preview` or `execute`), `plan`, `execution`, and `diagnostics`. Planning or
+preflight failures use a null execution; planning failures also use a null plan.
+Usage errors still use stderr, even with `--json`.
+
+Successful previews and completed operations return `0`; failed/signalled
+children, cancellation, termination, spawn/cleanup, and output failures return
+`1`; usage errors return `2`; validation failures return `3`; recovery or
+concurrent-operation conflicts return `4`. Child exit codes are reported, not
+copied as Hegira's exit code. Ctrl-C and SIGTERM stop and reap owned child groups
+through the existing executor. Pending mutation recovery blocks execution
+without deleting recovery state. Do not mutate application source while an
+operation runs. See the [execution boundary](architecture.md#trusted-application-process-execution-library)
+for process-group, environment, tool trust, and Linux limitations.
 
 ## Guided Creation
 

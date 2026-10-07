@@ -32,3 +32,6 @@ upgrade_test_support = { path = "../upgrade_test_support" }
 
 [target.'cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))'.dependencies]
 rustix = { version = "1.1.4", features = ["fs", "process"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+signal-hook = { version = "0.4.5", default-features = false }

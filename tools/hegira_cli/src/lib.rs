@@ -92,6 +92,10 @@ enum CliCommand {
     Inspect(InspectCommand),
     /// Diagnose application composition and local prerequisites without modifying it.
     Doctor(DoctorCommand),
+    /// Preview or explicitly run locked native and hydration checks.
+    Check(operations::command::ValidationCommand),
+    /// Preview or explicitly run native tests and a hydration check (no ignored tests).
+    Test(operations::command::ValidationCommand),
     /// Inspect application upgrade readiness without modifying source.
     Upgrade(upgrade::UpgradeCommand),
     /// Manage bundled additive application components.
@@ -428,6 +432,22 @@ fn run_command(
         ),
         CliCommand::Doctor(command) => doctor::run(
             command,
+            repository_root,
+            working_directory,
+            output,
+            diagnostics,
+        ),
+        CliCommand::Check(command) => operations::command::run(
+            command,
+            operations::OperationIntent::Check,
+            repository_root,
+            working_directory,
+            output,
+            diagnostics,
+        ),
+        CliCommand::Test(command) => operations::command::run(
+            command,
+            operations::OperationIntent::Test,
             repository_root,
             working_directory,
             output,

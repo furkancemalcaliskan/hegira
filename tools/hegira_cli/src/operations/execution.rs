@@ -1,6 +1,6 @@
 //! Explicit, trusted operation execution; not an application sandbox.
 //!
-//! No public CLI command invokes this library yet. Callers must acknowledge
+//! Public check/test commands use this library. Callers must acknowledge
 //! trusted application, toolchain, Cargo configuration, and inherited environment.
 //! Child output is inherited or discarded, never captured in framework summaries.
 
@@ -8,7 +8,7 @@ use std::{
     path::Path,
     sync::{
         Arc,
-        atomic::{AtomicU8, Ordering},
+        atomic::{AtomicUsize, Ordering},
     },
 };
 
@@ -35,9 +35,14 @@ pub enum ChildOutput {
 /// The caller connects cancellation/termination (including OS signals) here.
 /// The library does not install process-global signal handlers.
 #[derive(Debug, Clone, Default)]
-pub struct ExecutionControl(Arc<AtomicU8>);
+pub struct ExecutionControl(Arc<AtomicUsize>);
 
 impl ExecutionControl {
+    #[cfg(target_os = "linux")]
+    pub(crate) fn signal_state(&self) -> Arc<AtomicUsize> {
+        Arc::clone(&self.0)
+    }
+
     pub fn cancel(&self) {
         self.0.store(1, Ordering::Release);
     }

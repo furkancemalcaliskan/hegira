@@ -4,7 +4,7 @@ use std::{
     fs,
     os::unix::fs::{PermissionsExt, symlink},
     path::{Path, PathBuf},
-    process::Command,
+    process::{Command, Output, Stdio},
     sync::{
         Arc, Mutex, Weak,
         atomic::{AtomicU64, Ordering},
@@ -151,11 +151,377 @@ impl Fixture {
     fn mode(&self, mode: &str) {
         fs::write(self.root.join("child-mode"), mode).unwrap();
     }
+
+    fn public_command(&self, operation: &str) -> Command {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_hegira"));
+        command
+            .arg(operation)
+            .current_dir(&self.root)
+            .env_clear()
+            .env("PATH", "")
+            .stdin(Stdio::null());
+        command
+    }
+
+    fn public_execute(&self, operation: &str, json: bool) -> Command {
+        let mut command = self.public_command(operation);
+        command
+            .args(["--execute", "--trust-application", "--cargo"])
+            .arg(self.tools.join("cargo"))
+            .arg("--tool-directory")
+            .arg(&self.tools);
+        if json {
+            command.arg("--json");
+        }
+        command
+    }
 }
 
 impl Drop for Fixture {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.parent);
+    }
+}
+
+fn public_json(output: &Output, code: i32) -> serde_json::Value {
+    assert_eq!(output.status.code(), Some(code), "{:?}", output);
+    assert!(output.stderr.is_empty(), "{:?}", output.stderr);
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(value["output_schema"], 1);
+    assert_eq!(value.as_object().unwrap().len(), 5);
+    value
+}
+
+fn application_source_tree(root: &Path) -> Vec<(PathBuf, Vec<u8>)> {
+    fn visit(root: &Path, directory: &Path, result: &mut Vec<(PathBuf, Vec<u8>)>) {
+        let mut entries: Vec<_> = fs::read_dir(directory)
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .collect();
+        entries.sort();
+        for path in entries {
+            if path.is_dir() {
+                visit(root, &path, result);
+            } else {
+                let relative = path.strip_prefix(root).unwrap();
+                // Only these controlled child observations are test-owned output.
+                if [
+                    "child.log",
+                    "child.pid",
+                    "child.cwd",
+                    "child.path",
+                    "child.auto-install",
+                    "child.override",
+                ]
+                .iter()
+                .any(|name| relative == Path::new(name))
+                {
+                    continue;
+                }
+                result.push((relative.to_owned(), fs::read(path).unwrap()));
+            }
+        }
+    }
+    let mut result = Vec::new();
+    visit(root, root, &mut result);
+    result
+}
+
+#[test]
+fn public_help_and_parser_require_explicit_mode_consent_and_tool_selection() {
+    let fixture = Fixture::new();
+    for operation in ["check", "test"] {
+        let result = fixture
+            .public_command(operation)
+            .arg("--help")
+            .output()
+            .unwrap();
+        assert!(result.status.success());
+        assert!(result.stderr.is_empty());
+        let help = String::from_utf8(result.stdout).unwrap();
+        for option in [
+            "--dry-run",
+            "--execute",
+            "--trust-application",
+            "--cargo",
+            "--tool-directory",
+            "--application-root",
+            "--json",
+        ] {
+            assert!(help.contains(option));
+        }
+        for args in [
+            vec![],
+            vec!["--execute"],
+            vec!["--execute", "--trust-application"],
+            vec!["--dry-run", "--execute"],
+            vec!["--dry-run", "--trust-application"],
+            vec!["--dry-run", "--cargo", "relative-cargo"],
+            vec!["--dry-run", "--tool-directory", "."],
+            vec!["--dry-run", "--ignored"],
+            vec!["--dry-run", "--", "--ignored"],
+            vec!["--dry-run", "--features", "db-postgres"],
+        ] {
+            let result = fixture
+                .public_command(operation)
+                .args(args)
+                .output()
+                .unwrap();
+            assert_eq!(result.status.code(), Some(2));
+            assert!(result.stdout.is_empty());
+        }
+        assert!(!fixture.root.join("child.log").exists());
+        assert!(!fixture.root.join("target").exists());
+    }
+}
+
+#[test]
+fn public_preview_and_execution_share_plans_across_all_six_compositions() {
+    let fixture = Fixture::new();
+    for composition in ["default", "minimal", "identity-added"] {
+        for database in ["sqlite", "postgres"] {
+            let root = fixture
+                .parent
+                .join(format!("public-{composition}-{database}"));
+            let mut create = Command::new(env!("CARGO_BIN_EXE_hegira"));
+            create
+                .args(["new", "public-operation-app", "--destination"])
+                .arg(&root)
+                .args(["--database", database]);
+            if composition != "default" {
+                create.args(["--composition", "minimal"]);
+            }
+            assert!(create.output().unwrap().status.success());
+            if composition == "identity-added" {
+                assert!(
+                    Command::new(env!("CARGO_BIN_EXE_hegira"))
+                        .args(["component", "add", "identity"])
+                        .current_dir(&root)
+                        .output()
+                        .unwrap()
+                        .status
+                        .success()
+                );
+            }
+            fs::write(root.join("child-mode"), "success").unwrap();
+            let before = application_source_tree(&root);
+            for operation in ["check", "test"] {
+                let preview = fixture
+                    .public_command(operation)
+                    .current_dir(root.join("apps/web/src"))
+                    .args(["--dry-run", "--json"])
+                    .output()
+                    .unwrap();
+                let preview = public_json(&preview, 0);
+                assert_eq!(preview["mode"], "preview");
+                assert!(preview["execution"].is_null());
+                assert_eq!(preview["diagnostics"], serde_json::json!([]));
+                let repeated = fixture
+                    .public_command(operation)
+                    .current_dir(&fixture.parent)
+                    .arg("--application-root")
+                    .arg(&root)
+                    .args(["--dry-run", "--json"])
+                    .output()
+                    .unwrap();
+                assert_eq!(public_json(&repeated, 0), preview);
+                let human = fixture
+                    .public_command(operation)
+                    .current_dir(&root)
+                    .arg("--dry-run")
+                    .output()
+                    .unwrap();
+                assert!(human.status.success());
+                assert!(human.stderr.is_empty());
+                let human = String::from_utf8(human.stdout).unwrap();
+                assert!(human.contains("Planning only"));
+                assert!(human.contains("wasm32-unknown-unknown"));
+                assert!(!human.contains(root.to_str().unwrap()));
+                assert!(!root.join("target").exists());
+                assert!(!root.join("child.log").exists());
+                assert_eq!(application_source_tree(&root), before);
+                let executed = fixture
+                    .public_execute(operation, true)
+                    .current_dir(&root)
+                    .output()
+                    .unwrap();
+                let executed = public_json(&executed, 0);
+                assert_eq!(executed["mode"], "execute");
+                assert_eq!(executed["plan"], preview["plan"]);
+                assert_eq!(executed["execution"]["outcome"]["status"], "succeeded");
+                assert_eq!(executed["execution"]["completed_steps"], 2);
+                assert_eq!(executed["diagnostics"], serde_json::json!([]));
+                let expected: Vec<_> = executed["plan"]["steps"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|step| {
+                        serde_json::from_value::<Vec<String>>(step["arguments"].clone()).unwrap()
+                    })
+                    .collect();
+                let log = fs::read_to_string(root.join("child.log")).unwrap();
+                assert_eq!(
+                    log.lines().collect::<Vec<_>>(),
+                    expected
+                        .iter()
+                        .map(|args| format!("{args:?}"))
+                        .collect::<Vec<_>>()
+                );
+                assert_eq!(expected[0][0], operation);
+                assert!(expected[0].contains(&format!("app_server/ssr,app_server/db-{database}")));
+                assert_eq!(expected[1][0], "check");
+                assert!(expected[1].contains(&"wasm32-unknown-unknown".to_owned()));
+                assert!(
+                    expected
+                        .iter()
+                        .all(|args| args.contains(&"--locked".to_owned())
+                            && !args.contains(&"--ignored".to_owned()))
+                );
+                fs::remove_file(root.join("child.log")).unwrap();
+                assert_eq!(application_source_tree(&root), before);
+                assert!(!root.join(".hegira-mutation.lock").exists());
+                assert!(!root.join("target").exists());
+            }
+        }
+    }
+}
+
+#[test]
+fn public_json_discards_child_output_while_human_execution_inherits_it() {
+    let fixture = Fixture::new();
+    fixture.mode("noisy");
+    let json = fixture.public_execute("check", true).output().unwrap();
+    public_json(&json, 0);
+    assert!(!String::from_utf8_lossy(&json.stdout).contains("fixture-child"));
+    assert!(!String::from_utf8_lossy(&json.stdout).contains(fixture.parent.to_str().unwrap()));
+    let human = fixture.public_execute("check", false).output().unwrap();
+    assert!(human.status.success());
+    assert!(String::from_utf8_lossy(&human.stdout).contains("fixture-child-output-only"));
+    assert!(String::from_utf8_lossy(&human.stderr).contains("fixture-child-diagnostic-only"));
+    assert!(String::from_utf8_lossy(&human.stdout).contains("Completed steps: 2/2"));
+}
+
+#[test]
+fn public_child_failures_stop_the_plan_and_report_exact_completed_steps() {
+    for (mode, completed, code) in [("failure", 0, 23), ("failure-hydration", 1, 24)] {
+        let fixture = Fixture::new();
+        fixture.mode(mode);
+        let result = fixture.public_execute("test", true).output().unwrap();
+        let report = public_json(&result, 1);
+        assert_eq!(report["execution"]["completed_steps"], completed);
+        assert_eq!(
+            report["execution"]["outcome"],
+            serde_json::json!({"status":"child-failed", "exit_code":code})
+        );
+        assert_eq!(
+            fs::read_to_string(fixture.root.join("child.log"))
+                .unwrap()
+                .lines()
+                .count(),
+            completed + 1
+        );
+        assert_stopped(pid(&fixture.root, "child.pid"));
+    }
+}
+
+#[test]
+fn public_missing_prerequisites_recovery_and_relative_tools_fail_before_spawn() {
+    for (mode, code, diagnostic) in [
+        ("lockfile", 3, "execution-path"),
+        ("tool", 3, "execution-path"),
+        ("recovery", 4, "application-recovery"),
+    ] {
+        let fixture = Fixture::new();
+        if mode == "lockfile" {
+            fs::remove_file(fixture.root.join("Cargo.lock")).unwrap();
+        } else if mode == "recovery" {
+            fs::write(
+                fixture.root.join(".hegira-mutation.lock"),
+                "fixture recovery; preserve",
+            )
+            .unwrap();
+        }
+        let mut command = fixture.public_execute("check", true);
+        if mode == "tool" {
+            command = fixture.public_command("check");
+            command.args([
+                "--execute",
+                "--trust-application",
+                "--cargo",
+                "relative-cargo",
+                "--tool-directory",
+                ".",
+                "--json",
+            ]);
+        }
+        let result = public_json(&command.output().unwrap(), code);
+        assert_eq!(result["diagnostics"][0]["code"], diagnostic);
+        assert!(result["execution"].is_null());
+        assert!(!fixture.root.join("child.log").exists());
+        if mode == "recovery" {
+            assert_eq!(
+                fs::read_to_string(fixture.root.join(".hegira-mutation.lock")).unwrap(),
+                "fixture recovery; preserve"
+            );
+        }
+    }
+}
+
+#[test]
+fn public_sigint_and_sigterm_clean_owned_groups_and_return_non_success() {
+    for (signal, status) in [(Signal::INT, "cancelled"), (Signal::TERM, "terminated")] {
+        let fixture = Fixture::new();
+        fixture.mode("descendant");
+        let child = fixture
+            .public_execute("test", true)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let leader = pid(&fixture.root, "child.pid");
+        let descendant = pid(&fixture.root, "descendant.pid");
+        kill_process(
+            Pid::from_raw(child.id().try_into().unwrap()).unwrap(),
+            signal,
+        )
+        .unwrap();
+        let result = child.wait_with_output().unwrap();
+        let report = public_json(&result, 1);
+        assert_eq!(report["execution"]["outcome"]["status"], status);
+        assert_eq!(report["execution"]["completed_steps"], 0);
+        assert_stopped(leader);
+        assert_stopped(descendant);
+        fixture.mode("success");
+        public_json(&fixture.public_execute("check", true).output().unwrap(), 0);
+    }
+}
+
+#[test]
+fn public_planning_errors_use_versioned_json_or_static_human_diagnostics() {
+    let fixture = Fixture::new();
+    for operation in ["check", "test"] {
+        let failed = fixture
+            .public_command(operation)
+            .current_dir(&fixture.tools)
+            .args(["--dry-run", "--json"])
+            .output()
+            .unwrap();
+        let report = public_json(&failed, 3);
+        assert!(report["plan"].is_null());
+        assert!(report["execution"].is_null());
+        assert_eq!(report["diagnostics"][0]["code"], "application-context");
+        let failed = fixture
+            .public_command(operation)
+            .current_dir(&fixture.tools)
+            .arg("--dry-run")
+            .output()
+            .unwrap();
+        assert_eq!(failed.status.code(), Some(3));
+        assert!(failed.stdout.is_empty());
+        assert!(String::from_utf8_lossy(&failed.stderr).contains("application-context"));
+        assert!(
+            !String::from_utf8_lossy(&failed.stderr).contains(fixture.parent.to_str().unwrap())
+        );
     }
 }
 
