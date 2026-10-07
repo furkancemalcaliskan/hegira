@@ -23,6 +23,7 @@ cargo run --locked -p hegira_cli -- doctor --help
 cargo run --locked -p hegira_cli -- check --help
 cargo run --locked -p hegira_cli -- test --help
 cargo run --locked -p hegira_cli -- dev --help
+cargo run --locked -p hegira_cli -- build --help
 cargo run --locked -p hegira_cli -- upgrade status --help
 cargo run --locked -p hegira_cli -- upgrade --help
 cargo run --locked -p hegira_cli -- component add --help
@@ -177,6 +178,82 @@ Other inherited settings and credentials remain effective. Human mode inherits
 raw tool/application output; JSON mode discards it and emits the same schema-1
 envelope and exit outcomes as `check`/`test` after the foreground operation ends.
 Preview has no startup or tool-probe side effects.
+
+## Build An Application Release Bundle
+
+Review the current application's selected-provider production-bundle plan:
+
+```sh
+cargo run --locked --manifest-path /path/to/hegira/Cargo.toml \
+  -p hegira_cli -- build --release --dry-run --json
+```
+
+`--release` is required; debug builds and arbitrary argument passthrough are not
+supported. The preview reads only the manifest and authenticated bundled
+composition. It reports the expected output paths and ownership but probes no
+tools, reads no runtime profile, creates no output directory, and builds nothing.
+
+Complete the [explicit prerequisite setup](#application-prerequisites-and-non-interactive-creation)
+and separately install Binaryen `wasm-opt` version `123` from a reviewed official
+distribution. On Linux, explicitly select the trusted tools:
+
+```sh
+cargo run --locked --manifest-path /path/to/hegira/Cargo.toml \
+  -p hegira_cli -- build --release --execute --trust-application \
+  --cargo /absolute/trusted/bin/cargo \
+  --tool-directory /absolute/trusted/bin \
+  --tool-directory /usr/bin \
+  --wasm-bindgen /absolute/my-application/target/hegira-tools/wasm-bindgen/bin/wasm-bindgen \
+  --wasm-opt /absolute/trusted/bin/wasm-opt
+```
+
+The command uses the same installed Rust/WASM, Cargo Leptos 0.3.7, Node, npm
+receipt, Tailwind, wasm-bindgen, and locked Cargo preflight as `dev`. It additionally
+verifies the native optimizer's version before building; `wasm-opt` must be
+outside the application. No tool is automatically downloaded. Native release
+features are `ssr,db-sqlite` or `ssr,db-postgres` according to `hegira.toml`;
+hydration uses `hydrate` and the canonical `wasm-release` profile. It neither
+selects `APP_ENV=production` nor loads runtime configuration or starts a server.
+No database or deployment action is granted.
+
+The fixed, application-relative build root is `target/hegira/release-build`.
+Hegira exclusively creates and records ownership of a new root; an existing
+root is reusable only with its matching `.hegira-release-build.json` claim.
+Unclaimed output is never adopted, even if empty. Symlinks, special files,
+external hard links, and oversized/deep ownership walks fail closed. Do not
+fabricate or edit that marker to bypass ownership checks. Do not put product
+source or unrelated data under the claimed root: Cargo Leptos can clear and
+recreate its owned `site` subtree. Ordinary `target/debug`, `target/release`,
+the manual Leptos `target/site`, and prepared tools remain outside this claim.
+Hegira provides no automatic cache cleanup or size-budget guarantee here.
+
+Only a successful builder, unchanged preflight/lock identities, and verified
+native/WASM/JS/CSS outputs produce a successful artifact report:
+
+| Artifact | Application-relative location |
+|---|---|
+| Native server | `target/hegira/release-build/release/app_server` |
+| Site and browser assets | `target/hegira/release-build/site` |
+| Browser WASM | `target/hegira/release-build/site/pkg/app_bg.wasm` |
+
+The schema-1 plan's `artifacts` describes expectations. A successful schema-1
+execution adds verified `artifacts`; unsuccessful execution reports no verified
+artifact receipt. Failure or cancellation may leave partial owned output or
+earlier artifacts; path existence alone is not a successful build. Changed locks
+fail closed without silently reverting trusted builder changes. Review and
+recover those changes manually. Repeated builds reuse only the claimed output
+area. Customized cross-target, profile, Cargo-command, or output layouts require
+an owner-reviewed manual workflow rather than redirecting this command.
+
+**Build with a reviewed environment that contains no production credentials.**
+Build scripts and frontend tools execute trusted code with inherited privileges
+and may embed environment values in binaries/browser assets. Hegira does not
+sanitize trusted code or certify browser assets as secret-free. Human logs are
+raw; JSON discards child logs and returns the existing content-redacted envelope
+and process outcomes. Tests, supply-chain audits, runtime validation, migrations,
+container checks, signing, and deployment approval remain separate tasks. This
+produces application artifacts, not a framework executable release or registry
+publication.
 
 ## Guided Creation
 

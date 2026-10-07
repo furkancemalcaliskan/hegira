@@ -1,4 +1,4 @@
-//! Lock-matched development tool preflight and a private, allowlisted tool PATH.
+//! Shared lock-matched Leptos preflight and a private, allowlisted tool PATH.
 
 use super::*;
 use std::{
@@ -246,12 +246,62 @@ impl Session {
                 read_file(&plan.anchor.directory.fd, Path::new(path), LIMIT)?,
             );
         }
+        if plan.summary.intent == OperationIntent::ReleaseBuild {
+            if leptos.get("bin-target").and_then(toml::Value::as_str) != Some("app_server")
+                || leptos.get("output-name").and_then(toml::Value::as_str) != Some("app")
+                || leptos
+                    .get("lib-profile-release")
+                    .and_then(toml::Value::as_str)
+                    != Some("wasm-release")
+                || leptos.get("assets-dir").and_then(toml::Value::as_str)
+                    != Some("../web/src/public")
+                || [
+                    "bin-profile-release",
+                    "bin-target-dir",
+                    "bin-target-triple",
+                    "front-target-dir",
+                ]
+                .iter()
+                .any(|key| leptos.get(*key).is_some())
+                || leptos.get("features").is_some_and(|features| {
+                    features
+                        .as_array()
+                        .is_none_or(|features| !features.is_empty())
+                })
+                || [
+                    "CARGO_BUILD_TARGET",
+                    "CARGO_BUILD_BUILD_DIR",
+                    "LEPTOS_BIN_TARGET_TRIPLE",
+                ]
+                .iter()
+                .any(|key| std::env::var_os(key).is_some())
+            {
+                return Err(prerequisite(
+                    "release-metadata",
+                    "Release builds require canonical host/profile/asset metadata and no inherited cross-target or alternate intermediate-output settings; review customized workflows manually.",
+                ));
+            }
+            let (_, workspace) = toml_source(plan, "Cargo.toml")?;
+            if workspace
+                .get("workspace")
+                .and_then(|value| value.get("metadata"))
+                .and_then(|value| value.get("leptos"))
+                .is_some()
+            {
+                return Err(prerequisite(
+                    "release-metadata",
+                    "Release builds require the canonical single server-package Leptos composition, not workspace-level overrides.",
+                ));
+            }
+        }
         let profile = match plan.summary.database {
             application_manifest::DatabaseAdapter::Sqlite => "config/sqlite.yaml",
             application_manifest::DatabaseAdapter::Postgres => "config/development.yaml",
         };
         // Presence/type only: runtime secrets are not loaded or validated here.
-        open_file(&plan.anchor.directory.fd, Path::new(profile))?;
+        if plan.summary.intent == OperationIntent::Develop {
+            open_file(&plan.anchor.directory.fd, Path::new(profile))?;
+        }
         let (bytes, frontend_lock) = json(plan, "apps/web/src/package-lock.json")?;
         sources.insert("apps/web/src/package-lock.json".into(), bytes);
         let (bytes, installed) = json(plan, "apps/web/src/node_modules/.package-lock.json")?;
@@ -314,6 +364,25 @@ impl Session {
         }
         tools.insert("wasm-bindgen", NativeTool::open(wasm)?);
         tools.insert("cargo", NativeTool::open(proxy)?);
+        if plan.summary.intent == OperationIntent::ReleaseBuild {
+            let selected = toolchain.release_optimizer.as_ref().ok_or_else(|| prerequisite("release-tool-selection", "Select an absolute trusted Binaryen --wasm-opt version 123; release builds never install it automatically."))?;
+            let optimizer = NativeTool::open(selected)?;
+            if optimizer.path.starts_with(&plan.root) {
+                return Err(unsafe_path());
+            }
+            let mut version = optimizer.command("wasm-opt", plan, toolchain)?;
+            version.arg("--version");
+            let version = probe(version, control)?;
+            if !["wasm-opt version 123", "wasm-opt version 123 (version_123)"]
+                .contains(&version.trim())
+            {
+                return Err(prerequisite(
+                    "release-wasm-opt-version",
+                    "Install and explicitly select Binaryen wasm-opt 123 to match Cargo Leptos 0.3.7; no optimizer was downloaded.",
+                ));
+            }
+            tools.insert("wasm-opt", optimizer);
+        }
         if tools["cargo"].path.starts_with(&plan.root) {
             return Err(unsafe_path());
         }

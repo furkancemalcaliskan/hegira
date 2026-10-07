@@ -200,6 +200,16 @@ fn six_compositions_have_deterministic_read_only_plans_for_every_intent() {
                                 "LEPTOS_RELOAD_PORT",
                                 "LEPTOS_BIN_CARGO_COMMAND",
                                 "LEPTOS_STYLE_FILE",
+                                "CARGO_TARGET_DIR",
+                                "CARGO_BUILD_TARGET_DIR",
+                                "LEPTOS_BIN_TARGET_DIR",
+                                "LEPTOS_SITE_ROOT",
+                                "LEPTOS_SITE_PKG_DIR",
+                                "LEPTOS_OUTPUT_NAME",
+                                "LEPTOS_BIN_EXE_NAME",
+                                "LEPTOS_BIN_TARGET",
+                                "LEPTOS_ASSETS_DIR",
+                                "LEPTOS_HASH_FILES",
                             ]
                             .contains(&key.as_str())
                         }));
@@ -310,7 +320,23 @@ fn features_profiles_and_locked_arguments_match_the_current_application_contract
         };
         assert_eq!(&arguments[..2], ["leptos", "build"]);
         assert!(arguments.contains(&"--release".to_owned()));
-        assert!(environment.is_empty());
+        assert_eq!(
+            environment["CARGO_TARGET_DIR"],
+            "target/hegira/release-build"
+        );
+        assert_eq!(environment["LEPTOS_SITE_ROOT"], "CARGO_TARGET_DIR/site");
+        assert_eq!(environment["LEPTOS_ASSETS_DIR"], "../web/src/public");
+        assert!(!environment.contains_key("APP_ENV"));
+        assert_eq!(
+            build.summary().artifacts.as_ref().unwrap().owner,
+            "hegira-release-build"
+        );
+        assert!(
+            build
+                .summary()
+                .prerequisites
+                .contains(&OperationPrerequisite::WasmOpt { version: "123" })
+        );
         assert!(
             build
                 .summary()

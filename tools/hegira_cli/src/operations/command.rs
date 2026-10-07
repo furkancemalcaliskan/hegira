@@ -62,6 +62,31 @@ pub(crate) struct DevelopmentCommand {
     wasm_bindgen: Option<PathBuf>,
 }
 
+#[derive(Debug, Args)]
+pub(crate) struct BuildCommand {
+    /// Only production-bundle compilation is supported; this does not run or deploy it.
+    #[arg(long, required = true)]
+    release: bool,
+
+    #[command(flatten)]
+    frontend: DevelopmentCommand,
+
+    /// Absolute trusted Binaryen wasm-opt 123 executable; never downloaded automatically.
+    #[arg(
+        long,
+        value_name = "PATH",
+        required_if_eq("execute", "true"),
+        requires = "execute"
+    )]
+    wasm_opt: Option<PathBuf>,
+}
+
+#[derive(Default)]
+struct FrontendTools {
+    wasm_bindgen: Option<PathBuf>,
+    wasm_opt: Option<PathBuf>,
+}
+
 #[derive(Debug, Clone, Copy, Serialize)]
 #[serde(rename_all = "kebab-case")]
 enum Mode {
@@ -91,7 +116,7 @@ pub(crate) fn run(
     run_operation(
         command,
         intent,
-        None,
+        FrontendTools::default(),
         repository,
         working_directory,
         output,
@@ -109,7 +134,31 @@ pub(crate) fn run_development(
     run_operation(
         command.options,
         OperationIntent::Develop,
-        command.wasm_bindgen,
+        FrontendTools {
+            wasm_bindgen: command.wasm_bindgen,
+            wasm_opt: None,
+        },
+        repository,
+        working_directory,
+        output,
+        diagnostics,
+    )
+}
+
+pub(crate) fn run_build(
+    command: BuildCommand,
+    repository: PathBuf,
+    working_directory: PathBuf,
+    output: &mut impl Write,
+    diagnostics: &mut impl Write,
+) -> CliExit {
+    run_operation(
+        command.frontend.options,
+        OperationIntent::ReleaseBuild,
+        FrontendTools {
+            wasm_bindgen: command.frontend.wasm_bindgen,
+            wasm_opt: command.wasm_opt,
+        },
         repository,
         working_directory,
         output,
@@ -120,7 +169,7 @@ pub(crate) fn run_development(
 fn run_operation(
     command: ValidationCommand,
     intent: OperationIntent,
-    wasm_bindgen: Option<PathBuf>,
+    frontend: FrontendTools,
     repository: PathBuf,
     working_directory: PathBuf,
     output: &mut impl Write,
@@ -140,7 +189,7 @@ fn run_operation(
     if command.dry_run {
         return emit(&command, Some(&plan), Ok(None), output, diagnostics);
     }
-    let result = execute(&command, &repository, &plan, wasm_bindgen.as_deref()).map(Some);
+    let result = execute(&command, &repository, &plan, &frontend).map(Some);
     emit(&command, Some(&plan), result, output, diagnostics)
 }
 
@@ -148,7 +197,7 @@ fn execute(
     command: &ValidationCommand,
     repository: &std::path::Path,
     plan: &OperationPlan,
-    wasm_bindgen: Option<&std::path::Path>,
+    frontend: &FrontendTools,
 ) -> Result<ExecutionReport, OperationError> {
     // Defense in depth for callers other than Clap. No default or preview grants consent.
     if !command.execute || !command.trust_application || command.dry_run {
@@ -166,12 +215,17 @@ fn execute(
         )
     })?;
     let mut toolchain = TrustedToolchain::resolve(cargo, &command.tool_directory)?;
-    if plan.summary().intent == OperationIntent::Develop {
-        let wasm_bindgen = wasm_bindgen.ok_or_else(|| OperationError::new(
-            OperationErrorKind::Validation,
-            "development-tool-selection",
-            "Development execution requires an absolute trusted --wasm-bindgen matching Cargo.lock.",
-        ))?;
+    if matches!(
+        plan.summary().intent,
+        OperationIntent::Develop | OperationIntent::ReleaseBuild
+    ) {
+        let wasm_bindgen = frontend.wasm_bindgen.as_deref().ok_or_else(|| {
+            OperationError::new(
+                OperationErrorKind::Validation,
+                "development-tool-selection",
+                "Leptos execution requires an absolute trusted --wasm-bindgen matching Cargo.lock.",
+            )
+        })?;
         let proxy = std::env::current_exe().map_err(|_| {
             OperationError::new(
                 OperationErrorKind::Internal,
@@ -180,6 +234,14 @@ fn execute(
             )
         })?;
         toolchain = toolchain.with_development_tools(wasm_bindgen, &proxy)?;
+        if plan.summary().intent == OperationIntent::ReleaseBuild {
+            let wasm_opt = frontend.wasm_opt.as_deref().ok_or_else(|| OperationError::new(
+                OperationErrorKind::Validation,
+                "release-tool-selection",
+                "Release execution requires an absolute trusted --wasm-opt version 123; install it explicitly.",
+            ))?;
+            toolchain = toolchain.with_release_optimizer(wasm_opt)?;
+        }
     }
     let control = ExecutionControl::default();
     let _signals = CommandSignals::register(&control)?;
@@ -227,15 +289,21 @@ fn emit(
     } else {
         match result {
             Ok(None) => plan.is_some_and(|plan| write!(output, "{}", plan.render_human()).is_ok()),
-            Ok(Some(execution)) => writeln!(
-                output,
-                "Application operation {:?}: {:?}\nCompleted steps: {}/{}",
-                execution.intent,
-                execution.outcome,
-                execution.completed_steps,
-                plan.map_or(0, |plan| plan.summary().steps.len()),
-            )
-            .is_ok(),
+            Ok(Some(execution)) => {
+                let written = writeln!(
+                    output,
+                    "Application operation {:?}: {:?}\nCompleted steps: {}/{}",
+                    execution.intent,
+                    execution.outcome,
+                    execution.completed_steps,
+                    plan.map_or(0, |plan| plan.summary().steps.len()),
+                )
+                .is_ok();
+                written && execution.artifacts.as_ref().is_none_or(|artifacts| {
+                    writeln!(output, "Verified artifacts (application-relative; owner: {}):\nServer: {}\nSite: {}\nBrowser WASM: {}",
+                        artifacts.owner, artifacts.server, artifacts.site, artifacts.browser_wasm).is_ok()
+                })
+            }
             Err(error) => writeln!(diagnostics, "{error}").is_ok(),
         }
     };

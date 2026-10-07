@@ -130,14 +130,14 @@ commands change. Never describe planned work as implemented.
   not probe tools, load runtime configuration, execute commands, or grant
   execution authority. Database steps declare an application-owned entry-point
   requirement, not a currently available executable. Its separate Linux native
-  check/test/development execution library requires explicit trust consent, an absolute trusted Cargo
+  check/test/development/release-build execution library requires explicit trust consent, an absolute trusted Cargo
   selection, and trusted auxiliary tool directories. It anchors the approved
   root and executable, re-authenticates composition, rejects pending recovery
   and concurrent operations, and owns child-group termination and reaping.
   Inherited environment and application/tool output are not sanitized; this is
   not a sandbox. Development verifies pinned Rust/WASM, Cargo Leptos, Node,
-  npm receipts, and Tailwind before foreground watch/serve; release-build
-  execution remains blocked. Public `dev`, `check`, and `test` expose read-only
+  npm receipts, and Tailwind before foreground watch/serve or release build.
+  Public `dev`, `check`, `test`, and `build --release` expose read-only
   `--dry-run` or explicitly trusted `--execute` through the same typed plan.
   Execution additionally requires `--trust-application`, absolute `--cargo`
   and `--tool-directory` selections, and Linux. CLI signal handlers forward
@@ -148,8 +148,14 @@ commands change. Never describe planned work as implemented.
   proxy without installing tools or rewriting source. It explicitly selects a
   development provider/profile and localhost bind, but trusted startup can
   migrate, seed, and access configured dependencies. Review runtime settings
-  and inherited database overrides before execution. Build and database
-  operation commands are not public CLI capabilities.
+  and inherited database overrides before execution. Release builds additionally
+  require explicitly installed `wasm-opt` 123 and select only the separately
+  claimed `target/hegira/release-build` output root. Existing unclaimed output,
+  symlinks, and external hard links fail closed. Successful reports include
+  verified application-relative server/site/WASM locations, not deployment
+  approval. Never fabricate the cache's ownership marker to adopt unrelated
+  data. This output claim grants neither ordinary Cargo-cache cleanup nor a
+  disk-budget guarantee. Database operation commands are not public CLI capabilities.
   Generation validates project identity and destination before rendering and
   requires a new destination under an existing parent without symlinks. Safe
   atomic publication fails closed on unsupported platforms.

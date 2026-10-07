@@ -160,6 +160,9 @@ impl Fixture {
             .env_clear()
             .env("PATH", "")
             .stdin(Stdio::null());
+        if operation == "build" {
+            command.arg("--release");
+        }
         command
     }
 
@@ -170,10 +173,13 @@ impl Fixture {
             .arg(self.tools.join("cargo"))
             .arg("--tool-directory")
             .arg(&self.tools);
-        if operation == "dev" {
+        if operation == "dev" || operation == "build" {
             command
                 .arg("--wasm-bindgen")
                 .arg(self.tools.join("wasm-bindgen"));
+        }
+        if operation == "build" {
+            command.arg("--wasm-opt").arg(self.tools.join("wasm-opt"));
         }
         if json {
             command.arg("--json");
@@ -182,7 +188,7 @@ impl Fixture {
     }
 
     fn development_tools(&self, root: &Path) {
-        for name in ["cargo-leptos", "rustc", "node", "wasm-bindgen"] {
+        for name in ["cargo-leptos", "rustc", "node", "wasm-bindgen", "wasm-opt"] {
             fs::copy(self.tools.join("cargo"), self.tools.join(name)).unwrap();
         }
         let target = self.tools.join("wasm-target");
@@ -261,6 +267,9 @@ fn application_source_tree(root: &Path) -> Vec<(PathBuf, Vec<u8>)> {
             .collect();
         entries.sort();
         for path in entries {
+            if path.strip_prefix(root).unwrap() == Path::new("target/hegira/release-build") {
+                continue; // Only this separately claimed build root belongs to Hegira.
+            }
             if path.is_dir() {
                 visit(root, &path, result);
             } else {
@@ -296,7 +305,7 @@ fn application_source_tree(root: &Path) -> Vec<(PathBuf, Vec<u8>)> {
 #[test]
 fn public_help_and_parser_require_explicit_mode_consent_and_tool_selection() {
     let fixture = Fixture::new();
-    for operation in ["check", "test", "dev"] {
+    for operation in ["check", "test", "dev", "build"] {
         let result = fixture
             .public_command(operation)
             .arg("--help")
@@ -382,7 +391,7 @@ fn public_preview_and_execution_share_plans_across_all_six_compositions() {
             fs::write(root.join("child-mode"), "success").unwrap();
             fixture.development_tools(&root);
             let before = application_source_tree(&root);
-            for operation in ["check", "test", "dev"] {
+            for operation in ["check", "test", "dev", "build"] {
                 let preview = fixture
                     .public_command(operation)
                     .current_dir(root.join("apps/web/src"))
@@ -412,11 +421,13 @@ fn public_preview_and_execution_share_plans_across_all_six_compositions() {
                 assert!(human.stderr.is_empty());
                 let human = String::from_utf8(human.stdout).unwrap();
                 assert!(human.contains("Planning only"));
-                assert!(human.contains(if operation == "dev" {
-                    "leptos"
-                } else {
-                    "wasm32-unknown-unknown"
-                }));
+                assert!(
+                    human.contains(if operation == "dev" || operation == "build" {
+                        "leptos"
+                    } else {
+                        "wasm32-unknown-unknown"
+                    })
+                );
                 assert!(!human.contains(root.to_str().unwrap()));
                 assert!(!root.join("target").exists());
                 assert!(!root.join("child.log").exists());
@@ -438,7 +449,11 @@ fn public_preview_and_execution_share_plans_across_all_six_compositions() {
                 assert_eq!(executed["execution"]["outcome"]["status"], "succeeded");
                 assert_eq!(
                     executed["execution"]["completed_steps"],
-                    if operation == "dev" { 1 } else { 2 }
+                    if operation == "dev" || operation == "build" {
+                        1
+                    } else {
+                        2
+                    }
                 );
                 assert_eq!(executed["diagnostics"], serde_json::json!([]));
                 let expected: Vec<_> = executed["plan"]["steps"]
@@ -457,7 +472,23 @@ fn public_preview_and_execution_share_plans_across_all_six_compositions() {
                         .map(|args| format!("{args:?}"))
                         .collect::<Vec<_>>()
                 );
-                if operation == "dev" {
+                if operation == "build" {
+                    assert_eq!(expected[0][..2], ["leptos", "build"]);
+                    assert!(expected[0].contains(&"--release".to_owned()));
+                    assert!(expected[0].contains(&format!("ssr,db-{database}")));
+                    assert_eq!(
+                        executed["execution"]["artifacts"],
+                        preview["plan"]["artifacts"]
+                    );
+                    assert_eq!(
+                        executed["execution"]["artifacts"]["owner"],
+                        "hegira-release-build"
+                    );
+                    assert!(
+                        root.join("target/hegira/release-build/site/pkg/app_bg.wasm")
+                            .is_file()
+                    );
+                } else if operation == "dev" {
                     assert_eq!(expected[0][..2], ["leptos", "watch"]);
                     assert!(expected[0].contains(&format!("ssr,db-{database}")));
                     assert_eq!(
@@ -505,7 +536,7 @@ fn public_preview_and_execution_share_plans_across_all_six_compositions() {
                 fs::remove_file(root.join("child.log")).unwrap();
                 assert_eq!(application_source_tree(&root), before);
                 assert!(!root.join(".hegira-mutation.lock").exists());
-                assert!(!root.join("target").exists());
+                assert_eq!(root.join("target").exists(), operation == "build");
             }
         }
     }
@@ -524,6 +555,190 @@ fn public_json_discards_child_output_while_human_execution_inherits_it() {
     assert!(String::from_utf8_lossy(&human.stdout).contains("fixture-child-output-only"));
     assert!(String::from_utf8_lossy(&human.stderr).contains("fixture-child-diagnostic-only"));
     assert!(String::from_utf8_lossy(&human.stdout).contains("Completed steps: 2/2"));
+}
+
+#[test]
+fn release_build_requires_release_and_explicit_optimizer_selection() {
+    let fixture = Fixture::new();
+    let missing_release = Command::new(env!("CARGO_BIN_EXE_hegira"))
+        .args(["build", "--dry-run"])
+        .current_dir(&fixture.root)
+        .output()
+        .unwrap();
+    assert_eq!(missing_release.status.code(), Some(2));
+    let missing_optimizer = fixture
+        .public_command("build")
+        .args(["--execute", "--trust-application", "--cargo"])
+        .arg(fixture.tools.join("cargo"))
+        .arg("--tool-directory")
+        .arg(&fixture.tools)
+        .arg("--wasm-bindgen")
+        .arg(fixture.tools.join("wasm-bindgen"))
+        .output()
+        .unwrap();
+    assert_eq!(missing_optimizer.status.code(), Some(2));
+    assert!(!fixture.root.join("target").exists());
+    assert!(!fixture.root.join("child.pid").exists());
+}
+
+#[test]
+fn release_failures_and_modified_locks_never_issue_an_artifact_receipt() {
+    for (mode, exit, diagnostic) in [
+        ("failure", 1, None),
+        ("incomplete", 3, Some("release-artifacts-incomplete")),
+        ("rewrite-lock", 4, Some("execution-precondition")),
+        ("optimizer", 3, Some("release-wasm-opt-version")),
+    ] {
+        let fixture = Fixture::new();
+        fixture.development_tools(&fixture.root);
+        if mode == "optimizer" {
+            fs::write(fixture.root.join("probe-mode"), mode).unwrap();
+        } else {
+            fixture.mode(mode);
+        }
+        let lock = fs::read(fixture.root.join("Cargo.lock")).unwrap();
+        let output = fixture.public_execute("build", true).output().unwrap();
+        let report = public_json(&output, exit);
+        assert!(report["execution"]["artifacts"].is_null());
+        if let Some(code) = diagnostic {
+            assert_eq!(report["diagnostics"][0]["code"], code);
+            assert!(report["execution"].is_null());
+        } else {
+            assert_eq!(report["execution"]["outcome"]["status"], "child-failed");
+        }
+        if mode == "rewrite-lock" {
+            // Fail closed without silently restoring or overwriting a trusted builder's changes.
+            assert_ne!(fs::read(fixture.root.join("Cargo.lock")).unwrap(), lock);
+            assert!(!String::from_utf8_lossy(&output.stdout).contains("unreviewed fixture lock"));
+        } else {
+            assert_eq!(fs::read(fixture.root.join("Cargo.lock")).unwrap(), lock);
+        }
+        if mode == "optimizer" {
+            assert!(!fixture.root.join("child.pid").exists());
+            assert!(!fixture.root.join("target").exists());
+        }
+    }
+}
+
+#[test]
+fn release_output_never_adopts_unclaimed_or_redirected_data() {
+    for mode in [
+        "unclaimed",
+        "marker",
+        "target",
+        "hegira",
+        "root",
+        "nested-symlink",
+        "external-hard-link",
+    ] {
+        let fixture = Fixture::new();
+        fixture.development_tools(&fixture.root);
+        let external = fixture.parent.join("external-output");
+        fs::create_dir(&external).unwrap();
+        fs::write(external.join("sentinel"), "unrelated data; preserve").unwrap();
+        let root = fixture.root.join("target/hegira/release-build");
+        match mode {
+            "unclaimed" | "marker" => {
+                fs::create_dir_all(&root).unwrap();
+                fs::write(root.join("sentinel"), "unclaimed data; preserve").unwrap();
+                if mode == "marker" {
+                    fs::write(
+                        root.join(".hegira-release-build.json"),
+                        "not an ownership claim",
+                    )
+                    .unwrap();
+                }
+            }
+            "target" => symlink(&external, fixture.root.join("target")).unwrap(),
+            "hegira" => {
+                fs::create_dir(fixture.root.join("target")).unwrap();
+                symlink(&external, fixture.root.join("target/hegira")).unwrap();
+            }
+            "root" => {
+                fs::create_dir_all(fixture.root.join("target/hegira")).unwrap();
+                symlink(&external, &root).unwrap();
+            }
+            _ => {
+                public_json(&fixture.public_execute("build", true).output().unwrap(), 0);
+                fs::remove_file(fixture.root.join("child.pid")).unwrap();
+                if mode == "nested-symlink" {
+                    symlink(&external, root.join("site/redirect")).unwrap();
+                } else {
+                    fs::hard_link(external.join("sentinel"), root.join("aliased-file")).unwrap();
+                }
+            }
+        }
+        let report = public_json(&fixture.public_execute("build", true).output().unwrap(), 4);
+        assert_eq!(report["diagnostics"][0]["code"], "release-output-ownership");
+        assert!(report["execution"].is_null());
+        assert!(!fixture.root.join("child.pid").exists());
+        assert_eq!(
+            fs::read_to_string(external.join("sentinel")).unwrap(),
+            "unrelated data; preserve"
+        );
+        assert_eq!(fs::read_dir(&external).unwrap().count(), 1);
+        if mode == "unclaimed" || mode == "marker" {
+            assert_eq!(
+                fs::read_to_string(root.join("sentinel")).unwrap(),
+                "unclaimed data; preserve"
+            );
+        }
+    }
+}
+
+#[test]
+fn release_reuses_only_owned_output_preserves_developer_cache_and_handles_termination() {
+    let fixture = Fixture::new();
+    fixture.development_tools(&fixture.root);
+    fs::create_dir_all(fixture.root.join("target/release")).unwrap();
+    fs::write(
+        fixture.root.join("target/release/developer-output"),
+        "developer-owned; preserve",
+    )
+    .unwrap();
+    fs::write(
+        fixture.root.join("config/production.yaml"),
+        "never read fixture runtime credentials",
+    )
+    .unwrap();
+    let before = application_source_tree(&fixture.root);
+    for _ in 0..2 {
+        let mut command = fixture.public_execute("build", true);
+        command
+            .env("CARGO_TARGET_DIR", &fixture.tools)
+            .env("LEPTOS_SITE_ROOT", &fixture.tools)
+            .env("LEPTOS_ASSETS_DIR", &fixture.tools)
+            .env("LEPTOS_BIN_CARGO_COMMAND", "unreviewed-command")
+            .env("LEPTOS_HASH_FILES", "true");
+        let report = public_json(&command.output().unwrap(), 0);
+        assert_eq!(report["execution"]["completed_steps"], 1);
+        assert_eq!(application_source_tree(&fixture.root), before);
+    }
+    let human = fixture.public_execute("build", false).output().unwrap();
+    assert!(human.status.success());
+    assert!(String::from_utf8_lossy(&human.stdout).contains("Verified artifacts"));
+    fixture.mode("wait");
+    fs::remove_file(fixture.root.join("child.pid")).unwrap();
+    let child = fixture
+        .public_execute("build", true)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let leader = pid(&fixture.root, "child.pid");
+    kill_process(
+        Pid::from_raw(child.id().try_into().unwrap()).unwrap(),
+        Signal::TERM,
+    )
+    .unwrap();
+    let report = public_json(&child.wait_with_output().unwrap(), 1);
+    assert_eq!(report["execution"]["outcome"]["status"], "terminated");
+    assert!(report["execution"]["artifacts"].is_null());
+    assert_stopped(leader);
+    assert_eq!(
+        fs::read_to_string(fixture.root.join("target/release/developer-output")).unwrap(),
+        "developer-owned; preserve"
+    );
 }
 
 #[test]
