@@ -4,7 +4,7 @@ use std::{
     fs,
     os::unix::fs::{PermissionsExt, symlink},
     path::{Path, PathBuf},
-    process::{Command, Output, Stdio},
+    process::{Child, Command, Output, Stdio},
     sync::{
         Arc, Mutex, Weak,
         atomic::{AtomicU64, Ordering},
@@ -24,8 +24,11 @@ use hegira_cli::{
         plan_application_operation,
     },
 };
-use rustix::process::{Pid, Signal, WaitOptions, kill_process, waitpid};
+use rustix::process::{Pid, Signal, WaitOptions, kill_process, kill_process_group, waitpid};
 use template_renderer::{RenderRequest, render};
+
+#[path = "support/operation_contract.rs"]
+mod operation_contract;
 
 static NEXT: AtomicU64 = AtomicU64::new(0);
 static HELPER: Mutex<Weak<Helper>> = Mutex::new(Weak::new());
@@ -309,6 +312,68 @@ fn public_json(output: &Output, code: i32) -> serde_json::Value {
     assert_eq!(value["output_schema"], 1);
     assert_eq!(value.as_object().unwrap().len(), 5);
     value
+}
+
+// Signal tests must not strand a controlled command even if an assertion panics.
+// Reap the CLI; it owns normal group cleanup. Kill its observed group only as a
+// bounded last resort while the CLI is still alive (never reuse a stale PID).
+struct ControlledCommand {
+    child: Option<Child>,
+    leader: Option<Pid>,
+}
+
+impl ControlledCommand {
+    fn spawn(mut command: Command) -> Self {
+        Self {
+            child: Some(
+                command
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::piped())
+                    .spawn()
+                    .unwrap(),
+            ),
+            leader: None,
+        }
+    }
+
+    fn pid(&self) -> Pid {
+        Pid::from_raw(self.child.as_ref().unwrap().id().try_into().unwrap()).unwrap()
+    }
+
+    fn output(mut self) -> Output {
+        let deadline = Instant::now() + Duration::from_secs(15);
+        while self.child.as_mut().unwrap().try_wait().unwrap().is_none() {
+            assert!(Instant::now() < deadline, "controlled CLI did not finish");
+            thread::sleep(Duration::from_millis(10));
+        }
+        self.child.take().unwrap().wait_with_output().unwrap()
+    }
+}
+
+impl Drop for ControlledCommand {
+    fn drop(&mut self) {
+        let Some(child) = self.child.as_mut() else {
+            return;
+        };
+        if child.try_wait().ok().flatten().is_some() {
+            return;
+        }
+        if let Some(pid) = Pid::from_raw(child.id().try_into().unwrap()) {
+            let _ = kill_process(pid, Signal::TERM);
+        }
+        let deadline = Instant::now() + Duration::from_secs(3);
+        while Instant::now() < deadline {
+            if child.try_wait().ok().flatten().is_some() {
+                return;
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
+        if let Some(leader) = self.leader {
+            let _ = kill_process_group(leader, Signal::KILL);
+        }
+        let _ = child.kill();
+        let _ = child.wait();
+    }
 }
 
 fn doctor_json(output: &Output, code: i32) -> serde_json::Value {
@@ -1037,6 +1102,17 @@ fn public_preview_and_execution_share_plans_across_all_six_compositions() {
                     .output()
                     .unwrap();
                 let preview = public_json(&preview, 0);
+                let reviewed_plan = operation_contract::plan(
+                    "public-operation-app",
+                    composition,
+                    database,
+                    operation,
+                );
+                assert_eq!(
+                    preview,
+                    operation_contract::preview(reviewed_plan),
+                    "review the full {composition}/{database}/{operation} plan before changing its snapshot"
+                );
                 assert_eq!(preview["mode"], "preview");
                 assert!(preview["execution"].is_null());
                 assert_eq!(preview["diagnostics"], serde_json::json!([]));
@@ -1058,6 +1134,10 @@ fn public_preview_and_execution_share_plans_across_all_six_compositions() {
                 assert!(human.status.success());
                 assert!(human.stderr.is_empty());
                 let human = String::from_utf8(human.stdout).unwrap();
+                assert_eq!(
+                    human,
+                    operation_contract::human_preview("public-operation-app", database, operation)
+                );
                 assert!(human.contains("Planning only"));
                 assert!(
                     human.contains(if operation == "dev" || operation == "build" {
@@ -1082,6 +1162,18 @@ fn public_preview_and_execution_share_plans_across_all_six_compositions() {
                     .output()
                     .unwrap();
                 let executed = public_json(&executed, 0);
+                let expected_plan = operation_contract::plan(
+                    "public-operation-app",
+                    composition,
+                    database,
+                    operation,
+                );
+                let expected_outcome =
+                    operation_contract::outcome(operation, "success", &expected_plan);
+                assert_eq!(
+                    executed,
+                    operation_contract::execution(expected_plan, &expected_outcome)
+                );
                 assert_eq!(executed["mode"], "execute");
                 assert_eq!(executed["plan"], preview["plan"]);
                 assert_eq!(executed["execution"]["outcome"]["status"], "succeeded");
@@ -1175,6 +1267,192 @@ fn public_preview_and_execution_share_plans_across_all_six_compositions() {
                 assert_eq!(application_source_tree(&root), before);
                 assert!(!root.join(".hegira-mutation.lock").exists());
                 assert_eq!(root.join("target").exists(), operation == "build");
+            }
+        }
+    }
+}
+
+#[test]
+fn public_previews_never_invoke_tools_or_load_runtime_configuration() {
+    let fixture = Fixture::new();
+    for name in [
+        "rustc",
+        "npm",
+        "node",
+        "cargo-leptos",
+        "wasm-bindgen",
+        "wasm-opt",
+    ] {
+        fs::copy(fixture.tools.join("cargo"), fixture.tools.join(name)).unwrap();
+    }
+    fs::write(fixture.tools.join("preview-trap-marker"), "controlled trap").unwrap();
+    fs::write(
+        fixture.root.join("config/production.yaml"),
+        "invalid runtime fixture; never load",
+    )
+    .unwrap();
+    let before = application_source_tree(&fixture.root);
+    let tools_before = application_source_tree(&fixture.tools);
+    for operation in ["check", "test", "dev", "build"] {
+        for json in [false, true] {
+            let mut command = fixture.public_command(operation);
+            command
+                .arg("--dry-run")
+                .env("PATH", &fixture.tools)
+                .env("APP_ENV", "production");
+            if json {
+                command.arg("--json");
+            }
+            let output = ControlledCommand::spawn(command).output();
+            if json {
+                assert_eq!(
+                    public_json(&output, 0),
+                    operation_contract::preview(operation_contract::plan(
+                        "execution-app",
+                        "default",
+                        "sqlite",
+                        operation
+                    ))
+                );
+            } else {
+                assert!(output.status.success(), "{output:?}");
+                assert!(output.stderr.is_empty());
+                assert_eq!(
+                    String::from_utf8(output.stdout).unwrap(),
+                    operation_contract::human_preview("execution-app", "sqlite", operation)
+                );
+            }
+            assert_eq!(application_source_tree(&fixture.root), before);
+            assert_eq!(application_source_tree(&fixture.tools), tools_before);
+            assert!(!fixture.root.join("target").exists());
+            assert!(!fixture.root.join("child.pid").exists());
+            assert!(!fixture.tools.join("preview-trap-observed").exists());
+        }
+    }
+}
+
+#[test]
+fn public_process_outcomes_match_reviewed_json_and_human_snapshots() {
+    for operation in ["check", "test", "dev", "build"] {
+        for case in [
+            "success",
+            "failure",
+            "failure-hydration",
+            "child-signalled",
+            "cancelled",
+            "terminated",
+            "spawn",
+            "missing-lock",
+            "recovery",
+        ] {
+            if matches!(operation, "dev" | "build") && matches!(case, "spawn" | "failure-hydration")
+            {
+                continue; // Cargo spawn and the second hydration step belong to native check/test.
+            }
+            for json in [true, false] {
+                let fixture = Fixture::new();
+                if matches!(operation, "dev" | "build") {
+                    fixture.development_tools(&fixture.root);
+                }
+                let signalled = matches!(case, "child-signalled" | "cancelled" | "terminated");
+                match case {
+                    "spawn" => {
+                        // Pass native selection but fail at the OS spawn boundary, not parsing.
+                        fs::write(
+                            fixture.tools.join("cargo"),
+                            b"\x7fELFcontrolled invalid executable",
+                        )
+                        .unwrap();
+                        fs::set_permissions(
+                            fixture.tools.join("cargo"),
+                            fs::Permissions::from_mode(0o755),
+                        )
+                        .unwrap();
+                    }
+                    "missing-lock" => fs::remove_file(fixture.root.join("Cargo.lock")).unwrap(),
+                    "recovery" => fs::write(
+                        fixture.root.join(".hegira-mutation.lock"),
+                        "pending fixture recovery; preserve",
+                    )
+                    .unwrap(),
+                    _ => fixture.mode(if signalled { "wait" } else { case }),
+                }
+                let before = application_source_tree(&fixture.root);
+                let mut command = ControlledCommand::spawn(fixture.public_execute(operation, json));
+                let leader = if signalled {
+                    let leader = pid(&fixture.root, "child.pid");
+                    command.leader = Some(leader);
+                    kill_process(
+                        if case == "child-signalled" {
+                            leader
+                        } else {
+                            command.pid()
+                        },
+                        if case == "cancelled" {
+                            Signal::INT
+                        } else {
+                            Signal::TERM
+                        },
+                    )
+                    .unwrap();
+                    Some(leader)
+                } else {
+                    None
+                };
+                let output = command.output();
+                let expected_plan =
+                    operation_contract::plan("execution-app", "default", "sqlite", operation);
+                let expected = operation_contract::outcome(operation, case, &expected_plan);
+                let exit = expected["exit"].as_i64().unwrap().try_into().unwrap();
+                if json {
+                    assert_eq!(
+                        public_json(&output, exit),
+                        operation_contract::execution(expected_plan, &expected),
+                        "{operation}/{case}"
+                    );
+                } else {
+                    assert_eq!(
+                        output.status.code(),
+                        Some(exit),
+                        "{operation}/{case}: {output:?}"
+                    );
+                    assert_eq!(
+                        String::from_utf8(output.stdout).unwrap(),
+                        expected["stdout"].as_str().unwrap(),
+                        "{operation}/{case}"
+                    );
+                    assert_eq!(
+                        String::from_utf8(output.stderr).unwrap(),
+                        expected["stderr"].as_str().unwrap(),
+                        "{operation}/{case}"
+                    );
+                }
+                if let Some(leader) = leader {
+                    assert_stopped(leader);
+                }
+                if matches!(case, "spawn" | "missing-lock" | "recovery") {
+                    assert!(!fixture.root.join("child.pid").exists());
+                    assert!(!fixture.root.join("target").exists());
+                } else {
+                    assert_stopped(pid(&fixture.root, "child.pid"));
+                }
+                if matches!(operation, "dev" | "build") && fixture.root.join("child.path").exists()
+                {
+                    let path = fs::read_to_string(fixture.root.join("child.path")).unwrap();
+                    assert!(!std::env::split_paths(&path).next().unwrap().exists());
+                }
+                assert_eq!(application_source_tree(&fixture.root), before);
+                if case != "recovery" {
+                    assert!(!fixture.root.join(".hegira-mutation.lock").exists());
+                }
+                if signalled {
+                    // A new operation must succeed: no stale coordination state or lock.
+                    fixture.mode("success");
+                    public_json(
+                        &fixture.public_execute(operation, true).output().unwrap(),
+                        0,
+                    );
+                }
             }
         }
     }

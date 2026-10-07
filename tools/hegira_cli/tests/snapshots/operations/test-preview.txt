@@ -1,0 +1,13 @@
+Application operation plan (schema 1)
+Application: __APPLICATION__
+Intent: Test
+Database: @@DATABASE_DEBUG@@; client: Leptos
+Working directory: application-root (machine-local path omitted)
+Planning only: no command, tool probe, configuration load, or database operation was executed.
+Execution requires explicit intent and trusted application/toolchain source; this is not a sandbox.
+Step 1: Tool { program: Cargo, arguments: ["test", "--locked", "--workspace", "--no-default-features", "--features", "app_server/ssr,app_server/db-@@DATABASE@@"], environment: {} }
+Step 2: Tool { program: Cargo, arguments: ["check", "--locked", "-p", "app_server", "--no-default-features", "--features", "hydrate", "--target", "wasm32-unknown-unknown"], environment: {} }
+Required (not probed): ApplicationRustToolchain { path: "rust-toolchain.toml" }
+Required (not probed): Cargo
+Required (not probed): CargoLockfile { path: "Cargo.lock" }
+Required (not probed): WasmTarget { target: "wasm32-unknown-unknown" }

@@ -1,0 +1,65 @@
+{
+  "success": {
+    "exit": 0,
+    "execution": { "output_schema": 1, "intent": { "operation": "__OPERATION__" }, "completed_steps": 0, "outcome": { "status": "succeeded" } },
+    "diagnostics": [],
+    "stdout": "Application operation __INTENT__: Succeeded\nCompleted steps: __COMPLETED__/__TOTAL__\n",
+    "stderr": ""
+  },
+  "failure": {
+    "exit": 1,
+    "execution": { "output_schema": 1, "intent": { "operation": "__OPERATION__" }, "completed_steps": 0, "outcome": { "status": "child-failed", "exit_code": 23 } },
+    "diagnostics": [],
+    "stdout": "Application operation __INTENT__: ChildFailed { exit_code: 23 }\nCompleted steps: 0/__TOTAL__\n",
+    "stderr": ""
+  },
+  "failure-hydration": {
+    "exit": 1,
+    "execution": { "output_schema": 1, "intent": { "operation": "__OPERATION__" }, "completed_steps": 1, "outcome": { "status": "child-failed", "exit_code": 24 } },
+    "diagnostics": [],
+    "stdout": "Application operation __INTENT__: ChildFailed { exit_code: 24 }\nCompleted steps: 1/__TOTAL__\n",
+    "stderr": ""
+  },
+  "child-signalled": {
+    "exit": 1,
+    "execution": { "output_schema": 1, "intent": { "operation": "__OPERATION__" }, "completed_steps": 0, "outcome": { "status": "child-signalled", "signal": 15 } },
+    "diagnostics": [],
+    "stdout": "Application operation __INTENT__: ChildSignalled { signal: 15 }\nCompleted steps: 0/__TOTAL__\n",
+    "stderr": ""
+  },
+  "cancelled": {
+    "exit": 1,
+    "execution": { "output_schema": 1, "intent": { "operation": "__OPERATION__" }, "completed_steps": 0, "outcome": { "status": "cancelled" } },
+    "diagnostics": [],
+    "stdout": "Application operation __INTENT__: Cancelled\nCompleted steps: 0/__TOTAL__\n",
+    "stderr": ""
+  },
+  "terminated": {
+    "exit": 1,
+    "execution": { "output_schema": 1, "intent": { "operation": "__OPERATION__" }, "completed_steps": 0, "outcome": { "status": "terminated" } },
+    "diagnostics": [],
+    "stdout": "Application operation __INTENT__: Terminated\nCompleted steps: 0/__TOTAL__\n",
+    "stderr": ""
+  },
+  "spawn": {
+    "exit": 1,
+    "execution": null,
+    "diagnostics": [{ "output_schema": 1, "kind": "internal", "code": "execution-spawn", "message": "Cannot start the approved application tool; no child output or OS details are included." }],
+    "stdout": "",
+    "stderr": "execution-spawn: Cannot start the approved application tool; no child output or OS details are included.\n"
+  },
+  "missing-lock": {
+    "exit": 3,
+    "execution": null,
+    "diagnostics": [{ "output_schema": 1, "kind": "validation", "code": "execution-path", "message": "Execution requires accessible real directories and regular prerequisite files." }],
+    "stdout": "",
+    "stderr": "execution-path: Execution requires accessible real directories and regular prerequisite files.\n"
+  },
+  "recovery": {
+    "exit": 4,
+    "execution": null,
+    "diagnostics": [{ "output_schema": 1, "kind": "conflict", "code": "application-recovery", "message": "Application mutation recovery is pending; follow the documented recovery workflow before executing code." }],
+    "stdout": "",
+    "stderr": "application-recovery: Application mutation recovery is pending; follow the documented recovery workflow before executing code.\n"
+  }
+}
