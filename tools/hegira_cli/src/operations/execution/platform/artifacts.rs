@@ -20,13 +20,39 @@ pub(super) struct BuildOutputs {
 }
 
 impl BuildOutputs {
-    pub(super) fn prepare(plan: &OperationPlan) -> Result<Self, OperationError> {
-        let marker = serde_json::to_vec(&serde_json::json!({
+    fn marker(plan: &OperationPlan) -> Result<Vec<u8>, OperationError> {
+        serde_json::to_vec(&serde_json::json!({
             "output_schema": 1,
             "owner": "hegira-release-build",
             "application": plan.summary.application,
         }))
-        .map_err(|_| ownership())?;
+        .map_err(|_| ownership())
+    }
+
+    /// Validate a reusable root, or the absence of one, without creating anything.
+    pub(super) fn inspect(plan: &OperationPlan) -> Result<(), OperationError> {
+        plan.anchor.verify()?;
+        let mut directory = plan.anchor.directory.clone();
+        for name in ["target", "hegira", "release-build"] {
+            directory.verify().map_err(|_| ownership())?;
+            match fs::statat(&directory.fd, name, AtFlags::SYMLINK_NOFOLLOW) {
+                Err(rustix::io::Errno::NOENT) => return Ok(()),
+                Ok(stat) if fs::FileType::from_raw_mode(stat.st_mode).is_dir() => {
+                    directory =
+                        Directory::open(&directory.path.join(name)).map_err(|_| ownership())?;
+                }
+                _ => return Err(ownership()),
+            }
+        }
+        Self {
+            root: directory,
+            marker: Self::marker(plan)?,
+        }
+        .verify(plan)
+    }
+
+    pub(super) fn prepare(plan: &OperationPlan) -> Result<Self, OperationError> {
+        let marker = Self::marker(plan)?;
         let mut parent = plan.anchor.directory.clone();
         for name in ["target", "hegira"] {
             ensure_directory(&parent, name)?;

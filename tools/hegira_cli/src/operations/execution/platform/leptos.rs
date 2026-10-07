@@ -17,13 +17,13 @@ fn prerequisite(code: &'static str, message: &'static str) -> OperationError {
     failure(OperationErrorKind::Validation, code, message)
 }
 
-struct NativeTool {
-    path: PathBuf,
-    file: OwnedFd,
+pub(super) struct NativeTool {
+    pub(super) path: PathBuf,
+    pub(super) file: OwnedFd,
 }
 
 impl NativeTool {
-    fn open(path: &Path) -> Result<Self, OperationError> {
+    pub(super) fn open(path: &Path) -> Result<Self, OperationError> {
         if !path.is_absolute() {
             return Err(unsafe_path());
         }
@@ -48,7 +48,7 @@ impl NativeTool {
         Ok(Self { path, file })
     }
 
-    fn verify(&self) -> Result<(), OperationError> {
+    pub(super) fn verify(&self) -> Result<(), OperationError> {
         if identity(&Self::open(&self.path)?.file)? != identity(&self.file)? {
             return Err(changed());
         }
@@ -75,7 +75,7 @@ impl NativeTool {
     }
 }
 
-fn selected(
+pub(super) fn selected(
     name: &str,
     toolchain: &TrustedToolchain,
     plan: &OperationPlan,
@@ -102,7 +102,10 @@ fn selected(
 
 /// Bounded, cancellable probes use the same owned process-group lifecycle.
 /// Raw stdout is consumed privately for matching only; stderr is discarded.
-fn probe(mut command: Command, control: &ExecutionControl) -> Result<String, OperationError> {
+pub(super) fn probe(
+    mut command: Command,
+    control: &ExecutionControl,
+) -> Result<String, OperationError> {
     if control.outcome().is_some() {
         return Err(probe_failure());
     }
@@ -161,7 +164,10 @@ fn json(plan: &OperationPlan, path: &str) -> Result<(Vec<u8>, serde_json::Value)
     Ok((bytes, value))
 }
 
-fn toml_source(plan: &OperationPlan, path: &str) -> Result<(Vec<u8>, toml::Value), OperationError> {
+pub(super) fn toml_source(
+    plan: &OperationPlan,
+    path: &str,
+) -> Result<(Vec<u8>, toml::Value), OperationError> {
     let bytes = read_file(&plan.anchor.directory.fd, Path::new(path), LIMIT)?;
     let source = std::str::from_utf8(&bytes).map_err(|_| unsafe_path())?;
     let value = toml::from_str(source).map_err(|_| prerequisite("development-metadata", "Development requires valid pinned Rust/Cargo metadata; inspect application files without changing their lockfiles."))?;
@@ -175,6 +181,195 @@ pub(super) struct Session {
     cargo_identity: (u64, u64),
 }
 
+pub(super) struct FrontendSources {
+    sources: BTreeMap<PathBuf, Vec<u8>>,
+    pub(super) channel: String,
+    pub(super) wasm_version: String,
+    tailwind_version: String,
+}
+
+/// Read-only half of the execution preflight. Never runs frontend/application code.
+pub(super) fn frontend_sources(plan: &OperationPlan) -> Result<FrontendSources, OperationError> {
+    let mut sources = BTreeMap::new();
+    let (bytes, rust) = toml_source(plan, "rust-toolchain.toml")?;
+    sources.insert("rust-toolchain.toml".into(), bytes);
+    let channel = rust
+        .get("toolchain")
+        .and_then(|value| value.get("channel"))
+        .and_then(toml::Value::as_str)
+        .ok_or_else(unsafe_path)?;
+    let (bytes, lock) = toml_source(plan, "Cargo.lock")?;
+    sources.insert("Cargo.lock".into(), bytes);
+    let packages = lock
+        .get("package")
+        .and_then(toml::Value::as_array)
+        .ok_or_else(unsafe_path)?;
+    let versions: Vec<_> = packages
+        .iter()
+        .filter(|package| package.get("name").and_then(toml::Value::as_str) == Some("wasm-bindgen"))
+        .filter_map(|package| package.get("version").and_then(toml::Value::as_str))
+        .collect();
+    if versions.len() != 1 {
+        return Err(prerequisite(
+            "development-wasm-lock",
+            "Cargo.lock must select exactly one wasm-bindgen version; review the application lockfile manually.",
+        ));
+    }
+    let (bytes, manifest) = toml_source(plan, "apps/server/Cargo.toml")?;
+    sources.insert("apps/server/Cargo.toml".into(), bytes);
+    let leptos = manifest
+        .get("package")
+        .and_then(|value| value.get("metadata"))
+        .and_then(|value| value.get("leptos"))
+        .ok_or_else(unsafe_path)?;
+    if leptos
+        .get("tailwind-input-file")
+        .and_then(toml::Value::as_str)
+        != Some("../web/src/style/tailwind.css")
+        || leptos
+            .get("bin-default-features")
+            .and_then(toml::Value::as_bool)
+            != Some(false)
+        || leptos
+            .get("lib-default-features")
+            .and_then(toml::Value::as_bool)
+            != Some(false)
+        || leptos.get("bin-cargo-command").is_some()
+    {
+        return Err(prerequisite(
+            "development-metadata",
+            "The current development workflow requires canonical Tailwind and disabled native/hydration default-feature metadata; use a manually reviewed workflow for customized tool composition.",
+        ));
+    }
+    for path in [
+        "Cargo.toml",
+        "apps/web/src/style/main.css",
+        "apps/web/src/style/tailwind.css",
+    ] {
+        sources.insert(
+            path.into(),
+            read_file(&plan.anchor.directory.fd, Path::new(path), LIMIT)?,
+        );
+    }
+    if plan.summary.intent == OperationIntent::ReleaseBuild {
+        if leptos.get("bin-target").and_then(toml::Value::as_str) != Some("app_server")
+            || leptos.get("output-name").and_then(toml::Value::as_str) != Some("app")
+            || leptos
+                .get("lib-profile-release")
+                .and_then(toml::Value::as_str)
+                != Some("wasm-release")
+            || leptos.get("assets-dir").and_then(toml::Value::as_str) != Some("../web/src/public")
+            || [
+                "bin-profile-release",
+                "bin-target-dir",
+                "bin-target-triple",
+                "front-target-dir",
+            ]
+            .iter()
+            .any(|key| leptos.get(*key).is_some())
+            || leptos.get("features").is_some_and(|features| {
+                features
+                    .as_array()
+                    .is_none_or(|features| !features.is_empty())
+            })
+            || [
+                "CARGO_BUILD_TARGET",
+                "CARGO_BUILD_BUILD_DIR",
+                "LEPTOS_BIN_TARGET_TRIPLE",
+            ]
+            .iter()
+            .any(|key| std::env::var_os(key).is_some())
+        {
+            return Err(prerequisite(
+                "release-metadata",
+                "Release builds require canonical host/profile/asset metadata and no inherited cross-target or alternate intermediate-output settings; review customized workflows manually.",
+            ));
+        }
+        let (_, workspace) = toml_source(plan, "Cargo.toml")?;
+        if workspace
+            .get("workspace")
+            .and_then(|value| value.get("metadata"))
+            .and_then(|value| value.get("leptos"))
+            .is_some()
+        {
+            return Err(prerequisite(
+                "release-metadata",
+                "Release builds require the canonical single server-package Leptos composition, not workspace-level overrides.",
+            ));
+        }
+    }
+    let profile = match plan.summary.database {
+        application_manifest::DatabaseAdapter::Sqlite => "config/sqlite.yaml",
+        application_manifest::DatabaseAdapter::Postgres => "config/development.yaml",
+    };
+    // Presence/type only: runtime secrets are not loaded or validated here.
+    if plan.summary.intent == OperationIntent::Develop {
+        open_file(&plan.anchor.directory.fd, Path::new(profile))?;
+    }
+    let (bytes, frontend_lock) = json(plan, "apps/web/src/package-lock.json")?;
+    sources.insert("apps/web/src/package-lock.json".into(), bytes);
+    let (bytes, installed) = json(plan, "apps/web/src/node_modules/.package-lock.json")?;
+    sources.insert("apps/web/src/node_modules/.package-lock.json".into(), bytes);
+    if frontend_lock["lockfileVersion"] != 3 || installed["lockfileVersion"] != 3 {
+        return Err(prerequisite(
+            "development-frontend-lock",
+            "Run npm ci --prefix apps/web/src explicitly; development requires npm lockfileVersion 3.",
+        ));
+    }
+    let (bytes, package) = json(
+        plan,
+        "apps/web/src/node_modules/@tailwindcss/cli/package.json",
+    )?;
+    sources.insert(
+        "apps/web/src/node_modules/@tailwindcss/cli/package.json".into(),
+        bytes,
+    );
+    let expected = frontend_lock["packages"]["node_modules/@tailwindcss/cli"]["version"]
+        .as_str()
+        .ok_or_else(unsafe_path)?;
+    if package["version"] != expected
+        || package["name"] != "@tailwindcss/cli"
+        || package["bin"]["tailwindcss"] != "./dist/index.mjs"
+    {
+        return Err(prerequisite(
+            "development-tailwind-version",
+            "Installed @tailwindcss/cli must match the committed package lock; run npm ci explicitly, never an automatic dependency update.",
+        ));
+    }
+    for name in [
+        "node_modules/@tailwindcss/cli",
+        "node_modules/tailwindcss",
+        "node_modules/tw-animate-css",
+    ] {
+        for key in ["version", "resolved", "integrity"] {
+            if frontend_lock["packages"][name][key].is_null()
+                || frontend_lock["packages"][name][key] != installed["packages"][name][key]
+            {
+                return Err(prerequisite(
+                    "development-frontend-lock",
+                    "Installed frontend package receipts do not match the committed lock; run npm ci --prefix apps/web/src explicitly.",
+                ));
+            }
+        }
+    }
+    let tailwind = "apps/web/src/node_modules/@tailwindcss/cli/dist/index.mjs";
+    sources.insert(
+        tailwind.into(),
+        read_file(&plan.anchor.directory.fd, Path::new(tailwind), LIMIT)?,
+    );
+    let tailwind_fd = open_file(&plan.anchor.directory.fd, Path::new(tailwind))?;
+    let stat = fs::fstat(&tailwind_fd).map_err(|_| unsafe_path())?;
+    if stat.st_mode & 0o111 == 0 || stat.st_mode & 0o6000 != 0 {
+        return Err(unsafe_path());
+    }
+    Ok(FrontendSources {
+        sources,
+        channel: channel.to_owned(),
+        wasm_version: versions[0].to_owned(),
+        tailwind_version: expected.to_owned(),
+    })
+}
+
 impl Session {
     pub(super) fn prepare(
         plan: &OperationPlan,
@@ -183,181 +378,13 @@ impl Session {
     ) -> Result<Self, OperationError> {
         let (wasm, proxy) = toolchain.development_tools.as_ref().ok_or_else(|| prerequisite(
             "execution-readiness", "Leptos development requires explicit wasm-bindgen and native Hegira Cargo proxy selections plus lock-matched frontend preflight; no application was started."))?;
-        let mut sources = BTreeMap::new();
-        let (bytes, rust) = toml_source(plan, "rust-toolchain.toml")?;
-        sources.insert("rust-toolchain.toml".into(), bytes);
-        let channel = rust
-            .get("toolchain")
-            .and_then(|value| value.get("channel"))
-            .and_then(toml::Value::as_str)
-            .ok_or_else(unsafe_path)?;
-        let (bytes, lock) = toml_source(plan, "Cargo.lock")?;
-        sources.insert("Cargo.lock".into(), bytes);
-        let packages = lock
-            .get("package")
-            .and_then(toml::Value::as_array)
-            .ok_or_else(unsafe_path)?;
-        let versions: Vec<_> = packages
-            .iter()
-            .filter(|package| {
-                package.get("name").and_then(toml::Value::as_str) == Some("wasm-bindgen")
-            })
-            .filter_map(|package| package.get("version").and_then(toml::Value::as_str))
-            .collect();
-        if versions.len() != 1 {
-            return Err(prerequisite(
-                "development-wasm-lock",
-                "Cargo.lock must select exactly one wasm-bindgen version; review the application lockfile manually.",
-            ));
-        }
-        let (bytes, manifest) = toml_source(plan, "apps/server/Cargo.toml")?;
-        sources.insert("apps/server/Cargo.toml".into(), bytes);
-        let leptos = manifest
-            .get("package")
-            .and_then(|value| value.get("metadata"))
-            .and_then(|value| value.get("leptos"))
-            .ok_or_else(unsafe_path)?;
-        if leptos
-            .get("tailwind-input-file")
-            .and_then(toml::Value::as_str)
-            != Some("../web/src/style/tailwind.css")
-            || leptos
-                .get("bin-default-features")
-                .and_then(toml::Value::as_bool)
-                != Some(false)
-            || leptos
-                .get("lib-default-features")
-                .and_then(toml::Value::as_bool)
-                != Some(false)
-            || leptos.get("bin-cargo-command").is_some()
-        {
-            return Err(prerequisite(
-                "development-metadata",
-                "The current development workflow requires canonical Tailwind and disabled native/hydration default-feature metadata; use a manually reviewed workflow for customized tool composition.",
-            ));
-        }
-        for path in [
-            "Cargo.toml",
-            "apps/web/src/style/main.css",
-            "apps/web/src/style/tailwind.css",
-        ] {
-            sources.insert(
-                path.into(),
-                read_file(&plan.anchor.directory.fd, Path::new(path), LIMIT)?,
-            );
-        }
-        if plan.summary.intent == OperationIntent::ReleaseBuild {
-            if leptos.get("bin-target").and_then(toml::Value::as_str) != Some("app_server")
-                || leptos.get("output-name").and_then(toml::Value::as_str) != Some("app")
-                || leptos
-                    .get("lib-profile-release")
-                    .and_then(toml::Value::as_str)
-                    != Some("wasm-release")
-                || leptos.get("assets-dir").and_then(toml::Value::as_str)
-                    != Some("../web/src/public")
-                || [
-                    "bin-profile-release",
-                    "bin-target-dir",
-                    "bin-target-triple",
-                    "front-target-dir",
-                ]
-                .iter()
-                .any(|key| leptos.get(*key).is_some())
-                || leptos.get("features").is_some_and(|features| {
-                    features
-                        .as_array()
-                        .is_none_or(|features| !features.is_empty())
-                })
-                || [
-                    "CARGO_BUILD_TARGET",
-                    "CARGO_BUILD_BUILD_DIR",
-                    "LEPTOS_BIN_TARGET_TRIPLE",
-                ]
-                .iter()
-                .any(|key| std::env::var_os(key).is_some())
-            {
-                return Err(prerequisite(
-                    "release-metadata",
-                    "Release builds require canonical host/profile/asset metadata and no inherited cross-target or alternate intermediate-output settings; review customized workflows manually.",
-                ));
-            }
-            let (_, workspace) = toml_source(plan, "Cargo.toml")?;
-            if workspace
-                .get("workspace")
-                .and_then(|value| value.get("metadata"))
-                .and_then(|value| value.get("leptos"))
-                .is_some()
-            {
-                return Err(prerequisite(
-                    "release-metadata",
-                    "Release builds require the canonical single server-package Leptos composition, not workspace-level overrides.",
-                ));
-            }
-        }
-        let profile = match plan.summary.database {
-            application_manifest::DatabaseAdapter::Sqlite => "config/sqlite.yaml",
-            application_manifest::DatabaseAdapter::Postgres => "config/development.yaml",
-        };
-        // Presence/type only: runtime secrets are not loaded or validated here.
-        if plan.summary.intent == OperationIntent::Develop {
-            open_file(&plan.anchor.directory.fd, Path::new(profile))?;
-        }
-        let (bytes, frontend_lock) = json(plan, "apps/web/src/package-lock.json")?;
-        sources.insert("apps/web/src/package-lock.json".into(), bytes);
-        let (bytes, installed) = json(plan, "apps/web/src/node_modules/.package-lock.json")?;
-        sources.insert("apps/web/src/node_modules/.package-lock.json".into(), bytes);
-        if frontend_lock["lockfileVersion"] != 3 || installed["lockfileVersion"] != 3 {
-            return Err(prerequisite(
-                "development-frontend-lock",
-                "Run npm ci --prefix apps/web/src explicitly; development requires npm lockfileVersion 3.",
-            ));
-        }
-        let (bytes, package) = json(
-            plan,
-            "apps/web/src/node_modules/@tailwindcss/cli/package.json",
-        )?;
-        sources.insert(
-            "apps/web/src/node_modules/@tailwindcss/cli/package.json".into(),
-            bytes,
-        );
-        let expected = frontend_lock["packages"]["node_modules/@tailwindcss/cli"]["version"]
-            .as_str()
-            .ok_or_else(unsafe_path)?;
-        if package["version"] != expected
-            || package["name"] != "@tailwindcss/cli"
-            || package["bin"]["tailwindcss"] != "./dist/index.mjs"
-        {
-            return Err(prerequisite(
-                "development-tailwind-version",
-                "Installed @tailwindcss/cli must match the committed package lock; run npm ci explicitly, never an automatic dependency update.",
-            ));
-        }
-        for name in [
-            "node_modules/@tailwindcss/cli",
-            "node_modules/tailwindcss",
-            "node_modules/tw-animate-css",
-        ] {
-            for key in ["version", "resolved", "integrity"] {
-                if frontend_lock["packages"][name][key].is_null()
-                    || frontend_lock["packages"][name][key] != installed["packages"][name][key]
-                {
-                    return Err(prerequisite(
-                        "development-frontend-lock",
-                        "Installed frontend package receipts do not match the committed lock; run npm ci --prefix apps/web/src explicitly.",
-                    ));
-                }
-            }
-        }
+        let FrontendSources {
+            sources,
+            channel,
+            wasm_version,
+            tailwind_version,
+        } = frontend_sources(plan)?;
         let tailwind = "apps/web/src/node_modules/@tailwindcss/cli/dist/index.mjs";
-        sources.insert(
-            tailwind.into(),
-            read_file(&plan.anchor.directory.fd, Path::new(tailwind), LIMIT)?,
-        );
-        let tailwind_fd = open_file(&plan.anchor.directory.fd, Path::new(tailwind))?;
-        let stat = fs::fstat(&tailwind_fd).map_err(|_| unsafe_path())?;
-        if stat.st_mode & 0o111 == 0 || stat.st_mode & 0o6000 != 0 {
-            return Err(unsafe_path());
-        }
         let mut tools = BTreeMap::new();
         for name in ["cargo-leptos", "rustc", "node"] {
             tools.insert(name, selected(name, toolchain, plan)?);
@@ -396,7 +423,7 @@ impl Session {
         }
         let mut version = tools["wasm-bindgen"].command("wasm-bindgen", plan, toolchain)?;
         version.arg("--version");
-        if probe(version, control)?.trim() != format!("wasm-bindgen {}", versions[0]) {
+        if probe(version, control)?.trim() != format!("wasm-bindgen {wasm_version}") {
             return Err(prerequisite(
                 "development-wasm-version",
                 "The selected --wasm-bindgen must exactly match Cargo.lock; use the documented authenticated preparation script explicitly.",
@@ -404,7 +431,7 @@ impl Session {
         }
         let mut version = tools["rustc"].command("rustc", plan, toolchain)?;
         version.arg("--version");
-        if probe(version, control)?.split_whitespace().nth(1) != Some(channel) {
+        if probe(version, control)?.split_whitespace().nth(1) != Some(channel.as_str()) {
             return Err(prerequisite(
                 "development-rust-version",
                 "Select the Rust version pinned in rust-toolchain.toml and explicitly install its wasm32-unknown-unknown target.",
@@ -458,7 +485,7 @@ impl Session {
         }
         let mut help = tools["node"].command("node", plan, toolchain)?;
         help.arg(plan.root.join(tailwind)).arg("--help");
-        if !probe(help, control)?.contains(&format!("tailwindcss v{expected}")) {
+        if !probe(help, control)?.contains(&format!("tailwindcss v{tailwind_version}")) {
             return Err(prerequisite(
                 "development-tailwind-version",
                 "The lock-selected Tailwind CLI is not runnable with the selected Node; run npm ci explicitly and review the installed frontend.",

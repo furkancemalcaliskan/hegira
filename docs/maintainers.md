@@ -205,7 +205,15 @@ hard-link rejection, normal developer-cache preservation, incomplete-artifact
 and lock-change rejection, terminated builds, and expectation-versus-verified
 artifact reports. These are controlled builder tests, not real production
 application compilation or deployment. The generated-application release and
-container gates remain separate. See the
+container gates remain separate. Operation-doctor tests cover every intent in
+all six compositions, deterministic human/JSON diagnostics, process-free
+inspection, isolated native version/target probes, sanitized probe environment,
+missing/mismatched tools, unsafe selections, frontend receipts/assets, invalid
+manifest/provider/client/profile state, recovery and concurrent-operation
+blocking, existing-output ownership, and bounded/cancelled probe cleanup.
+They verify that application source and output claims remain unchanged and
+that no application hook, build, frontend script, or database is invoked.
+See the
 [execution boundary](architecture.md#trusted-application-process-execution-library)
 for inherited environment/output limits and Linux support.
 

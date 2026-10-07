@@ -128,6 +128,13 @@ fn unsupported() -> OperationError {
 pub(super) use anchors::RootAnchor;
 pub use platform::TrustedToolchain;
 
+pub(crate) fn diagnose_operation(
+    plan: &OperationPlan,
+    tools: Option<&super::readiness::ReadinessTools>,
+) -> Vec<super::readiness::ReadinessCheck> {
+    platform::diagnose_operation(plan, tools)
+}
+
 /// Internal binary entry point for the private development Cargo proxy.
 #[doc(hidden)]
 pub fn development_cargo_proxy() -> Option<u8> {
@@ -345,10 +352,12 @@ mod anchors {
 mod platform {
     mod artifacts;
     mod leptos;
+    mod readiness;
     use super::{anchors::*, *};
     use crate::{ApplicationContextRequest, operations::*};
     use application_mutator::MUTATION_MARKER;
     pub(super) use leptos::cargo_proxy as development_cargo_proxy;
+    pub(super) use readiness::diagnose_operation;
     use rustix::{
         fd::{AsRawFd, OwnedFd},
         fs::{self, AtFlags, FlockOperation, Mode},
@@ -825,6 +834,18 @@ mod platform {
 #[cfg(not(target_os = "linux"))]
 mod platform {
     use super::*;
+    pub(super) fn diagnose_operation(
+        _: &OperationPlan,
+        _: Option<&crate::operations::readiness::ReadinessTools>,
+    ) -> Vec<crate::operations::readiness::ReadinessCheck> {
+        use crate::operations::readiness::{ReadinessCheck, ReadinessStatus};
+        vec![ReadinessCheck::new(
+            "operation-platform",
+            ReadinessStatus::Failure,
+            "Operation readiness diagnostics require Linux with accessible proc descriptors.",
+            Some("Use the supported Linux host; no tool was probed."),
+        )]
+    }
     use std::path::PathBuf;
 
     #[derive(Debug)]

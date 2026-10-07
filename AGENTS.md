@@ -124,6 +124,16 @@ commands change. Never describe planned work as implemented.
   Mutation output is deterministic, versioned, content-redacted, and derived
   from the same typed plan used for publication. The CLI also owns stable
   process outcomes and its user-facing diagnostic contract.
+  `doctor --operation` reuses the typed operation plan for read-only file,
+  composition, provider/profile, recovery, and release-output ownership
+  diagnostics. Native version/target probes require explicit `--probe-tools`,
+  absolute trusted Cargo, and external auxiliary-directory selections. They
+  run outside the application with a closed, Rustup-only environment,
+  bounded output/deadlines, and owned child cleanup. Doctor never executes
+  frontend scripts, build hooks, application code, or database operations,
+  creates output claims, installs tools, or cleans recovery state. Native
+  tools themselves remain trusted code, not sandboxed. Warnings and a zero
+  doctor exit are not execution consent or proof that an operation can run.
   Its `operations` library additionally derives read-only typed development,
   check, test, release-build, and database-operation plans from a safely resolved
   current application and authenticated bundled composition. These plans do

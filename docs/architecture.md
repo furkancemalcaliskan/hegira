@@ -514,6 +514,36 @@ sources without reading runtime configuration or connecting to a provider.
 Its local tool checks and selected-provider requirements are diagnostics, not
 startup preflight or application mutation.
 
+`doctor --operation` additionally obtains the same privately typed operation
+plan as execution. The closed selections cover development, check, test,
+release build, and the still non-executable database status/migrate contracts.
+It diagnoses required toolchain/lock metadata, selected provider/profile,
+frontend assets and installed receipts, pending recovery, concurrent Hegira
+operations, and reusable release-output ownership. The executor's read-only
+frontend source check and release ownership check are shared rather than
+duplicated. Diagnosis never creates a tool shim, output directory, or marker.
+Operation-specific readiness currently supports Linux; unsupported hosts fail
+closed without a probe. The default doctor contract is unchanged.
+
+Without `--probe-tools`, operation doctor starts no process. Explicit native
+tool selection enables only closed version arguments and the Rust WASM target
+library query. Probes run from `/`, not the application, with a cleared
+environment except trusted tool discovery and Rustup home/toolchain settings;
+auto-installation is disabled. They reuse the native executable anchors,
+bounded output/deadlines, signals, and owned child-group cleanup. No Cargo
+metadata, compilation, tests, npm lifecycle, Tailwind JavaScript, database,
+or application hook is invoked. A failing bounded probe prevents later probes.
+The selected tools remain explicitly trusted code, not a sandbox guarantee.
+
+The existing schema-1 doctor report retains its default shape; operation mode
+adds a typed `operation` identity and deterministic prerequisite checks.
+Missing/mismatched or unprobed tools are warnings, while invalid composition,
+recovery, unsafe tool selections/output ownership, or interrupted/over-limit
+probes are failures. Frontend execution and provider connectivity remain
+unprobed. A diagnostic report cannot grant consent or certify runtime settings,
+compiled authorization, or executable readiness. See
+[Operation diagnostics](getting-started.md#diagnose-operation-prerequisites).
+
 ### Application operation planning library
 
 `hegira_cli::operations::plan_application_operation` accepts the source

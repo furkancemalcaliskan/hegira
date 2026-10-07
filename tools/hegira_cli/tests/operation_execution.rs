@@ -242,6 +242,58 @@ impl Fixture {
         fs::create_dir(modules.join(".bin")).unwrap();
         fs::write(modules.join(".bin/cargo"), "untrusted fixture").unwrap();
     }
+
+    fn doctor_tools(&self, root: &Path) {
+        self.development_tools(root);
+        for (source, target) in [
+            ("probe-rust-version", "doctor-rust-version"),
+            ("probe-wasm-version", "doctor-wasm-version"),
+            ("probe-target", "doctor-target"),
+        ] {
+            fs::copy(root.join(source), self.tools.join(target)).unwrap();
+        }
+    }
+
+    fn doctor(&self, root: &Path, operation: &str, probe: bool, database: &str) -> Command {
+        let mut command = self.public_command("doctor");
+        command
+            .current_dir(root)
+            .args(["--operation", operation, "--json"]);
+        if operation.starts_with("database-") {
+            command.args([
+                "--profile",
+                if database == "sqlite" {
+                    "sqlite"
+                } else {
+                    "development"
+                },
+            ]);
+        }
+        if probe {
+            command
+                .arg("--probe-tools")
+                .arg("--cargo")
+                .arg(self.tools.join("cargo"))
+                .arg("--tool-directory")
+                .arg(&self.tools)
+                .arg("--wasm-bindgen")
+                .arg(self.tools.join("wasm-bindgen"))
+                .arg("--wasm-opt")
+                .arg(self.tools.join("wasm-opt"));
+        }
+        command
+            .env(
+                "APP__DATABASE__URL",
+                "doctor-runtime-secret-must-not-appear",
+            )
+            .env(
+                "APP__SECURITY__JWT_SECRET",
+                "doctor-runtime-secret-must-not-appear",
+            )
+            .env("NODE_OPTIONS", "--require=untrusted-application-preload")
+            .env("RUSTC_WRAPPER", "untrusted-application-hook");
+        command
+    }
 }
 
 impl Drop for Fixture {
@@ -257,6 +309,592 @@ fn public_json(output: &Output, code: i32) -> serde_json::Value {
     assert_eq!(value["output_schema"], 1);
     assert_eq!(value.as_object().unwrap().len(), 5);
     value
+}
+
+fn doctor_json(output: &Output, code: i32) -> serde_json::Value {
+    assert_eq!(output.status.code(), Some(code), "{output:?}");
+    assert!(output.stderr.is_empty(), "{output:?}");
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(value["output_schema"], 1);
+    assert_eq!(value.as_object().unwrap().len(), 4);
+    for forbidden in [
+        "doctor-runtime-secret-must-not-appear",
+        "private-tool-output-must-not-appear",
+        "untrusted-application",
+    ] {
+        assert!(!String::from_utf8_lossy(&output.stdout).contains(forbidden));
+    }
+    value
+}
+
+fn doctor_status(report: &serde_json::Value, code: &str) -> String {
+    report["checks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|check| check["code"] == code)
+        .unwrap_or_else(|| panic!("missing {code}: {report}"))
+        .get("status")
+        .unwrap()
+        .as_str()
+        .unwrap()
+        .to_owned()
+}
+
+#[test]
+fn operation_doctor_covers_six_compositions_and_every_intent_without_application_writes() {
+    let fixture = Fixture::new();
+    for composition in ["default", "minimal", "identity-added"] {
+        for database in ["sqlite", "postgres"] {
+            let root = fixture
+                .parent
+                .join(format!("doctor-{composition}-{database}"));
+            let mut create = Command::new(env!("CARGO_BIN_EXE_hegira"));
+            create
+                .args(["new", "doctor-operation-app", "--destination"])
+                .arg(&root)
+                .args(["--database", database]);
+            if composition != "default" {
+                create.args(["--composition", "minimal"]);
+            }
+            assert!(create.output().unwrap().status.success());
+            if composition == "identity-added" {
+                assert!(
+                    Command::new(env!("CARGO_BIN_EXE_hegira"))
+                        .args(["component", "add", "identity"])
+                        .current_dir(&root)
+                        .output()
+                        .unwrap()
+                        .status
+                        .success()
+                );
+            }
+            fixture.doctor_tools(&root);
+            fs::write(
+                root.join("config/production.yaml"),
+                "doctor-runtime-secret-must-not-appear",
+            )
+            .unwrap();
+            let before = application_source_tree(&root);
+            for operation in [
+                "dev",
+                "check",
+                "test",
+                "build",
+                "database-status",
+                "database-migrate",
+            ] {
+                let exit = if operation.starts_with("database-") {
+                    3
+                } else {
+                    0
+                };
+                let first = fixture
+                    .doctor(&root, operation, true, database)
+                    .output()
+                    .unwrap();
+                let second = fixture
+                    .doctor(&root, operation, true, database)
+                    .output()
+                    .unwrap();
+                assert_eq!(first.stdout, second.stdout);
+                let report = doctor_json(&first, exit);
+                assert_eq!(doctor_status(&report, "operation-rust"), "pass");
+                assert_eq!(doctor_status(&report, "operation-cargo"), "pass");
+                assert!(!String::from_utf8_lossy(&first.stdout).contains(root.to_str().unwrap()));
+                if operation == "dev" || operation == "build" {
+                    for code in [
+                        "operation-node",
+                        "operation-cargo-leptos",
+                        "operation-wasm-bindgen",
+                        "operation-wasm-target",
+                        "operation-frontend-state",
+                        "operation-public-assets",
+                    ] {
+                        assert_eq!(doctor_status(&report, code), "pass");
+                    }
+                    assert_eq!(
+                        doctor_status(&report, "operation-frontend-execution"),
+                        "warning"
+                    );
+                }
+                if operation == "build" {
+                    assert_eq!(doctor_status(&report, "operation-wasm-opt"), "pass");
+                    assert_eq!(doctor_status(&report, "operation-release-output"), "pass");
+                }
+                if operation.starts_with("database-") {
+                    assert_eq!(
+                        doctor_status(&report, "operation-database-entry-point"),
+                        "failure"
+                    );
+                }
+                assert!(!root.join("target").exists());
+                assert!(!root.join("child.pid").exists());
+                assert!(!root.join("proxy.log").exists());
+                assert_eq!(application_source_tree(&root), before);
+            }
+        }
+    }
+    let probes = fs::read_to_string(fixture.tools.join("doctor-probes.log")).unwrap();
+    assert!(probes.contains("cargo: [\"--version\"]"));
+    assert!(!probes.contains("metadata"));
+    assert!(!probes.contains("build"));
+    assert!(!probes.contains("--help"));
+}
+
+#[test]
+fn operation_doctor_without_probe_consent_is_read_only_and_tool_free() {
+    let fixture = Fixture::new();
+    fixture.doctor_tools(&fixture.root);
+    let before = application_source_tree(&fixture.root);
+    for operation in [
+        "dev",
+        "check",
+        "test",
+        "build",
+        "database-status",
+        "database-migrate",
+    ] {
+        let output = fixture
+            .doctor(&fixture.root, operation, false, "sqlite")
+            .output()
+            .unwrap();
+        let report = doctor_json(
+            &output,
+            if operation.starts_with("database-") {
+                3
+            } else {
+                0
+            },
+        );
+        assert_eq!(doctor_status(&report, "operation-cargo"), "warning");
+    }
+    assert!(!fixture.tools.join("doctor-probes.log").exists());
+    assert!(!fixture.root.join("target").exists());
+    assert_eq!(application_source_tree(&fixture.root), before);
+    // The fixture helper always adds JSON; construct the human variant directly.
+    let mut human = fixture.public_command("doctor");
+    let output = human.args(["--operation", "build"]).output().unwrap();
+    assert!(output.status.success());
+    assert!(String::from_utf8_lossy(&output.stdout).contains("[WARN] operation-cargo"));
+}
+
+#[test]
+fn operation_doctor_reports_tool_mismatches_missing_assets_and_frontend_receipts() {
+    let fixture = Fixture::new();
+    fixture.doctor_tools(&fixture.root);
+    for (mode, code) in [
+        ("cargo", "operation-cargo"),
+        ("rustc", "operation-rust"),
+        ("node", "operation-node"),
+        ("leptos", "operation-cargo-leptos"),
+        ("wasm", "operation-wasm-bindgen"),
+        ("optimizer", "operation-wasm-opt"),
+        ("oversize", "operation-rust"),
+    ] {
+        fs::write(fixture.tools.join("doctor-mode"), mode).unwrap();
+        let report = doctor_json(
+            &fixture
+                .doctor(&fixture.root, "build", true, "sqlite")
+                .output()
+                .unwrap(),
+            if mode == "oversize" { 3 } else { 0 },
+        );
+        assert_eq!(doctor_status(&report, code), "warning");
+    }
+    fs::remove_file(fixture.tools.join("doctor-mode")).unwrap();
+    for (name, code) in [
+        ("cargo", "operation-cargo"),
+        ("node", "operation-node"),
+        ("cargo-leptos", "operation-cargo-leptos"),
+        ("wasm-bindgen", "operation-wasm-bindgen"),
+        ("wasm-opt", "operation-wasm-opt"),
+    ] {
+        let file = fixture.tools.join(name);
+        let original = fs::read(&file).unwrap();
+        fs::remove_file(&file).unwrap();
+        let report = doctor_json(
+            &fixture
+                .doctor(&fixture.root, "build", true, "sqlite")
+                .output()
+                .unwrap(),
+            0,
+        );
+        assert_eq!(doctor_status(&report, code), "warning");
+        fs::write(&file, original).unwrap();
+        fs::set_permissions(&file, fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    fs::remove_file(fixture.tools.join("wasm-target/libcore-fixture.rlib")).unwrap();
+    let report = doctor_json(
+        &fixture
+            .doctor(&fixture.root, "check", true, "sqlite")
+            .output()
+            .unwrap(),
+        0,
+    );
+    assert_eq!(doctor_status(&report, "operation-wasm-target"), "warning");
+    for name in [
+        "apps/web/src/style/main.css",
+        "apps/web/src/node_modules/.package-lock.json",
+    ] {
+        let original = fs::read(fixture.root.join(name)).unwrap();
+        fs::remove_file(fixture.root.join(name)).unwrap();
+        let report = doctor_json(
+            &fixture
+                .doctor(&fixture.root, "build", false, "sqlite")
+                .output()
+                .unwrap(),
+            0,
+        );
+        assert_eq!(
+            doctor_status(&report, "operation-frontend-state"),
+            "warning"
+        );
+        fs::write(fixture.root.join(name), original).unwrap();
+    }
+    let receipt = fixture
+        .root
+        .join("apps/web/src/node_modules/.package-lock.json");
+    let mut value: serde_json::Value =
+        serde_json::from_slice(&fs::read(&receipt).unwrap()).unwrap();
+    value["packages"]["node_modules/@tailwindcss/cli"]["version"] = "0.0.0".into();
+    fs::write(receipt, serde_json::to_vec(&value).unwrap()).unwrap();
+    let report = doctor_json(
+        &fixture
+            .doctor(&fixture.root, "build", false, "sqlite")
+            .output()
+            .unwrap(),
+        0,
+    );
+    assert_eq!(
+        doctor_status(&report, "operation-frontend-state"),
+        "warning"
+    );
+    assert!(!fixture.root.join("target").exists());
+    assert!(!fixture.root.join("child.pid").exists());
+}
+
+#[test]
+fn operation_doctor_invalid_composition_profile_and_recovery_never_probe_tools() {
+    let _helper = helper();
+    for mode in [
+        "manifest",
+        "provider",
+        "client",
+        "profile",
+        "file",
+        "directory",
+        "symlink",
+    ] {
+        let fixture = Fixture::new();
+        fixture.doctor_tools(&fixture.root);
+        let marker = fixture.root.join(application_mutator::MUTATION_MARKER);
+        match mode {
+            "manifest" => fs::write(
+                fixture.root.join("hegira.toml"),
+                "invalid = doctor-private-source",
+            )
+            .unwrap(),
+            "provider" => {
+                let path = fixture.root.join("hegira.toml");
+                let source = fs::read_to_string(&path).unwrap();
+                fs::write(path, source.replace("sqlite", "unsupported-provider")).unwrap();
+            }
+            "client" => {
+                let path = fixture.root.join("hegira.toml");
+                let source = fs::read_to_string(&path).unwrap();
+                fs::write(path, source.replace("leptos", "unsupported-client")).unwrap();
+            }
+            "profile" => {}
+            "file" => fs::write(&marker, "doctor-private-source").unwrap(),
+            "directory" => fs::create_dir(&marker).unwrap(),
+            _ => symlink(fixture.parent.join("private-missing-target"), &marker).unwrap(),
+        }
+        let mut command = fixture.doctor(
+            &fixture.root,
+            if mode == "profile" {
+                "database-status"
+            } else {
+                "check"
+            },
+            true,
+            if mode == "profile" {
+                "postgres"
+            } else {
+                "sqlite"
+            },
+        );
+        let output = command.output().unwrap();
+        let report = doctor_json(&output, 3);
+        assert_eq!(report["status"], "failure");
+        assert!(!String::from_utf8_lossy(&output.stdout).contains("doctor-private-source"));
+        assert!(!fixture.tools.join("doctor-probes.log").exists());
+        if matches!(mode, "file" | "directory" | "symlink") {
+            assert!(fs::symlink_metadata(&marker).is_ok());
+        }
+    }
+}
+
+#[test]
+fn operation_doctor_output_ownership_and_unsafe_tool_selection_fail_without_writes() {
+    let _helper = helper();
+    for mode in [
+        "output",
+        "symlink",
+        "relative",
+        "script",
+        "application-tool",
+    ] {
+        let fixture = Fixture::new();
+        fixture.doctor_tools(&fixture.root);
+        let mut command = fixture.public_command("doctor");
+        command.args(["--operation", "build", "--json"]);
+        let expected = if mode == "output" || mode == "symlink" {
+            "operation-release-output"
+        } else {
+            "operation-tool-selection"
+        };
+        match mode {
+            "output" => {
+                fs::create_dir_all(fixture.root.join("target/hegira/release-build")).unwrap();
+                fs::write(
+                    fixture.root.join("target/hegira/release-build/user-data"),
+                    "preserve",
+                )
+                .unwrap();
+            }
+            "symlink" => symlink(&fixture.tools, fixture.root.join("target")).unwrap(),
+            _ => {
+                let cargo = match mode {
+                    "relative" => PathBuf::from("cargo"),
+                    "script" => {
+                        let path = fixture.tools.join("script-cargo");
+                        fs::write(&path, "#!/bin/sh\ntouch unintended-doctor-hook\n").unwrap();
+                        fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
+                        path
+                    }
+                    _ => {
+                        let path = fixture.root.join("untrusted-cargo");
+                        fs::copy(fixture.tools.join("cargo"), &path).unwrap();
+                        path
+                    }
+                };
+                command
+                    .arg("--probe-tools")
+                    .arg("--cargo")
+                    .arg(cargo)
+                    .arg("--tool-directory")
+                    .arg(&fixture.tools);
+            }
+        }
+        let report = doctor_json(&command.output().unwrap(), 3);
+        assert_eq!(doctor_status(&report, expected), "failure");
+        assert!(!fixture.tools.join("doctor-probes.log").exists());
+        assert!(!fixture.root.join("unintended-doctor-hook").exists());
+        if mode == "output" {
+            assert_eq!(
+                fs::read_to_string(fixture.root.join("target/hegira/release-build/user-data"))
+                    .unwrap(),
+                "preserve"
+            );
+        }
+    }
+}
+
+#[test]
+fn operation_doctor_interrupted_probes_are_bounded_and_reaped() {
+    let fixture = Fixture::new();
+    fixture.doctor_tools(&fixture.root);
+    fs::write(fixture.tools.join("doctor-mode"), "hang").unwrap();
+    let child = fixture
+        .doctor(&fixture.root, "check", true, "sqlite")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let probe = pid(&fixture.tools, "doctor-probe.pid");
+    kill_process(
+        Pid::from_raw(child.id().try_into().unwrap()).unwrap(),
+        Signal::INT,
+    )
+    .unwrap();
+    let report = doctor_json(&child.wait_with_output().unwrap(), 3);
+    assert_eq!(
+        doctor_status(&report, "operation-probe-interrupted"),
+        "failure"
+    );
+    assert_stopped(probe);
+    assert!(!fixture.root.join("target").exists());
+}
+
+#[test]
+fn operation_doctor_times_out_once_and_never_runs_followup_probes() {
+    let fixture = Fixture::new();
+    fixture.doctor_tools(&fixture.root);
+    fs::write(fixture.tools.join("doctor-mode"), "hang").unwrap();
+    let start = Instant::now();
+    let output = fixture
+        .doctor(&fixture.root, "build", true, "sqlite")
+        .output()
+        .unwrap();
+    assert!(start.elapsed() < Duration::from_secs(15));
+    let report = doctor_json(&output, 3);
+    assert_eq!(
+        doctor_status(&report, "operation-probe-interrupted"),
+        "failure"
+    );
+    assert_eq!(
+        fs::read_to_string(fixture.tools.join("doctor-probes.log"))
+            .unwrap()
+            .lines()
+            .count(),
+        1
+    );
+    assert_stopped(pid(&fixture.tools, "doctor-probe.pid"));
+    assert!(!fixture.root.join("target").exists());
+}
+
+#[test]
+fn operation_doctor_does_not_compete_with_an_active_executor() {
+    let fixture = Fixture::new();
+    fixture.doctor_tools(&fixture.root);
+    fixture.mode("wait");
+    let control = ExecutionControl::default();
+    let plan = fixture.plan(OperationIntent::Check);
+    thread::scope(|scope| {
+        let worker = scope.spawn(|| fixture.execute(&plan, &control));
+        wait_file(&fixture.root, "child.pid");
+        let output = fixture
+            .doctor(&fixture.root, "check", true, "sqlite")
+            .output()
+            .unwrap();
+        control.cancel();
+        worker.join().unwrap().unwrap();
+        let report = doctor_json(&output, 3);
+        assert_eq!(doctor_status(&report, "operation-active"), "failure");
+        assert!(!fixture.tools.join("doctor-probes.log").exists());
+        assert!(!fixture.root.join(".hegira-mutation.lock").exists());
+    });
+}
+
+#[test]
+fn operation_doctor_accepts_owned_release_output_without_mutating_it() {
+    let fixture = Fixture::new();
+    fixture.doctor_tools(&fixture.root);
+    public_json(&fixture.public_execute("build", true).output().unwrap(), 0);
+    let files = [
+        ".hegira-release-build.json",
+        "release/app_server",
+        "site/pkg/app_bg.wasm",
+        "site/pkg/app.js",
+        "site/pkg/app.css",
+    ];
+    let root = fixture.root.join("target/hegira/release-build");
+    let before: Vec<_> = files
+        .iter()
+        .map(|file| fs::read(root.join(file)).unwrap())
+        .collect();
+    let report = doctor_json(
+        &fixture
+            .doctor(&fixture.root, "build", true, "sqlite")
+            .output()
+            .unwrap(),
+        0,
+    );
+    assert_eq!(doctor_status(&report, "operation-release-output"), "pass");
+    let after: Vec<_> = files
+        .iter()
+        .map(|file| fs::read(root.join(file)).unwrap())
+        .collect();
+    assert_eq!(before, after);
+}
+
+#[test]
+fn operation_doctor_parser_limits_intents_profiles_and_probe_authority() {
+    let fixture = Fixture::new();
+    for args in [
+        vec!["--operation", "shell"],
+        vec!["--operation", "database-status"],
+        vec!["--operation", "check", "--profile", "production"],
+        vec!["--probe-tools"],
+        vec!["--operation", "check", "--cargo", "/absolute/cargo"],
+    ] {
+        let output = fixture
+            .public_command("doctor")
+            .args(args)
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(2));
+        assert!(output.stdout.is_empty());
+    }
+    let output = fixture
+        .public_command("doctor")
+        .args(["--help"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    assert!(String::from_utf8_lossy(&output.stdout).contains("--probe-tools"));
+    assert!(!fixture.root.join("target").exists());
+}
+
+#[test]
+fn operation_doctor_never_reads_redirected_sources_or_blocks_on_special_files() {
+    let _helper = helper();
+    for mode in ["fifo", "css", "public-assets"] {
+        let fixture = Fixture::new();
+        fixture.doctor_tools(&fixture.root);
+        let secret = fixture.tools.join("private-doctor-source");
+        fs::write(&secret, "doctor-private-source-must-not-appear").unwrap();
+        match mode {
+            "fifo" => {
+                let path = fixture.root.join("apps/server/src/server.rs");
+                fs::remove_file(&path).unwrap();
+                rustix::fs::mkfifoat(
+                    rustix::fs::CWD,
+                    path,
+                    rustix::fs::Mode::from_raw_mode(0o600),
+                )
+                .unwrap();
+            }
+            "css" => {
+                let path = fixture.root.join("apps/web/src/style/main.css");
+                fs::remove_file(&path).unwrap();
+                symlink(&secret, path).unwrap();
+            }
+            _ => {
+                let path = fixture.root.join("apps/web/src/public");
+                fs::rename(&path, fixture.root.join("original-public-assets")).unwrap();
+                symlink(&fixture.tools, path).unwrap();
+            }
+        }
+        let start = Instant::now();
+        let output = fixture
+            .doctor(&fixture.root, "build", false, "sqlite")
+            .output()
+            .unwrap();
+        assert!(start.elapsed() < Duration::from_secs(3));
+        let report = doctor_json(&output, if mode == "fifo" { 3 } else { 0 });
+        assert_eq!(
+            doctor_status(
+                &report,
+                match mode {
+                    "fifo" => "managed-integrations",
+                    "css" => "operation-frontend-state",
+                    _ => "operation-public-assets",
+                }
+            ),
+            if mode == "fifo" { "failure" } else { "warning" }
+        );
+        assert!(
+            !String::from_utf8_lossy(&output.stdout)
+                .contains("doctor-private-source-must-not-appear")
+        );
+        assert_eq!(
+            fs::read_to_string(secret).unwrap(),
+            "doctor-private-source-must-not-appear"
+        );
+        assert!(!fixture.tools.join("doctor-probes.log").exists());
+    }
 }
 
 fn application_source_tree(root: &Path) -> Vec<(PathBuf, Vec<u8>)> {
