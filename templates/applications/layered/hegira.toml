@@ -28,6 +28,31 @@ version = "{{package_version}}"
 default = "application-owned"
 
 [[upgrade.ownership.claims]]
+path = "apps/server/Cargo.toml"
+class = "managed-integration"
+integration = "database-entry-point-manifest"
+
+[[upgrade.ownership.claims]]
+path = "apps/server/src/bin/app_database.rs"
+class = "managed-integration"
+integration = "database-entry-point"
+
+[[upgrade.ownership.claims]]
+path = "crates/infrastructure/src/database_operations.rs"
+class = "managed-integration"
+integration = "database-operations"
+
+[[upgrade.ownership.claims]]
+path = "crates/infrastructure/src/config.rs"
+class = "managed-integration"
+integration = "database-operation-config"
+
+[[upgrade.ownership.claims]]
+path = "crates/infrastructure/src/lib.rs"
+class = "managed-integration"
+integration = "database-operation-module"
+
+[[upgrade.ownership.claims]]
 path = "Cargo.lock"
 class = "managed-integration"
 integration = "framework-lockfile"

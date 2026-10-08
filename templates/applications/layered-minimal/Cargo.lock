@@ -108,6 +108,7 @@ dependencies = [
  "platform_core",
  "serde",
  "sqlx",
+ "tokio",
  "tracing",
 ]
 
@@ -143,6 +144,8 @@ dependencies = [
  "persistence",
  "runtime",
  "serde",
+ "serde_json",
+ "sqlx",
  "tokio",
  "tower-http 0.7.1",
  "tracing",

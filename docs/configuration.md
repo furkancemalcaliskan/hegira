@@ -53,6 +53,18 @@ optional providers do not require their Cargo features.
 
 ## Compile-Time Features
 
+The separate application-owned `app_database` binary uses the same profile
+files, defaults, and `APP__` overrides, but deserializes only environment,
+database, and `startup.ensure_database` settings. It accepts only the four
+documented `APP_ENV` profiles and pins its policy environment to that selection.
+Database structure, compiled database provider, and database production policy
+are validated in order before connecting. Production operations require
+`startup.ensure_database=false` and `database.auto_migrate=false`; explicit
+forward migration remains a separate request. Unrelated HTTP, Identity, worker,
+and optional-service settings do not initialize or block this isolated path.
+Normal server startup retains its full validation contract. See
+[application-owned database operations](operations.md#application-owned-database-entry-point).
+
 Cargo features decide which providers enter the binary. Runtime settings only
 select among providers that were compiled. Startup validates this contract
 before connecting to the database or any other external dependency and reports

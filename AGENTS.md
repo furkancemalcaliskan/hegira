@@ -59,6 +59,11 @@ commands change. Never describe planned work as implemented.
   Its Infrastructure operation surface owns startup migration and Identity
   seed composition plus explicitly authorized disposable-database reset for
   validation; it does not use compatibility migration helpers or `db_migrator`.
+  Both variants additionally provide `apps/server`'s separately selected
+  `app_database` binary through `database-operations`. Its Infrastructure
+  database-operation subset validates configuration before isolated status or
+  forward migration on an existing target; it never starts HTTP, ensures a
+  database, seeds Identity, or initializes workers and unrelated providers.
   `templates/applications/layered-minimal/` contains the explicit module-free
   outward-layer variant. It preserves the server, Leptos client, selected SQLx
   provider, configuration, and deployment boundaries while recording no
@@ -143,7 +148,8 @@ commands change. Never describe planned work as implemented.
   current application and authenticated bundled composition. These plans do
   not probe tools, load runtime configuration, execute commands, or grant
   execution authority. Database steps declare an application-owned entry-point
-  requirement, not a currently available executable. Its separate Linux native
+  requirement, not an executable step supported by the CLI executor. The
+  application-owned `app_database` entry point is invoked separately. Its separate Linux native
   check/test/development/release-build execution library requires explicit trust consent, an absolute trusted Cargo
   selection, and trusted auxiliary tool directories. It anchors the approved
   root and executable, re-authenticates composition, rejects pending recovery

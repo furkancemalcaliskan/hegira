@@ -100,7 +100,7 @@ impl ExecutionReport {
 
 /// Re-authenticates the plan and executes explicitly trusted application steps.
 /// Leptos operations require installed frontend tools and an explicit selection;
-/// database entry points remain unavailable. Plans never authorize installation.
+/// database execution remains unavailable here. Plans never authorize installation.
 pub fn execute_application_operation(
     repository_root: &Path,
     plan: &OperationPlan,
@@ -529,7 +529,7 @@ mod platform {
             return Err(failure(
                 OperationErrorKind::Validation,
                 "execution-entry-point",
-                "This operation requires an unavailable application-owned database entry point.",
+                "The CLI executor does not support application-owned database execution.",
             ));
         }
         if !matches!(

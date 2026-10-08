@@ -257,7 +257,7 @@ pub(crate) fn diagnose_operation(
             ),
             OperationPrerequisite::ApplicationDatabaseEntryPoint => blocked(
                 "operation-database-entry-point",
-                "The current application database executable contract is unavailable; a library plan is not an executable.",
+                "CLI database execution is unavailable; a library plan does not invoke the separate application-owned entry point.",
                 "Use an owner-reviewed application database workflow; public Hegira database execution is not supported.",
             ),
         };

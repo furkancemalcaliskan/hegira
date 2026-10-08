@@ -139,6 +139,26 @@ fn staging_rejects_symlinked_generated_content() {
 }
 
 #[test]
+fn legacy_upgrade_keeps_exactly_three_source_publications() {
+    let catalog = ManifestCatalog::load(repository_root(), "layered").unwrap();
+    let edge = &catalog.upgrade_edges()[0];
+    assert_eq!(edge.id, "v0-6-0-to-v0-7-0");
+    assert!(edge.managed_integrations.is_empty());
+    for composition in &edge.compositions {
+        let mut paths = composition
+            .managed_integrations
+            .iter()
+            .map(|transition| transition.path.as_str())
+            .collect::<Vec<_>>();
+        paths.sort_unstable();
+        assert_eq!(paths, ["Cargo.lock", "Cargo.toml", "hegira.toml"]);
+        assert!(composition.managed_integrations.iter().all(|transition| {
+            transition.kind == template_renderer::ManagedIntegrationTransitionKind::Edit
+        }));
+    }
+}
+
+#[test]
 fn layered_template_snapshot_is_deterministic() {
     let repository = repository_root();
     let output_parent = TestDirectory::new("snapshot");

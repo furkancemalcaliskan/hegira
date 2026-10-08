@@ -3,6 +3,7 @@
 pub mod audit;
 pub mod config;
 pub mod database;
+pub mod database_operations;
 pub mod identity;
 pub mod operations;
 pub mod security;

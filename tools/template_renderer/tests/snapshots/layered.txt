@@ -1,6 +1,6 @@
 package=hegira-canonical@v0.7.0
 framework=https://github.com/furkancemalcaliskan/hegira.git#v0.7.0
-digest=sha256:938aa008e032e767b91d31c222d8762e2b3e3ee2cf96e7ac68f11cf02b50e22a
+digest=sha256:84d30597d5e7e9bab14b502b77e89aabfee6071ff3894f215a6dfd1c7cf3f021
 components=layered-base,layered-leptos-identity
 6986e1a96f1eaa98 .dockerignore
 4845a8e7ed4a8aa1 .env.example
@@ -9,12 +9,14 @@ components=layered-base,layered-leptos-identity
 5b6ceb35f21ec030 Cargo.lock
 0ab183cd1a2096ab Cargo.toml
 abb13fca335cf059 Dockerfile
-acb1f40708fef3bc apps/server/Cargo.toml
+7020439f5f70d85f apps/server/Cargo.toml
+388f6e0e83c44ae6 apps/server/src/bin/app_database.rs
 3bde3764afe35806 apps/server/src/lib.rs
 9ea27e2845c55bb5 apps/server/src/main.rs
 bcead05dce4336dc apps/server/src/server.rs
 5f7ffc9d0f5ba7bb apps/server/src/worker_operations.rs
 50ed8852150fc65a apps/server/tests/database_contracts.rs
+09bd66720d74da03 apps/server/tests/database_operations.rs
 b249b1f80f690d85 apps/web/Cargo.toml
 5cdf33ea1fc44058 apps/web/src/app/layout.rs
 2e684ad1c47b141c apps/web/src/app/mod.rs
@@ -64,8 +66,9 @@ fba197e4c0ea8f58 crates/infrastructure/migrations/postgres/007_app_settings.sql
 f3ba72816961bb19 crates/infrastructure/migrations/sqlite/008_catalog_products.sql
 e4f90a35c538e114 crates/infrastructure/migrations/sqlite/009_retire_catalog_persistence.sql
 c7fcf44104381606 crates/infrastructure/src/audit/mod.rs
-b3bd5ad804b3b836 crates/infrastructure/src/config.rs
+beb01f93100b6520 crates/infrastructure/src/config.rs
 963ba6d322a3632c crates/infrastructure/src/database.rs
+91c5d9e809523d74 crates/infrastructure/src/database_operations.rs
 9f4566e08ef15f01 crates/infrastructure/src/identity/authorization/mod.rs
 ed912714d31a65c0 crates/infrastructure/src/identity/authorization/service.rs
 f5dd22f136f9f656 crates/infrastructure/src/identity/mod.rs
@@ -74,7 +77,7 @@ cf1381fa5f66e850 crates/infrastructure/src/identity/oauth/mod.rs
 10be0f8fa396f120 crates/infrastructure/src/identity/services.rs
 2c4d87b9763b4f68 crates/infrastructure/src/identity/sessions/mod.rs
 4f0c462e9fee0d87 crates/infrastructure/src/identity/sessions/redis_session.rs
-a9ff15cbbfb6a6a4 crates/infrastructure/src/lib.rs
+a6aa24bc3129934a crates/infrastructure/src/lib.rs
 a5cee92157b6a0cb crates/infrastructure/src/operations.rs
 7cb7827bbd706f3b crates/infrastructure/src/security/mod.rs
 0ed16015226b6cba crates/infrastructure/src/security/password_hasher.rs
@@ -84,6 +87,6 @@ a5cee92157b6a0cb crates/infrastructure/src/operations.rs
 28acfa4312676a72 crates/presentation/src/http.rs
 d9d3e75ec6021d05 crates/presentation/src/lib.rs
 1309f45751c079e0 docker-compose.yml
-e0e9fa32f493fbfb hegira.toml
+b37c602156378258 hegira.toml
 64a3f64b8bdc337f rust-toolchain.toml
 d1e261656118b330 scripts/prepare-wasm-bindgen.sh

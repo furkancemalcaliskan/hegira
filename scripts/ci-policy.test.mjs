@@ -156,7 +156,8 @@ for database in sqlite postgres; do
   hegira -- generate resource --application-root "$validation_root" --dry-run --json
   hegira -- generate resource --application-root "$validation_root" --json
   test ! -e "$staging_parent/$database-source/$generated_resource_path"
-  cargo test --locked --workspace
+  cargo test --locked --workspace --features app_server/ssr,app_server/database-operations
+  cargo test --locked -p app_server --features database-operations,db-postgres --test database_operations
   cargo check --features hydrate
 done
 docker build --tag "$GENERATED_APP_IMAGE" "$generated_root"
@@ -357,6 +358,17 @@ test("accepts the generated and mutated application contract", () => {
     validateGeneratedApplicationScript(validGeneratedApplicationScript),
     [],
   );
+});
+
+test("database entry-point process and PostgreSQL gates cannot be removed", () => {
+  for (const contract of [
+    "app_server/ssr,app_server/database-operations",
+    "--features database-operations,db-postgres --test database_operations",
+  ]) {
+    assert.ok(validateGeneratedApplicationScript(
+      validGeneratedApplicationScript.replace(contract, ""),
+    ).some(error => error.includes("database")));
+  }
 });
 
 test("rejects lifecycle validation without the installed Identity source", () => {

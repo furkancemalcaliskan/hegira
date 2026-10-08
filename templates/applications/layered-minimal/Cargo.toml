@@ -53,6 +53,7 @@ leptos_axum = "0.8.9"
 leptos_meta = "0.8.6"
 leptos_router = "0.8.13"
 serde = { version = "1.0.228", features = ["derive"] }
+serde_json = { version = "1.0.145" }
 sqlx = { version = "0.8.6", features = ["runtime-tokio-rustls", "migrate", "uuid"] }
 tokio = { version = "1.52.3", features = ["rt-multi-thread", "macros", "signal"] }
 tower-http = { version = "0.7.0", features = ["compression-br", "compression-gzip", "limit", "timeout"] }

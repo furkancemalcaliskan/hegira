@@ -19,3 +19,5 @@ default = ["{{database_feature}}"]
 db-postgres = ["persistence/db-postgres", "sqlx/postgres"]
 db-sqlite = ["persistence/db-sqlite", "sqlx/sqlite"]
 
+[dev-dependencies]
+tokio.workspace = true
