@@ -35,3 +35,12 @@ run_step "All-capability platform contracts" cargo test --locked --all-features 
   -p platform_core -p audit -p background_jobs -p cache -p configuration \
   -p http_support -p leptos_support -p mail -p observability -p persistence \
   -p runtime -p search -p security -p settings -p storage -p test_support
+
+if [ "${WITH_IGNORED_DB_TESTS:-false}" = "true" ]; then
+  if [ -z "${DATABASE_URL:-}" ]; then
+    echo "DATABASE_URL must select a disposable database when WITH_IGNORED_DB_TESTS=true" >&2
+    exit 1
+  fi
+  run_step "Read-only PostgreSQL migration status contracts" cargo test --locked \
+    --all-features -p persistence --test migration_status -- --ignored
+fi

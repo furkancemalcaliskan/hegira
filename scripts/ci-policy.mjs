@@ -205,6 +205,24 @@ export function validateFrontendAuditJob(job) {
   return errors;
 }
 
+export function validateMigrationStatusJob(job) {
+  const errors = [];
+  for (const contract of [
+    "POSTGRES_HOST_AUTH_METHOD: trust",
+    "DATABASE_URL: postgres://postgres@localhost:5432/hegira_test",
+    "run: WITH_IGNORED_DB_TESTS=true sh scripts/framework-check.sh",
+  ]) {
+    if (!job.includes(contract)) {
+      errors.push(`framework migration status gate is missing: ${contract}`);
+    }
+  }
+  if (/^\s+(?:-\s+)?(?:if:|continue-on-error:)/m.test(job)
+      || job.includes("|| true") || job.includes("secrets.")) {
+    errors.push("framework migration status gate must be unconditional, fail closed, and secret-free");
+  }
+  return errors;
+}
+
 export function validateRepositoryValidationWorkflow(workflow) {
   const errors = [];
 
@@ -277,6 +295,11 @@ export function validateRepositoryValidationWorkflow(workflow) {
     /^  supply-chain:\s*$([\s\S]*?)(?=^  [a-zA-Z0-9_-]+:\s*$|(?![\s\S]))/m,
   )?.[1] ?? "";
   errors.push(...validateFrontendAuditJob(supplyChainJob));
+
+  const frameworkJob = workflow.match(
+    /^  framework:\s*$([\s\S]*?)(?=^  [a-zA-Z0-9_-]+:\s*$|(?![\s\S]))/m,
+  )?.[1] ?? "";
+  errors.push(...validateMigrationStatusJob(frameworkJob));
 
   const qualityJob = workflow.match(
     /^  quality:\s*$([\s\S]*?)(?=^  [a-zA-Z0-9_-]+:\s*$|(?![\s\S]))/m,

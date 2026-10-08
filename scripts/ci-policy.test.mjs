@@ -45,8 +45,14 @@ jobs:
     steps:
       - run: sh scripts/generated-feature-check.sh
   framework:
+    services:
+      postgres:
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+    env:
+      DATABASE_URL: postgres://postgres@localhost:5432/hegira_test
     steps:
-      - run: sh scripts/framework-check.sh
+      - run: WITH_IGNORED_DB_TESTS=true sh scripts/framework-check.sh
   official-modules:
     services:
       postgres:
@@ -160,6 +166,21 @@ curl "$base_url/api/validation-records"
 
 test("accepts separated repository ownership gates", () => {
   assert.deepEqual(validateRepositoryValidationWorkflow(validWorkflow), []);
+});
+
+test("framework migration status cannot lose its disposable PostgreSQL gate", () => {
+  for (const contract of [
+    "WITH_IGNORED_DB_TESTS=true sh scripts/framework-check.sh",
+    "DATABASE_URL: postgres://postgres@localhost:5432/hegira_test",
+  ]) {
+    assert.ok(validateRepositoryValidationWorkflow(validWorkflow.replace(contract, "true"))
+      .some(error => error.includes("migration status")));
+  }
+  for (const condition of ["    if: false\n", "    continue-on-error: true\n"]) {
+    assert.ok(validateRepositoryValidationWorkflow(validWorkflow.replace(
+      "  framework:\n", `  framework:\n${condition}`,
+    )).some(error => error.includes("migration status")));
+  }
 });
 
 test("frontend audit cannot be removed, skipped or tolerated in supply-chain", () => {

@@ -75,8 +75,14 @@ jobs:
         with:
           upload-release-assets: false
   framework:
+    services:
+      postgres:
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+    env:
+      DATABASE_URL: postgres://postgres@localhost:5432/hegira_test
     steps:
-      - run: sh scripts/framework-check.sh
+      - run: WITH_IGNORED_DB_TESTS=true sh scripts/framework-check.sh
   official-modules:
     steps:
       - run: sh scripts/official-modules-check.sh
@@ -341,6 +347,21 @@ test("rejects missing versioned release notes", (context) => {
 
 test("accepts the source-only framework release workflow contract", () => {
   assert.deepEqual(validateReleaseWorkflow(validWorkflow), []);
+});
+
+test("release requires unconditional disposable PostgreSQL migration status", () => {
+  for (const contract of [
+    "WITH_IGNORED_DB_TESTS=true sh scripts/framework-check.sh",
+    "DATABASE_URL: postgres://postgres@localhost:5432/hegira_test",
+  ]) {
+    assert.ok(validateReleaseWorkflow(validWorkflow.replace(contract, "true"))
+      .some(error => error.includes("migration status")));
+  }
+  for (const condition of ["    if: false\n", "    continue-on-error: true\n"]) {
+    assert.ok(validateReleaseWorkflow(validWorkflow.replace(
+      "  framework:\n", `  framework:\n${condition}`,
+    )).some(error => error.includes("migration status")));
+  }
 });
 
 test("release frontend audit cannot be removed, skipped or tolerated", () => {
