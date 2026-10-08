@@ -34,6 +34,10 @@ commands change. Never describe planned work as implemented.
   search, security, settings, storage, configuration, persistence,
   background-work, HTTP, Leptos, observability, test-support, and runtime
   packages. These packages are application-independent framework source.
+  Persistence migration status inspects an explicitly selected target through
+  the composed plan without writing database data, schema, or history. SQLite
+  WAL coordination may affect sidecars; status never creates a missing database
+  or metadata table and is not a public CLI database command.
 - `modules/identity/` contains the canonical Identity Domain Shared, Domain,
   Application Contracts, Application, SQLx, Axum HTTP, and Leptos adapter
   packages.

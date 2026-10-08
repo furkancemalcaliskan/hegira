@@ -732,6 +732,20 @@ sh scripts/backend-check.sh
 
 Never point the ignored database tests at persistent or production data.
 
+Framework persistence tests include read-only migration status. SQLite fixtures
+verify missing-file/metadata behavior, ordered provider state, invalid history,
+database and existing WAL byte preservation, and the documented coordination
+sidecar exception. The ignored PostgreSQL integration contract requires explicit
+`DATABASE_URL` and disposable-database opt-in; it creates only unique test-owned
+schemas, compares relations and history before/after inspection, covers missing
+database and invalid/checksum/duplicate/failed history, and removes its schemas.
+It never resets or adopts an existing application schema. The framework jobs
+in repository and source-release validation opt in against their own ephemeral
+PostgreSQL service, so failure propagates to the existing quality/release gate.
+For a focused check against an explicitly selected disposable target, run
+`cargo test --locked -p persistence --all-features --test migration_status -- --ignored`
+through the documented bounded framework validation cache.
+
 ## Application Upgrade Review
 
 The current public edge is exactly v0.6.0 → v0.7.0 for default, minimal, and

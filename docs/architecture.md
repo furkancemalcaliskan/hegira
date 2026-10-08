@@ -867,6 +867,17 @@ migration identifiers and checksums remain unchanged even after their runtime
 feature is retired. Destructive reset requires an explicit disposable-database
 authorization token and is never part of normal startup.
 
+The same `persistence::migrations::MigrationPlan` exposes typed read-only
+`status(&DatabaseConfig)` inspection. It retains each migration's module owner
+without changing execution identities, checksums, or order. Provider-specific
+inspection uses a dedicated connection and validates observed history against
+the composed plan; it never executes migrations or provisions missing state.
+SQLite WAL coordination is distinct from database/schema writes. Infrastructure
+still owns composition and explicit database-access intent; neither Presentation
+nor the Hegira CLI acquires a new database command through this primitive.
+See [migration status](operations.md#read-only-migration-status) for provider
+limits, typed errors, and the point-in-time observation boundary.
+
 ## Rendering And Validation
 
 Component manifests select the layered base and the Leptos Identity adapter.
