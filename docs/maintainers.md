@@ -213,6 +213,23 @@ manifest/provider/client/profile state, recovery and concurrent-operation
 blocking, existing-output ownership, and bounded/cancelled probe cleanup.
 They verify that application source and output claims remain unchanged and
 that no application hook, build, frontend script, or database is invoked.
+Reviewed operation snapshots live in
+`tools/hegira_cli/tests/snapshots/operations/`. The public six-composition matrix
+compares complete JSON plans, successful execution envelopes, and human previews
+against independently specified data. Only explicit fixture application and
+provider/profile placeholders are substituted; observed output is never
+normalized or reduced to a hash. The public process matrix also fixes full
+JSON/human success, child failure, child signal, SIGINT cancellation, SIGTERM
+termination, native Cargo spawn failure, and prerequisite/recovery diagnostics,
+including exit codes, output channels, and artifact-receipt absence on failure.
+Native preview traps detect accidental tool invocation even outside the
+application directory. Signal tests use bounded waits and cleanup guards,
+verify stopped children and private-tool cleanup, preserve source and recovery
+state, and verify that another operation can run after interruption. These tests
+run in the existing tooling gate and therefore the required quality aggregate;
+they do not add a CI path filter or replace generated-application validation.
+Review semantic differences against actual CLI output before editing a snapshot;
+there is no automatic acceptance/update command.
 See the
 [execution boundary](architecture.md#trusted-application-process-execution-library)
 for inherited environment/output limits and Linux support.

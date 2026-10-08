@@ -1,0 +1,4 @@
+Verified artifacts (application-relative; owner: hegira-release-build):
+Server: target/hegira/release-build/release/app_server
+Site: target/hegira/release-build/site
+Browser WASM: target/hegira/release-build/site/pkg/app_bg.wasm

@@ -1,0 +1,138 @@
+{
+  "common": {
+    "output_schema": 1,
+    "application": "__APPLICATION__",
+    "framework_version": "v0.7.0",
+    "package": { "id": "hegira-canonical", "version": "v0.7.0" },
+    "database": "@@DATABASE@@",
+    "client": "leptos",
+    "working_directory": "application-root",
+    "policy": {
+      "explicit_intent_required": true,
+      "trusted_source_required": true,
+      "production_migration_approval_required": false
+    },
+    "prerequisites": [
+      { "kind": "application-rust-toolchain", "path": "rust-toolchain.toml" },
+      { "kind": "cargo" },
+      { "kind": "cargo-lockfile", "path": "Cargo.lock" },
+      { "kind": "wasm-target", "target": "wasm32-unknown-unknown" }
+    ]
+  },
+  "compositions": {
+    "default": {
+      "components": [
+        { "id": "layered-base", "version": "v0.7.0" },
+        { "id": "layered-leptos-identity", "version": "v0.7.0" }
+      ],
+      "modules": [{ "id": "identity", "version": "v0.7.0" }],
+      "capabilities": ["authentication", "authorization"]
+    },
+    "minimal": {
+      "components": [
+        { "id": "layered-base", "version": "v0.7.0" },
+        { "id": "layered-leptos-minimal", "version": "v0.7.0" }
+      ],
+      "modules": [],
+      "capabilities": []
+    },
+    "identity-added": {
+      "components": [
+        { "id": "identity", "version": "v0.7.0" },
+        { "id": "layered-base", "version": "v0.7.0" },
+        { "id": "layered-leptos-minimal", "version": "v0.7.0" }
+      ],
+      "modules": [{ "id": "identity", "version": "v0.7.0" }],
+      "capabilities": ["authentication", "authorization"]
+    }
+  },
+  "frontend_prerequisites": [
+    { "kind": "cargo-leptos", "version": "0.3.7" },
+    { "kind": "frontend-dependencies", "lockfile": "apps/web/src/package-lock.json" },
+    { "kind": "lockfile-wasm-bindgen", "lockfile": "Cargo.lock" },
+    { "kind": "lockfile-tailwind-cli", "lockfile": "apps/web/src/package-lock.json" }
+  ],
+  "operations": {
+    "check": {
+      "intent": { "operation": "check" },
+      "effect": "compilation",
+      "steps": [
+        {
+          "kind": "tool", "program": "cargo",
+          "arguments": ["check", "--locked", "--workspace", "--all-targets", "--no-default-features", "--features", "app_server/ssr,app_server/db-@@DATABASE@@"],
+          "environment": {}
+        },
+        {
+          "kind": "tool", "program": "cargo",
+          "arguments": ["check", "--locked", "-p", "app_server", "--no-default-features", "--features", "hydrate", "--target", "wasm32-unknown-unknown"],
+          "environment": {}
+        }
+      ]
+    },
+    "test": {
+      "intent": { "operation": "test" },
+      "effect": "application-tests",
+      "steps": [
+        {
+          "kind": "tool", "program": "cargo",
+          "arguments": ["test", "--locked", "--workspace", "--no-default-features", "--features", "app_server/ssr,app_server/db-@@DATABASE@@"],
+          "environment": {}
+        },
+        {
+          "kind": "tool", "program": "cargo",
+          "arguments": ["check", "--locked", "-p", "app_server", "--no-default-features", "--features", "hydrate", "--target", "wasm32-unknown-unknown"],
+          "environment": {}
+        }
+      ]
+    },
+    "dev": {
+      "intent": { "operation": "develop" },
+      "effect": "development-runtime",
+      "steps": [{
+        "kind": "tool", "program": "cargo",
+        "arguments": ["leptos", "watch", "-p", "app_server", "--bin-features", "ssr,db-@@DATABASE@@", "--lib-features", "hydrate", "--bin-cargo-args=--locked", "--lib-cargo-args=--locked"],
+        "environment": {
+          "APP_ENV": "__PROFILE__",
+          "APP__DATABASE__BACKEND": "@@DATABASE@@",
+          "APP__SERVER__ADDR": "127.0.0.1:3000",
+          "LEPTOS_BIN_CARGO_COMMAND": "cargo",
+          "LEPTOS_RELOAD_PORT": "3001",
+          "LEPTOS_SITE_ADDR": "127.0.0.1:3000",
+          "LEPTOS_STYLE_FILE": "../web/src/style/main.css"
+        }
+      }]
+    },
+    "build": {
+      "intent": { "operation": "release-build" },
+      "effect": "production-bundle",
+      "steps": [{
+        "kind": "tool", "program": "cargo",
+        "arguments": ["leptos", "build", "-p", "app_server", "--release", "--bin-features", "ssr,db-@@DATABASE@@", "--lib-features", "hydrate", "--bin-cargo-args=--locked", "--lib-cargo-args=--locked"],
+        "environment": {
+          "CARGO_BUILD_TARGET_DIR": "target/hegira/release-build",
+          "CARGO_TARGET_DIR": "target/hegira/release-build",
+          "LEPTOS_ASSETS_DIR": "../web/src/public",
+          "LEPTOS_BIN_CARGO_COMMAND": "cargo",
+          "LEPTOS_BIN_EXE_NAME": "app_server",
+          "LEPTOS_BIN_TARGET": "app_server",
+          "LEPTOS_BIN_TARGET_DIR": "target/hegira/release-build",
+          "LEPTOS_HASH_FILES": "false",
+          "LEPTOS_OUTPUT_NAME": "app",
+          "LEPTOS_SITE_PKG_DIR": "pkg",
+          "LEPTOS_SITE_ROOT": "CARGO_TARGET_DIR/site",
+          "LEPTOS_STYLE_FILE": "../web/src/style/main.css"
+        }
+      }],
+      "artifacts": {
+        "owner": "hegira-release-build",
+        "root": "target/hegira/release-build",
+        "server": "target/hegira/release-build/release/app_server",
+        "site": "target/hegira/release-build/site",
+        "browser_wasm": "target/hegira/release-build/site/pkg/app_bg.wasm"
+      }
+    }
+  },
+  "development_prerequisites": [{ "kind": "runtime-configuration", "profile": "__PROFILE__" }],
+  "postgres_development_prerequisites": [{ "kind": "postgres-service" }],
+  "release_prerequisites": [{ "kind": "wasm-opt", "version": "123" }]
+}

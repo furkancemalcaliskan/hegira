@@ -8,6 +8,14 @@ fn wait_forever() -> ! {
 }
 
 fn main() {
+    // Every accidental preview tool invocation leaves an external observation,
+    // including probes that clear the environment or change working directory.
+    let executable = std::env::current_exe().unwrap();
+    let tools = executable.parent().unwrap();
+    if tools.join("preview-trap-marker").exists() {
+        fs::write(tools.join("preview-trap-observed"), "unexpected process").unwrap();
+        std::process::exit(31);
+    }
     let args: Vec<_> = std::env::args().skip(1).collect();
     let name = std::env::args().next().unwrap();
     let name = std::path::Path::new(&name)
