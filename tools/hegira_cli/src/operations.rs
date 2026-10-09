@@ -94,7 +94,7 @@ impl From<OperationIntentInput> for OperationIntent {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, clap::ValueEnum)]
 #[serde(rename_all = "kebab-case")]
 pub enum RuntimeProfile {
     Sqlite,
@@ -184,7 +184,7 @@ impl OperationPlan {
             .iter()
             .any(|step| matches!(step, OperationStep::ApplicationDatabase { .. }))
         {
-            lines.push("Database entry point is a typed requirement, not an available executable in the CLI executor; invoke the application-owned entry point separately.".to_owned());
+            lines.push("Database execution delegates to the application-owned app_database entry point; review runtime settings and inherited overrides before explicit execution.".to_owned());
         }
         lines.join("\n") + "\n"
     }
@@ -268,7 +268,7 @@ pub enum OperationPrerequisite {
         profile: RuntimeProfile,
     },
     PostgresService,
-    /// No executable protocol is invented before its implementation issue.
+    /// The separately selected application-owned status/forward-migrate binary.
     ApplicationDatabaseEntryPoint,
 }
 
@@ -295,7 +295,7 @@ pub enum OperationProgram {
     Cargo,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum DatabaseOperation {
     Status,

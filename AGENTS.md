@@ -37,7 +37,8 @@ commands change. Never describe planned work as implemented.
   Persistence migration status inspects an explicitly selected target through
   the composed plan without writing database data, schema, or history. SQLite
   WAL coordination may affect sidecars; status never creates a missing database
-  or metadata table and is not a public CLI database command.
+  or metadata table. Public CLI database commands delegate to the application's
+  entry point rather than calling this primitive directly.
 - `modules/identity/` contains the canonical Identity Domain Shared, Domain,
   Application Contracts, Application, SQLx, Axum HTTP, and Leptos adapter
   packages.
@@ -147,9 +148,13 @@ commands change. Never describe planned work as implemented.
   check, test, release-build, and database-operation plans from a safely resolved
   current application and authenticated bundled composition. These plans do
   not probe tools, load runtime configuration, execute commands, or grant
-  execution authority. Database steps declare an application-owned entry-point
-  requirement, not an executable step supported by the CLI executor. The
-  application-owned `app_database` entry point is invoked separately. Its separate Linux native
+  execution authority. Database steps declare the application-owned `app_database`
+  entry point; public `db status` and `db migrate` require an explicit matching
+  profile and preview or execution mode. Their separate approval-aware executor
+  validates real registration/source/profile files and delegates locked Cargo
+  execution to that binary, never a CLI SQL engine. Production migration requires
+  independent `--approve-production-migration` in addition to execution trust.
+  Its separate Linux native
   check/test/development/release-build execution library requires explicit trust consent, an absolute trusted Cargo
   selection, and trusted auxiliary tool directories. It anchors the approved
   root and executable, re-authenticates composition, rejects pending recovery
@@ -162,8 +167,15 @@ commands change. Never describe planned work as implemented.
   Execution additionally requires `--trust-application`, absolute `--cargo`
   and `--tool-directory` selections, and Linux. CLI signal handlers forward
   SIGINT/SIGTERM into owned group cleanup; ignored database tests never run by
-  default. JSON execution discards child output; human execution inherits it
-  without redaction. `dev` additionally requires explicit lock-matched
+  default. For dev/check/test/build, JSON execution discards child output; human
+  execution inherits it without redaction. Database execution discards raw logs
+  in both modes and accepts only a bounded, validated schema-1 application result.
+  It never provisions a database, seeds, or starts HTTP. Status preserves database
+  data/schema/history, with the documented SQLite WAL coordination exception;
+  compiling trusted application code can still write Cargo output. Review runtime
+  settings and inherited URL overrides before approving database access. Source
+  upgrades, inspection, doctor, and generation do not grant database authority.
+  `dev` additionally requires explicit lock-matched
   `--wasm-bindgen` and uses a private allowlisted tool PATH and locked Cargo
   proxy without installing tools or rewriting source. It explicitly selects a
   development provider/profile and localhost bind, but trusted startup can
@@ -175,7 +187,8 @@ commands change. Never describe planned work as implemented.
   verified application-relative server/site/WASM locations, not deployment
   approval. Never fabricate the cache's ownership marker to adopt unrelated
   data. This output claim grants neither ordinary Cargo-cache cleanup nor a
-  disk-budget guarantee. Database operation commands are not public CLI capabilities.
+  disk-budget guarantee. Reset, rollback, seed, and arbitrary SQL are not public
+  CLI database capabilities.
   Generation validates project identity and destination before rendering and
   requires a new destination under an existing parent without symlinks. Safe
   atomic publication fails closed on unsupported platforms.

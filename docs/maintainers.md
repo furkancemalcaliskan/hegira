@@ -758,6 +758,17 @@ runs the ignored entry-point test against its disposable database. That test
 owns a unique schema, never resets an existing schema, checks repeated migration
 and unseeded Identity state, and removes only its newly created schema.
 
+The focused CLI gate additionally covers public `db status`/`db migrate`
+parsing, read-only previews for all six compositions, profile/provider matching,
+real entry-point and recovery preflight, fixed delegation arguments, and separate
+production migration approval at both command and library boundaries. Controlled
+native child fixtures verify bounded closed results, raw-output suppression,
+failure/non-success behavior, and cancellation cleanup without contacting a
+database. These process fixtures do not replace the application-owned SQLite
+and disposable PostgreSQL lifecycle tests above. Actual database operations
+still require an explicitly reviewed target and trusted application/toolchain;
+CI or doctor success is not production migration authorization.
+
 ## Application Upgrade Review
 
 The current public edge is exactly v0.6.0 → v0.7.0 for default, minimal, and

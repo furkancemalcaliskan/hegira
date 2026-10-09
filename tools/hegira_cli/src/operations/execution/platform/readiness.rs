@@ -255,11 +255,21 @@ pub(crate) fn diagnose_operation(
                     "Review the intended database and runtime settings yourself before authorized startup; doctor never connects.",
                 ),
             ),
-            OperationPrerequisite::ApplicationDatabaseEntryPoint => blocked(
-                "operation-database-entry-point",
-                "CLI database execution is unavailable; a library plan does not invoke the separate application-owned entry point.",
-                "Use an owner-reviewed application database workflow; public Hegira database execution is not supported.",
-            ),
+            OperationPrerequisite::ApplicationDatabaseEntryPoint => {
+                match database::validate_entry_point(plan) {
+                    Ok(()) => check(
+                        "operation-database-entry-point",
+                        true,
+                        "The app_database registration, feature, sources and selected profile are readable; application code, runtime values and database connectivity were not validated.",
+                        "",
+                    ),
+                    Err(_) => blocked(
+                        "operation-database-entry-point",
+                        "The application-owned database entry point or selected profile is missing or unsafe.",
+                        "Review the app_database registration, database-operations feature and owned sources; doctor never creates, repairs or runs them.",
+                    ),
+                }
+            }
         };
         checks.push(result);
     }

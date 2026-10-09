@@ -24,6 +24,7 @@ cargo run --locked -p hegira_cli -- check --help
 cargo run --locked -p hegira_cli -- test --help
 cargo run --locked -p hegira_cli -- dev --help
 cargo run --locked -p hegira_cli -- build --help
+cargo run --locked -p hegira_cli -- db --help
 cargo run --locked -p hegira_cli -- upgrade status --help
 cargo run --locked -p hegira_cli -- upgrade --help
 cargo run --locked -p hegira_cli -- component add --help
@@ -254,6 +255,90 @@ and process outcomes. Tests, supply-chain audits, runtime validation, migrations
 container checks, signing, and deployment approval remain separate tasks. This
 produces application artifacts, not a framework executable release or registry
 publication.
+
+## Operate An Application Database
+
+Use a compatible framework checkout to preview an explicitly selected operation:
+
+```sh
+cargo run --locked --manifest-path /path/to/hegira/Cargo.toml \
+  -p hegira_cli -- db status --application-root ../my-application \
+  --profile sqlite --dry-run --json
+cargo run --locked --manifest-path /path/to/hegira/Cargo.toml \
+  -p hegira_cli -- db migrate --application-root ../my-application \
+  --profile sqlite --dry-run --json
+```
+
+Choose exactly one of `--dry-run` and `--execute`. The profile is required:
+`sqlite` selects SQLite; `development` and `production` select PostgreSQL;
+`test` selects PostgreSQL for the default Identity composition and SQLite for
+minimal or Identity-added compositions. Mismatches fail before execution.
+Preview reads the application manifest and authenticated composition only. It
+never loads runtime settings or credentials, probes tools, compiles, connects to
+a database, or grants migration approval. Application inspection, source upgrades,
+and migration generation remain separate commands with no database authority.
+
+Explicit Linux execution delegates to the application's separately registered
+`app_database` binary:
+
+```sh
+cargo run --locked --manifest-path /path/to/hegira/Cargo.toml \
+  -p hegira_cli -- db status --application-root ../my-application \
+  --profile sqlite --execute --trust-application \
+  --cargo /absolute/trusted/bin/cargo \
+  --tool-directory /absolute/trusted/bin --tool-directory /usr/bin --json
+```
+
+Replace the trusted tool paths as described for [checks and tests](#check-and-test-an-application).
+Execution validates the binary registration, `database-operations` feature,
+real entry-point/Infrastructure source, and selected profile file before starting
+locked Cargo with only `database-operations,db-<provider>`. It explicitly sets
+`APP_ENV` and the manifest's `APP__DATABASE__BACKEND`. Runtime URL/credential
+overrides are inherited, not printed or passed in arguments. **Review the actual
+target, configuration, inherited overrides, and backups before execution.**
+The chosen profile does not independently certify that a URL is non-production.
+
+Use `db migrate` for forward migration of an existing target. A production
+migration additionally requires `--approve-production-migration`; this approval
+is independent of `--execute --trust-application` and is invalid for previews,
+status, or non-production migration. For example, after reviewing a PostgreSQL
+production target:
+
+```sh
+cargo run --locked --manifest-path /path/to/hegira/Cargo.toml \
+  -p hegira_cli -- db migrate --application-root ../my-application \
+  --profile production --execute --trust-application \
+  --approve-production-migration --cargo /absolute/trusted/bin/cargo \
+  --tool-directory /absolute/trusted/bin --tool-directory /usr/bin --json
+```
+
+The application validates database configuration and compiled provider before
+connecting. `status` writes no database data, schema, or migration history and
+never creates a missing database or metadata table; SQLite WAL coordination may
+affect sidecars. `migrate` runs the composed forward plan only on an existing
+target. Neither command provisions a database, seeds Identity, starts HTTP or
+workers, installs tools, or provides reset, rollback, repair, or arbitrary SQL.
+See [database operation semantics](operations.md#application-owned-database-entry-point).
+Older applications without this real entry point fail preflight rather than
+acquiring it through a managed ownership claim or the existing source upgrade.
+
+This is trusted application/toolchain execution, **not a sandbox**. Cargo and
+build scripts can write build output or have other effects; read-only database
+status is not a promise of zero filesystem writes. The existing Linux anchoring,
+recovery/concurrency blocking, and SIGINT/SIGTERM child-group cleanup apply.
+Interrupted or failed migration is not proof of zero database changes; assess
+the target before retrying.
+
+Both human and JSON execution discard raw stderr and accept only a bounded
+(1 MiB), closed schema-1 success result from the application. Operation/provider,
+module identities, ordered states, and completed migration results are validated;
+malformed or oversized output fails without echoing raw logs. Human success
+prints migration states. JSON uses the existing schema-1 operation envelope,
+with an optional `execution.database` result on success. Nonzero child exit or
+signal is never success; CLI exit codes follow [checks and tests](#check-and-test-an-application),
+not the child binary's codes. Compiler/driver logs are not forwarded, including
+on failure. The report is the trusted application's point-in-time observation,
+not independent CLI verification of the database or deployment approval.
 
 ## Guided Creation
 
@@ -905,11 +990,10 @@ and `database-migrate`. Operation-specific readiness currently requires Linux;
 the default doctor command retains its existing behavior. The two database
 selections require `--profile sqlite`,
 `development`, `test`, or `production`, matching the recorded provider and
-composition. No other operation accepts a profile. Database diagnostics
-explicitly report that CLI database execution is unavailable, independently
-of the separate application-owned `app_database` binary; selecting this
-diagnostic does not introduce a public database
-command or grant production migration approval.
+composition. No other operation accepts a profile. Database diagnostics check
+the real application-owned entry point and selected profile file without
+compiling, loading runtime settings, connecting, or granting execution or
+production migration approval. A passing diagnostic is not database readiness.
 
 Operation mode reuses the authenticated plan and checks required real files,
 toolchain/Cargo metadata, locked frontend receipts and assets, runtime-profile

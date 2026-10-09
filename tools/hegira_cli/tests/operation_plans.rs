@@ -452,7 +452,10 @@ fn database_intents_declare_isolated_application_requirements_and_approval() {
                 .prerequisites
                 .contains(&OperationPrerequisite::ApplicationDatabaseEntryPoint)
         );
-        assert!(plan.render_human().contains("not an available executable"));
+        assert!(
+            plan.render_human()
+                .contains("application-owned app_database")
+        );
     }
     let error = plan_application_operation(
         &repository(),

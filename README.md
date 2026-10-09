@@ -148,6 +148,14 @@ verified native/server and browser artifact locations without starting or
 deploying an application. See [Application release builds](docs/getting-started.md#build-an-application-release-bundle).
 Framework releases remain source-only.
 
+`hegira db status --profile sqlite --dry-run` reviews read-only database
+inspection; `db migrate` reviews explicit forward migration. Linux execution
+requires reviewed application/toolchain trust and delegates to the application-owned
+`app_database` binary, not a CLI SQL engine. Production migration additionally
+requires `--approve-production-migration`. Neither command provisions a database,
+seeds Identity, or starts HTTP. See [Application database operations](docs/getting-started.md#operate-an-application-database)
+for target selection, safe reports, and SQLite WAL coordination.
+
 ## Quick Start
 
 Create the default layered application with SQLite, Leptos, and the official Identity
