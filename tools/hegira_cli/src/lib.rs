@@ -100,6 +100,8 @@ enum CliCommand {
     Dev(operations::command::DevelopmentCommand),
     /// Preview or explicitly build a locked application release bundle (no deployment).
     Build(operations::command::BuildCommand),
+    /// Preview or explicitly run application-owned database status or forward migration.
+    Db(operations::command::DatabaseCommand),
     /// Inspect application upgrade readiness without modifying source.
     Upgrade(upgrade::UpgradeCommand),
     /// Manage bundled additive application components.
@@ -465,6 +467,13 @@ fn run_command(
             diagnostics,
         ),
         CliCommand::Build(command) => operations::command::run_build(
+            command,
+            repository_root,
+            working_directory,
+            output,
+            diagnostics,
+        ),
+        CliCommand::Db(command) => operations::command::run_database(
             command,
             repository_root,
             working_directory,

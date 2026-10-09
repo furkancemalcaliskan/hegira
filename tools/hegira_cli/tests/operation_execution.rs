@@ -18,8 +18,9 @@ use hegira_cli::{
     operations::{
         OperationIntent, OperationPlan, OperationRequest, RuntimeProfile,
         execution::{
-            ChildOutput, ExecutionConsent, ExecutionControl, ExecutionOutcome, TrustedToolchain,
-            execute_application_operation,
+            ChildOutput, DatabaseExecutionApproval, ExecutionConsent, ExecutionControl,
+            ExecutionOutcome, TrustedToolchain, execute_application_operation,
+            execute_database_operation,
         },
         plan_application_operation,
     },
@@ -183,6 +184,30 @@ impl Fixture {
         }
         if operation == "build" {
             command.arg("--wasm-opt").arg(self.tools.join("wasm-opt"));
+        }
+        if json {
+            command.arg("--json");
+        }
+        command
+    }
+
+    fn database_command(
+        &self,
+        operation: &str,
+        profile: &str,
+        execute: bool,
+        json: bool,
+    ) -> Command {
+        let mut command = self.public_command("db");
+        command.args([operation, "--profile", profile]);
+        if execute {
+            command
+                .args(["--execute", "--trust-application", "--cargo"])
+                .arg(self.tools.join("cargo"))
+                .arg("--tool-directory")
+                .arg(&self.tools);
+        } else {
+            command.arg("--dry-run");
         }
         if json {
             command.arg("--json");
@@ -449,11 +474,7 @@ fn operation_doctor_covers_six_compositions_and_every_intent_without_application
                 "database-status",
                 "database-migrate",
             ] {
-                let exit = if operation.starts_with("database-") {
-                    3
-                } else {
-                    0
-                };
+                let exit = 0;
                 let first = fixture
                     .doctor(&root, operation, true, database)
                     .output()
@@ -490,7 +511,7 @@ fn operation_doctor_covers_six_compositions_and_every_intent_without_application
                 if operation.starts_with("database-") {
                     assert_eq!(
                         doctor_status(&report, "operation-database-entry-point"),
-                        "failure"
+                        "pass"
                     );
                 }
                 assert!(!root.join("target").exists());
@@ -524,14 +545,7 @@ fn operation_doctor_without_probe_consent_is_read_only_and_tool_free() {
             .doctor(&fixture.root, operation, false, "sqlite")
             .output()
             .unwrap();
-        let report = doctor_json(
-            &output,
-            if operation.starts_with("database-") {
-                3
-            } else {
-                0
-            },
-        );
+        let report = doctor_json(&output, 0);
         assert_eq!(doctor_status(&report, "operation-cargo"), "warning");
     }
     assert!(!fixture.tools.join("doctor-probes.log").exists());
@@ -2392,7 +2406,7 @@ fn cargo_proxy_symlinks_resolve_explicitly_and_spawn_errors_remain_redacted() {
 }
 
 #[test]
-fn database_plans_never_select_or_execute_a_placeholder_binary() {
+fn general_executor_cannot_acquire_database_execution_authority() {
     let fixture = Fixture::new();
     for intent in [
         OperationIntent::DatabaseStatus {
@@ -2408,6 +2422,426 @@ fn database_plans_never_select_or_execute_a_placeholder_binary() {
         assert_eq!(error.code, "execution-entry-point");
         assert!(!fixture.root.join("child.log").exists());
     }
+}
+
+#[test]
+fn public_database_parser_requires_profile_mode_and_independent_approval() {
+    let fixture = Fixture::new();
+    for args in [
+        vec![],
+        vec!["reset"],
+        vec!["status"],
+        vec!["status", "--profile", "sqlite"],
+        vec!["status", "--profile", "invalid", "--dry-run"],
+        vec!["status", "--profile", "sqlite", "--execute"],
+        vec![
+            "migrate",
+            "--profile",
+            "production",
+            "--dry-run",
+            "--approve-production-migration",
+        ],
+        vec![
+            "status",
+            "--profile",
+            "production",
+            "--dry-run",
+            "--approve-production-migration",
+        ],
+        vec![
+            "migrate",
+            "--profile",
+            "sqlite",
+            "--dry-run",
+            "--url",
+            "private-value",
+        ],
+    ] {
+        let output = fixture.public_command("db").args(args).output().unwrap();
+        assert_eq!(output.status.code(), Some(2));
+        assert!(output.stdout.is_empty());
+    }
+    for operation in ["status", "migrate"] {
+        let output = fixture
+            .public_command("db")
+            .args([operation, "--help"])
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        assert!(String::from_utf8_lossy(&output.stdout).contains("--profile"));
+    }
+    assert!(!fixture.root.join("child.log").exists());
+}
+
+#[test]
+fn database_preview_is_deterministic_tool_free_and_read_only_for_six_compositions() {
+    let mut fixture = Fixture::new();
+    fs::write(fixture.tools.join("preview-trap-marker"), "active").unwrap();
+    for composition in ["default", "minimal", "identity-added"] {
+        for provider in ["sqlite", "postgres"] {
+            let root = fixture.parent.join(format!("db-{composition}-{provider}"));
+            let mut create = fixture.public_command("new");
+            create
+                .args(["database-app", "--destination"])
+                .arg(&root)
+                .args(["--database", provider]);
+            if composition != "default" {
+                create.args(["--composition", "minimal"]);
+            }
+            assert!(create.output().unwrap().status.success());
+            fixture.root = root;
+            if composition == "identity-added" {
+                assert!(
+                    fixture
+                        .public_command("component")
+                        .args(["add", "identity"])
+                        .output()
+                        .unwrap()
+                        .status
+                        .success()
+                );
+            }
+            let before = application_source_tree(&fixture.root);
+            let profile = if provider == "sqlite" {
+                "sqlite"
+            } else {
+                "development"
+            };
+            for operation in ["status", "migrate"] {
+                let preview = fixture
+                    .database_command(operation, profile, false, true)
+                    .env("APP_ENV", "private-invalid-profile")
+                    .env("APP__DATABASE__URL", "private-target")
+                    .output()
+                    .unwrap();
+                let repeated = fixture
+                    .database_command(operation, profile, false, true)
+                    .output()
+                    .unwrap();
+                assert_eq!(preview.stdout, repeated.stdout);
+                let json = public_json(&preview, 0);
+                assert_eq!(json["mode"], "preview");
+                assert!(json["execution"].is_null());
+                assert_eq!(json["plan"]["steps"][0]["database"], provider);
+                assert_eq!(json["plan"]["steps"][0]["profile"], profile);
+                assert_eq!(
+                    json["plan"]["effect"],
+                    if operation == "status" {
+                        "database-read"
+                    } else {
+                        "database-write"
+                    }
+                );
+                assert!(!String::from_utf8_lossy(&preview.stdout).contains("private"));
+                assert_eq!(before, application_source_tree(&fixture.root));
+            }
+        }
+    }
+    assert!(!fixture.tools.join("preview-trap-observed").exists());
+}
+
+#[test]
+fn public_database_execution_uses_closed_arguments_profile_provider_and_safe_results() {
+    let fixture = Fixture::new();
+    for operation in ["status", "migrate"] {
+        let output = fixture
+            .database_command(operation, "sqlite", true, true)
+            .env("APP_ENV", "production")
+            .env("APP__DATABASE__BACKEND", "postgres")
+            .env("APP__DATABASE__URL", "private-selected-target")
+            .output()
+            .unwrap();
+        let json = public_json(&output, 0);
+        assert_eq!(json["execution"]["outcome"]["status"], "succeeded");
+        assert_eq!(json["execution"]["completed_steps"], 1);
+        assert_eq!(json["execution"]["database"]["operation"], operation);
+        assert_eq!(json["execution"]["database"]["provider"], "sqlite");
+        assert_eq!(
+            json["execution"]["database"]["status"]["migrations"][0]["version"],
+            1
+        );
+        assert_eq!(
+            fs::read_to_string(fixture.root.join("child.profile")).unwrap(),
+            "sqlite"
+        );
+        assert_eq!(
+            fs::read_to_string(fixture.root.join("child.provider")).unwrap(),
+            "sqlite"
+        );
+        assert_eq!(
+            fs::read_to_string(fixture.root.join("child.database-url")).unwrap(),
+            "private-selected-target"
+        );
+        assert!(!String::from_utf8_lossy(&output.stdout).contains("private"));
+        assert!(
+            !fs::read_to_string(fixture.root.join("child.log"))
+                .unwrap()
+                .contains("private")
+        );
+    }
+    let human = fixture
+        .database_command("status", "sqlite", true, false)
+        .output()
+        .unwrap();
+    assert!(human.status.success());
+    assert!(String::from_utf8_lossy(&human.stdout).contains("1 application Applied"));
+    assert!(!String::from_utf8_lossy(&human.stdout).contains("private"));
+    assert!(human.stderr.is_empty());
+}
+
+#[test]
+fn production_migration_approval_is_required_in_public_and_library_boundaries() {
+    let mut fixture = Fixture::new();
+    let root = fixture.parent.join("production");
+    assert!(
+        fixture
+            .public_command("new")
+            .args(["production-app", "--destination"])
+            .arg(&root)
+            .args(["--database", "postgres"])
+            .output()
+            .unwrap()
+            .status
+            .success()
+    );
+    fixture.root = root;
+    fixture.mode("success");
+    let preview = public_json(
+        &fixture
+            .database_command("migrate", "production", false, true)
+            .output()
+            .unwrap(),
+        0,
+    );
+    assert_eq!(
+        preview["plan"]["policy"]["production_migration_approval_required"],
+        true
+    );
+    let denied = public_json(
+        &fixture
+            .database_command("migrate", "production", true, true)
+            .output()
+            .unwrap(),
+        3,
+    );
+    assert_eq!(
+        denied["diagnostics"][0]["code"],
+        "production-migration-approval"
+    );
+    let plan = fixture.plan(OperationIntent::DatabaseMigrate {
+        profile: RuntimeProfile::Production,
+    });
+    let error = execute_database_operation(
+        &repository(),
+        &plan,
+        ExecutionConsent::ExecuteTrustedApplicationAndToolchain,
+        DatabaseExecutionApproval::Ordinary,
+        &fixture.toolchain(),
+        &ExecutionControl::default(),
+    )
+    .unwrap_err();
+    assert_eq!(error.code, "production-migration-approval");
+    assert!(!fixture.root.join("child.log").exists());
+    let approved = public_json(
+        &fixture
+            .database_command("migrate", "production", true, true)
+            .arg("--approve-production-migration")
+            .output()
+            .unwrap(),
+        0,
+    );
+    assert_eq!(approved["execution"]["database"]["operation"], "migrate");
+    assert_eq!(
+        fs::read_to_string(fixture.root.join("child.profile")).unwrap(),
+        "production"
+    );
+    let status = public_json(
+        &fixture
+            .database_command("status", "production", true, true)
+            .output()
+            .unwrap(),
+        0,
+    );
+    assert_eq!(status["execution"]["database"]["operation"], "status");
+    let denied = public_json(
+        &fixture
+            .database_command("migrate", "development", true, true)
+            .arg("--approve-production-migration")
+            .output()
+            .unwrap(),
+        3,
+    );
+    assert_eq!(
+        denied["diagnostics"][0]["code"],
+        "production-migration-approval"
+    );
+}
+
+#[test]
+fn database_execution_rejects_profiles_missing_unsafe_entry_points_and_recovery_before_spawn() {
+    for mode in [
+        "profile",
+        "binary",
+        "registration",
+        "feature",
+        "infrastructure",
+        "symlink",
+        "runtime-profile",
+        "recovery",
+    ] {
+        let fixture = Fixture::new();
+        let profile = if mode == "profile" {
+            "development"
+        } else {
+            "sqlite"
+        };
+        match mode {
+            "binary" => {
+                fs::remove_file(fixture.root.join("apps/server/src/bin/app_database.rs")).unwrap()
+            }
+            "infrastructure" => fs::remove_file(
+                fixture
+                    .root
+                    .join("crates/infrastructure/src/database_operations.rs"),
+            )
+            .unwrap(),
+            "registration" | "feature" => {
+                let file = fixture.root.join("apps/server/Cargo.toml");
+                let source = fs::read_to_string(&file).unwrap();
+                fs::write(
+                    file,
+                    if mode == "registration" {
+                        source.replace("src/bin/app_database.rs", "src/main.rs")
+                    } else {
+                        source.replace("database-operations =", "removed-feature =")
+                    },
+                )
+                .unwrap();
+            }
+            "symlink" => {
+                let file = fixture.root.join("apps/server/src/bin/app_database.rs");
+                fs::remove_file(&file).unwrap();
+                symlink("/private-missing-file", file).unwrap();
+            }
+            "runtime-profile" => fs::remove_file(fixture.root.join("config/sqlite.yaml")).unwrap(),
+            "recovery" => {
+                fs::write(fixture.root.join(".hegira-mutation.lock"), "private-state").unwrap()
+            }
+            _ => (),
+        }
+        let expected = if mode == "recovery" { 4 } else { 3 };
+        let json = public_json(
+            &fixture
+                .database_command("status", profile, true, true)
+                .output()
+                .unwrap(),
+            expected,
+        );
+        assert!(!json["diagnostics"].as_array().unwrap().is_empty());
+        assert!(!fixture.root.join("child.log").exists());
+    }
+}
+
+#[test]
+fn database_failures_invalid_and_oversized_output_cannot_report_success_or_leak_output() {
+    let fixture = Fixture::new();
+    for mode in ["db-failure", "db-malformed", "db-oversize"] {
+        fixture.mode(mode);
+        for operation in ["status", "migrate"] {
+            let output = fixture
+                .database_command(operation, "sqlite", true, true)
+                .output()
+                .unwrap();
+            let json = public_json(&output, 1);
+            assert!(!String::from_utf8_lossy(&output.stdout).contains("private"));
+            if mode == "db-failure" {
+                assert_eq!(json["execution"]["outcome"]["status"], "child-failed");
+                assert_eq!(json["execution"]["outcome"]["exit_code"], 4);
+                assert_eq!(json["execution"]["completed_steps"], 0);
+                assert!(json["execution"].get("database").is_none());
+            } else {
+                assert_eq!(json["diagnostics"][0]["code"], "database-protocol");
+                assert!(json["execution"].is_null());
+            }
+        }
+    }
+}
+
+#[test]
+fn database_protocol_rejects_extra_fields_mismatched_identity_and_incomplete_migrations() {
+    let fixture = Fixture::new();
+    fixture.mode("db-report");
+    for mutation in [
+        "schema",
+        "provider",
+        "operation",
+        "extra",
+        "module",
+        "order",
+        "state",
+        "history",
+    ] {
+        let mut result = serde_json::json!({"output_schema":1,"outcome":"success","operation":"migrate","provider":"sqlite",
+            "status":{"output_schema":1,"history":"present","migrations":[{"module_id":"application","version":1,"state":"applied"}]}});
+        match mutation {
+            "schema" => result["status"]["output_schema"] = 99.into(),
+            "provider" => result["provider"] = "postgres".into(),
+            "operation" => result["operation"] = "status".into(),
+            "extra" => result["private-extra"] = "private-raw-content".into(),
+            "module" => {
+                result["status"]["migrations"][0]["module_id"] = "private-runtime-identity".into()
+            }
+            "order" => {
+                let duplicate = result["status"]["migrations"][0].clone();
+                result["status"]["migrations"]
+                    .as_array_mut()
+                    .unwrap()
+                    .push(duplicate);
+            }
+            "state" => result["status"]["migrations"][0]["state"] = "pending".into(),
+            "history" => result["status"]["history"] = "database-missing".into(),
+            _ => unreachable!(),
+        }
+        fs::write(
+            fixture.root.join("database-result.json"),
+            result.to_string(),
+        )
+        .unwrap();
+        let output = fixture
+            .database_command("migrate", "sqlite", true, true)
+            .output()
+            .unwrap();
+        let json = public_json(&output, 1);
+        assert_eq!(json["diagnostics"][0]["code"], "database-protocol");
+        assert!(!String::from_utf8_lossy(&output.stdout).contains("private"));
+    }
+}
+
+#[test]
+fn database_capture_obeys_public_signal_cancellation_and_releases_coordination() {
+    let fixture = Fixture::new();
+    fixture.mode("db-wait");
+    let mut command =
+        ControlledCommand::spawn(fixture.database_command("migrate", "sqlite", true, true));
+    wait_file(&fixture.root, "child.pid");
+    let leader = pid(&fixture.root, "child.pid");
+    command.leader = Some(leader);
+    kill_process(command.pid(), Signal::TERM).unwrap();
+    let output = command.output();
+    let json = public_json(&output, 1);
+    assert_eq!(json["execution"]["outcome"]["status"], "terminated");
+    assert!(json["execution"].get("database").is_none());
+    assert_stopped(leader);
+    assert_reaped(leader);
+    fixture.mode("success");
+    assert!(
+        fixture
+            .database_command("status", "sqlite", true, true)
+            .output()
+            .unwrap()
+            .status
+            .success()
+    );
 }
 
 #[test]

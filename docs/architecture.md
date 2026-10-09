@@ -571,8 +571,8 @@ declarations, not installed or probed by the planner.
 
 Database intents carry a typed status/forward-migrate request and an explicit
 baseline profile. They require an application-owned operation entry point;
-the planner does not wire the separate application-owned `app_database`
-binary or invent a CLI SQL engine. Baseline profile/provider mismatches
+the planner declares that requirement without invoking the application-owned
+`app_database` binary or inventing a CLI SQL engine. Baseline profile/provider mismatches
 are rejected: `sqlite` selects SQLite; `development` and `production` select
 PostgreSQL; `test` selects PostgreSQL for the default Identity template and
 SQLite for minimal or Identity-added applications. User runtime overrides are
@@ -583,8 +583,9 @@ Planning is read-only, but planned check/test/build execution would still run
 trusted application and toolchain code; development execution can initialize
 the application's configured dependencies. A summary is not execution
 authority, a readiness certificate, a cached publication token, or a sandbox.
-Public `dev`, `check`, `test`, and `build --release` commands reuse this planner;
-database operations remain library plans rather than public commands. Development plans
+Public `dev`, `check`, `test`, `build --release`, `db status`, and `db migrate`
+commands reuse this planner. Database commands require an explicit profile.
+Development plans
 explicitly select the recorded backend and development profile, localhost site
 and server address, reload port, canonical CSS input, and standard Cargo
 server-build command without reading runtime
@@ -598,8 +599,17 @@ outcomes without echoing input, parser excerpts, or source paths.
 from inspection and planning. It requires a privately constructed plan,
 `ExecutionConsent::ExecuteTrustedApplicationAndToolchain`, an explicitly
 resolved `TrustedToolchain`, an `ExecutionControl`, and a child-output policy.
-Public `dev`, `check`, `test`, and `build --release` commands delegate to this library. Database steps fail
-before spawning: this CLI executor does not implement database execution.
+Public `dev`, `check`, `test`, and `build --release` commands delegate to this library.
+Database steps fail before spawning through this general executor. The separate
+`execute_database_operation` API additionally requires `DatabaseExecutionApproval`;
+production forward migration requires its independent `ProductionMigration`
+variant, while other database requests require `Ordinary`. A preview, generic
+execution consent, or source upgrade cannot substitute for that approval.
+It validates the registered `app_database` binary, database-operations feature,
+Infrastructure source, and selected real profile file before spawning locked
+Cargo with only the selected database feature. It explicitly selects `APP_ENV`
+and the manifest's backend; inherited URL overrides remain the owner's responsibility.
+Database configuration and SQL behavior remain in the trusted application.
 Check/test plans execute native provider validation and a hydration check.
 Development plans require explicit lock-matched wasm-bindgen selection plus a
 verified frontend/toolchain preflight before foreground Cargo Leptos watch/serve.
@@ -671,9 +681,16 @@ the child inherits the caller's environment, including runtime overrides and
 possibly credentials. Trust approval must cover this environment and Cargo
 configuration as well as application and toolchain source. Credentials are not
 copied into arguments, plan summaries, execution reports, or framework errors.
-Child output is either inherited unchanged or discarded, not captured in
-schema-1 framework reports; arbitrary tool/application output is **not
-redacted**. Child stdin is closed. Execution is a trust decision, not an OS
+For non-database operations, child output is either inherited unchanged or
+discarded, not captured in schema-1 framework reports; arbitrary tool/application
+output is **not redacted**. Database execution discards stderr and captures at
+most 1 MiB of stdout. Only a closed schema-1 success result with matching
+operation/provider, known module identities, and ordered migration states is
+accepted. Forward-migration success additionally requires present history and
+no pending entries. Malformed, oversized, or failed child output produces a
+non-success outcome without raw output. Successful execution adds the optional
+`database` field to its report; it is a trusted application observation, not an
+independent CLI audit of the database. Child stdin is closed. Execution is a trust decision, not an OS
 sandbox, network isolation, or a promise of secret-output sanitization.
 
 Each child owns a new process group. Cancellation or termination requested

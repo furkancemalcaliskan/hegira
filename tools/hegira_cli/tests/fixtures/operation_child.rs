@@ -191,6 +191,51 @@ fn main() {
         std::env::var("RUSTUP_TOOLCHAIN").unwrap_or_default(),
     )
     .unwrap();
+    if args.first().map(String::as_str) == Some("run") {
+        assert_eq!(
+            &args[..9],
+            [
+                "run", "--locked", "--quiet", "-p", "app_server", "--bin",
+                "app_database", "--no-default-features", "--features"
+            ]
+        );
+        assert_eq!(args[10], "--");
+        assert_eq!(args[12], "--json");
+        assert_eq!(args.len(), 13);
+        assert!(matches!(args[11].as_str(), "status" | "migrate"));
+        let provider = std::env::var("APP__DATABASE__BACKEND").unwrap();
+        assert_eq!(args[9], format!("database-operations,db-{provider}"));
+        fs::write("child.profile", std::env::var("APP_ENV").unwrap()).unwrap();
+        fs::write("child.provider", &provider).unwrap();
+        fs::write(
+            "child.database-url",
+            std::env::var("APP__DATABASE__URL").unwrap_or_default(),
+        )
+        .unwrap();
+        eprintln!("private-driver-output-must-not-appear");
+        match mode.trim() {
+            "db-failure" => {
+                println!("private-failed-child-output");
+                std::process::exit(4);
+            }
+            "db-malformed" => {
+                println!("private-invalid-json");
+                return;
+            }
+            "db-oversize" => {
+                println!("{}", "private-overflow".repeat(100000));
+                return;
+            }
+            "db-wait" => wait_forever(),
+            "db-report" => {
+                print!("{}", fs::read_to_string("database-result.json").unwrap());
+                return;
+            }
+            _ => (),
+        }
+        println!("{{\"output_schema\":1,\"outcome\":\"success\",\"operation\":\"{}\",\"provider\":\"{provider}\",\"status\":{{\"output_schema\":1,\"history\":\"present\",\"migrations\":[{{\"module_id\":\"application\",\"version\":1,\"state\":\"applied\"}}]}}}}", args[11]);
+        return;
+    }
     if args.first().map(String::as_str) == Some("leptos") {
         assert_eq!(std::env::var("LEPTOS_BIN_CARGO_COMMAND").unwrap(), "cargo");
         if args.get(1).map(String::as_str) == Some("build") {

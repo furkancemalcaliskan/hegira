@@ -2,15 +2,16 @@
 
 use std::{io::Write, path::PathBuf};
 
-use clap::Args;
+use clap::{Args, Subcommand};
 use serde::Serialize;
 
 use super::{
     OperationError, OperationErrorKind, OperationIntent, OperationPlan, OperationPlanSummary,
-    OperationRequest,
+    OperationRequest, RuntimeProfile,
     execution::{
-        ChildOutput, ExecutionConsent, ExecutionControl, ExecutionReport, TrustedToolchain,
-        execute_application_operation,
+        ChildOutput, DatabaseExecutionApproval, ExecutionConsent, ExecutionControl,
+        ExecutionReport, TrustedToolchain, execute_application_operation,
+        execute_database_operation,
     },
     plan_application_operation,
 };
@@ -82,9 +83,83 @@ pub(crate) struct BuildCommand {
 }
 
 #[derive(Default)]
-struct FrontendTools {
+struct ExecutionOptions {
     wasm_bindgen: Option<PathBuf>,
     wasm_opt: Option<PathBuf>,
+    database_approval: Option<DatabaseExecutionApproval>,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct DatabaseCommand {
+    #[command(subcommand)]
+    command: DatabaseAction,
+}
+
+#[derive(Debug, Subcommand)]
+enum DatabaseAction {
+    /// Inspect composed migration history; never provision, seed, or migrate.
+    Status(DatabaseOptions),
+    /// Apply only forward migrations to an existing, explicitly selected database.
+    Migrate(DatabaseMigrateOptions),
+}
+
+#[derive(Debug, Args)]
+struct DatabaseOptions {
+    /// Explicit baseline profile matching the application's recorded provider.
+    #[arg(long, value_enum)]
+    profile: RuntimeProfile,
+    #[command(flatten)]
+    options: ValidationCommand,
+}
+
+#[derive(Debug, Args)]
+struct DatabaseMigrateOptions {
+    #[command(flatten)]
+    database: DatabaseOptions,
+    /// Separately approve production migration after reviewing the target and backups.
+    #[arg(long, requires = "execute")]
+    approve_production_migration: bool,
+}
+
+pub(crate) fn run_database(
+    command: DatabaseCommand,
+    repository: PathBuf,
+    working_directory: PathBuf,
+    output: &mut impl Write,
+    diagnostics: &mut impl Write,
+) -> CliExit {
+    let (options, intent, approval) = match command.command {
+        DatabaseAction::Status(command) => (
+            command.options,
+            OperationIntent::DatabaseStatus {
+                profile: command.profile,
+            },
+            DatabaseExecutionApproval::Ordinary,
+        ),
+        DatabaseAction::Migrate(command) => (
+            command.database.options,
+            OperationIntent::DatabaseMigrate {
+                profile: command.database.profile,
+            },
+            if command.approve_production_migration {
+                DatabaseExecutionApproval::ProductionMigration
+            } else {
+                DatabaseExecutionApproval::Ordinary
+            },
+        ),
+    };
+    run_operation(
+        options,
+        intent,
+        ExecutionOptions {
+            database_approval: Some(approval),
+            ..Default::default()
+        },
+        repository,
+        working_directory,
+        output,
+        diagnostics,
+    )
 }
 
 #[derive(Debug, Clone, Copy, Serialize)]
@@ -116,7 +191,7 @@ pub(crate) fn run(
     run_operation(
         command,
         intent,
-        FrontendTools::default(),
+        ExecutionOptions::default(),
         repository,
         working_directory,
         output,
@@ -134,9 +209,10 @@ pub(crate) fn run_development(
     run_operation(
         command.options,
         OperationIntent::Develop,
-        FrontendTools {
+        ExecutionOptions {
             wasm_bindgen: command.wasm_bindgen,
             wasm_opt: None,
+            database_approval: None,
         },
         repository,
         working_directory,
@@ -155,9 +231,10 @@ pub(crate) fn run_build(
     run_operation(
         command.frontend.options,
         OperationIntent::ReleaseBuild,
-        FrontendTools {
+        ExecutionOptions {
             wasm_bindgen: command.frontend.wasm_bindgen,
             wasm_opt: command.wasm_opt,
+            database_approval: None,
         },
         repository,
         working_directory,
@@ -169,7 +246,7 @@ pub(crate) fn run_build(
 fn run_operation(
     command: ValidationCommand,
     intent: OperationIntent,
-    frontend: FrontendTools,
+    frontend: ExecutionOptions,
     repository: PathBuf,
     working_directory: PathBuf,
     output: &mut impl Write,
@@ -197,7 +274,7 @@ fn execute(
     command: &ValidationCommand,
     repository: &std::path::Path,
     plan: &OperationPlan,
-    frontend: &FrontendTools,
+    frontend: &ExecutionOptions,
 ) -> Result<ExecutionReport, OperationError> {
     // Defense in depth for callers other than Clap. No default or preview grants consent.
     if !command.execute || !command.trust_application || command.dry_run {
@@ -206,6 +283,9 @@ fn execute(
             "execution-consent",
             "Execution requires --execute and --trust-application; a preview grants no authority.",
         ));
+    }
+    if let Some(approval) = frontend.database_approval {
+        approval.validate(plan)?;
     }
     let cargo = command.cargo.as_deref().ok_or_else(|| {
         OperationError::new(
@@ -245,6 +325,16 @@ fn execute(
     }
     let control = ExecutionControl::default();
     let _signals = CommandSignals::register(&control)?;
+    if let Some(approval) = frontend.database_approval {
+        return execute_database_operation(
+            repository,
+            plan,
+            ExecutionConsent::ExecuteTrustedApplicationAndToolchain,
+            approval,
+            &toolchain,
+            &control,
+        );
+    }
     execute_application_operation(
         repository,
         plan,
@@ -299,6 +389,10 @@ fn emit(
                     plan.map_or(0, |plan| plan.summary().steps.len()),
                 )
                 .is_ok();
+                let written = written
+                    && execution.database.as_ref().is_none_or(|database| {
+                        writeln!(output, "{}", database.render_human()).is_ok()
+                    });
                 written && execution.artifacts.as_ref().is_none_or(|artifacts| {
                     writeln!(output, "Verified artifacts (application-relative; owner: {}):\nServer: {}\nSite: {}\nBrowser WASM: {}",
                         artifacts.owner, artifacts.server, artifacts.site, artifacts.browser_wasm).is_ok()

@@ -1,8 +1,10 @@
 //! Explicit, trusted operation execution; not an application sandbox.
 //!
-//! Public dev/check/test/build commands use this library. Callers must acknowledge
-//! trusted application, toolchain, Cargo configuration, and inherited environment.
-//! Child output is inherited or discarded, never captured in framework summaries.
+//! Public dev/check/test/build and separately approved db commands use this library.
+//! Callers must acknowledge trusted application, toolchain, Cargo configuration,
+//! and inherited environment.
+//! Ordinary child output is inherited or discarded. Database commands accept only
+//! a bounded, validated data-only application result; raw logs are discarded.
 
 use std::{
     path::Path,
@@ -15,6 +17,11 @@ use std::{
 use serde::Serialize;
 
 use super::{OperationError, OperationErrorKind, OperationIntent, OperationPlan};
+mod database_protocol;
+pub use database_protocol::{
+    DatabaseHistory, DatabaseMigration, DatabaseMigrationState, DatabaseResult, DatabaseStatus,
+    DatabaseSuccess,
+};
 
 pub const OPERATION_EXECUTION_SCHEMA: u32 = 1;
 
@@ -23,6 +30,37 @@ pub const OPERATION_EXECUTION_SCHEMA: u32 = 1;
 #[derive(Debug, Clone, Copy)]
 pub enum ExecutionConsent {
     ExecuteTrustedApplicationAndToolchain,
+}
+
+/// Production mutation approval is independent of trust/execution consent.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DatabaseExecutionApproval {
+    Ordinary,
+    ProductionMigration,
+}
+
+impl DatabaseExecutionApproval {
+    pub(crate) fn validate(self, plan: &OperationPlan) -> Result<(), OperationError> {
+        if !matches!(
+            plan.summary().intent,
+            OperationIntent::DatabaseStatus { .. } | OperationIntent::DatabaseMigrate { .. }
+        ) {
+            return Err(failure(
+                OperationErrorKind::Validation,
+                "database-intent",
+                "Database approval applies only to explicit database operations.",
+            ));
+        }
+        let required = plan.summary().policy.production_migration_approval_required;
+        if required != (self == Self::ProductionMigration) {
+            return Err(failure(
+                OperationErrorKind::Validation,
+                "production-migration-approval",
+                "Production migration requires independent --approve-production-migration; that approval is invalid for other operations.",
+            ));
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -80,6 +118,9 @@ pub struct ExecutionReport {
     /// Verified output locations only after a successful release build.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub artifacts: Option<super::ReleaseBuildArtifacts>,
+    /// Only a validated application-owned database protocol result, never raw output.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub database: Option<DatabaseResult>,
 }
 
 impl ExecutionReport {
@@ -110,7 +151,28 @@ pub fn execute_application_operation(
     output: ChildOutput,
 ) -> Result<ExecutionReport, OperationError> {
     let ExecutionConsent::ExecuteTrustedApplicationAndToolchain = consent;
-    platform::execute(repository_root, plan, toolchain, control, output)
+    platform::execute(repository_root, plan, toolchain, control, output, None)
+}
+
+/// Separate authority path: general application execution cannot migrate a database.
+pub fn execute_database_operation(
+    repository_root: &Path,
+    plan: &OperationPlan,
+    consent: ExecutionConsent,
+    approval: DatabaseExecutionApproval,
+    toolchain: &TrustedToolchain,
+    control: &ExecutionControl,
+) -> Result<ExecutionReport, OperationError> {
+    let ExecutionConsent::ExecuteTrustedApplicationAndToolchain = consent;
+    approval.validate(plan)?;
+    platform::execute(
+        repository_root,
+        plan,
+        toolchain,
+        control,
+        ChildOutput::Discard,
+        Some(approval),
+    )
 }
 
 fn failure(kind: OperationErrorKind, code: &'static str, message: &'static str) -> OperationError {
@@ -351,6 +413,7 @@ mod anchors {
 #[cfg(target_os = "linux")]
 mod platform {
     mod artifacts;
+    mod database;
     mod leptos;
     mod readiness;
     use super::{anchors::*, *};
@@ -515,21 +578,26 @@ mod platform {
         toolchain: &TrustedToolchain,
         control: &ExecutionControl,
         output: ChildOutput,
+        database_approval: Option<DatabaseExecutionApproval>,
     ) -> Result<ExecutionReport, OperationError> {
+        if let Some(approval) = database_approval {
+            approval.validate(plan)?;
+        }
         // Unsupported steps are rejected for the entire operation, not halfway.
         if plan.summary.steps.iter().any(|step| {
-            !matches!(
+            !(matches!(
                 step,
                 OperationStep::Tool {
                     program: OperationProgram::Cargo,
                     ..
                 }
-            )
+            ) || (database_approval.is_some()
+                && matches!(step, OperationStep::ApplicationDatabase { .. })))
         }) {
             return Err(failure(
                 OperationErrorKind::Validation,
                 "execution-entry-point",
-                "The CLI executor does not support application-owned database execution.",
+                "Database operations require the separate approval-aware database executor.",
             ));
         }
         if !matches!(
@@ -538,7 +606,8 @@ mod platform {
                 | OperationIntent::Test
                 | OperationIntent::Develop
                 | OperationIntent::ReleaseBuild
-        ) {
+        ) && database_approval.is_none()
+        {
             return Err(failure(
                 OperationErrorKind::Validation,
                 "execution-readiness",
@@ -621,6 +690,38 @@ mod platform {
             if let Some(outputs) = &build_outputs {
                 outputs.verify(plan)?;
             }
+            if let OperationStep::ApplicationDatabase {
+                operation,
+                profile,
+                database: provider,
+            } = step
+            {
+                database::validate_entry_point(plan)?;
+                let mut command = Command::new(&cargo_path);
+                command
+                    .arg0("cargo")
+                    .args(database::arguments(*operation, *provider))
+                    .current_dir(&root_path)
+                    .env("PATH", &toolchain.search_path)
+                    .env("RUSTUP_AUTO_INSTALL", "0")
+                    .env_remove("RUSTUP_TOOLCHAIN")
+                    .env("APP_ENV", profile.name())
+                    .env("APP__DATABASE__BACKEND", database::provider_name(*provider))
+                    .stdin(Stdio::null())
+                    .process_group(0);
+                let (outcome, result) = database::run(command, plan, control)?;
+                let mut report = report(
+                    plan,
+                    if outcome == ExecutionOutcome::Succeeded {
+                        index + 1
+                    } else {
+                        index
+                    },
+                    outcome,
+                );
+                report.database = result;
+                return Ok(report);
+            }
             let OperationStep::Tool {
                 arguments,
                 environment,
@@ -689,6 +790,7 @@ mod platform {
             completed_steps,
             outcome,
             artifacts,
+            database: None,
         }
     }
 
@@ -711,6 +813,12 @@ mod platform {
     fn validate_prerequisite_paths(plan: &OperationPlan) -> Result<(), OperationError> {
         for path in ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml"] {
             open_file(&plan.anchor.directory.fd, Path::new(path))?;
+        }
+        if matches!(
+            plan.summary.intent,
+            OperationIntent::DatabaseStatus { .. } | OperationIntent::DatabaseMigrate { .. }
+        ) {
+            database::validate_entry_point(plan)?;
         }
         Ok(())
     }
@@ -867,6 +975,7 @@ mod platform {
         _: &TrustedToolchain,
         _: &ExecutionControl,
         _: ChildOutput,
+        _: Option<DatabaseExecutionApproval>,
     ) -> Result<ExecutionReport, OperationError> {
         Err(unsupported())
     }

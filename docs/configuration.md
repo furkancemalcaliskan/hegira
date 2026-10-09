@@ -65,6 +65,15 @@ and optional-service settings do not initialize or block this isolated path.
 Normal server startup retains its full validation contract. See
 [application-owned database operations](operations.md#application-owned-database-entry-point).
 
+Public `hegira db status` and `db migrate` require an explicit baseline profile
+matching the application's recorded provider. Their preview never loads these
+runtime values. Explicit execution selects `APP_ENV` and the manifest's backend
+before delegating to the application binary; inherited URL and credential
+overrides remain the operator's responsibility. Production migration requires
+independent `--approve-production-migration` in addition to tool/application
+trust, but this flag does not certify the actual target. See
+[CLI database operations](getting-started.md#operate-an-application-database).
+
 Cargo features decide which providers enter the binary. Runtime settings only
 select among providers that were compiled. Startup validates this contract
 before connecting to the database or any other external dependency and reports

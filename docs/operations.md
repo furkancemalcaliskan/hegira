@@ -47,7 +47,8 @@ directory. See [SQLite WAL documentation](https://www.sqlite.org/wal.html).
 
 Infrastructure remains responsible for composing application and official-module
 migration sources and obtaining separate explicit intent for database access.
-This framework API is not a public `hegira` database command. The observed
+The CLI delegates to the application-owned entry point rather than invoking
+this framework API directly. The observed
 report is a point-in-time snapshot, not approval to migrate, repair, or deploy.
 
 ### Application-Owned Database Entry Point
@@ -73,7 +74,8 @@ arguments or output. Configuration loading reuses application profile sources
 and defaults but validates only database-relevant settings. Production requires
 database ensure and automatic migration to be disabled. Normal HTTP startup
 policy is unchanged. This command trusts application source and accesses its
-configured database; it is neither a sandbox nor a public `hegira` DB command.
+configured database; it is not a sandbox. Public `hegira db` commands delegate
+to this binary with separate execution and production-migration approvals.
 
 `status` reuses the typed read-only inspection above, including its SQLite WAL
 coordination boundary. `migrate` first authenticates history against the
@@ -100,6 +102,35 @@ separately selected binary. Application operators own its build/invocation and
 deployment approval. The current v0.6.0-to-v0.7.0 source upgrade changes only
 three files and does not install this entry point. Managed claims are not
 blanket rewrite permission or proof that a binary is present.
+
+### Explicit CLI Database Operations
+
+`hegira db status` and `hegira db migrate` require an explicit matching
+`--profile` and exactly one of `--dry-run` or `--execute`. Preview reads only
+the manifest/composition and declares effects without loading runtime secrets,
+building, or connecting. Execution additionally requires `--trust-application`,
+absolute trusted `--cargo` and `--tool-directory` selections, and Linux.
+Production forward migration separately requires `--approve-production-migration`;
+that flag is invalid for status, previews, or other profiles. Inspection, source
+upgrades, and generation never authorize database access.
+
+The executor validates real application binary registration, source, and selected
+profile files before spawning the locked application command. It selects the
+manifest provider and explicit profile; inherited URL overrides still require
+owner review. This trusts build scripts and application code and is not a
+sandbox or independent verification of the target's production classification.
+Even database status can compile trusted code and write ordinary Cargo output.
+The entry point retains the database semantics and WAL caveat above.
+
+Raw child logs are discarded in both human and JSON modes. Only a bounded,
+closed schema-1 success result with matching provider/operation and valid ordered
+module migration states enters output. Failure, malformed output, oversized
+output, and cancellation never report success. Child-group cleanup, recovery
+blocking, and CLI exit codes follow the existing operation executor; an
+interrupted migration may have changed the database. CLI result envelopes and
+exit codes are distinct from invoking `app_database` directly. See
+[application database commands](getting-started.md#operate-an-application-database)
+for reviewed invocation examples and report boundaries.
 
 ## Health And Readiness
 
