@@ -769,6 +769,37 @@ and disposable PostgreSQL lifecycle tests above. Actual database operations
 still require an explicitly reviewed target and trusted application/toolchain;
 CI or doctor success is not production migration authorization.
 
+The framework CI job additionally invokes the real public database-operation
+matrix as a separate unconditional step after the focused framework package gate.
+Both repository and source-release jobs explicitly authorize their own ephemeral
+PostgreSQL target and require all six cells. Failures
+propagate through the existing framework/quality gate; no status check or repository
+secret is added.
+
+Run the focused file-owned subset with
+`sh scripts/database-operation-check.sh sqlite`. The complete matrix requires
+`ALLOW_DATABASE_OPERATION_DISPOSABLE_TARGETS=true` and an explicit
+`DATABASE_OPERATION_POSTGRES_URL` without URL query overrides. Never select
+persistent or production data. Each PostgreSQL case creates a uniquely named
+schema with no adoption/reset, uses only that schema, and drops it even after a
+joined test assertion fails. SQLite files and application copies live in the
+bounded `database-operation-check` cache workspace and are cleaned on exit.
+
+Public status checks compare schema, all history fields, existing product data,
+SQLite database bytes, and PostgreSQL table-row fingerprints. Production denial,
+profile/provider mismatch, checksum/unknown/failed history, missing targets, and
+explicit repeat migration are tested. Test-only appended migrations inject a
+constraint failure after a successful prior migration: its committed history
+remains, the failed migration's DDL/history rolls back, and retry verifies that
+locking is released. A duplicate version fixture separately fails composition
+before database access. The fixture package is explicitly recompiled when that
+extra migration is injected; existing macro artifacts are not trusted to discover
+a new SQL directory entry. No canonical or historical migration is modified.
+Tests run outside the compiling Cargo process because the public CLI invokes
+Cargo itself. Source-upgrade CLI tests additionally tripwire PostgreSQL connection
+attempts and preserve an external SQLite sentinel across all six baselines, even
+when inherited startup flags request migration/seed.
+
 ## Application Upgrade Review
 
 The current public edge is exactly v0.6.0 → v0.7.0 for default, minimal, and

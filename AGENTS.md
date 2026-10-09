@@ -231,6 +231,12 @@ commands change. Never describe planned work as implemented.
   `target/validation/`. Their 64 GiB default LRU budget is enforced before and
   after validation, active locks are protected, and status, prune, and complete
   cleanup commands never own normal developer Cargo output.
+  The framework CI job's separate public database-operation security matrix stages all six
+  current compositions, uses only owned SQLite files and explicitly authorized
+  disposable PostgreSQL schemas, and exercises status/approval/history/failure
+  isolation. Test-only migrations never enter canonical source. Its focused
+  SQLite subset is `sh scripts/database-operation-check.sh sqlite`; the full
+  matrix requires the documented explicit disposable PostgreSQL opt-in.
 - `.github/workflows/` contains validation and release automation.
 
 Do not create future-facing directories, manifests, modules, tools, clients, or

@@ -13,6 +13,71 @@ use upgrade_test_support::{
 
 static NEXT_DIRECTORY: AtomicU64 = AtomicU64::new(0);
 
+#[test]
+fn public_source_upgrades_never_connect_to_database_or_run_seed() {
+    use std::net::TcpListener;
+    for composition in BaselineComposition::ALL {
+        for database in BaselineDatabase::ALL {
+            let fixture = Fixture::new();
+            let root = fixture.baseline(composition, database);
+            let sentinel = fixture.0.join("database.sqlite3");
+            let sentinel_bytes = b"application-owner database bytes; never open or seed";
+            fs::write(&sentinel, sentinel_bytes).unwrap();
+            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+            listener.set_nonblocking(true).unwrap();
+            let postgres = format!(
+                "postgres://owner@{}/application",
+                listener.local_addr().unwrap()
+            );
+            let sqlite = format!("sqlite://{}?mode=rwc", sentinel.display());
+            let url = match database {
+                BaselineDatabase::Sqlite => &sqlite,
+                BaselineDatabase::Postgres => &postgres,
+            };
+            let before = tree(&root);
+            for args in [
+                vec!["upgrade", "status", "--json"],
+                vec!["upgrade", "--dry-run", "--json"],
+                vec!["upgrade", "--json"],
+            ] {
+                let output = Command::new(env!("CARGO_BIN_EXE_hegira"))
+                    .args(&args)
+                    .current_dir(&root)
+                    .env_clear()
+                    .env("PATH", "")
+                    .env("APP_ENV", "production")
+                    .env("APP__DATABASE__URL", url)
+                    .env("DATABASE_URL", url)
+                    .env("APP__DATABASE__AUTO_MIGRATE", "true")
+                    .env("APP__STARTUP__ENSURE_DATABASE", "true")
+                    .env("APP__STARTUP__SEED_IDENTITY", "true")
+                    .output()
+                    .unwrap();
+                assert!(output.status.success());
+                assert!(output.stderr.is_empty());
+                assert_eq!(fs::read(&sentinel).unwrap(), sentinel_bytes);
+                assert_eq!(
+                    listener.accept().unwrap_err().kind(),
+                    std::io::ErrorKind::WouldBlock
+                );
+                assert!(!String::from_utf8_lossy(&output.stdout).contains(url));
+            }
+            let after = tree(&root);
+            assert_eq!(
+                before.keys().collect::<Vec<_>>(),
+                after.keys().collect::<Vec<_>>()
+            );
+            let changed: Vec<_> = before
+                .iter()
+                .filter(|(path, bytes)| after.get(*path) != Some(*bytes))
+                .map(|(path, _)| path.to_str().unwrap())
+                .collect();
+            assert_eq!(changed, ["Cargo.lock", "Cargo.toml", "hegira.toml"]);
+            assert_eq!(fs::read_dir(&fixture.0).unwrap().count(), 2);
+        }
+    }
+}
+
 #[path = "support/upgrade_matrix.rs"]
 mod upgrade_matrix;
 #[path = "support/upgrade_schema.rs"]

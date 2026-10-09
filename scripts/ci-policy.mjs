@@ -145,6 +145,13 @@ export function validateUpgradeScripts(root) {
   const errors = [];
   const contracts = [
     ["scripts/framework-check.sh", "cargo test --locked -p application_manifest"],
+    ["scripts/database-operation-check.sh", "for composition in default minimal identity-added; do"],
+    ["scripts/database-operation-check.sh", 'providers="sqlite postgres"'],
+    ["scripts/database-operation-check.sh", "validation_cache_prepare"],
+    ["scripts/database-operation-check.sh", "validation_cache_release"],
+    ["scripts/database-operation-check.sh", '\n    "$test_binary" --test-threads=1\n'],
+    ["scripts/database-operation-check.sh", 'DATABASE_OPERATION_COMPOSITION_CONFLICT=true "$test_binary" --test-threads=1'],
+    ["scripts/database-operation-contract.rs", "public_database_security_contract"],
     ["scripts/layered-template-check.sh", "cargo test --locked -p template_renderer"],
     ["scripts/layered-template-check.sh", 'echo "==> Isolated application database entry-point matrix"'],
     ["scripts/layered-template-check.sh", '--features "database-operations,db-$database"'],
@@ -216,6 +223,9 @@ export function validateMigrationStatusJob(job) {
     "POSTGRES_HOST_AUTH_METHOD: trust",
     "DATABASE_URL: postgres://postgres@localhost:5432/hegira_test",
     "run: WITH_IGNORED_DB_TESTS=true sh scripts/framework-check.sh",
+    "ALLOW_DATABASE_OPERATION_DISPOSABLE_TARGETS: \"true\"",
+    "DATABASE_OPERATION_POSTGRES_URL: postgres://postgres@localhost:5432/hegira_test",
+    "run: sh scripts/database-operation-check.sh",
   ]) {
     if (!job.includes(contract)) {
       errors.push(`framework migration status gate is missing: ${contract}`);

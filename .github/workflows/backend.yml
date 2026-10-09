@@ -81,6 +81,11 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Validate application-independent framework packages
         run: WITH_IGNORED_DB_TESTS=true sh scripts/framework-check.sh
+      - name: Verify public database operation authorization and history
+        env:
+          ALLOW_DATABASE_OPERATION_DISPOSABLE_TARGETS: "true"
+          DATABASE_OPERATION_POSTGRES_URL: postgres://postgres@localhost:5432/hegira_test
+        run: sh scripts/database-operation-check.sh
 
   official-modules:
     name: official-modules

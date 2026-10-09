@@ -83,6 +83,10 @@ jobs:
       DATABASE_URL: postgres://postgres@localhost:5432/hegira_test
     steps:
       - run: WITH_IGNORED_DB_TESTS=true sh scripts/framework-check.sh
+      - env:
+          ALLOW_DATABASE_OPERATION_DISPOSABLE_TARGETS: "true"
+          DATABASE_OPERATION_POSTGRES_URL: postgres://postgres@localhost:5432/hegira_test
+        run: sh scripts/database-operation-check.sh
   official-modules:
     steps:
       - run: sh scripts/official-modules-check.sh
@@ -353,6 +357,9 @@ test("release requires unconditional disposable PostgreSQL migration status", ()
   for (const contract of [
     "WITH_IGNORED_DB_TESTS=true sh scripts/framework-check.sh",
     "DATABASE_URL: postgres://postgres@localhost:5432/hegira_test",
+    "ALLOW_DATABASE_OPERATION_DISPOSABLE_TARGETS: \"true\"",
+    "DATABASE_OPERATION_POSTGRES_URL: postgres://postgres@localhost:5432/hegira_test",
+    "run: sh scripts/database-operation-check.sh",
   ]) {
     assert.ok(validateReleaseWorkflow(validWorkflow.replace(contract, "true"))
       .some(error => error.includes("migration status")));
