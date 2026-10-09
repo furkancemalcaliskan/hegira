@@ -571,8 +571,8 @@ declarations, not installed or probed by the planner.
 
 Database intents carry a typed status/forward-migrate request and an explicit
 baseline profile. They require an application-owned operation entry point;
-current templates do not yet provide that executable and the planner invents
-neither a binary path nor a CLI SQL engine. Baseline profile/provider mismatches
+the planner does not wire the separate application-owned `app_database`
+binary or invent a CLI SQL engine. Baseline profile/provider mismatches
 are rejected: `sqlite` selects SQLite; `development` and `production` select
 PostgreSQL; `test` selects PostgreSQL for the default Identity template and
 SQLite for minimal or Identity-added applications. User runtime overrides are
@@ -599,7 +599,7 @@ from inspection and planning. It requires a privately constructed plan,
 `ExecutionConsent::ExecuteTrustedApplicationAndToolchain`, an explicitly
 resolved `TrustedToolchain`, an `ExecutionControl`, and a child-output policy.
 Public `dev`, `check`, `test`, and `build --release` commands delegate to this library. Database steps fail
-before spawning: the application-owned entry-point contract is not implemented.
+before spawning: this CLI executor does not implement database execution.
 Check/test plans execute native provider validation and a hydration check.
 Development plans require explicit lock-matched wasm-bindgen selection plus a
 verified frontend/toolchain preflight before foreground Cargo Leptos watch/serve.
@@ -877,6 +877,18 @@ still owns composition and explicit database-access intent; neither Presentation
 nor the Hegira CLI acquires a new database command through this primitive.
 See [migration status](operations.md#read-only-migration-status) for provider
 limits, typed errors, and the point-in-time observation boundary.
+
+Fresh canonical applications also contain the transport-only `app_database`
+binary in `apps/server`, explicitly enabled by `database-operations`. It parses
+only status/forward-migrate requests and delegates to Infrastructure's
+`database_operations` module, which shares normal profile sources/defaults but
+deserializes only database-relevant settings. Structural, selected-provider,
+and database production validation precedes connection. It reuses the same
+`migration_plan`, never normal initialization, ensure, seed, or worker paths.
+Its exact binary, Cargo registration, Infrastructure module/config integration,
+and operation-source claims are declared for governed upgrades. Claims alone
+do not authorize source publication: the existing v0.6.0-to-v0.7.0 edge still
+changes only three files and does not install this entry point.
 
 ## Rendering And Validation
 

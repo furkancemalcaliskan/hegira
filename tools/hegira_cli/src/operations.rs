@@ -184,7 +184,7 @@ impl OperationPlan {
             .iter()
             .any(|step| matches!(step, OperationStep::ApplicationDatabase { .. }))
         {
-            lines.push("Database entry point is a typed requirement, not an available executable in current templates.".to_owned());
+            lines.push("Database entry point is a typed requirement, not an available executable in the CLI executor; invoke the application-owned entry point separately.".to_owned());
         }
         lines.join("\n") + "\n"
     }

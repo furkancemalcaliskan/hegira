@@ -372,12 +372,12 @@ for database in sqlite postgres; do
   (
     cd "$validation_root"
     test -f Cargo.lock
-    cargo check --locked --workspace --all-targets --features app_server/ssr
+    cargo check --locked --workspace --all-targets --features app_server/ssr,app_server/database-operations
     HEGIRA_TEST_GENERATED_MIGRATION_VERSION="$generated_migration_version" \
     HEGIRA_TEST_GENERATED_MIGRATION_DESCRIPTION="validation record" \
     HEGIRA_TEST_GENERATED_RESOURCE_TABLE="validation_records" \
     HEGIRA_TEST_GENERATED_PERMISSION_PREFIX="validation-records" \
-      cargo test --locked --workspace --features app_server/ssr
+      cargo test --locked --workspace --features app_server/ssr,app_server/database-operations
     node "$repo_root/scripts/architecture-boundaries.mjs" \
       check-generated --root "$validation_root"
     cargo check --locked -p app_server --no-default-features --features hydrate \
@@ -407,6 +407,13 @@ if [ "$mode" = default ]; then (
       --test database_contracts postgres_fresh_install_and_v020_upgrade_pass -- \
       --ignored --test-threads=1
 ); fi
+(
+  cd "$generated_root"
+  GENERATED_APP_DATABASE_URL="postgres://generated_app:$GENERATED_APP_DB_PASSWORD@127.0.0.1:$GENERATED_APP_POSTGRES_PORT/generated_app" \
+    cargo test --locked -p app_server --no-default-features \
+      --features database-operations,db-postgres --test database_operations -- \
+      --ignored --test-threads=1
+)
 phase_finish
 
 phase_begin "production container build"

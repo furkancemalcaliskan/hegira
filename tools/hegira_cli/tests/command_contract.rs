@@ -1723,8 +1723,8 @@ fn explicit_sibling_destination_still_works() {
 #[test]
 fn provider_snapshots_and_interactive_requests_match() {
     for (database, expected) in [
-        ("sqlite", 11465894065941790357_u64),
-        ("postgres", 17569328239316217428_u64),
+        ("sqlite", 5704493183883208368_u64),
+        ("postgres", 2814147560971706551_u64),
     ] {
         let root = TestDirectory::new(database);
         let explicit = root.path().join("explicit");
@@ -1774,6 +1774,91 @@ fn provider_snapshots_and_interactive_requests_match() {
             fingerprint, expected,
             "review {database} output before updating its snapshot"
         );
+    }
+}
+
+#[test]
+fn database_entry_point_and_exact_ownership_survive_all_six_compositions() {
+    use application_manifest::{ApplicationManifest, SourceOwnershipClass};
+    for composition in ["default", "minimal", "identity-added"] {
+        for database in ["sqlite", "postgres"] {
+            let root = TestDirectory::new("database-entry-point-ownership");
+            let application = root.path().join("application");
+            let mut arguments = vec![
+                "new",
+                "database-application",
+                "--destination",
+                path_argument(&application),
+                "--database",
+                database,
+            ];
+            if composition != "default" {
+                arguments.extend(["--composition", "minimal"]);
+            }
+            assert!(hegira(&arguments).status.success());
+            if composition == "identity-added" {
+                let installed = hegira_at(&application, &["component", "add", "identity"]);
+                assert!(
+                    installed.status.success(),
+                    "{}",
+                    String::from_utf8_lossy(&installed.stderr)
+                );
+            }
+            let manifest = ApplicationManifest::from_toml(
+                &fs::read_to_string(application.join("hegira.toml")).unwrap(),
+            )
+            .unwrap();
+            let claims = manifest.upgrade.unwrap().ownership.claims;
+            for (path, integration) in [
+                ("apps/server/Cargo.toml", "database-entry-point-manifest"),
+                (
+                    "apps/server/src/bin/app_database.rs",
+                    "database-entry-point",
+                ),
+                (
+                    "crates/infrastructure/src/database_operations.rs",
+                    "database-operations",
+                ),
+                (
+                    "crates/infrastructure/src/config.rs",
+                    "database-operation-config",
+                ),
+                (
+                    "crates/infrastructure/src/lib.rs",
+                    "database-operation-module",
+                ),
+            ] {
+                assert!(application.join(path).is_file());
+                assert_eq!(
+                    claims
+                        .iter()
+                        .filter(|claim| {
+                            claim.path == path
+                                && claim.class == SourceOwnershipClass::ManagedIntegration
+                                && claim.integration.as_deref() == Some(integration)
+                        })
+                        .count(),
+                    1
+                );
+            }
+            let server = fs::read_to_string(application.join("apps/server/Cargo.toml")).unwrap();
+            assert!(server.contains("name = \"app_database\""));
+            assert!(server.contains("required-features = [\"database-operations\"]"));
+            assert!(server.contains("default-run = \"app_server\""));
+            let entry = fs::read_to_string(application.join("apps/server/src/bin/app_database.rs"))
+                .unwrap();
+            assert!(entry.contains("database_operations::execute"));
+            assert!(!entry.contains("server::run"));
+            let operations = fs::read_to_string(
+                application.join("crates/infrastructure/src/database_operations.rs"),
+            )
+            .unwrap();
+            assert!(operations.contains("migration_plan(&config.database.backend)"));
+            assert!(operations.contains(".create_if_missing(false)"));
+            assert!(operations.contains("AppConfig::load_profile(&profile)"));
+            assert!(!operations.contains("initialize_database("));
+            assert!(!operations.contains("seed_identity("));
+        }
     }
 }
 

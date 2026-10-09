@@ -24,7 +24,7 @@ Framework dependencies: audit, background_jobs, cache, configuration, http_suppo
     result: {"kind":"present","sha256":"7bf28812e2a060ebcb9697d877cd3456ec556a56ab0014255a0c6b1851d91f42"}
   edit hegira.toml (owner=layered-base, integration=application-manifest, ownership=managed-integration)
     precondition: {"kind":"matches-digest","sha256":"4d4048a4403bfb5ab53c6c0b082773ccbae5e9acb2f1e9319007f5c648d5334d"}
-    result: {"kind":"present","sha256":"def65e49a41b74200c3e659a8139392549f1bed30680250cb1cb409c3be1415f"}
+    result: {"kind":"present","sha256":"e3b838e23ceb02b50749f73ba9d04b3cdfe32ab882c96753ff3e83890f5c273a"}
 Preserved: application-owned, generated-once, immutable-history boundaries.
 Applied receipt: 3 managed files; edge v0-6-0-to-v0-7-0; target v0.7.0.
 Next: Review the managed Cargo.toml, Cargo.lock, and hegira.toml changes; do not regenerate the lockfile blindly.

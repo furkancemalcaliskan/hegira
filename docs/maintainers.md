@@ -746,6 +746,18 @@ For a focused check against an explicitly selected disposable target, run
 `cargo test --locked -p persistence --all-features --test migration_status -- --ignored`
 through the documented bounded framework validation cache.
 
+The tooling gate's layered-template check creates fresh default, minimal, and
+Identity-added applications through the public CLI for both providers. It
+verifies exact database entry-point output/ownership and stages local framework
+dependencies only in disposable copies, then runs isolated binary/process and
+Infrastructure preflight tests, formatting, Clippy, and dependency boundaries.
+SQLite process tests own their files and prove status/no-provision behavior,
+explicit forward migration without Identity seed, and rejected corrupt history.
+The default and Identity-added generated-application PostgreSQL lifecycle also
+runs the ignored entry-point test against its disposable database. That test
+owns a unique schema, never resets an existing schema, checks repeated migration
+and unseeded Identity state, and removes only its newly created schema.
+
 ## Application Upgrade Review
 
 The current public edge is exactly v0.6.0 → v0.7.0 for default, minimal, and

@@ -75,6 +75,8 @@ const GENERATED_APPLICATION_CONTRACTS = [
   ["locked Cargo Leptos server build", "--bin-cargo-args=--locked"],
   ["locked Cargo Leptos client build", "--lib-cargo-args=--locked"],
   ["locked generated workspace tests", "cargo test --locked --workspace"],
+  ["isolated database binary tests", "app_server/ssr,app_server/database-operations"],
+  ["disposable database entry-point PostgreSQL contract", "--features database-operations,db-postgres --test database_operations"],
   ["generated hydration build", "--features hydrate"],
   ["production container build", 'docker build --tag "$GENERATED_APP_IMAGE" "$generated_root"'],
   ["production readiness probe", '"$base_url/readyz"'],
@@ -144,6 +146,9 @@ export function validateUpgradeScripts(root) {
   const contracts = [
     ["scripts/framework-check.sh", "cargo test --locked -p application_manifest"],
     ["scripts/layered-template-check.sh", "cargo test --locked -p template_renderer"],
+    ["scripts/layered-template-check.sh", 'echo "==> Isolated application database entry-point matrix"'],
+    ["scripts/layered-template-check.sh", '--features "database-operations,db-$database"'],
+    ["scripts/layered-template-check.sh", "--bin app_database --test database_operations"],
     ["scripts/cli-check.sh", "cargo test --locked -p upgrade_test_support"],
     ["scripts/cli-check.sh", "cargo test --locked -p application_mutator"],
     ["scripts/cli-check.sh", "cargo test --locked -p hegira_cli"],

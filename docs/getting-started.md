@@ -906,8 +906,9 @@ the default doctor command retains its existing behavior. The two database
 selections require `--profile sqlite`,
 `development`, `test`, or `production`, matching the recorded provider and
 composition. No other operation accepts a profile. Database diagnostics
-explicitly report that the current executable entry-point contract is
-unavailable; selecting this diagnostic does not introduce a public database
+explicitly report that CLI database execution is unavailable, independently
+of the separate application-owned `app_database` binary; selecting this
+diagnostic does not introduce a public database
 command or grant production migration approval.
 
 Operation mode reuses the authenticated plan and checks required real files,
