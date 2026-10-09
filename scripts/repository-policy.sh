@@ -13,6 +13,7 @@ sh "$repository_root/scripts/architecture-boundaries.sh"
 node "$repository_root/scripts/ci-policy.mjs" "$repository_root"
 node "$repository_root/scripts/ci-policy.test.mjs"
 node --test "$repository_root/scripts/generated-lifecycle.test.mjs"
+node --test "$repository_root/scripts/database-operation-check.test.mjs"
 sh "$repository_root/scripts/release-policy.sh"
 
 if [ "$#" -eq 0 ]; then

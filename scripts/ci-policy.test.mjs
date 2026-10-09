@@ -53,6 +53,10 @@ jobs:
       DATABASE_URL: postgres://postgres@localhost:5432/hegira_test
     steps:
       - run: WITH_IGNORED_DB_TESTS=true sh scripts/framework-check.sh
+      - env:
+          ALLOW_DATABASE_OPERATION_DISPOSABLE_TARGETS: "true"
+          DATABASE_OPERATION_POSTGRES_URL: postgres://postgres@localhost:5432/hegira_test
+        run: sh scripts/database-operation-check.sh
   official-modules:
     services:
       postgres:
@@ -173,6 +177,9 @@ test("framework migration status cannot lose its disposable PostgreSQL gate", ()
   for (const contract of [
     "WITH_IGNORED_DB_TESTS=true sh scripts/framework-check.sh",
     "DATABASE_URL: postgres://postgres@localhost:5432/hegira_test",
+    "ALLOW_DATABASE_OPERATION_DISPOSABLE_TARGETS: \"true\"",
+    "DATABASE_OPERATION_POSTGRES_URL: postgres://postgres@localhost:5432/hegira_test",
+    "run: sh scripts/database-operation-check.sh",
   ]) {
     assert.ok(validateRepositoryValidationWorkflow(validWorkflow.replace(contract, "true"))
       .some(error => error.includes("migration status")));
@@ -253,6 +260,10 @@ test("requires upgrade source, dispatcher, and focused owner commands", t => {
   for (const [file, contract] of [
     ["scripts/generated-application-check.sh", 'exec sh "$repo_root/scripts/upgraded-application-check.sh"'],
     ["scripts/framework-check.sh", "cargo test --locked -p application_manifest"],
+    ["scripts/database-operation-check.sh", "for composition in default minimal identity-added; do"],
+    ["scripts/database-operation-check.sh", 'providers="sqlite postgres"'],
+    ["scripts/database-operation-check.sh", '\n    "$test_binary" --test-threads=1\n'],
+    ["scripts/database-operation-check.sh", 'DATABASE_OPERATION_COMPOSITION_CONFLICT=true "$test_binary" --test-threads=1'],
     ["scripts/layered-template-check.sh", "cargo test --locked -p template_renderer"],
     ["scripts/cli-check.sh", "cargo test --locked -p application_mutator"],
     ["scripts/cli-check.sh", "cargo test --locked -p hegira_cli"],
