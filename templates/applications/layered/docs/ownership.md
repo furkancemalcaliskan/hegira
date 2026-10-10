@@ -5,7 +5,9 @@ releases, installed components/modules/capabilities, selected database/client,
 and explicit ownership claims. Runtime configuration and secrets stay outside
 this manifest. Unclaimed paths belong to the application owner.
 
-README and these three guides are `generated-once`: the owner can edit them, and
+README, these three guides, [AGENTS.md](../AGENTS.md), [CLAUDE.md](../CLAUDE.md),
+and the [Cursor adapter](../.cursor/rules/application.mdc) are `generated-once`:
+the owner can edit them, and
 component installation and source upgrades preserve them. Keep them current after
 composition or product changes; `hegira inspect` reports current composition.
 Generated-once scaffolding is not blanket managed rewrite permission. Managed

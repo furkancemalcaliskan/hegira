@@ -85,6 +85,8 @@ composition, and selected adapters in a validated `hegira.toml`. Runtime configu
 secrets remain outside that manifest. Its generated-once README and architecture,
 development, and ownership guides describe the selected application and remain
 under the application owner's control after installation and upgrades.
+Its canonical `AGENTS.md` supplies the same working contract for humans and
+agents, with thin Claude/Cursor adapters and owner-controlled contribution policy.
 The canonical package locks its source inputs with a
 deterministic SHA-256 digest so repository-local or untracked files cannot silently enter
 generated output. Package and framework identity, declared paths, regular-file types, and the

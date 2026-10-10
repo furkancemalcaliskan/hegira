@@ -1,11 +1,14 @@
 package=hegira-canonical@v0.7.0
 framework=https://github.com/furkancemalcaliskan/hegira.git#v0.7.0
-digest=sha256:d7dea427d817e17ec343982a6ff29c247c1115f2b038b4de3827df4953126453
+digest=sha256:2a396951b36306cfdd935a2de0ef84de7b95c930b10eb058752478a68cdb4ef3
 components=layered-base,layered-leptos-identity
+a185b5c4932fdb88 .cursor/rules/application.mdc
 6986e1a96f1eaa98 .dockerignore
 4845a8e7ed4a8aa1 .env.example
 5993ab4d526be466 .gitignore
 60458e1827934c3d .node-version
+56b087c7157db6b5 AGENTS.md
+3a0d357346d3c4dc CLAUDE.md
 5b6ceb35f21ec030 Cargo.lock
 0ab183cd1a2096ab Cargo.toml
 abb13fca335cf059 Dockerfile
@@ -90,7 +93,7 @@ d9d3e75ec6021d05 crates/presentation/src/lib.rs
 1309f45751c079e0 docker-compose.yml
 3bc19c2ee6472ab7 docs/architecture.md
 973d6b292588f454 docs/development.md
-b428d6cd2e903488 docs/ownership.md
-e343c5da2a0b2f4f hegira.toml
+0580d9739262ec53 docs/ownership.md
+482eabbcf12950e4 hegira.toml
 64a3f64b8bdc337f rust-toolchain.toml
 d1e261656118b330 scripts/prepare-wasm-bindgen.sh

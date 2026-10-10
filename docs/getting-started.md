@@ -537,6 +537,16 @@ state; `inspect` and `hegira.toml` remain authoritative after installation.
 Component installation and source upgrades preserve customized documentation.
 The historical v0.6.0-to-v0.7.0 edge does not add or adopt these paths.
 
+Applications also receive a canonical `AGENTS.md` shared by humans and coding
+agents. Thin `CLAUDE.md` and `.cursor/rules/application.mdc` adapters delegate to
+that file. Instructions cover the actual application layers, provider-correct
+operation previews, source/security/recovery boundaries, and distinct branch,
+commit, PR, and release-promotion conventions using the application identity.
+Contribution availability and remote hosting policy remain the application
+owner's decisions; no Hegira-only contribution restriction or repository
+automation is copied. All three files have exact `generated-once` claims and
+remain owner-editable and preserved during installation and source upgrades.
+
 The CLI currently exposes application creation, read-only inspection, upgrade
 readiness, dry-run plans and explicit atomic apply, a reviewable bundled-component
 addition boundary, complete layered resource generation, and application-owned
