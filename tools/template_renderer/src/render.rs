@@ -171,6 +171,9 @@ fn write_resolved_application_composition(
     files: &mut BTreeMap<PathBuf, PlannedFile>,
 ) -> Result<()> {
     let documentation = [
+        ".cursor/rules/application.mdc",
+        "AGENTS.md",
+        "CLAUDE.md",
         "README.md",
         "docs/architecture.md",
         "docs/development.md",

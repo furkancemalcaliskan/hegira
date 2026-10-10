@@ -1723,8 +1723,8 @@ fn explicit_sibling_destination_still_works() {
 #[test]
 fn provider_snapshots_and_interactive_requests_match() {
     for (database, expected) in [
-        ("sqlite", 1667558246433646739_u64),
-        ("postgres", 4113475182014716254_u64),
+        ("sqlite", 6850627415354056820_u64),
+        ("postgres", 6105894376178640031_u64),
     ] {
         let root = TestDirectory::new(database);
         let explicit = root.path().join("explicit");
@@ -1777,11 +1777,14 @@ fn provider_snapshots_and_interactive_requests_match() {
     }
 }
 
-const APPLICATION_DOCUMENTATION: [&str; 4] = [
+const APPLICATION_DOCUMENTATION: [&str; 7] = [
     "README.md",
     "docs/architecture.md",
     "docs/development.md",
     "docs/ownership.md",
+    "AGENTS.md",
+    "CLAUDE.md",
+    ".cursor/rules/application.mdc",
 ];
 
 #[test]
@@ -1860,6 +1863,81 @@ fn application_documentation_matches_all_six_states_and_preserves_owner_edits() 
                 "development"
             };
             let development = &original[2];
+            let instructions = original[4].split_whitespace().collect::<Vec<_>>().join(" ");
+            assert!(instructions.contains(&format!("selected provider is `{database}`")));
+            assert!(instructions.contains(&format!("development profile is `{profile}`")));
+            for convention in [
+                "<type>/<issue>-<short-description>",
+                "#<issue> <type>(<scope>): <description>",
+                "<type>(<scope>): <description>` without an issue number",
+                "Exactly one `Closes #<issue>` matching the branch issue",
+                "`develop`, squash merge",
+                "release: promote travel-notes vX.Y.Z to main",
+                "the application owner's policy",
+                "Domain and Application rules must not depend on",
+                "Protected operations must authorize in Application before repository/count",
+                "UI permission checks are presentation only",
+                "cookie-authenticated browser/BFF and Bearer API policies separate",
+                "explicit owner authority for that action",
+            ] {
+                assert!(
+                    instructions.contains(convention),
+                    "missing instruction: {convention}"
+                );
+            }
+            for absent in [
+                "not currently accepting unsolicited",
+                "scripts/repository-policy.sh",
+                "scripts/backend-check.sh",
+                "modules/identity/",
+                "tools/hegira_cli/",
+                "Closes #384",
+            ] {
+                assert!(
+                    !instructions.contains(absent),
+                    "framework-specific instruction: {absent}"
+                );
+            }
+            assert!(instructions.contains(
+                "minimal starts without an official module, login pages, authentication,"
+            ));
+            assert!(
+                instructions
+                    .contains("Only an explicit Identity installation adds those capabilities")
+            );
+            let claude = &original[5];
+            assert!(claude.starts_with("@AGENTS.md\n"));
+            assert!(claude.contains("[AGENTS.md](AGENTS.md)"));
+            let cursor = &original[6];
+            let frontmatter = cursor
+                .strip_prefix("---\n")
+                .unwrap()
+                .split_once("---\n")
+                .unwrap()
+                .0;
+            assert_eq!(
+                frontmatter,
+                "description: Canonical travel-notes application instructions\nglobs:\nalwaysApply: true\n"
+            );
+            assert!(cursor.contains("[AGENTS.md](../../AGENTS.md)"));
+            assert!(cursor.ends_with("@AGENTS.md\n"));
+            for adapter in [claude, cursor] {
+                assert!(adapter.contains("This adapter adds no separate project rules."));
+                assert!(adapter.lines().count() <= 12);
+                for canonical_rule in [
+                    "<type>",
+                    "--dry-run",
+                    "--execute",
+                    "--approve-production-migration",
+                    "squash",
+                    "Domain",
+                ] {
+                    assert!(
+                        !adapter.contains(canonical_rule),
+                        "adapter duplicates a canonical rule: {canonical_rule}"
+                    );
+                }
+            }
             assert!(development.contains(&format!("config/{profile}.yaml")));
             assert!(development.contains(&format!("ssr,db-{database}")));
             assert!(development.contains(&format!("database-operations,db-{database}")));

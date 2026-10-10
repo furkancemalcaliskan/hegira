@@ -3,9 +3,12 @@ id = "layered-base"
 version = "v0.7.0"
 source = "applications/layered"
 include = [
+  ".cursor/rules/application.mdc",
   ".node-version",
   ".dockerignore",
   ".gitignore",
+  "AGENTS.md",
+  "CLAUDE.md",
   "crates/application",
   "crates/application_contracts",
   "crates/domain",

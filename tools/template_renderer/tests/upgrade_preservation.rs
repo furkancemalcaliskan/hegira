@@ -79,11 +79,15 @@ fn historical_upgrade_preserves_customized_application_documentation_without_ado
                 .unwrap();
             fs::create_dir_all(application.join("docs")).unwrap();
             let paths = [
+                "AGENTS.md",
+                "CLAUDE.md",
+                ".cursor/rules/application.mdc",
                 "README.md",
                 "docs/architecture.md",
                 "docs/development.md",
                 "docs/ownership.md",
             ];
+            fs::create_dir_all(application.join(".cursor/rules")).unwrap();
             for path in paths {
                 fs::write(
                     application.join(path),
