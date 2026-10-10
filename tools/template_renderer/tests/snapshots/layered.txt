@@ -1,6 +1,6 @@
 package=hegira-canonical@v0.7.0
 framework=https://github.com/furkancemalcaliskan/hegira.git#v0.7.0
-digest=sha256:84d30597d5e7e9bab14b502b77e89aabfee6071ff3894f215a6dfd1c7cf3f021
+digest=sha256:d7dea427d817e17ec343982a6ff29c247c1115f2b038b4de3827df4953126453
 components=layered-base,layered-leptos-identity
 6986e1a96f1eaa98 .dockerignore
 4845a8e7ed4a8aa1 .env.example
@@ -9,6 +9,7 @@ components=layered-base,layered-leptos-identity
 5b6ceb35f21ec030 Cargo.lock
 0ab183cd1a2096ab Cargo.toml
 abb13fca335cf059 Dockerfile
+1f5b59581e7f5bc0 README.md
 7020439f5f70d85f apps/server/Cargo.toml
 388f6e0e83c44ae6 apps/server/src/bin/app_database.rs
 3bde3764afe35806 apps/server/src/lib.rs
@@ -87,6 +88,9 @@ a5cee92157b6a0cb crates/infrastructure/src/operations.rs
 28acfa4312676a72 crates/presentation/src/http.rs
 d9d3e75ec6021d05 crates/presentation/src/lib.rs
 1309f45751c079e0 docker-compose.yml
-b37c602156378258 hegira.toml
+3bc19c2ee6472ab7 docs/architecture.md
+973d6b292588f454 docs/development.md
+b428d6cd2e903488 docs/ownership.md
+e343c5da2a0b2f4f hegira.toml
 64a3f64b8bdc337f rust-toolchain.toml
 d1e261656118b330 scripts/prepare-wasm-bindgen.sh

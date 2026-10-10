@@ -10,6 +10,8 @@ include = [
   "crates/application_contracts",
   "crates/domain",
   "crates/domain_shared",
+  "docs/development.md",
+  "docs/ownership.md",
   "hegira.toml",
   "rust-toolchain.toml",
   "scripts/prepare-wasm-bindgen.sh",

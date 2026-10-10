@@ -159,6 +159,19 @@ fn legacy_upgrade_keeps_exactly_three_source_publications() {
 }
 
 #[test]
+fn documentation_profile_cannot_be_overridden_independently_of_the_database() {
+    let repository = repository_root();
+    let parent = TestDirectory::new("documentation-profile");
+    let mut request = canonical_request(&repository, parent.path().join("application"));
+    request
+        .variables
+        .insert("development_profile".to_owned(), "production".to_owned());
+    let error = render(&request).unwrap_err();
+    assert_eq!(error.kind(), RendererErrorKind::Variables);
+    assert!(!request.output.exists());
+}
+
+#[test]
 fn layered_template_snapshot_is_deterministic() {
     let repository = repository_root();
     let output_parent = TestDirectory::new("snapshot");

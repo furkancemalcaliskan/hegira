@@ -63,6 +63,66 @@ fn customized_released_applications_preserve_product_source_and_history() {
 }
 
 #[test]
+fn historical_upgrade_preserves_customized_application_documentation_without_adoption() {
+    use upgrade_test_support::BaselineCatalog;
+    let parent = TestDirectory::new("documentation");
+    let baselines = BaselineCatalog::from_repository(repository()).unwrap();
+    let catalog = ManifestCatalog::load(repository(), "layered").unwrap();
+    for composition in BaselineComposition::ALL {
+        for database in BaselineDatabase::ALL {
+            let request = BaselineRequest::new(composition, database);
+            let application = parent.0.join(request.id());
+            baselines
+                .snapshot(request)
+                .unwrap()
+                .materialize(&application)
+                .unwrap();
+            fs::create_dir_all(application.join("docs")).unwrap();
+            let paths = [
+                "README.md",
+                "docs/architecture.md",
+                "docs/development.md",
+                "docs/ownership.md",
+            ];
+            for path in paths {
+                fs::write(
+                    application.join(path),
+                    format!("# Owner documentation\n\n{} / {path}\n", request.id()),
+                )
+                .unwrap();
+            }
+            let before = support::fingerprints(&application);
+            let plan = catalog.plan_upgrade(&application).unwrap();
+            assert_eq!(
+                plan.change_plan()
+                    .changes()
+                    .iter()
+                    .map(|change| change.path().as_str())
+                    .collect::<Vec<_>>(),
+                support::MANAGED_FILES
+            );
+            application_mutator::publish_change_plan(&application, plan.change_plan()).unwrap();
+            let after = support::fingerprints(&application);
+            for path in paths {
+                assert_eq!(before[Path::new(path)], after[Path::new(path)]);
+            }
+            let manifest =
+                application_manifest::ApplicationManifest::read(application.join("hegira.toml"))
+                    .unwrap();
+            assert!(
+                manifest
+                    .upgrade
+                    .unwrap()
+                    .ownership
+                    .claims
+                    .iter()
+                    .all(|claim| !paths.contains(&claim.path.as_str()))
+            );
+        }
+    }
+}
+
+#[test]
 fn conflicting_managed_source_blocks_customized_applications_before_publication() {
     let parent = TestDirectory::new("conflicts");
     let catalog = ManifestCatalog::load(repository(), "layered").unwrap();
