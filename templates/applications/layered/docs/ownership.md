@@ -5,7 +5,7 @@ releases, installed components/modules/capabilities, selected database/client,
 and explicit ownership claims. Runtime configuration and secrets stay outside
 this manifest. Unclaimed paths belong to the application owner.
 
-README, these three guides, [AGENTS.md](../AGENTS.md), [CLAUDE.md](../CLAUDE.md),
+README, these guides, [AGENTS.md](../AGENTS.md), [CLAUDE.md](../CLAUDE.md),
 and the [Cursor adapter](../.cursor/rules/application.mdc) are `generated-once`:
 the owner can edit them, and
 component installation and source upgrades preserve them. Keep them current after
@@ -14,6 +14,10 @@ Generated-once scaffolding is not blanket managed rewrite permission. Managed
 integrations require an exact authenticated transition and observed digests.
 Historical migration files are immutable; append a new application migration
 instead of changing a checksum already recorded by a database.
+
+The [repository policy](repository.md), its configuration, scripts, GitHub
+workflow, and PR template are also generated-once. Owner edits survive component
+installation and source upgrades; these files grant no Git/GitHub mutation authority.
 
 Using the compatible CLI helper in the [development guide](development.md),
 inspect supported source-upgrade readiness and preview a direct transition:
