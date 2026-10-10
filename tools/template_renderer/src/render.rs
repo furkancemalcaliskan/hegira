@@ -170,14 +170,21 @@ fn write_resolved_application_composition(
     composition: &ResolvedComposition,
     files: &mut BTreeMap<PathBuf, PlannedFile>,
 ) -> Result<()> {
-    let documentation = [
+    let generated_once = [
         ".cursor/rules/application.mdc",
+        ".github/PULL_REQUEST_TEMPLATE.md",
+        ".github/repository-policy.json",
+        ".github/workflows/repository-policy.yml",
         "AGENTS.md",
         "CLAUDE.md",
         "README.md",
         "docs/architecture.md",
         "docs/development.md",
         "docs/ownership.md",
+        "docs/repository.md",
+        "scripts/repository-policy.mjs",
+        "scripts/repository-policy.sh",
+        "scripts/repository-policy.test.mjs",
     ]
     .into_iter()
     .filter(|path| files.contains_key(Path::new(path)))
@@ -204,10 +211,10 @@ fn write_resolved_application_composition(
         modules: composition.modules.clone(),
         capabilities: composition.capabilities.clone(),
     });
-    // Freshly rendered docs belong to the owner. Historical edges retain their
+    // Freshly rendered guides and policy belong to the owner. Historical edges retain their
     // exact ownership and raw manifest source rather than adopting these paths.
     if let Some(upgrade) = &mut manifest.upgrade {
-        for path in documentation {
+        for path in generated_once {
             upgrade.ownership.claims.push(SourceOwnershipClaim {
                 path: path.to_owned(),
                 class: SourceOwnershipClass::GeneratedOnce,

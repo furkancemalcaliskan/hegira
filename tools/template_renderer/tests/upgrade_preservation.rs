@@ -86,9 +86,16 @@ fn historical_upgrade_preserves_customized_application_documentation_without_ado
                 "docs/architecture.md",
                 "docs/development.md",
                 "docs/ownership.md",
+                "docs/repository.md",
+                ".github/PULL_REQUEST_TEMPLATE.md",
+                ".github/repository-policy.json",
+                ".github/workflows/repository-policy.yml",
+                "scripts/repository-policy.mjs",
+                "scripts/repository-policy.sh",
+                "scripts/repository-policy.test.mjs",
             ];
-            fs::create_dir_all(application.join(".cursor/rules")).unwrap();
             for path in paths {
+                fs::create_dir_all(application.join(path).parent().unwrap()).unwrap();
                 fs::write(
                     application.join(path),
                     format!("# Owner documentation\n\n{} / {path}\n", request.id()),

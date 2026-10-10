@@ -1723,8 +1723,8 @@ fn explicit_sibling_destination_still_works() {
 #[test]
 fn provider_snapshots_and_interactive_requests_match() {
     for (database, expected) in [
-        ("sqlite", 6850627415354056820_u64),
-        ("postgres", 6105894376178640031_u64),
+        ("sqlite", 10124183412166273914_u64),
+        ("postgres", 7193849730834706993_u64),
     ] {
         let root = TestDirectory::new(database);
         let explicit = root.path().join("explicit");
@@ -1777,7 +1777,7 @@ fn provider_snapshots_and_interactive_requests_match() {
     }
 }
 
-const APPLICATION_DOCUMENTATION: [&str; 7] = [
+const APPLICATION_DOCUMENTATION: [&str; 8] = [
     "README.md",
     "docs/architecture.md",
     "docs/development.md",
@@ -1785,6 +1785,7 @@ const APPLICATION_DOCUMENTATION: [&str; 7] = [
     "AGENTS.md",
     "CLAUDE.md",
     ".cursor/rules/application.mdc",
+    "docs/repository.md",
 ];
 
 #[test]
@@ -1887,7 +1888,6 @@ fn application_documentation_matches_all_six_states_and_preserves_owner_edits() 
             }
             for absent in [
                 "not currently accepting unsolicited",
-                "scripts/repository-policy.sh",
                 "scripts/backend-check.sh",
                 "modules/identity/",
                 "tools/hegira_cli/",
@@ -1995,6 +1995,84 @@ fn application_documentation_matches_all_six_states_and_preserves_owner_edits() 
             );
             assert!(!application.join(".git").exists());
             assert!(!application.join("target").exists());
+        }
+    }
+}
+
+const APPLICATION_POLICY: [&str; 7] = [
+    ".github/PULL_REQUEST_TEMPLATE.md",
+    ".github/repository-policy.json",
+    ".github/workflows/repository-policy.yml",
+    "docs/repository.md",
+    "scripts/repository-policy.mjs",
+    "scripts/repository-policy.sh",
+    "scripts/repository-policy.test.mjs",
+];
+
+#[test]
+fn application_policy_runs_in_all_six_states_and_preserves_owner_edits() {
+    use application_manifest::{ApplicationManifest, SourceOwnershipClass};
+    for composition in ["default", "minimal", "identity-added"] {
+        for database in ["sqlite", "postgres"] {
+            let root = TestDirectory::new("application-policy");
+            let application = root.path().join("application");
+            let mut arguments = vec![
+                "new",
+                "owner-product",
+                "--destination",
+                path_argument(&application),
+                "--database",
+                database,
+            ];
+            if composition != "default" {
+                arguments.extend(["--composition", "minimal"]);
+            }
+            assert!(hegira(&arguments).status.success());
+            let original = APPLICATION_POLICY.map(|path| fs::read(application.join(path)).unwrap());
+            let second = root.path().join("second");
+            arguments[3] = path_argument(&second);
+            assert!(hegira(&arguments).status.success());
+            for (path, bytes) in APPLICATION_POLICY.iter().zip(&original) {
+                assert_eq!(*bytes, fs::read(second.join(path)).unwrap());
+            }
+            let result = Command::new("sh")
+                .arg("scripts/repository-policy.sh")
+                .current_dir(&application)
+                .output()
+                .expect("application policy needs Node.js 22+ and Git on PATH");
+            assert!(
+                result.status.success(),
+                "{}\n{}",
+                String::from_utf8_lossy(&result.stdout),
+                String::from_utf8_lossy(&result.stderr)
+            );
+            assert!(!application.join(".git").exists());
+            assert!(!application.join("target").exists());
+            if composition == "identity-added" {
+                for path in APPLICATION_POLICY {
+                    fs::write(application.join(path), "Owner customized policy.\n").unwrap();
+                }
+                let installed = hegira_at(&application, &["component", "add", "identity"]);
+                assert!(installed.status.success(), "{:?}", installed.stderr);
+                for path in APPLICATION_POLICY {
+                    assert_eq!(
+                        fs::read_to_string(application.join(path)).unwrap(),
+                        "Owner customized policy.\n"
+                    );
+                }
+            }
+            let manifest = ApplicationManifest::read(application.join("hegira.toml")).unwrap();
+            let ownership = manifest.upgrade.unwrap().ownership;
+            for path in APPLICATION_POLICY {
+                let claims = ownership
+                    .claims
+                    .iter()
+                    .filter(|claim| claim.path == path)
+                    .collect::<Vec<_>>();
+                assert_eq!(claims.len(), 1);
+                assert_eq!(claims[0].class, SourceOwnershipClass::GeneratedOnce);
+                assert!(claims[0].integration.is_none());
+            }
         }
     }
 }
