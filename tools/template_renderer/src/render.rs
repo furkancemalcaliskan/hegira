@@ -4,7 +4,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use application_manifest::{ApplicationComposition, ApplicationManifest};
+use application_manifest::{
+    ApplicationComposition, ApplicationManifest, SourceOwnershipClaim, SourceOwnershipClass,
+};
 
 use crate::{
     ComponentManifest, ComponentPackageManifest, ManifestCatalog, RendererError, RendererErrorKind,
@@ -168,6 +170,15 @@ fn write_resolved_application_composition(
     composition: &ResolvedComposition,
     files: &mut BTreeMap<PathBuf, PlannedFile>,
 ) -> Result<()> {
+    let documentation = [
+        "README.md",
+        "docs/architecture.md",
+        "docs/development.md",
+        "docs/ownership.md",
+    ]
+    .into_iter()
+    .filter(|path| files.contains_key(Path::new(path)))
+    .collect::<Vec<_>>();
     let Some(planned) = files.get_mut(Path::new("hegira.toml")) else {
         return Ok(());
     };
@@ -190,6 +201,17 @@ fn write_resolved_application_composition(
         modules: composition.modules.clone(),
         capabilities: composition.capabilities.clone(),
     });
+    // Freshly rendered docs belong to the owner. Historical edges retain their
+    // exact ownership and raw manifest source rather than adopting these paths.
+    if let Some(upgrade) = &mut manifest.upgrade {
+        for path in documentation {
+            upgrade.ownership.claims.push(SourceOwnershipClaim {
+                path: path.to_owned(),
+                class: SourceOwnershipClass::GeneratedOnce,
+                integration: None,
+            });
+        }
+    }
     planned.bytes = manifest
         .to_toml()
         .map_err(|error| {
@@ -259,6 +281,27 @@ fn resolve_variables(
                     format!("reserved package variable is declared by the template: {name}"),
                 ));
             }
+        }
+    }
+    if let Some(database) = variables.get("database_adapter") {
+        let profile = match database.as_str() {
+            "sqlite" => "sqlite",
+            "postgres" => "development",
+            _ => {
+                return Err(RendererError::with_kind(
+                    RendererErrorKind::Variables,
+                    "unsupported database adapter for development documentation",
+                ));
+            }
+        };
+        if variables
+            .insert("development_profile".to_owned(), profile.to_owned())
+            .is_some()
+        {
+            return Err(RendererError::with_kind(
+                RendererErrorKind::Catalog,
+                "reserved derived variable is declared by the template: development_profile",
+            ));
         }
     }
     Ok(variables)

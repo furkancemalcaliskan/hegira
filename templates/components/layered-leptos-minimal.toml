@@ -7,11 +7,13 @@ include = [
   "Cargo.lock",
   "Cargo.toml",
   "Dockerfile",
+  "README.md",
   "apps",
   "config",
   "crates/infrastructure",
   "crates/presentation",
   "docker-compose.yml",
+  "docs/architecture.md",
 ]
 requires = ["layered-base"]
 

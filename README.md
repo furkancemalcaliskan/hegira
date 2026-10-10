@@ -82,7 +82,10 @@ ownership:
 The canonical rendered application is an independent Cargo workspace, consumes framework
 packages from a pinned release source, and records its generation identity, installed
 composition, and selected adapters in a validated `hegira.toml`. Runtime configuration and
-secrets remain outside that manifest. The canonical package locks its source inputs with a
+secrets remain outside that manifest. Its generated-once README and architecture,
+development, and ownership guides describe the selected application and remain
+under the application owner's control after installation and upgrades.
+The canonical package locks its source inputs with a
 deterministic SHA-256 digest so repository-local or untracked files cannot silently enter
 generated output. Package and framework identity, declared paths, regular-file types, and the
 opened package root are verified before those snapshot bytes become render input. Releases remain

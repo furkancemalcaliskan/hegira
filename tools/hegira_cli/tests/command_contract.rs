@@ -1723,8 +1723,8 @@ fn explicit_sibling_destination_still_works() {
 #[test]
 fn provider_snapshots_and_interactive_requests_match() {
     for (database, expected) in [
-        ("sqlite", 5704493183883208368_u64),
-        ("postgres", 2814147560971706551_u64),
+        ("sqlite", 1667558246433646739_u64),
+        ("postgres", 4113475182014716254_u64),
     ] {
         let root = TestDirectory::new(database);
         let explicit = root.path().join("explicit");
@@ -1774,6 +1774,191 @@ fn provider_snapshots_and_interactive_requests_match() {
             fingerprint, expected,
             "review {database} output before updating its snapshot"
         );
+    }
+}
+
+const APPLICATION_DOCUMENTATION: [&str; 4] = [
+    "README.md",
+    "docs/architecture.md",
+    "docs/development.md",
+    "docs/ownership.md",
+];
+
+#[test]
+fn application_documentation_matches_all_six_states_and_preserves_owner_edits() {
+    use application_manifest::{ApplicationManifest, SourceOwnershipClass};
+    for composition in ["default", "minimal", "identity-added"] {
+        for database in ["sqlite", "postgres"] {
+            let root = TestDirectory::new("application-documentation");
+            let application = root.path().join("application");
+            let mut arguments = vec![
+                "new",
+                "travel-notes",
+                "--destination",
+                path_argument(&application),
+                "--database",
+                database,
+            ];
+            if composition != "default" {
+                arguments.extend(["--composition", "minimal"]);
+            }
+            assert!(hegira(&arguments).status.success());
+            let original = APPLICATION_DOCUMENTATION
+                .map(|path| fs::read_to_string(application.join(path)).unwrap());
+            let second = root.path().join("second");
+            arguments[3] = path_argument(&second);
+            assert!(hegira(&arguments).status.success());
+            for (path, content) in APPLICATION_DOCUMENTATION.iter().zip(&original) {
+                assert_eq!(*content, fs::read_to_string(second.join(path)).unwrap());
+            }
+            if composition == "identity-added" {
+                for (path, content) in APPLICATION_DOCUMENTATION.iter().zip(&original) {
+                    fs::write(
+                        application.join(path),
+                        format!("{content}\nOwner product notes.\n"),
+                    )
+                    .unwrap();
+                }
+                let installed = hegira_at(&application, &["component", "add", "identity"]);
+                assert!(installed.status.success(), "{:?}", installed.stderr);
+                for (path, content) in APPLICATION_DOCUMENTATION.iter().zip(&original) {
+                    assert_eq!(
+                        fs::read_to_string(application.join(path)).unwrap(),
+                        format!("{content}\nOwner product notes.\n")
+                    );
+                }
+            }
+            let manifest = ApplicationManifest::read(application.join("hegira.toml")).unwrap();
+            let ownership = &manifest.upgrade.as_ref().unwrap().ownership;
+            assert_eq!(ownership.default, SourceOwnershipClass::ApplicationOwned);
+            for (path, content) in APPLICATION_DOCUMENTATION.iter().zip(&original) {
+                let claims = ownership
+                    .claims
+                    .iter()
+                    .filter(|claim| claim.path == *path)
+                    .collect::<Vec<_>>();
+                assert_eq!(claims.len(), 1);
+                assert_eq!(claims[0].class, SourceOwnershipClass::GeneratedOnce);
+                assert!(claims[0].integration.is_none());
+                assert!(content.contains("travel-notes"));
+                for forbidden in [
+                    "{{",
+                    "}}",
+                    "# Hegira",
+                    "my-application",
+                    "postgres:postgres",
+                    repository_root().to_str().unwrap(),
+                ] {
+                    assert!(!content.contains(forbidden), "{path}: {forbidden}");
+                }
+                assert_documentation_links(&application, path, content);
+                assert_documented_cli_syntax(&application, content);
+            }
+            let profile = if database == "sqlite" {
+                "sqlite"
+            } else {
+                "development"
+            };
+            let development = &original[2];
+            assert!(development.contains(&format!("config/{profile}.yaml")));
+            assert!(development.contains(&format!("ssr,db-{database}")));
+            assert!(development.contains(&format!("database-operations,db-{database}")));
+            assert!(
+                fs::read_to_string(application.join(format!("config/{profile}.yaml")))
+                    .unwrap()
+                    .contains(&format!("backend: {database}"))
+            );
+            for operation in ["status", "migrate"] {
+                assert!(
+                    development.contains(&format!("hegira db {operation} --profile {profile}"))
+                );
+                let preview = hegira_at(
+                    &application,
+                    &["db", operation, "--profile", profile, "--dry-run", "--json"],
+                );
+                assert!(preview.status.success(), "{:?}", preview.stderr);
+                let report: serde_json::Value = serde_json::from_slice(&preview.stdout).unwrap();
+                assert_eq!(report["plan"]["database"], database);
+            }
+            for operation in ["dev", "check", "test"] {
+                assert!(
+                    hegira_at(&application, &[operation, "--dry-run"])
+                        .status
+                        .success()
+                );
+            }
+            assert!(
+                hegira_at(&application, &["build", "--release", "--dry-run"])
+                    .status
+                    .success()
+            );
+            assert!(
+                hegira_at(&application, &["doctor", "--operation", "check"])
+                    .status
+                    .success()
+            );
+            if composition == "default" {
+                assert!(
+                    original[0]
+                        .contains("initial composition includes the official\nIdentity module")
+                );
+            } else {
+                assert!(
+                    original[0].contains(
+                        "no official module, login pages, authentication, or authorization"
+                    )
+                );
+                assert!(original[1].contains("Once `hegira.toml` records Identity"));
+                assert!(original[1].contains("Installation preserves existing documentation"));
+            }
+            assert_eq!(
+                manifest.composition.unwrap().modules.is_empty(),
+                composition == "minimal"
+            );
+            assert!(!application.join(".git").exists());
+            assert!(!application.join("target").exists());
+        }
+    }
+}
+
+fn assert_documentation_links(root: &Path, document: &str, content: &str) {
+    for suffix in content.split("](").skip(1) {
+        let destination = suffix.split_once(')').unwrap().0;
+        let (path, anchor) = destination.split_once('#').unwrap_or((destination, ""));
+        let target = root.join(document).parent().unwrap().join(path);
+        assert!(target.exists(), "{document}: {destination}");
+        assert!(
+            target
+                .canonicalize()
+                .unwrap()
+                .starts_with(root.canonicalize().unwrap())
+        );
+        if !anchor.is_empty() {
+            let source = fs::read_to_string(target).unwrap();
+            assert!(
+                source
+                    .lines()
+                    .filter_map(|line| line.strip_prefix("## "))
+                    .any(|heading| heading.to_ascii_lowercase().replace(' ', "-") == anchor)
+            );
+        }
+    }
+}
+
+fn assert_documented_cli_syntax(root: &Path, content: &str) {
+    let joined = content.replace("\\\n", " ");
+    let mut fenced = false;
+    for line in joined.lines() {
+        if line.starts_with("```") {
+            fenced = !fenced;
+        } else if fenced && let Some(command) = line.strip_prefix("hegira ") {
+            // Parse every example through the real public command without
+            // executing trusted source or publishing an upgrade/installation.
+            let mut arguments = command.split_whitespace().collect::<Vec<_>>();
+            arguments.push("--help");
+            let result = hegira_at(root, &arguments);
+            assert!(result.status.success(), "{command}: {:?}", result.stderr);
+        }
     }
 }
 

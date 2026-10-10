@@ -527,6 +527,16 @@ for its supported released states. Manually changing `schema` or ownership
 claims does not establish upgrade compatibility. Reading or validating the
 manifest does not access the network or modify application files.
 
+Fresh applications also receive a brand-neutral `README.md` and
+`docs/architecture.md`, `docs/development.md`, and `docs/ownership.md`. These
+describe the selected provider, initial composition, prerequisites, current
+CLI operations, ownership, and manual recovery. Each file has an exact
+`generated-once` claim and belongs to the application owner. Minimal documentation
+describes both the module-free initial state and the conditional Identity-added
+state; `inspect` and `hegira.toml` remain authoritative after installation.
+Component installation and source upgrades preserve customized documentation.
+The historical v0.6.0-to-v0.7.0 edge does not add or adopt these paths.
+
 The CLI currently exposes application creation, read-only inspection, upgrade
 readiness, dry-run plans and explicit atomic apply, a reviewable bundled-component
 addition boundary, complete layered resource generation, and application-owned
