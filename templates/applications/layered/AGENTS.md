@@ -14,6 +14,8 @@ contribution availability, accepted issue scope, and repository hosting policy.
   startup, release builds, and database operations.
 - [Ownership and recovery](docs/ownership.md): source changes, upgrades, and
   interrupted publication.
+- [Repository setup](docs/repository.md): application policy checks, explicit
+  maintenance exceptions, and owner hosting/protection setup.
 - [hegira.toml](hegira.toml): exact releases, current composition, selected
   adapters, and source ownership.
 
@@ -74,6 +76,7 @@ hegira build --release --dry-run
 hegira db status --profile {{development_profile}} --dry-run
 hegira db migrate --profile {{development_profile}} --dry-run
 cargo fmt --all -- --check
+sh scripts/repository-policy.sh
 ```
 
 After explicit owner trust, follow the development guide's Linux execution
@@ -105,7 +108,8 @@ milestone, and acceptance criteria. Inspect Git status, branch, recent history,
 and unrelated tracked, untracked, ignored, and stashed work. Preserve that work.
 Create the issue branch from the latest `develop`; never implement directly on
 `develop` or `main`. Generation itself does not initialize Git or configure a
-remote. The owner configures hosting, protections, and maintenance exceptions.
+remote. The owner configures hosting and protections; exact maintenance exceptions
+and optional Dependabot acceptance use [.github/repository-policy.json](.github/repository-policy.json).
 
 Use this integration path:
 
@@ -135,8 +139,9 @@ Promote only a completed, verified milestone from `develop` to `main` using a
 merge commit. The promotion PR title is
 `release: promote {{application_name}} vX.Y.Z to main`.
 The owner reviews version, changelog/release notes, checks, and signed tag/release
-identity before authorizing publication. These conventions do not create CI,
-remote protections, release automation, or a contribution policy.
+identity before authorizing publication. The generated repository-policy workflow
+checks application conventions and branch commits using read-only permissions;
+it does not configure remote protections, release automation, or contribution policy.
 
 ## Ownership, recovery, and security
 

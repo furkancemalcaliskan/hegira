@@ -10,6 +10,7 @@ Run commands from this application workspace root. Begin with the
 startup, checks, tests, release builds, and explicit database operations.
 
 - [Architecture and security boundaries](docs/architecture.md)
+- [Repository setup and policy checks](docs/repository.md)
 - [Source ownership, upgrades, and recovery](docs/ownership.md)
 - [Current release, composition, and ownership record](hegira.toml)
 

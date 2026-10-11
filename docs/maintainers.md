@@ -174,6 +174,11 @@ contracts together with deterministic existing-application change planning:
 sh scripts/cli-check.sh
 ```
 
+Node.js 22+ and Git must be on PATH for the CLI's generated application-policy
+matrix. It executes the generated dependency-free fixtures in all six
+compositions, checks exact generated-once ownership and owner-edit preservation,
+and creates only temporary local Git repositories; it needs no remote or secrets.
+
 The CLI suite also tests the `operations` planning library against all six
 default, minimal, and Identity-added SQLite/PostgreSQL states. It verifies
 ordered locked arguments, provider/profile selection, explicit production

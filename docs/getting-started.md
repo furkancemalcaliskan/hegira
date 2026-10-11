@@ -543,9 +543,24 @@ that file. Instructions cover the actual application layers, provider-correct
 operation previews, source/security/recovery boundaries, and distinct branch,
 commit, PR, and release-promotion conventions using the application identity.
 Contribution availability and remote hosting policy remain the application
-owner's decisions; no Hegira-only contribution restriction or repository
+owner's decisions; no Hegira-only contribution restriction or release
 automation is copied. All three files have exact `generated-once` claims and
 remain owner-editable and preserved during installation and source upgrades.
+
+Fresh applications additionally receive `docs/repository.md`, schema-1
+`.github/repository-policy.json`, a PR template, a read-only GitHub Actions
+`repository-policy` workflow, and dependency-free Node.js policy scripts/fixtures.
+They check application files, canonical adapters, ordinary branch/PR/commit
+conventions, application-specific promotion, and explicit exact maintenance
+exceptions. Dependabot acceptance is owner opt-in. The policy runs locally with
+`sh scripts/repository-policy.sh`; an event check additionally requires Git and
+the exact PR base/head commits. PR metadata is parsed as data, with no secrets,
+write token permission, or `pull_request_target` execution. All seven artifacts
+have exact generated-once claims; owner changes survive installation/upgrades.
+The historical edge does not add or adopt them. The owner configures hosting,
+branch protection, review, merge methods, and initial source import explicitly;
+generation performs no Git/GitHub mutation. These checks do not verify future
+squash/merge commits, milestone completion, or product quality.
 
 The CLI currently exposes application creation, read-only inspection, upgrade
 readiness, dry-run plans and explicit atomic apply, a reviewable bundled-component

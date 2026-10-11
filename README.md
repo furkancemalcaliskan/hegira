@@ -87,6 +87,9 @@ development, and ownership guides describe the selected application and remain
 under the application owner's control after installation and upgrades.
 Its canonical `AGENTS.md` supplies the same working contract for humans and
 agents, with thin Claude/Cursor adapters and owner-controlled contribution policy.
+Generated-once repository/PR policy scripts, configuration, and a read-only GitHub
+workflow validate application conventions; remote hosting and protection setup
+remain explicit application-owner actions.
 The canonical package locks its source inputs with a
 deterministic SHA-256 digest so repository-local or untracked files cannot silently enter
 generated output. Package and framework identity, declared paths, regular-file types, and the
