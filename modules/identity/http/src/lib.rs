@@ -6,6 +6,8 @@ pub mod extractors;
 pub mod openapi;
 pub mod policy;
 pub mod state;
+#[cfg(feature = "openapi")]
+mod swagger;
 
 use axum::{Extension, Router};
 use state::IdentityHttpState;

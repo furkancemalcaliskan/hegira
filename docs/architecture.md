@@ -299,7 +299,11 @@ before repository access.
 
 When OpenAPI is compiled, resource paths and schemas contribute a typed
 document which the application server explicitly merges with the Identity API
-document. The same managed-entry contract rejects missing, duplicate,
+document. The Identity HTTP adapter serves this typed document at
+`/api-docs/openapi.json` and embeds the official Swagger UI distribution from a
+locked, data-only dependency at `/swagger-ui/`. Asset extraction uses supported
+ZIP code and fixed output names; builds do not download UI assets separately.
+The same managed-entry contract rejects missing, duplicate,
 reordered, or malformed service, route, and document registrations before a
 change plan is produced. Provider migrations seed generated permission
 identifiers for the canonical administrator role so the composed authorization

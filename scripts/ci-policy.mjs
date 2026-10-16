@@ -310,6 +310,9 @@ export function validateRepositoryValidationWorkflow(workflow) {
     /^  supply-chain:\s*$([\s\S]*?)(?=^  [a-zA-Z0-9_-]+:\s*$|(?![\s\S]))/m,
   )?.[1] ?? "";
   errors.push(...validateFrontendAuditJob(supplyChainJob));
+  if (!/^      - uses: EmbarkStudios\/cargo-deny-action@v2\n        with:\n(?:          [^\n]+\n)*?          rust-version: "1\.96\.1"(?:\n|$)/m.test(supplyChainJob)) {
+    errors.push("dependency policy requires the pinned Rust toolchain inside cargo-deny's container");
+  }
 
   const frameworkJob = workflow.match(
     /^  framework:\s*$([\s\S]*?)(?=^  [a-zA-Z0-9_-]+:\s*$|(?![\s\S]))/m,

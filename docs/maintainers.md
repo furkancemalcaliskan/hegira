@@ -145,6 +145,15 @@ policy using `cargo deny --manifest-path <application>/Cargo.toml --all-features
 check --config <framework>/deny.toml bans advisories` and audit their lockfiles.
 Use disposable repository-validation copies for unreleased framework source.
 
+The root dependency lock and deny policy require Rustls 0.23.46 or newer for
+RUSTSEC-2026-0346 through RUSTSEC-2026-0349 and quinn-proto 0.11.18 or newer for
+RUSTSEC-2026-0338 through RUSTSEC-2026-0342. The container-based Cargo deny
+action explicitly selects Rust 1.96.1 inside its own container; the host runner's
+Rust installation does not supply that container toolchain. Identity's optional
+Swagger UI uses a locked official data package and supported ZIP extraction,
+avoiding the retired ZIP requirements of the former UI adapter. Its document
+schema and application contribution contract remain unchanged.
+
 ## Local Validation
 
 Run the commands in this section from the repository root. The virtual workspace coordinates

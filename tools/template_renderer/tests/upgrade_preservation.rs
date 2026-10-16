@@ -55,6 +55,9 @@ fn customized_released_applications_preserve_product_source_and_history() {
         .into_iter()
         .map(|(id, digest)| format!("{id} {digest}\n"))
         .collect::<String>();
+    // These are released baselines customized by the current resource generator,
+    // not the immutable baseline inventory. Review generated page/localization
+    // changes before updating them; the before/after upgrade checks stay exact.
     assert_eq!(
         snapshot,
         include_str!("snapshots/customized-v0.6.0.txt"),
