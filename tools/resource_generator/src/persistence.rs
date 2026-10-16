@@ -608,6 +608,28 @@ version = "v0.6.0"
     }
 
     #[test]
+    fn both_providers_bind_pagination_and_count_the_unpaged_table_in_one_operation() {
+        for (database, limit, offset) in [("sqlite", "?1", "?2"), ("postgres", "$1", "$2")] {
+            let source = infrastructure_source(&specification(database));
+            assert!(source.contains(&format!(
+                "SELECT id, active, name, published_at FROM order_items ORDER BY id LIMIT {limit} OFFSET {offset}"
+            )));
+            assert!(source.contains(".bind(i64::from(query.limit)).bind(offset)"));
+            assert!(source.contains("sqlx::query_scalar(\"SELECT COUNT(*) FROM order_items\")"));
+            assert!(source.contains("i64::try_from(query.offset)"));
+            assert!(source.contains("u64::try_from(total)"));
+            assert_eq!(source.matches(".fetch_one(&mut *transaction)").count(), 1);
+            assert_eq!(source.matches(".fetch_all(&mut *transaction)").count(), 1);
+            assert_eq!(source.matches("transaction.commit().await").count(), 1);
+            syn::parse_file(&source).unwrap();
+        }
+        syn::parse_file(include_str!(
+            "../../../scripts/resource-pagination-contract.rs"
+        ))
+        .unwrap();
+    }
+
+    #[test]
     fn an_existing_infrastructure_registration_fails_before_migration_planning() {
         let application = TestApplication::new();
         let error = plan_resource_persistence(&application.0, &specification("sqlite"), PersistenceLayerSources { infrastructure_root: b"// hegira:generated-modules:start\npub mod order_item;\n// hegira:generated-modules:end\n" }).unwrap_err();

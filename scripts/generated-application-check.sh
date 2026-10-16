@@ -364,6 +364,15 @@ for database in sqlite postgres; do
   cmp "$migration_artifacts/before-duplicate.sha256" "$migration_artifacts/after-duplicate.sha256"
 
   stage_framework_source "$validation_root"
+  # These fixtures belong only to the disposable validation copy. Public CLI
+  # output and immutable application/upgrade source remain unchanged.
+  mkdir -p "$validation_root/crates/infrastructure/tests"
+  cp "$repo_root/scripts/resource-pagination-contract.rs" \
+    "$validation_root/crates/infrastructure/tests/resource_pagination.rs"
+  cp "$validation_root/$generated_migration_path" \
+    "$validation_root/crates/infrastructure/tests/resource_pagination.sql"
+  cat "$repo_root/scripts/resource-pagination-ui-contract.rs" \
+    >>"$validation_root/apps/web/src/validation_record.rs"
   generated_tool_bin=$(sh "$repo_root/scripts/generated-toolchain.sh" application \
     "$validation_root")
   PATH="$generated_tool_bin:$PATH"
@@ -382,6 +391,8 @@ for database in sqlite postgres; do
       check-generated --root "$validation_root"
     cargo check --locked -p app_server --no-default-features --features hydrate \
       --target wasm32-unknown-unknown
+    cargo check --locked -p app_web --all-targets --no-default-features --features hydrate \
+      --target wasm32-unknown-unknown
     npm ci --prefix apps/web/src
     PATH="$validation_root/apps/web/src/node_modules/.bin:$PATH"
     export PATH
@@ -394,6 +405,14 @@ done
 
 phase_begin "PostgreSQL migration contracts"
 compose up --detach postgres
+
+(
+  cd "$generated_root"
+  ALLOW_GENERATED_APP_DB_RESET=true \
+  GENERATED_APP_DATABASE_URL="postgres://generated_app:$GENERATED_APP_DB_PASSWORD@127.0.0.1:$GENERATED_APP_POSTGRES_PORT/generated_app" \
+    cargo test --locked -p app_infrastructure --no-default-features \
+      --features db-postgres --test resource_pagination -- --include-ignored
+)
 
 if [ "$mode" = default ]; then (
   cd "$generated_root"
