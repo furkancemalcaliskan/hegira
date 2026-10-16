@@ -316,6 +316,15 @@ registration conflicts fail before publication. Permission gates improve the
 presentation experience but do not replace authorization in the generated
 application service.
 
+Generated lists use the existing ordered, bound provider queries with 50-row
+pages and authorized totals. First/previous/next/last and refresh controls show
+localized page and record counts; empty and boundary pages disable unavailable
+navigation. Refresh and successful mutations reload the selected page, correcting
+out-of-range pages after deletion before publishing rows or counts. Request
+generations discard superseded responses, and loading or list failures hide
+previous results and totals. This presentation state does not replace backend
+authorization or modify existing application-owned resource pages.
+
 The Identity-added minimal composition uses its smaller Leptos shell instead:
 the generator registers a native route and a permission-gated dashboard link,
 and emits local English labels and visible mutation feedback in the resource

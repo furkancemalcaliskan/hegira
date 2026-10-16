@@ -1166,6 +1166,16 @@ access. Bearer API routes remain separate from cookie-authenticated browser/BFF
 routes. Leptos permission gates improve navigation and page behavior only;
 client-side or UI visibility checks are never an authorization boundary.
 
+New Leptos resource lists include 50-row pagination with first, previous, next,
+last, and refresh controls plus page and record counts. Labels follow the
+application's English/Turkish localization; the Identity-added minimal shell
+uses its local English labels. Empty and boundary pages disable unavailable
+navigation. Successful changes and refresh reload the selected page and move
+back to the last valid page if records were removed. Loading and failed list
+requests hide previous rows and counts; refresh retries a failed request.
+Generation preserves existing customized resource pages rather than adding
+pagination to them automatically.
+
 Generation does not infer business invariants or relationships and does not
 run formatters, builds, application processes, or migrations. Review the
 generated aggregate shape, validation, authorization, transaction needs,
