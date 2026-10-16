@@ -17,8 +17,10 @@ const SERVER_SOURCE: &str = "apps/server/src/server.rs";
 
 // Exercise the same state implementation that is emitted into application source.
 #[cfg(test)]
-#[path = "web_pagination.rs"]
-mod pagination;
+mod pagination {
+    include!("web_pagination.rs");
+    include!("../../../scripts/resource-pagination-ui-contract.rs");
+}
 
 #[derive(Debug, Clone, Copy)]
 pub struct WebLayerSources<'a> {

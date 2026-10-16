@@ -374,6 +374,21 @@ history. Generated Rust is parsed before publication, and an existing module
 registration fails before migration planning. HTTP and UI source remains
 outside this persistence plan.
 
+The generated-application lifecycle gate adds repository-only pagination
+fixtures to its disposable default and Identity-added applications. The actual
+generated services and selected SQLx repositories run against in-memory SQLite
+and an explicitly authorized, isolated PostgreSQL schema. Assertions cover
+empty, first, last and out-of-range pages, signed offset limits, bound values,
+deterministic UUID ordering, unpaged totals, deletion, failure and retry.
+Authorization probes require every list request to authorize before the
+repository port can read either rows or totals, including permission revocation
+between pages. PostgreSQL execution remains ignored without the lifecycle
+gate's disposable-target opt-in. Presentation-state assertions also run in
+the CLI gate and in each generated page, including repeated corrective reloads,
+failed corrections and stale responses. Native tests and hydration builds use
+the same generated fixtures; no test fixture enters canonical application source
+or immutable upgrade baselines.
+
 Migration-generator fixtures cover manifest-selected SQLite and PostgreSQL
 paths, append-only numeric identities, deterministic scaffolds and plans,
 identity and history conflicts, unchanged historical bytes, coordination-state

@@ -163,10 +163,14 @@ for database in sqlite postgres; do
   hegira -- generate resource --application-root "$validation_root" --dry-run --json
   hegira -- generate resource --application-root "$validation_root" --json
   test ! -e "$staging_parent/$database-source/$generated_resource_path"
+  cp pagination.rs "$validation_root/crates/infrastructure/tests/resource_pagination.rs"
+  cat "$repo_root/scripts/resource-pagination-ui-contract.rs" >>page.rs
   cargo test --locked --workspace --features app_server/ssr,app_server/database-operations
   cargo test --locked -p app_server --features database-operations,db-postgres --test database_operations
   cargo check --features hydrate
+  cargo check --locked -p app_web --all-targets --no-default-features --features hydrate
 done
+cargo test --features db-postgres --test resource_pagination -- --include-ignored
 docker build --tag "$GENERATED_APP_IMAGE" "$generated_root"
 curl "$base_url/readyz"
 curl "$base_url/api/validation-records"
@@ -394,6 +398,19 @@ test("database entry-point process and PostgreSQL gates cannot be removed", () =
     assert.ok(validateGeneratedApplicationScript(
       validGeneratedApplicationScript.replace(contract, ""),
     ).some(error => error.includes("database")));
+  }
+});
+
+test("pagination fixtures and real PostgreSQL execution cannot be removed", () => {
+  for (const contract of [
+    '"$validation_root/crates/infrastructure/tests/resource_pagination.rs"',
+    'cat "$repo_root/scripts/resource-pagination-ui-contract.rs"',
+    '--features db-postgres --test resource_pagination -- --include-ignored',
+    'cargo check --locked -p app_web --all-targets --no-default-features --features hydrate',
+  ]) {
+    assert.ok(validateGeneratedApplicationScript(
+      validGeneratedApplicationScript.replace(contract, ""),
+    ).some(error => error.includes("pagination")));
   }
 });
 
