@@ -15,6 +15,11 @@ const WEB_SIDEBAR: &str = "apps/web/src/app/sidebar.rs";
 const WEB_DASHBOARD: &str = "apps/web/src/dashboard.rs";
 const SERVER_SOURCE: &str = "apps/server/src/server.rs";
 
+// Exercise the same state implementation that is emitted into application source.
+#[cfg(test)]
+#[path = "web_pagination.rs"]
+mod pagination;
+
 #[derive(Debug, Clone, Copy)]
 pub struct WebLayerSources<'a> {
     pub web_root: &'a [u8],
@@ -414,6 +419,14 @@ fn localization_key_names(specification: &ResourceSpecification) -> Vec<String> 
         format!("{entity}SaveFailed"),
         format!("{entity}DeleteFailed"),
         format!("{plural}Actions"),
+        format!("{plural}Pagination"),
+        format!("{plural}FirstPage"),
+        format!("{plural}PreviousPage"),
+        format!("{plural}NextPage"),
+        format!("{plural}LastPage"),
+        format!("{plural}Refresh"),
+        format!("{plural}Page"),
+        format!("{plural}Records"),
     ];
     keys.extend(
         specification
@@ -474,6 +487,14 @@ fn localization(specification: &ResourceSpecification, turkish: bool) -> String 
                 "Silme başarısız".to_owned(),
             ),
             (format!("{plural}Actions"), "İşlemler".to_owned()),
+            (format!("{plural}Pagination"), "Sayfalama".to_owned()),
+            (format!("{plural}FirstPage"), "İlk".to_owned()),
+            (format!("{plural}PreviousPage"), "Önceki".to_owned()),
+            (format!("{plural}NextPage"), "Sonraki".to_owned()),
+            (format!("{plural}LastPage"), "Son".to_owned()),
+            (format!("{plural}Refresh"), "Yenile".to_owned()),
+            (format!("{plural}Page"), "Sayfa".to_owned()),
+            (format!("{plural}Records"), "kayıt".to_owned()),
         ]
     } else {
         vec![
@@ -493,6 +514,14 @@ fn localization(specification: &ResourceSpecification, turkish: bool) -> String 
             (format!("{entity}SaveFailed"), "Save failed".to_owned()),
             (format!("{entity}DeleteFailed"), "Delete failed".to_owned()),
             (format!("{plural}Actions"), "Actions".to_owned()),
+            (format!("{plural}Pagination"), "Pagination".to_owned()),
+            (format!("{plural}FirstPage"), "First".to_owned()),
+            (format!("{plural}PreviousPage"), "Previous".to_owned()),
+            (format!("{plural}NextPage"), "Next".to_owned()),
+            (format!("{plural}LastPage"), "Last".to_owned()),
+            (format!("{plural}Refresh"), "Refresh".to_owned()),
+            (format!("{plural}Page"), "Page".to_owned()),
+            (format!("{plural}Records"), "records".to_owned()),
         ]
     };
     let mut lines = values
@@ -572,6 +601,8 @@ fn leptos_source(specification: &ResourceSpecification, minimal: bool) -> String
     write_server_functions(&mut source, specification);
     write_form_parsers(&mut source, specification);
     write_form_values(&mut source, specification);
+    source.push_str(include_str!("web_pagination.rs"));
+    source.push('\n');
     write_resource_page(&mut source, specification, minimal);
     if minimal {
         write_minimal_web_support(&mut source, specification);
@@ -909,7 +940,16 @@ fn write_resource_page(source: &mut String, specification: &ResourceSpecificatio
         "    let items = RwSignal::new(Vec::<{entity}Dto>::new());"
     )
     .unwrap();
-    writeln!(source, "    let loading = RwSignal::new(false);").unwrap();
+    writeln!(
+        source,
+        "    let __resource_paging = RwSignal::new(ResourcePagination::default());"
+    )
+    .unwrap();
+    writeln!(
+        source,
+        "    let __resource_list_error = RwSignal::new(None::<String>);"
+    )
+    .unwrap();
     writeln!(source, "    let error = RwSignal::new(None::<String>);").unwrap();
     writeln!(
         source,
@@ -934,26 +974,7 @@ fn write_resource_page(source: &mut String, specification: &ResourceSpecificatio
     }
     source.push('\n');
 
-    writeln!(source, "    let load = Callback::new(move |()| {{").unwrap();
-    writeln!(source, "        loading.set(true);").unwrap();
-    writeln!(source, "        error.set(None);").unwrap();
-    writeln!(source, "        spawn_local(async move {{").unwrap();
-    writeln!(source, "            match list_{module}_resource(List{plural}Query {{ offset: 0, limit: 50 }}).await {{").unwrap();
-    writeln!(
-        source,
-        "                Ok(result) => items.set(result.items),"
-    )
-    .unwrap();
-    writeln!(
-        source,
-        "                Err(failure) => error.set(Some(failure.to_string())),"
-    )
-    .unwrap();
-    writeln!(source, "            }}").unwrap();
-    writeln!(source, "            loading.set(false);").unwrap();
-    writeln!(source, "        }});").unwrap();
-    writeln!(source, "    }});").unwrap();
-    writeln!(source, "    Effect::new(move |_| load.run(()));\n").unwrap();
+    write_load_callback(source, module, plural);
 
     writeln!(source, "    let begin_create = Callback::new(move |()| {{").unwrap();
     writeln!(source, "        editing.set(None);").unwrap();
@@ -1030,6 +1051,51 @@ fn write_resource_page(source: &mut String, specification: &ResourceSpecificatio
     writeln!(source, "        </WorkspaceRouteLayout>").unwrap();
     writeln!(source, "    }}").unwrap();
     writeln!(source, "}}").unwrap();
+}
+
+fn write_load_callback(source: &mut String, module: &str, plural: &str) {
+    source.push_str(
+        &r#"
+    let load = Callback::new(move |page: u64| {
+        let mut state = __resource_paging.get_untracked();
+        let mut request = state.begin(page);
+        __resource_paging.set(state);
+        __resource_list_error.set(None);
+        items.set(Vec::new());
+        delete_candidate.set(None);
+        spawn_local(async move {
+            loop {
+                let result = list___MODULE___resource(List__PLURAL__Query {
+                    offset: request.offset(), limit: ResourcePageRequest::LIMIT,
+                }).await;
+                let Some(mut state) = __resource_paging.try_get_untracked() else { return; };
+                if !state.is_current(request) { return; }
+                match result {
+                    Ok(result) => {
+                        if let Some(corrected) = state.complete(request, result.total) {
+                            __resource_paging.set(state);
+                            request = corrected;
+                            continue;
+                        }
+                        items.set(result.items);
+                        __resource_paging.set(state);
+                    }
+                    Err(failure) => {
+                        state.fail(request);
+                        __resource_list_error.set(Some(failure.to_string()));
+                        __resource_paging.set(state);
+                    }
+                }
+                break;
+            }
+        });
+    });
+    Effect::new(move |_| load.run(0));
+
+"#
+        .replace("__MODULE__", module)
+        .replace("__PLURAL__", plural),
+    );
 }
 
 fn write_form_view(source: &mut String, specification: &ResourceSpecification) {
@@ -1140,24 +1206,31 @@ fn write_list_view(source: &mut String, specification: &ResourceSpecification) {
     .unwrap();
     writeln!(
         source,
-        "                    <Show when=move || loading.get()>"
+        "                    <Show when=move || __resource_paging.get().loading>"
     )
     .unwrap();
     writeln!(source, "                        <p class=\"text-sm text-muted-foreground\">{{move || i18n.t(T::Loading{plural})}}</p>").unwrap();
     writeln!(source, "                    </Show>").unwrap();
     writeln!(
         source,
-        "                    <Show when=move || !loading.get() && error.get().is_some()>"
+        "                    <Show when=move || __resource_list_error.get().is_some()>"
+    )
+    .unwrap();
+    writeln!(source, "                        <p role=\"alert\" class=\"text-sm text-destructive\">{{move || __resource_list_error.get().unwrap_or_default()}}</p>").unwrap();
+    writeln!(source, "                    </Show>").unwrap();
+    writeln!(
+        source,
+        "                    <Show when=move || error.get().is_some()>"
     )
     .unwrap();
     writeln!(source, "                        <p class=\"text-sm text-destructive\">{{move || error.get().unwrap_or_default()}}</p>").unwrap();
     writeln!(source, "                    </Show>").unwrap();
-    writeln!(source, "                    <Show when=move || !loading.get() && error.get().is_none() && items.get().is_empty()>").unwrap();
+    writeln!(source, "                    <Show when=move || __resource_paging.get().ready() && items.get().is_empty()>").unwrap();
     writeln!(source, "                        <p class=\"text-sm text-muted-foreground\">{{move || i18n.t(T::Empty{plural})}}</p>").unwrap();
     writeln!(source, "                    </Show>").unwrap();
     writeln!(
         source,
-        "                    <Show when=move || !items.get().is_empty()>"
+        "                    <Show when=move || __resource_paging.get().ready() && !items.get().is_empty()>"
     )
     .unwrap();
     writeln!(
@@ -1243,7 +1316,45 @@ fn write_list_view(source: &mut String, specification: &ResourceSpecification) {
     writeln!(source, "                            </tbody>").unwrap();
     writeln!(source, "                        </table>").unwrap();
     writeln!(source, "                    </Show>").unwrap();
+    write_pagination_view(source, plural);
     writeln!(source, "                </PageSection>").unwrap();
+}
+
+fn write_pagination_view(source: &mut String, plural: &str) {
+    source.push_str(
+        &r#"
+                    <nav class="mt-4 flex flex-wrap items-center gap-2" aria-label=move || i18n.t(T::__PLURAL__Pagination) aria-busy=move || __resource_paging.get().loading.to_string()>
+                        <Show when=move || __resource_paging.get().ready()>
+                            <p role="status" class="mr-auto text-sm text-muted-foreground">
+                                {move || {
+                                    let state = __resource_paging.get();
+                                    let (first, last) = state.range(items.with(Vec::len));
+                                    let page = if state.pages() == 0 { 0 } else { state.page + 1 };
+                                    format!("{} {} / {} · {}–{} / {} {}",
+                                        i18n.t(T::__PLURAL__Page), page, state.pages(),
+                                        first, last, state.total.unwrap_or_default(), i18n.t(T::__PLURAL__Records))
+                                }}
+                            </p>
+                        </Show>
+                        <button type="button" class="rounded-md border px-3 py-2 text-sm" disabled=move || mutation.get().is_pending() || __resource_paging.get().previous().is_none() on:click=move |_| load.run(0)>
+                            {move || i18n.t(T::__PLURAL__FirstPage)}
+                        </button>
+                        <button type="button" class="rounded-md border px-3 py-2 text-sm" disabled=move || mutation.get().is_pending() || __resource_paging.get().previous().is_none() on:click=move |_| { if let Some(page) = __resource_paging.get_untracked().previous() { load.run(page); } }>
+                            {move || i18n.t(T::__PLURAL__PreviousPage)}
+                        </button>
+                        <button type="button" class="rounded-md border px-3 py-2 text-sm" disabled=move || mutation.get().is_pending() || __resource_paging.get().next().is_none() on:click=move |_| { if let Some(page) = __resource_paging.get_untracked().next() { load.run(page); } }>
+                            {move || i18n.t(T::__PLURAL__NextPage)}
+                        </button>
+                        <button type="button" class="rounded-md border px-3 py-2 text-sm" disabled=move || mutation.get().is_pending() || __resource_paging.get().next().is_none() on:click=move |_| load.run(__resource_paging.get_untracked().pages().saturating_sub(1))>
+                            {move || i18n.t(T::__PLURAL__LastPage)}
+                        </button>
+                        <button type="button" class="rounded-md border px-3 py-2 text-sm" disabled=move || mutation.get().is_pending() || __resource_paging.get().loading on:click=move |_| load.run(__resource_paging.get_untracked().page)>
+                            {move || i18n.t(T::__PLURAL__Refresh)}
+                        </button>
+                    </nav>
+"#
+        .replace("__PLURAL__", plural),
+    );
 }
 
 fn signal_default(field: &ResourceField) -> &'static str {
@@ -1467,7 +1578,11 @@ fn write_submit_callback(source: &mut String, specification: &ResourceSpecificat
     writeln!(source, "                        form_open.set(false);").unwrap();
     writeln!(source, "                        editing.set(None);").unwrap();
     writeln!(source, "                        toast.success(i18n.t_untracked(T::{entity}Saved), i18n.t_untracked(T::{entity}));").unwrap();
-    writeln!(source, "                        load.run(());").unwrap();
+    writeln!(
+        source,
+        "                        load.run(__resource_paging.get_untracked().page);"
+    )
+    .unwrap();
     writeln!(source, "                    }}").unwrap();
     writeln!(source, "                    Err(failure) => {{").unwrap();
     writeln!(
@@ -1523,7 +1638,11 @@ fn write_delete_callback(source: &mut String, specification: &ResourceSpecificat
     )
     .unwrap();
     writeln!(source, "                        toast.success(i18n.t_untracked(T::{entity}Deleted), i18n.t_untracked(T::{entity}));").unwrap();
-    writeln!(source, "                        load.run(());").unwrap();
+    writeln!(
+        source,
+        "                        load.run(__resource_paging.get_untracked().page);"
+    )
+    .unwrap();
     writeln!(source, "                    }}").unwrap();
     writeln!(source, "                    Err(failure) => {{").unwrap();
     writeln!(
@@ -1672,6 +1791,46 @@ version = "v0.6.0"
         assert!(i18n.contains("(Locale::Tr, T::OrderItemSaved)"));
         let server = content(first.plan(), SERVER_SOURCE);
         assert!(server.contains("OrderItemLeptosServices::new(services.order_item.clone())"));
+    }
+
+    #[test]
+    fn both_shells_emit_the_tested_paging_state_and_complete_localization() {
+        let specification = specification();
+        for minimal in [false, true] {
+            let web = leptos_source(&specification, minimal);
+            assert_eq!(web, leptos_source(&specification, minimal));
+            syn::parse_file(&web).unwrap_or_else(|error| panic!("{error}\n{web}"));
+            assert!(web.contains(include_str!("web_pagination.rs")));
+            assert!(web.contains("offset: request.offset(), limit: ResourcePageRequest::LIMIT"));
+            assert!(web.contains("if !state.is_current(request) { return; }"));
+            assert!(web.contains("__resource_paging.get().ready() && !items.get().is_empty()"));
+            assert!(!web.contains("offset: 0, limit: 50"));
+            for (key, english, turkish) in [
+                ("Pagination", "Pagination", "Sayfalama"),
+                ("FirstPage", "First", "İlk"),
+                ("PreviousPage", "Previous", "Önceki"),
+                ("NextPage", "Next", "Sonraki"),
+                ("LastPage", "Last", "Son"),
+                ("Refresh", "Refresh", "Yenile"),
+                ("Page", "Page", "Sayfa"),
+                ("Records", "records", "kayıt"),
+            ] {
+                let key = format!("OrderItems{key}");
+                assert!(localization_key_names(&specification).contains(&key));
+                assert!(
+                    english_localization(&specification)
+                        .contains(&format!("(Locale::En, T::{key}) => \"{english}\""))
+                );
+                assert!(
+                    turkish_localization(&specification)
+                        .contains(&format!("(Locale::Tr, T::{key}) => \"{turkish}\""))
+                );
+                assert!(web.contains(&format!("T::{key}")));
+                if minimal {
+                    assert!(web.contains(&format!("T::{key} => \"{english}\"")));
+                }
+            }
+        }
     }
 
     #[test]

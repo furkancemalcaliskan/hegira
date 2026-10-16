@@ -299,7 +299,11 @@ before repository access.
 
 When OpenAPI is compiled, resource paths and schemas contribute a typed
 document which the application server explicitly merges with the Identity API
-document. The same managed-entry contract rejects missing, duplicate,
+document. The Identity HTTP adapter serves this typed document at
+`/api-docs/openapi.json` and embeds the official Swagger UI distribution from a
+locked, data-only dependency at `/swagger-ui/`. Asset extraction uses supported
+ZIP code and fixed output names; builds do not download UI assets separately.
+The same managed-entry contract rejects missing, duplicate,
 reordered, or malformed service, route, and document registrations before a
 change plan is produced. Provider migrations seed generated permission
 identifiers for the canonical administrator role so the composed authorization
@@ -315,6 +319,15 @@ icons are registered through keyed managed blocks. Route, localization, and
 registration conflicts fail before publication. Permission gates improve the
 presentation experience but do not replace authorization in the generated
 application service.
+
+Generated lists use the existing ordered, bound provider queries with 50-row
+pages and authorized totals. First/previous/next/last and refresh controls show
+localized page and record counts; empty and boundary pages disable unavailable
+navigation. Refresh and successful mutations reload the selected page, correcting
+out-of-range pages after deletion before publishing rows or counts. Request
+generations discard superseded responses, and loading or list failures hide
+previous results and totals. This presentation state does not replace backend
+authorization or modify existing application-owned resource pages.
 
 The Identity-added minimal composition uses its smaller Leptos shell instead:
 the generator registers a native route and a permission-gated dashboard link,

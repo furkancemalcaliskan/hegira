@@ -126,6 +126,9 @@ jobs:
           node-version-file: .node-version
       - run: sh scripts/frontend-check.sh
       - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check
+          rust-version: "1.96.1"
       - run: cargo audit --file Cargo.lock
 `;
 
@@ -202,6 +205,18 @@ test("frontend audit cannot be removed, skipped or tolerated in supply-chain", (
       "  supply-chain:\n", `  supply-chain:\n${condition}`,
     )).some(error => error.includes("frontend audit")));
   }
+});
+
+test("cargo-deny must select the pinned Rust toolchain inside its container", () => {
+  for (const replacement of ["", '          rust-version: "stable"\n']) {
+    assert.ok(validateRepositoryValidationWorkflow(validWorkflow.replace(
+      '          rust-version: "1.96.1"\n', replacement,
+    )).some(error => error.includes("dependency policy requires the pinned Rust toolchain")));
+  }
+  assert.ok(validateRepositoryValidationWorkflow(validWorkflow.replace(
+    '          rust-version: "1.96.1"\n',
+    '      - uses: unrelated/action@v1\n        with:\n          rust-version: "1.96.1"\n',
+  )).some(error => error.includes("dependency policy requires the pinned Rust toolchain")));
 });
 
 for (const composition of ["default", "minimal", "identity-added"]) {
