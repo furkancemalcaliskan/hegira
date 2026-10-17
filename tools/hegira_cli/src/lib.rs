@@ -37,6 +37,7 @@ use template_renderer::{
 };
 
 mod application_context;
+mod artifacts;
 mod component;
 mod doctor;
 mod identity_installation;
@@ -92,6 +93,8 @@ enum CliCommand {
     Inspect(InspectCommand),
     /// Diagnose application composition and local prerequisites without modifying it.
     Doctor(DoctorCommand),
+    /// Report application artifact ownership and disk usage without changing files.
+    Artifacts(artifacts::ArtifactsCommand),
     /// Preview or explicitly run locked native and hydration checks.
     Check(operations::command::ValidationCommand),
     /// Preview or explicitly run native tests and a hydration check (no ignored tests).
@@ -437,6 +440,13 @@ fn run_command(
             diagnostics,
         ),
         CliCommand::Doctor(command) => doctor::run(
+            command,
+            repository_root,
+            working_directory,
+            output,
+            diagnostics,
+        ),
+        CliCommand::Artifacts(command) => artifacts::run(
             command,
             repository_root,
             working_directory,

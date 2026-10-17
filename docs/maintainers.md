@@ -188,6 +188,16 @@ matrix. It executes the generated dependency-free fixtures in all six
 compositions, checks exact generated-once ownership and owner-edit preservation,
 and creates only temporary local Git repositories; it needs no remote or secrets.
 
+The Linux `artifact_usage` CLI suite verifies read-only ownership/usage reports
+across all six compositions, mixed developer/release output, sparse large files,
+hard-link deduplication and external-link rejection, active operation locks,
+unsafe claims, symlinks, special files, bounded traversal, redaction, and stable
+process outcomes. Tree metadata snapshots prove that source and output are
+unchanged. Temporary Unix socket fixtures require local socket creation; no
+network listener, build, database, Docker state, or cleanup command is invoked
+by artifact inspection. See [Application artifact usage](getting-started.md#inspect-application-artifact-usage)
+for measurement limits and the explicitly unenforced application budget.
+
 The CLI suite also tests the `operations` planning library against all six
 default, minimal, and Identity-added SQLite/PostgreSQL states. It verifies
 ordered locked arguments, provider/profile selection, explicit production

@@ -17,7 +17,22 @@ use std::{
 use serde::Serialize;
 
 use super::{OperationError, OperationErrorKind, OperationIntent, OperationPlan};
+#[cfg(target_os = "linux")]
+mod artifact_usage;
 mod database_protocol;
+#[cfg(target_os = "linux")]
+pub(crate) use artifact_usage::inspect_artifact_usage;
+
+#[cfg(not(target_os = "linux"))]
+pub(crate) fn inspect_artifact_usage(
+    _: &OperationPlan,
+) -> Result<crate::artifacts::ArtifactReport, OperationError> {
+    Err(OperationError::new(
+        OperationErrorKind::Validation,
+        "artifact-platform",
+        "Safe artifact usage inspection is currently supported on Linux only.",
+    ))
+}
 pub use database_protocol::{
     DatabaseHistory, DatabaseMigration, DatabaseMigrationState, DatabaseResult, DatabaseStatus,
     DatabaseSuccess,
