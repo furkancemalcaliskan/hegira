@@ -30,6 +30,16 @@ use crate::{
 pub const OPERATION_PLAN_SCHEMA: u32 = 1;
 pub const OPERATION_DIAGNOSTIC_SCHEMA: u32 = 1;
 
+/// Shared with read-only diagnostics so a report cannot invent ownership.
+#[cfg(target_os = "linux")]
+pub(crate) fn release_output_marker(application: &str) -> Result<Vec<u8>, serde_json::Error> {
+    serde_json::to_vec(&serde_json::json!({
+        "output_schema": 1,
+        "owner": "hegira-release-build",
+        "application": application,
+    }))
+}
+
 /// Closed, application-relative output locations; not arbitrary destinations.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ReleaseBuildArtifacts {

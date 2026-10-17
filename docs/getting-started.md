@@ -256,6 +256,72 @@ container checks, signing, and deployment approval remain separate tasks. This
 produces application artifacts, not a framework executable release or registry
 publication.
 
+## Inspect Application Artifact Usage
+
+From a current generated application's workspace or a subdirectory, inspect local
+output without running tools, builds, application hooks, or database operations:
+
+```sh
+cargo run --locked --manifest-path /path/to/hegira/Cargo.toml \
+  -p hegira_cli -- artifacts status
+cargo run --locked --manifest-path /path/to/hegira/Cargo.toml \
+  -p hegira_cli -- artifacts status --json
+```
+
+Use `--application-root /absolute/path/to/application` for explicit selection.
+The source CLI launcher may compile itself; the artifact inspection command
+starts no child process and performs no filesystem writes or cleanup. Inspection
+currently requires Linux and a current manifest/composition authenticated against
+the source checkout's bundled package. Other platforms fail closed.
+
+The schema-1 report contains the application identity, `operation_activity`,
+`budget_bytes`, `budget_status`, two ordered `regions`, `exclusions`, `guidance`,
+and sorted, content-redacted `diagnostics`. Paths are application-relative;
+individual artifact names, file contents, runtime configuration, environment
+values, and machine-local paths are omitted. The regions are:
+
+| Region | Ownership and measurement |
+| --- | --- |
+| `target` | Developer or unclaimed output, excluding the separately reported release root; includes ordinary check/test, manual Cargo/Leptos output, and local tool installations |
+| `target/hegira/release-build` | CLI release output only when its exact existing claim matches this application and the entire owned tree passes safety checks; otherwise unclaimed or absent |
+
+Only regular-file metadata contributes sizes: `logical_bytes` sums file lengths,
+and `allocated_bytes` sums allocated 512-byte blocks. Sparse files can have large
+logical sizes and small allocations. Hard links count once per region; links
+across regions can overlap. Directory metadata is excluded, so these are artifact
+measurements rather than a filesystem quota. The target tree is traversed once,
+in sorted order, with at most 200000 entries and 64 directory levels. Missing
+regions report zero bytes. `status=measured` means the walk completed;
+`incomplete` or `unavailable` means reported sizes are partial or unknown.
+
+Symlinks, special files, filesystem boundaries, inaccessible entries, and detected
+substitutions fail closed without traversal. External hard links invalidate a
+release claim. Invalid claims are never repaired or adopted, and contents of
+invalid marker files are not printed. Unsafe or over-limit trees return exit 3
+with the partial report; invalid applications and incompatible compositions use
+the existing validation/conflict outcomes. JSON diagnostics stay on stdout,
+including failures before measurement.
+
+`operation_activity` observes the existing application-operation directory lock
+without creating a lock file or waiting for an active operation. `idle` is only
+an observation, and manual Cargo builds need not hold this lock. Active builds
+can change sizes during or immediately after measurement; retry after builds
+finish when a consistent result matters.
+
+Application output currently has **no size-budget enforcement**:
+`budget_bytes=null`, `budget_status=not-enforced`, and every region has
+`cleanup_eligible=false` with a reason. There is no application prune command.
+Never forge the release ownership marker or infer deletion authority from an
+idle report. Provider/features, debug/release profiles, native/WASM targets, and
+incremental builds each contribute output growth; development/watch output is
+not capped by repository validation-cache policy.
+
+Global Cargo registry/Git/toolchain caches, Docker state, and output outside the
+local `target` tree (including external `CARGO_TARGET_DIR` or custom site paths)
+are excluded. Environment and Cargo configuration are not loaded to discover
+alternate locations. Review developer output and external caches with the
+application owner; this command grants no cleanup authority.
+
 ## Operate An Application Database
 
 Use a compatible framework checkout to preview an explicitly selected operation:

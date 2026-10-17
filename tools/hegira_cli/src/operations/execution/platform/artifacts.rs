@@ -21,12 +21,7 @@ pub(super) struct BuildOutputs {
 
 impl BuildOutputs {
     fn marker(plan: &OperationPlan) -> Result<Vec<u8>, OperationError> {
-        serde_json::to_vec(&serde_json::json!({
-            "output_schema": 1,
-            "owner": "hegira-release-build",
-            "application": plan.summary.application,
-        }))
-        .map_err(|_| ownership())
+        crate::operations::release_output_marker(&plan.summary.application).map_err(|_| ownership())
     }
 
     /// Validate a reusable root, or the absence of one, without creating anything.

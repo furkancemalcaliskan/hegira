@@ -803,6 +803,27 @@ silently reverted. A receipt certifies source-build output only, not secret-free
 assets, runtime correctness, tests, container validation, signing, or deployment.
 See [Application release builds](getting-started.md#build-an-application-release-bundle).
 
+### Read-only application artifact diagnostics
+
+`hegira artifacts status` reuses the current operation plan's authenticated
+application/composition and root anchor without executing its steps. On Linux,
+one sorted, descriptor-relative metadata walk partitions local `target` output
+into developer/unclaimed data and the fixed CLI release root. Diagnostics share
+the executor's exact release-claim serialization and directory-lock contract;
+they never create claims, lock files, output directories, or child processes.
+No runtime profile, environment override, Cargo configuration, or artifact body
+is loaded. Only the bounded ownership marker is read as file content.
+
+The schema-1 human/JSON report exposes logical/allocated regular-file usage,
+per-region hard-link deduplication, active/idle/unknown operation state,
+exclusions, and cleanup eligibility. Unsafe entries, substitutions, external
+release hard links, and bounded-walk failures produce redacted diagnostics and
+partial measurements without claiming unsafe output. Byte budgets are explicitly
+unenforced and cleanup is ineligible: the current command supplies neither an
+application validation-cache lifecycle nor deletion authority. Ordinary developer
+output, global caches, Docker state, and external output are not adopted.
+See [Artifact usage](getting-started.md#inspect-application-artifact-usage).
+
 ### Application creation and source publication
 
 When an application name or destination is omitted in an interactive terminal,

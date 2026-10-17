@@ -156,6 +156,13 @@ verified native/server and browser artifact locations without starting or
 deploying an application. See [Application release builds](docs/getting-started.md#build-an-application-release-bundle).
 Framework releases remain source-only.
 
+`hegira artifacts status` reports local application output ownership and disk
+usage on Linux, with `--json` for schema-1 automation. It separates developer
+output from validated CLI release output, observes active operations, and
+performs no build, claim, or cleanup. Application output currently has no size
+budget. See [Application artifact usage](docs/getting-started.md#inspect-application-artifact-usage)
+for measurements, exclusions, and partial results.
+
 `hegira db status --profile sqlite --dry-run` reviews read-only database
 inspection; `db migrate` reviews explicit forward migration. Linux execution
 requires reviewed application/toolchain trust and delegates to the application-owned

@@ -189,6 +189,11 @@ commands change. Never describe planned work as implemented.
   data. This output claim grants neither ordinary Cargo-cache cleanup nor a
   disk-budget guarantee. Reset, rollback, seed, and arbitrary SQL are not public
   CLI database capabilities.
+  Its Linux `artifacts status` command reports read-only local target usage,
+  developer versus validated release-output ownership, operation activity,
+  exclusions, and explicitly unenforced budgets in human/schema-1 JSON output.
+  One bounded no-follow metadata walk never builds, creates claims, or cleans;
+  unsafe/partial trees cannot grant ownership or deletion authority.
   Generation validates project identity and destination before rendering and
   requires a new destination under an existing parent without symlinks. Safe
   atomic publication fails closed on unsupported platforms.
