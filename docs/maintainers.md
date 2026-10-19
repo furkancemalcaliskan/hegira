@@ -196,7 +196,19 @@ process outcomes. Tree metadata snapshots prove that source and output are
 unchanged. Temporary Unix socket fixtures require local socket creation; no
 network listener, build, database, Docker state, or cleanup command is invoked
 by artifact inspection. See [Application artifact usage](getting-started.md#inspect-application-artifact-usage)
-for measurement limits and the explicitly unenforced application budget.
+for measurement limits and the separation of uncapped developer output from
+explicitly bounded validation caches.
+
+The `operation_execution` validation-cache cases exercise typed read-only
+previews, stable check/test/build reuse, allocated-byte budgets before and after
+execution (including failed children), deterministic LRU previews/publication,
+developer/lock preservation, active-operation conflicts, and inherited directory
+leases after CLI SIGKILL. Unsafe/foreign claims, symlinks, external hard links,
+unknown entries and malformed access state block reclamation. These controlled
+native builder tests do not run the generated application's runtime or database.
+See [Application validation caches](getting-started.md#bound-application-validation-caches)
+for explicit application CI selection; the repository's own caches below
+`target/validation` retain the separate lifecycle documented below.
 
 The CLI suite also tests the `operations` planning library against all six
 default, minimal, and Identity-added SQLite/PostgreSQL states. It verifies

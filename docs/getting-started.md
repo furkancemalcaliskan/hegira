@@ -92,7 +92,9 @@ can access configured services, credentials, and files with your privileges;
 application tests may themselves have side effects. Hegira performs no source or
 lockfile rewrite, but cannot make arbitrary trusted code read-only. Cargo may
 fetch already locked dependencies and write ordinary developer build output.
-No Hegira-owned application cache or cleanup policy is implied.
+An explicit `--validation-cache` selection instead uses the bounded disposable
+output described in [Validation caches](#bound-application-validation-caches).
+Without that selection, no Hegira-owned cache or cleanup policy is implied.
 
 Choose exactly one of `--dry-run` and `--execute`; execution also requires
 `--trust-application`, `--cargo`, and at least one `--tool-directory`. There are
@@ -217,7 +219,8 @@ hydration uses `hydrate` and the canonical `wasm-release` profile. It neither
 selects `APP_ENV=production` nor loads runtime configuration or starts a server.
 No database or deployment action is granted.
 
-The fixed, application-relative build root is `target/hegira/release-build`.
+Without `--validation-cache`, the fixed application-relative build root is
+`target/hegira/release-build`.
 Hegira exclusively creates and records ownership of a new root; an existing
 root is reusable only with its matching `.hegira-release-build.json` claim.
 Unclaimed output is never adopted, even if empty. Symlinks, special files,
@@ -227,6 +230,8 @@ source or unrelated data under the claimed root: Cargo Leptos can clear and
 recreate its owned `site` subtree. Ordinary `target/debug`, `target/release`,
 the manual Leptos `target/site`, and prepared tools remain outside this claim.
 Hegira provides no automatic cache cleanup or size-budget guarantee here.
+For disposable CI builds, the explicit [validation-cache mode](#bound-application-validation-caches)
+selects separate budgeted output and reports those paths in its receipt.
 
 Only a successful builder, unchanged preflight/lock identities, and verified
 native/WASM/JS/CSS outputs produce a successful artifact report:
@@ -282,15 +287,19 @@ values, and machine-local paths are omitted. The regions are:
 
 | Region | Ownership and measurement |
 | --- | --- |
-| `target` | Developer or unclaimed output, excluding the separately reported release root; includes ordinary check/test, manual Cargo/Leptos output, and local tool installations |
+| `target` | Developer or unclaimed output, excluding the separately reported release and validation roots; includes ordinary check/test, manual Cargo/Leptos output, and local tool installations |
 | `target/hegira/release-build` | CLI release output only when its exact existing claim matches this application and the entire owned tree passes safety checks; otherwise unclaimed or absent |
+| `target/hegira/validation` | Explicitly claimed disposable validation caches; budget, activity and eligibility are also available through `artifacts cache-status` |
 
-Only regular-file metadata contributes sizes: `logical_bytes` sums file lengths,
-and `allocated_bytes` sums allocated 512-byte blocks. Sparse files can have large
+For developer/release output, only regular-file metadata contributes sizes:
+`logical_bytes` sums file lengths, and `allocated_bytes` sums allocated 512-byte
+blocks. Sparse files can have large
 logical sizes and small allocations. Hard links count once per region; links
-across regions can overlap. Directory metadata is excluded, so these are artifact
-measurements rather than a filesystem quota. The target tree is traversed once,
-in sorted order, with at most 200000 entries and 64 directory levels. Missing
+across regions can overlap. Developer/release measurements exclude directory
+metadata. Validation-cache allocation includes directories and ownership/access
+metadata so those bytes also count against its budget. The target walk delegates
+the validation subtree to its ownership walker without scanning it twice. Each
+walk is bounded by 200000 entries and 64 directory levels. Missing
 regions report zero bytes. `status=measured` means the walk completed;
 `incomplete` or `unavailable` means reported sizes are partial or unknown.
 
@@ -298,7 +307,8 @@ Symlinks, special files, filesystem boundaries, inaccessible entries, and detect
 substitutions fail closed without traversal. External hard links invalidate a
 release claim. Invalid claims are never repaired or adopted, and contents of
 invalid marker files are not printed. Unsafe or over-limit trees return exit 3
-with the partial report; invalid applications and incompatible compositions use
+with the partial report; unsafe validation ownership uses conflict exit 4.
+Invalid applications and incompatible compositions use
 the existing validation/conflict outcomes. JSON diagnostics stay on stdout,
 including failures before measurement.
 
@@ -308,11 +318,13 @@ an observation, and manual Cargo builds need not hold this lock. Active builds
 can change sizes during or immediately after measurement; retry after builds
 finish when a consistent result matters.
 
-Application output currently has **no size-budget enforcement**:
-`budget_bytes=null`, `budget_status=not-enforced`, and every region has
-`cleanup_eligible=false` with a reason. There is no application prune command.
-Never forge the release ownership marker or infer deletion authority from an
-idle report. Provider/features, debug/release profiles, native/WASM targets, and
+There is **no budget over all application output**: the overall
+`budget_bytes=null` and `budget_status=not-enforced` describe that boundary.
+Only explicitly selected validation storage has a budget and eligible inactive
+caches. Its optional `validation_cache` report uses the default budget;
+`artifacts cache-status --cache-budget-mib <MIB>` assesses a different budget.
+Never forge ownership markers or infer deletion authority from an idle report.
+Provider/features, debug/release profiles, native/WASM targets, and
 incremental builds each contribute output growth; development/watch output is
 not capped by repository validation-cache policy.
 
@@ -321,6 +333,87 @@ local `target` tree (including external `CARGO_TARGET_DIR` or custom site paths)
 are excluded. Environment and Cargo configuration are not loaded to discover
 alternate locations. Review developer output and external caches with the
 application owner; this command grants no cleanup authority.
+
+## Bound Application Validation Caches
+
+On Linux, add `--validation-cache` to `check`, `test`, or `build --release`,
+alongside the existing preview or trusted execution flags:
+
+```sh
+hegira check --validation-cache --cache-budget-mib 8192 --dry-run --json
+hegira artifacts cache-status --cache-budget-mib 8192 --json
+hegira artifacts prune --cache-budget-mib 8192 --dry-run --json
+hegira artifacts prune --cache-budget-mib 8192 --execute --json
+```
+
+Here `hegira` is the source-built CLI described above. Generation and previews
+create no storage or ownership claims, probe no tools, and perform no cleanup.
+Execution keeps the existing application/toolchain trust requirements. This mode
+is suitable for application CI using the selected provider/composition; it does
+not run the framework's provider matrix or authorize ignored integration tests.
+The provider-aware generated quality workflow is a separate capability.
+
+The fixed application-relative namespace is `target/hegira/validation`.
+The CLI creates its exact application-bound root claim only in an absent
+directory, then separately claims the stable `check`, `test`, and `build` cache
+directories. Existing unclaimed directories are never adopted, even if empty.
+The selected operation's native and WASM output share its cache; repeated runs
+reuse that location across lock, toolchain and feature changes. Cargo manages
+the graph identities within it. `CARGO_TARGET_DIR`, `CARGO_BUILD_TARGET_DIR` and
+release Leptos paths select the owned location over inherited target overrides;
+incremental compilation and dev/test debug information are disabled for this
+mode. Development/watch, database commands and ordinary output retain their
+separate contracts. This mode is rejected for `dev` and database operations.
+
+The default budget is 65536 MiB, configurable with positive
+`--cache-budget-mib` on each operation/status/prune invocation. It is a command
+selection, never runtime configuration or a persisted machine setting; use the
+same selection in CI and maintenance. It covers measured allocated bytes in
+this namespace, including directory/claim/access metadata, and counts internal
+hard links once per cache. Sparse logical sizes are reported separately.
+Global Cargo registry/Git/toolchain caches, npm dependencies, Docker, ordinary
+developer output and ordinary release bundles are excluded.
+
+Preparation and completion enforce the budget, including after child failure,
+cancellation or termination. Inactive caches are reclaimed by last-access time,
+with cache name breaking ties. The active graph remains protected. If inactive
+reclamation cannot meet the budget, execution exits 3 with
+`validation-cache-budget-exceeded`, emits no successful artifact receipt, and
+preserves active/unowned data. Raise the budget explicitly or inspect/prune
+after the work finishes. Failed or forcibly interrupted work may leave an
+oversized cache; a successful operation satisfies the measured boundary.
+This is pre/post enforcement, not a live filesystem quota: trusted code can
+allocate between checks or write elsewhere.
+
+The application-operation lock serializes validation and explicit pruning.
+Each cache also has a directory lease inherited by trusted Cargo children so
+SIGKILL of the CLI cannot make a surviving child eligible for cleanup. Leases
+release when all holders exit, without persistent stale lock files. Status
+observes activity conservatively; `artifacts prune --execute` reauthenticates
+ownership, current activity, and no-follow directory/file identities before
+removal. Symlinks, mount boundaries, special files, external hard links,
+malformed access markers, unknown root entries and partial scans fail closed
+before reclamation. Safe cache lookups require Linux `openat2` support and
+reject same-device bind mounts as well as different-device mounts; unsupported
+lookup semantics fail closed. No claim is repaired or fabricated. Manual
+concurrent edits and tools that deliberately discard inherited leases are outside this
+trusted-code coordination contract. An interruption during claim/access updates
+or deletion may leave incomplete state requiring manual owner inspection; do not
+forge claims or remove application mutation recovery state to enable pruning.
+
+`cache-status` and prune reports use schema 1 and contain sorted cache names,
+logical/allocated sizes, timestamps, activity/eligibility, budget satisfaction,
+and selected LRU candidates without file contents or machine-local paths.
+Status succeeds for a safely measured over-budget cache; a prune preview or
+execution that cannot meet its budget exits 3. Active-operation and unsafe
+ownership conflicts exit 4. Preview is read-only and is not a deletion token.
+
+A successful validation release build reports artifacts under
+`target/hegira/validation/build`, with owner `hegira-validation-cache`.
+These are disposable outputs: later validation/pruning can remove them.
+Copy reviewed outputs elsewhere before retaining or deploying them; an artifact
+receipt grants no deployment authority. Use ordinary `build --release` for
+the existing separately owned release-bundle location.
 
 ## Operate An Application Database
 

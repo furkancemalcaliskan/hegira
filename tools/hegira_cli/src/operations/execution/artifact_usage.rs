@@ -11,6 +11,7 @@ use super::{OperationError, OperationErrorKind, OperationPlan, anchors::*};
 use crate::artifacts::{ArtifactRegion, ArtifactReport};
 
 const RELEASE_ROOT: &str = "target/hegira/release-build";
+const CACHE_ROOT: &str = "target/hegira/validation";
 const MARKER: &str = ".hegira-release-build.json";
 const ENTRY_LIMIT: usize = 200_000;
 const DEPTH_LIMIT: usize = 64;
@@ -24,7 +25,7 @@ struct FileRecord {
 
 struct Scan {
     regions: Vec<ArtifactRegion>,
-    files: [BTreeMap<(u64, u64), FileRecord>; 2],
+    files: [BTreeMap<(u64, u64), FileRecord>; 3],
     diagnostics: BTreeMap<&'static str, OperationError>,
     remaining: usize,
     device: u64,
@@ -129,6 +130,10 @@ impl Scan {
         for name in names {
             use std::os::unix::ffi::OsStrExt;
             let path = relative.join(std::ffi::OsStr::from_bytes(name.to_bytes()));
+            // The dedicated ownership walker measures this subtree once below.
+            if path == Path::new("hegira/validation") {
+                continue;
+            }
             let child_region = if path.starts_with("hegira/release-build") {
                 1
             } else {
@@ -224,8 +229,13 @@ pub(crate) fn inspect_artifact_usage(
     };
     let mut developer = ArtifactRegion::new("target", "developer-or-unclaimed");
     developer.excluded_paths.push(RELEASE_ROOT);
+    developer.excluded_paths.push(CACHE_ROOT);
     let mut scan = Scan {
-        regions: vec![developer, ArtifactRegion::new(RELEASE_ROOT, "none")],
+        regions: vec![
+            developer,
+            ArtifactRegion::new(RELEASE_ROOT, "none"),
+            ArtifactRegion::new(CACHE_ROOT, "none"),
+        ],
         files: Default::default(),
         diagnostics: BTreeMap::new(),
         remaining: ENTRY_LIMIT,
@@ -275,6 +285,37 @@ pub(crate) fn inspect_artifact_usage(
     if scan.regions[1].status != "measured" && scan.regions[1].owner == "hegira-release-build" {
         scan.regions[1].owner = "unclaimed";
     }
+    let validation_cache = match super::maintain_validation_cache(
+        plan,
+        super::super::ValidationCache::from_mib(super::super::ValidationCache::DEFAULT_BUDGET_MIB)?,
+        crate::artifacts::CacheAction::Status,
+    ) {
+        Ok(report) => {
+            if report.allocated_bytes > 0 {
+                let region = &mut scan.regions[2];
+                region.status = "measured";
+                region.owner = "hegira-validation-cache";
+                region.logical_bytes = report.logical_bytes;
+                region.unique_files = 1 + report
+                    .caches
+                    .iter()
+                    .map(|cache| cache.unique_files)
+                    .sum::<u64>();
+                region.allocated_bytes = report.allocated_bytes;
+                region.cleanup_eligible = report.caches.iter().any(|cache| cache.cleanup_eligible);
+                region.cleanup_reason = "Explicit artifacts prune revalidates ownership and activity; preview first. Allocated cache bytes include directory and ownership metadata.";
+                Some(report)
+            } else {
+                None
+            }
+        }
+        Err(error) => {
+            scan.regions[2].owner = "unclaimed";
+            scan.regions[2].status = "incomplete";
+            scan.diagnostics.insert("artifact-validation-cache", error);
+            None
+        }
+    };
     plan.anchor.verify()?;
     Ok(ArtifactReport {
         output_schema: 1,
@@ -289,12 +330,13 @@ pub(crate) fn inspect_artifact_usage(
             "External CARGO_TARGET_DIR and configured build/site output outside target",
         ],
         guidance: vec![
-            "Sizes use regular-file logical bytes and allocated 512-byte blocks; hard links count once per region. Cross-region links may overlap. Directory metadata is excluded.",
+            "Sizes use logical bytes and allocated 512-byte blocks; hard links count once per region. Developer/release sizes exclude directory metadata; validation budgets include directory/claim metadata. Cross-region links may overlap.",
             "Only the fixed local target tree is measured, once, without following symlinks. Incomplete measurements are partial; active builds can change sizes immediately.",
             "Provider/features, native/WASM targets, debug/release profiles and incremental compilation grow separate artifacts; watch/development output has no size cap.",
-            "Check/test currently use ordinary Cargo output; only a validated release-build claim identifies CLI-owned output. No application validation budget or prune command is implemented.",
+            "Explicit --validation-cache check/test/build output has a separate pre/post budget and LRU lifecycle. artifacts cache-status accepts the selected --cache-budget-mib; ordinary developer and release output remain uncapped.",
             "Review developer output manually with the application owner. Never forge ownership markers or infer deletion authority from an idle observation.",
         ],
         diagnostics: scan.diagnostics.into_values().collect(),
+        validation_cache,
     })
 }

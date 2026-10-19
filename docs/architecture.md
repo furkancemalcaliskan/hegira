@@ -780,7 +780,7 @@ download. Hegira loads no runtime profile and starts neither application nor
 provider. Build code and inherited environment remain trusted, not sandboxed.
 
 The release plan records closed application-relative artifact identities and
-explicit output overrides. The executor creates only a new
+explicit output overrides. Without `--validation-cache`, the executor creates only a new
 `target/hegira/release-build` root or reuses its exact application-bound ownership
 claim. It never adopts an existing unclaimed root. Bounded no-follow metadata
 walks reject symlinks, special files, external hard links, and unsupported deep
@@ -812,17 +812,45 @@ into developer/unclaimed data and the fixed CLI release root. Diagnostics share
 the executor's exact release-claim serialization and directory-lock contract;
 they never create claims, lock files, output directories, or child processes.
 No runtime profile, environment override, Cargo configuration, or artifact body
-is loaded. Only the bounded ownership marker is read as file content.
+is loaded. Only bounded ownership and cache-access markers are read as file content.
 
 The schema-1 human/JSON report exposes logical/allocated regular-file usage,
 per-region hard-link deduplication, active/idle/unknown operation state,
 exclusions, and cleanup eligibility. Unsafe entries, substitutions, external
 release hard links, and bounded-walk failures produce redacted diagnostics and
-partial measurements without claiming unsafe output. Byte budgets are explicitly
-unenforced and cleanup is ineligible: the current command supplies neither an
-application validation-cache lifecycle nor deletion authority. Ordinary developer
-output, global caches, Docker state, and external output are not adopted.
+partial measurements without claiming unsafe output. There is no budget over
+all application output or deletion authority over release/developer output.
+The validation subtree is delegated once to the dedicated ownership walker and
+reported separately.
+Ordinary developer output, global caches, Docker state, and external output are
+not adopted.
 See [Artifact usage](getting-started.md#inspect-application-artifact-usage).
+
+### Explicit application validation caches
+
+`OperationPlan::with_validation_cache(ValidationCache)` derives a read-only
+check/test/release-build plan with a positive byte budget and fixed disposable
+output under `target/hegira/validation/{check,test,build}`. The public
+`--validation-cache` flag selects it; `--cache-budget-mib` defaults to 65536 MiB.
+Planning does not read output or create claims. The executor rederives this
+selection while reauthenticating the plan. Development and database operations
+reject it. Validation release receipts identify their disposable cache paths;
+ordinary release-bundle claims remain separate and ineligible for pruning.
+
+The application-directory lock serializes preparation, execution and postflight
+with explicit maintenance. Each cache's directory lease survives exec so an
+orphaned trusted child remains protected after the CLI is killed. Bounded,
+no-follow, device-checked metadata snapshots validate exact root/cache claims,
+closed child names, access markers and internal-only hard links before any LRU
+reclamation. Deletion verifies opened directories and observed entry identities,
+unlinks relative to those descriptors, and retains the claim until the end.
+Preparation/completion measure allocated file and directory bytes and reclaim
+only inactive owned caches; an unreclaimable budget fails without deleting
+active or unowned data. It is not a live quota or hostile-code sandbox.
+`artifacts cache-status` and `artifacts prune --dry-run` remain read-only;
+`artifacts prune --execute` obtains execution coordination anew and refuses
+pending application recovery. Interrupted partial deletion fails subsequent
+ownership validation rather than repairing/adopting state automatically.
 
 ### Application creation and source publication
 

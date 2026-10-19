@@ -17,6 +17,7 @@ fn ownership() -> OperationError {
 pub(super) struct BuildOutputs {
     root: Directory,
     marker: Vec<u8>,
+    marker_name: &'static str,
 }
 
 impl BuildOutputs {
@@ -28,7 +29,8 @@ impl BuildOutputs {
     pub(super) fn inspect(plan: &OperationPlan) -> Result<(), OperationError> {
         plan.anchor.verify()?;
         let mut directory = plan.anchor.directory.clone();
-        for name in ["target", "hegira", "release-build"] {
+        let root = plan.summary.artifacts.as_ref().ok_or_else(ownership)?.root;
+        for name in root.split('/') {
             directory.verify().map_err(|_| ownership())?;
             match fs::statat(&directory.fd, name, AtFlags::SYMLINK_NOFOLLOW) {
                 Err(rustix::io::Errno::NOENT) => return Ok(()),
@@ -41,12 +43,30 @@ impl BuildOutputs {
         }
         Self {
             root: directory,
-            marker: Self::marker(plan)?,
+            marker: if plan.summary.validation_cache.is_some() {
+                super::cache::cache_marker(plan, "build")?
+            } else {
+                Self::marker(plan)?
+            },
+            marker_name: if plan.summary.validation_cache.is_some() {
+                super::cache::MARKER
+            } else {
+                MARKER
+            },
         }
         .verify(plan)
     }
 
     pub(super) fn prepare(plan: &OperationPlan) -> Result<Self, OperationError> {
+        if plan.summary.validation_cache.is_some() {
+            let outputs = Self {
+                root: Directory::open(&plan.root.join("target/hegira/validation/build"))?,
+                marker: super::cache::cache_marker(plan, "build")?,
+                marker_name: super::cache::MARKER,
+            };
+            outputs.verify(plan)?;
+            return Ok(outputs);
+        }
         let marker = Self::marker(plan)?;
         let mut parent = plan.anchor.directory.clone();
         for name in ["target", "hegira"] {
@@ -77,7 +97,11 @@ impl BuildOutputs {
             file.write_all(&marker).map_err(|_| ownership())?;
             file.sync_all().map_err(|_| ownership())?;
         }
-        let outputs = Self { root, marker };
+        let outputs = Self {
+            root,
+            marker,
+            marker_name: MARKER,
+        };
         outputs.verify(plan)?;
         Ok(outputs)
     }
@@ -85,7 +109,7 @@ impl BuildOutputs {
     pub(super) fn verify(&self, plan: &OperationPlan) -> Result<(), OperationError> {
         plan.anchor.verify()?;
         self.root.verify().map_err(|_| ownership())?;
-        if read_file(&self.root.fd, Path::new(MARKER), 4096).map_err(|_| ownership())?
+        if read_file(&self.root.fd, Path::new(self.marker_name), 4096).map_err(|_| ownership())?
             != self.marker
         {
             return Err(ownership());

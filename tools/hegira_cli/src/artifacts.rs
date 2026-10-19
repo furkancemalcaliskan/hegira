@@ -8,7 +8,8 @@ use serde::Serialize;
 use crate::{
     ApplicationContextRequest, CliDiagnostic, CliExit,
     operations::{
-        OperationError, OperationIntent, OperationRequest, execution::inspect_artifact_usage,
+        OperationError, OperationIntent, OperationRequest, ValidationCache,
+        execution::inspect_artifact_usage, execution::maintain_validation_cache,
         plan_application_operation,
     },
     write_diagnostic,
@@ -24,6 +25,77 @@ pub(crate) struct ArtifactsCommand {
 enum ArtifactAction {
     /// Measure local target output; never build, claim, prune, or clean it.
     Status(ArtifactOptions),
+    /// Inspect claimed validation caches and their budget without writes or tools.
+    CacheStatus(CacheOptions),
+    /// Preview or explicitly reclaim inactive owned validation caches to meet a budget.
+    Prune(PruneOptions),
+}
+
+#[derive(Debug, Args)]
+struct CacheOptions {
+    #[command(flatten)]
+    options: ArtifactOptions,
+    /// Validation storage budget in MiB; excludes ordinary developer/release output.
+    #[arg(long, default_value_t = ValidationCache::DEFAULT_BUDGET_MIB)]
+    cache_budget_mib: u64,
+}
+
+#[derive(Debug, Args)]
+struct PruneOptions {
+    #[command(flatten)]
+    cache: CacheOptions,
+    /// Read-only LRU preview; never creates a claim or removes files.
+    #[arg(long, required_unless_present = "execute", conflicts_with = "execute")]
+    dry_run: bool,
+    /// Reauthenticate and remove only eligible owned inactive validation caches.
+    #[arg(long)]
+    execute: bool,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) enum CacheAction {
+    Status,
+    Preview,
+    Prune,
+}
+
+impl CacheAction {
+    #[cfg(target_os = "linux")]
+    pub(crate) fn name(self) -> &'static str {
+        match self {
+            Self::Status => "status",
+            Self::Preview => "preview",
+            Self::Prune => "prune",
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct CacheReport {
+    pub output_schema: u32,
+    pub mode: &'static str,
+    pub application: String,
+    pub path: &'static str,
+    pub operation_activity: &'static str,
+    pub budget_bytes: u64,
+    pub allocated_bytes: u64,
+    pub logical_bytes: u64,
+    pub remaining_bytes: u64,
+    pub budget_satisfied: bool,
+    pub caches: Vec<CacheEntry>,
+    pub selected: Vec<&'static str>,
+    pub guidance: &'static str,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct CacheEntry {
+    pub cache: &'static str,
+    pub logical_bytes: u64,
+    pub allocated_bytes: u64,
+    pub unique_files: u64,
+    pub last_used: u64,
+    pub active: bool,
+    pub cleanup_eligible: bool,
 }
 
 #[derive(Debug, Args)]
@@ -47,6 +119,8 @@ pub(crate) struct ArtifactReport {
     pub exclusions: Vec<&'static str>,
     pub guidance: Vec<&'static str>,
     pub diagnostics: Vec<OperationError>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub validation_cache: Option<CacheReport>,
 }
 
 #[derive(Debug, Serialize)]
@@ -88,7 +162,35 @@ pub(crate) fn run(
     output: &mut impl Write,
     diagnostics: &mut impl Write,
 ) -> CliExit {
-    let ArtifactAction::Status(options) = command.command;
+    let (options, cache) = match command.command {
+        ArtifactAction::Status(options) => (options, None),
+        ArtifactAction::CacheStatus(cache) => (
+            cache.options,
+            Some((cache.cache_budget_mib, CacheAction::Status)),
+        ),
+        ArtifactAction::Prune(prune) => (
+            prune.cache.options,
+            Some((
+                prune.cache.cache_budget_mib,
+                if prune.execute {
+                    CacheAction::Prune
+                } else {
+                    CacheAction::Preview
+                },
+            )),
+        ),
+    };
+    if let Some((mib, action)) = cache {
+        return run_cache(
+            options,
+            mib,
+            action,
+            repository_root,
+            working_directory,
+            output,
+            diagnostics,
+        );
+    }
     let application = match options.application_root {
         Some(root) => ApplicationContextRequest::explicit(working_directory, root),
         None => ApplicationContextRequest::discover_from(working_directory),
@@ -166,5 +268,87 @@ pub(crate) fn run(
         CliExit::Internal
     } else {
         exit
+    }
+}
+
+fn run_cache(
+    options: ArtifactOptions,
+    mib: u64,
+    action: CacheAction,
+    repository: PathBuf,
+    working_directory: PathBuf,
+    output: &mut impl Write,
+    diagnostics: &mut impl Write,
+) -> CliExit {
+    let application = match options.application_root {
+        Some(root) => ApplicationContextRequest::explicit(working_directory, root),
+        None => ApplicationContextRequest::discover_from(working_directory),
+    };
+    let result = ValidationCache::from_mib(mib).and_then(|budget| {
+        let plan = plan_application_operation(
+            &repository,
+            &OperationRequest {
+                application,
+                intent: OperationIntent::Check,
+            },
+        )?;
+        maintain_validation_cache(&plan, budget, action)
+    });
+    let (text, exit) = match result {
+        Ok(report) => {
+            let exit = if matches!(action, CacheAction::Status) || report.budget_satisfied {
+                CliExit::Success
+            } else {
+                CliExit::Validation
+            };
+            let text = if options.json {
+                serde_json::to_string_pretty(&report).unwrap()
+            } else {
+                let mut text = format!(
+                    "Application validation cache (schema 1; {})\nApplication: {}\nPath: {}\nOperation: {}\nBudget: {} bytes; allocated: {} bytes; remaining/projected: {} bytes; budget satisfied: {}\n",
+                    report.mode,
+                    report.application,
+                    report.path,
+                    report.operation_activity,
+                    report.budget_bytes,
+                    report.allocated_bytes,
+                    report.remaining_bytes,
+                    report.budget_satisfied
+                );
+                for cache in &report.caches {
+                    text.push_str(&format!("{}: {} allocated bytes, {} logical bytes; last used: {}; active: {}; cleanup eligible: {}\n", cache.cache, cache.allocated_bytes, cache.logical_bytes, cache.last_used, cache.active, cache.cleanup_eligible));
+                }
+                text.push_str(&format!(
+                    "Selected in LRU order: {:?}\n{}",
+                    report.selected, report.guidance
+                ));
+                if !report.budget_satisfied {
+                    text.push_str("\nBudget cannot be met with eligible inactive caches; finish active work or raise --cache-budget-mib explicitly.");
+                }
+                text
+            };
+            (text, exit)
+        }
+        Err(error) => {
+            if !options.json {
+                return if writeln!(diagnostics, "{error}").is_ok() {
+                    error.exit()
+                } else {
+                    CliExit::Internal
+                };
+            }
+            (
+                serde_json::to_string_pretty(
+                    &serde_json::json!({"output_schema": 1, "diagnostics": [error]}),
+                )
+                .unwrap(),
+                error.exit(),
+            )
+        }
+    };
+    if writeln!(output, "{text}").is_ok() {
+        exit
+    } else {
+        CliExit::Internal
     }
 }

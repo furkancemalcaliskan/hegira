@@ -31,6 +31,490 @@ use template_renderer::{RenderRequest, render};
 #[path = "support/operation_contract.rs"]
 mod operation_contract;
 
+const VALIDATION_ROOT: &str = "target/hegira/validation";
+
+fn artifact_json(output: &Output, code: i32) -> serde_json::Value {
+    assert_eq!(output.status.code(), Some(code), "{output:?}");
+    assert!(output.stderr.is_empty(), "{output:?}");
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(value["output_schema"], 1);
+    value
+}
+
+fn cache_command(fixture: &Fixture, action: &str, mib: u64) -> Command {
+    let mut command = fixture.public_command("artifacts");
+    command.args([action, "--json", "--cache-budget-mib", &mib.to_string()]);
+    command
+}
+
+fn cache_run(fixture: &Fixture, operation: &str, mib: u64, exit: i32) -> serde_json::Value {
+    public_json(
+        &fixture
+            .public_execute(operation, true)
+            .args(["--validation-cache", "--cache-budget-mib", &mib.to_string()])
+            .env("CARGO_TARGET_DIR", &fixture.tools)
+            .env("CARGO_BUILD_TARGET_DIR", &fixture.tools)
+            .output()
+            .unwrap(),
+        exit,
+    )
+}
+
+#[test]
+fn validation_cache_previews_are_typed_read_only_and_reject_unrelated_intents() {
+    let fixture = Fixture::new();
+    for operation in ["check", "test", "build"] {
+        let output = fixture
+            .public_command(operation)
+            .args([
+                "--validation-cache",
+                "--cache-budget-mib",
+                "2",
+                "--dry-run",
+                "--json",
+            ])
+            .output()
+            .unwrap();
+        let report = public_json(&output, 0);
+        assert_eq!(
+            report["plan"]["validation_cache"]["budget_bytes"],
+            2 * 1024 * 1024
+        );
+        for step in report["plan"]["steps"].as_array().unwrap() {
+            assert!(
+                step["environment"]["CARGO_TARGET_DIR"]
+                    .as_str()
+                    .unwrap()
+                    .starts_with(VALIDATION_ROOT)
+            );
+            assert_eq!(step["environment"]["CARGO_INCREMENTAL"], "0");
+        }
+    }
+    for args in [
+        vec![
+            "check",
+            "--dry-run",
+            "--validation-cache",
+            "--cache-budget-mib",
+            "0",
+            "--json",
+        ],
+        vec!["dev", "--dry-run", "--validation-cache", "--json"],
+        vec![
+            "db",
+            "status",
+            "--profile",
+            "sqlite",
+            "--dry-run",
+            "--validation-cache",
+            "--json",
+        ],
+    ] {
+        let output = fixture
+            .public_command(args[0])
+            .args(&args[1..])
+            .output()
+            .unwrap();
+        public_json(&output, 3);
+    }
+    for args in [
+        vec!["artifacts", "prune"],
+        vec!["artifacts", "prune", "--dry-run", "--execute"],
+        vec!["check", "--dry-run", "--cache-budget-mib", "1"],
+    ] {
+        let output = fixture
+            .public_command(args[0])
+            .args(&args[1..])
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(2));
+    }
+    for action in ["cache-status", "prune"] {
+        let mut command = cache_command(&fixture, action, 1);
+        if action == "prune" {
+            command.arg("--dry-run");
+        }
+        let report = artifact_json(&command.output().unwrap(), 0);
+        assert_eq!(report["allocated_bytes"], 0);
+        assert_eq!(report["caches"], serde_json::json!([]));
+    }
+    assert!(!fixture.root.join("target").exists());
+    assert!(!fixture.root.join("child.log").exists());
+}
+
+#[test]
+fn validation_check_test_and_build_reuse_measured_bounded_storage() {
+    let fixture = Fixture::new();
+    fixture.development_tools(&fixture.root);
+    fs::write(fixture.root.join("cache-payload-bytes"), "65536").unwrap();
+    fs::create_dir_all(fixture.root.join("target/debug")).unwrap();
+    let developer = fixture.root.join("target/debug/private-developer-file");
+    fs::write(&developer, "developer state").unwrap();
+    let locks: Vec<_> = ["Cargo.toml", "Cargo.lock", "hegira.toml"]
+        .into_iter()
+        .map(|name| fs::read(fixture.root.join(name)).unwrap())
+        .collect();
+    for operation in ["check", "test", "build"] {
+        let first = cache_run(&fixture, operation, 64, 0);
+        assert_eq!(first["execution"]["outcome"]["status"], "succeeded");
+        let before = artifact_json(
+            &cache_command(&fixture, "cache-status", 64)
+                .output()
+                .unwrap(),
+            0,
+        );
+        let repeated = cache_run(&fixture, operation, 64, 0);
+        let after = artifact_json(
+            &cache_command(&fixture, "cache-status", 64)
+                .output()
+                .unwrap(),
+            0,
+        );
+        assert_eq!(before["allocated_bytes"], after["allocated_bytes"]);
+        assert!(after["allocated_bytes"].as_u64().unwrap() <= 64 * 1024 * 1024);
+        assert!(after["budget_satisfied"].as_bool().unwrap());
+        if operation == "build" {
+            let artifacts = &repeated["execution"]["artifacts"];
+            assert_eq!(artifacts["owner"], "hegira-validation-cache");
+            assert_eq!(artifacts["root"], format!("{VALIDATION_ROOT}/build"));
+            assert!(
+                fixture
+                    .root
+                    .join(artifacts["server"].as_str().unwrap())
+                    .is_file()
+            );
+            assert!(!fixture.root.join("target/hegira/release-build").exists());
+        }
+    }
+    let usage = artifact_json(
+        &fixture
+            .public_command("artifacts")
+            .args(["status", "--json"])
+            .output()
+            .unwrap(),
+        0,
+    );
+    assert_eq!(
+        usage["regions"][0]["logical_bytes"],
+        "developer state".len()
+    );
+    assert_eq!(usage["regions"][2]["owner"], "hegira-validation-cache");
+    assert_eq!(fs::read_to_string(developer).unwrap(), "developer state");
+    for (i, name) in ["Cargo.toml", "Cargo.lock", "hegira.toml"]
+        .iter()
+        .enumerate()
+    {
+        assert_eq!(fs::read(fixture.root.join(name)).unwrap(), locks[i]);
+    }
+}
+
+#[test]
+fn validation_prune_is_read_only_in_preview_and_reclaims_in_deterministic_lru_order() {
+    use std::os::unix::fs::MetadataExt;
+    let fixture = Fixture::new();
+    for path in [
+        "target/release/developer-output",
+        "target/hegira/release-build/unclaimed-output",
+    ] {
+        let file = fixture.root.join(path);
+        fs::create_dir_all(file.parent().unwrap()).unwrap();
+        fs::write(file, "outside validation ownership").unwrap();
+    }
+    fs::write(fixture.root.join("cache-payload-bytes"), "614400").unwrap();
+    for operation in ["check", "test"] {
+        cache_run(&fixture, operation, 64, 0);
+    }
+    for operation in ["check", "test"] {
+        fs::write(
+            fixture
+                .root
+                .join(format!("{VALIDATION_ROOT}/{operation}/.last-used")),
+            "10",
+        )
+        .unwrap();
+    }
+    let payload = fixture
+        .root
+        .join(format!("{VALIDATION_ROOT}/check/payload"));
+    let before = fs::metadata(&payload).unwrap();
+    let preview = artifact_json(
+        &cache_command(&fixture, "prune", 1)
+            .arg("--dry-run")
+            .output()
+            .unwrap(),
+        0,
+    );
+    assert_eq!(preview["selected"], serde_json::json!(["check"]));
+    let repeated = artifact_json(
+        &cache_command(&fixture, "prune", 1)
+            .arg("--dry-run")
+            .output()
+            .unwrap(),
+        0,
+    );
+    assert_eq!(preview, repeated);
+    let after = fs::metadata(&payload).unwrap();
+    assert_eq!(
+        (before.ino(), before.len(), before.ctime(), before.mtime()),
+        (after.ino(), after.len(), after.ctime(), after.mtime())
+    );
+    let applied = artifact_json(
+        &cache_command(&fixture, "prune", 1)
+            .arg("--execute")
+            .output()
+            .unwrap(),
+        0,
+    );
+    assert_eq!(applied["selected"], preview["selected"]);
+    assert!(applied["remaining_bytes"].as_u64().unwrap() <= 1024 * 1024);
+    assert!(!payload.exists());
+    assert!(
+        fixture
+            .root
+            .join(format!("{VALIDATION_ROOT}/test/payload"))
+            .exists()
+    );
+    assert_eq!(
+        artifact_json(
+            &cache_command(&fixture, "prune", 1)
+                .arg("--execute")
+                .output()
+                .unwrap(),
+            0
+        )["selected"],
+        serde_json::json!([])
+    );
+    for path in [
+        "target/release/developer-output",
+        "target/hegira/release-build/unclaimed-output",
+    ] {
+        assert_eq!(
+            fs::read_to_string(fixture.root.join(path)).unwrap(),
+            "outside validation ownership"
+        );
+    }
+}
+
+#[test]
+fn validation_budget_enforcement_runs_before_and_after_even_on_child_failure() {
+    let fixture = Fixture::new();
+    fs::write(fixture.root.join("cache-payload-bytes"), "2097152").unwrap();
+    fixture.mode("failure");
+    let report = cache_run(&fixture, "check", 1, 3);
+    assert_eq!(
+        report["diagnostics"][0]["code"],
+        "validation-cache-budget-exceeded"
+    );
+    assert!(report["execution"].is_null());
+    let log = fs::read(fixture.root.join("child.log")).unwrap();
+    fixture.mode("success");
+    cache_run(&fixture, "check", 1, 3);
+    assert_eq!(fs::read(fixture.root.join("child.log")).unwrap(), log);
+    // A separate inactive cache is eligible before the next validation starts.
+    fs::write(fixture.root.join("cache-payload-bytes"), "65536").unwrap();
+    cache_run(&fixture, "test", 1, 0);
+    assert!(
+        !fixture
+            .root
+            .join(format!("{VALIDATION_ROOT}/check"))
+            .exists()
+    );
+    assert!(
+        fixture
+            .root
+            .join(format!("{VALIDATION_ROOT}/test/payload"))
+            .exists()
+    );
+    let build = Fixture::new();
+    build.development_tools(&build.root);
+    fs::write(build.root.join("cache-payload-bytes"), "2097152").unwrap();
+    let report = cache_run(&build, "build", 1, 3);
+    assert_eq!(
+        report["diagnostics"][0]["code"],
+        "validation-cache-budget-exceeded"
+    );
+    assert!(report["execution"].is_null());
+}
+
+#[test]
+fn validation_pruning_preserves_pending_application_recovery() {
+    let fixture = Fixture::new();
+    fs::write(fixture.root.join("cache-payload-bytes"), "2097152").unwrap();
+    cache_run(&fixture, "check", 64, 0);
+    let recovery = fixture.root.join(".hegira-mutation.lock");
+    fs::write(&recovery, "private recovery state").unwrap();
+    let output = cache_command(&fixture, "prune", 1)
+        .arg("--execute")
+        .output()
+        .unwrap();
+    let report = artifact_json(&output, 4);
+    assert_eq!(report["diagnostics"][0]["code"], "application-recovery");
+    assert!(!String::from_utf8_lossy(&output.stdout).contains("private recovery"));
+    assert_eq!(
+        fs::read_to_string(recovery).unwrap(),
+        "private recovery state"
+    );
+    assert!(
+        fixture
+            .root
+            .join(format!("{VALIDATION_ROOT}/check/payload"))
+            .exists()
+    );
+}
+
+#[test]
+fn validation_cache_activity_protects_live_and_orphaned_children() {
+    struct WaitingGroup(Option<Pid>);
+    impl Drop for WaitingGroup {
+        fn drop(&mut self) {
+            if let Some(leader) = self.0.take() {
+                let _ = kill_process_group(leader, Signal::KILL);
+            }
+        }
+    }
+    let fixture = Fixture::new();
+    fs::write(fixture.root.join("cache-payload-bytes"), "2097152").unwrap();
+    fixture.mode("wait");
+    let mut command = fixture.public_execute("check", true);
+    command.args(["--validation-cache", "--cache-budget-mib", "64"]);
+    let mut child = ControlledCommand::spawn(command);
+    let leader = pid(&fixture.root, "child.pid");
+    child.leader = Some(leader);
+    let mut group = WaitingGroup(Some(leader));
+    wait_file(&fixture.root, "cache-payload-ready");
+    let live = artifact_json(
+        &cache_command(&fixture, "cache-status", 1).output().unwrap(),
+        0,
+    );
+    assert_eq!(live["operation_activity"], "active");
+    assert_eq!(live["caches"][0]["cleanup_eligible"], false);
+    artifact_json(
+        &cache_command(&fixture, "prune", 1)
+            .arg("--execute")
+            .output()
+            .unwrap(),
+        4,
+    );
+    let preview = artifact_json(
+        &cache_command(&fixture, "prune", 1)
+            .arg("--dry-run")
+            .output()
+            .unwrap(),
+        3,
+    );
+    assert_eq!(preview["selected"], serde_json::json!([]));
+    kill_process(child.pid(), Signal::KILL).unwrap();
+    assert!(!child.output().status.success());
+    // SIGKILL releases the application lock, but the child's inherited cache
+    // lease still blocks reclamation and reuse of its active graph.
+    let orphan = artifact_json(
+        &cache_command(&fixture, "prune", 1)
+            .arg("--execute")
+            .output()
+            .unwrap(),
+        3,
+    );
+    assert_eq!(orphan["operation_activity"], "idle");
+    assert_eq!(orphan["caches"][0]["active"], true);
+    assert_eq!(orphan["selected"], serde_json::json!([]));
+    let blocked = cache_run(&fixture, "check", 64, 4);
+    assert_eq!(blocked["diagnostics"][0]["code"], "validation-cache-active");
+    kill_process_group(group.0.take().unwrap(), Signal::KILL).unwrap();
+    assert_stopped(leader);
+    // A killed child can remain a zombie briefly; it holds no descriptors.
+    let clean = artifact_json(
+        &cache_command(&fixture, "prune", 1)
+            .arg("--execute")
+            .output()
+            .unwrap(),
+        0,
+    );
+    assert_eq!(clean["selected"], serde_json::json!(["check"]));
+}
+
+#[test]
+fn validation_termination_finishes_budget_checks_and_releases_leases() {
+    let fixture = Fixture::new();
+    fixture.mode("wait");
+    fs::write(fixture.root.join("cache-payload-bytes"), "65536").unwrap();
+    let plan = fixture
+        .plan(OperationIntent::Check)
+        .with_validation_cache(hegira_cli::operations::ValidationCache::from_mib(1).unwrap())
+        .unwrap();
+    let control = ExecutionControl::default();
+    thread::scope(|scope| {
+        let worker = scope.spawn(|| fixture.execute(&plan, &control));
+        wait_file(&fixture.root, "cache-payload-ready");
+        control.terminate();
+        let report = worker.join().unwrap().unwrap();
+        assert_eq!(report.outcome, ExecutionOutcome::Terminated);
+        assert!(report.artifacts.is_none());
+    });
+    let status = artifact_json(
+        &cache_command(&fixture, "cache-status", 1).output().unwrap(),
+        0,
+    );
+    assert_eq!(status["operation_activity"], "idle");
+    assert_eq!(status["caches"][0]["active"], false);
+    assert!(status["budget_satisfied"].as_bool().unwrap());
+    fixture.mode("success");
+    cache_run(&fixture, "check", 1, 0);
+}
+
+#[test]
+fn validation_maintenance_rejects_unsafe_or_unclaimed_trees_before_deleting() {
+    for attack in [
+        "unclaimed",
+        "foreign",
+        "symlink",
+        "hard-link",
+        "unknown",
+        "access",
+        "substitution",
+    ] {
+        let fixture = Fixture::new();
+        fs::write(fixture.root.join("cache-payload-bytes"), "2097152").unwrap();
+        cache_run(&fixture, "check", 64, 0);
+        let root = fixture.root.join(VALIDATION_ROOT);
+        let cache = root.join("check");
+        let external = fixture.tools.join("private-external");
+        fs::write(&external, "preserve private external data").unwrap();
+        match attack {
+            "unclaimed" => fs::remove_file(root.join(".hegira-cache.json")).unwrap(),
+            "foreign" => {
+                fs::write(cache.join(".hegira-cache.json"), "private foreign claim").unwrap()
+            }
+            "symlink" => symlink(&external, cache.join("link")).unwrap(),
+            "hard-link" => fs::hard_link(&external, cache.join("link")).unwrap(),
+            "unknown" => fs::write(root.join("unclaimed-user-file"), "private owner data").unwrap(),
+            "access" => fs::write(cache.join(".last-used"), "malformed private state").unwrap(),
+            "substitution" => {
+                fs::rename(&cache, fixture.tools.join("detached-cache")).unwrap();
+                symlink(fixture.tools.join("detached-cache"), &cache).unwrap();
+            }
+            _ => unreachable!(),
+        }
+        for action in ["cache-status", "prune"] {
+            let mut command = cache_command(&fixture, action, 1);
+            if action == "prune" {
+                command.arg("--execute");
+            }
+            let output = command.output().unwrap();
+            let report = artifact_json(&output, 4);
+            assert_eq!(
+                report["diagnostics"][0]["code"],
+                "validation-cache-ownership"
+            );
+            assert!(!String::from_utf8_lossy(&output.stdout).contains("private"));
+        }
+        assert_eq!(
+            fs::read_to_string(&external).unwrap(),
+            "preserve private external data"
+        );
+        assert!(cache.join("payload").exists());
+    }
+}
+
 static NEXT: AtomicU64 = AtomicU64::new(0);
 static HELPER: Mutex<Weak<Helper>> = Mutex::new(Weak::new());
 

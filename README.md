@@ -159,8 +159,12 @@ Framework releases remain source-only.
 `hegira artifacts status` reports local application output ownership and disk
 usage on Linux, with `--json` for schema-1 automation. It separates developer
 output from validated CLI release output, observes active operations, and
-performs no build, claim, or cleanup. Application output currently has no size
-budget. See [Application artifact usage](docs/getting-started.md#inspect-application-artifact-usage)
+performs no build, claim, or cleanup. Explicit `--validation-cache` on
+check/test/release builds selects separately claimed disposable output with a
+configurable 64 GiB default budget, pre/post enforcement and inactive LRU
+reclamation. `artifacts cache-status` reports that lifecycle; `artifacts prune`
+requires a preview or explicit execution selection. Ordinary developer/watch
+and release-bundle output remain uncapped. See [Application artifact usage](docs/getting-started.md#inspect-application-artifact-usage)
 for measurements, exclusions, and partial results.
 
 `hegira db status --profile sqlite --dry-run` reviews read-only database
