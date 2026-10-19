@@ -93,7 +93,7 @@ enum CliCommand {
     Inspect(InspectCommand),
     /// Diagnose application composition and local prerequisites without modifying it.
     Doctor(DoctorCommand),
-    /// Report application artifact ownership and disk usage without changing files.
+    /// Report artifact usage or explicitly prune owned inactive validation caches.
     Artifacts(artifacts::ArtifactsCommand),
     /// Preview or explicitly run locked native and hydration checks.
     Check(operations::command::ValidationCommand),

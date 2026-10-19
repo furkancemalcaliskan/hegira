@@ -30,6 +30,29 @@ use crate::{
 pub const OPERATION_PLAN_SCHEMA: u32 = 1;
 pub const OPERATION_DIAGNOSTIC_SCHEMA: u32 = 1;
 
+/// Explicit opt-in to disposable application validation storage, not developer output.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct ValidationCache {
+    pub budget_bytes: u64,
+}
+
+impl ValidationCache {
+    pub const DEFAULT_BUDGET_MIB: u64 = 65_536;
+
+    pub fn from_mib(mib: u64) -> Result<Self, OperationError> {
+        mib.checked_mul(1024 * 1024)
+            .filter(|bytes| *bytes > 0)
+            .map(|budget_bytes| Self { budget_bytes })
+            .ok_or_else(|| {
+                OperationError::new(
+                    OperationErrorKind::Validation,
+                    "validation-cache-budget",
+                    "Select a positive --cache-budget-mib within the supported byte range.",
+                )
+            })
+    }
+}
+
 /// Shared with read-only diagnostics so a report cannot invent ownership.
 #[cfg(target_os = "linux")]
 pub(crate) fn release_output_marker(application: &str) -> Result<Vec<u8>, serde_json::Error> {
@@ -148,6 +171,57 @@ impl fmt::Debug for OperationPlan {
 }
 
 impl OperationPlan {
+    /// Derive the explicit cache selection without observing or modifying output.
+    pub fn with_validation_cache(mut self, cache: ValidationCache) -> Result<Self, OperationError> {
+        if cache.budget_bytes == 0 {
+            return Err(OperationError::new(
+                OperationErrorKind::Validation,
+                "validation-cache-budget",
+                "The validation cache budget must be positive.",
+            ));
+        }
+        let root = match self.summary.intent {
+            OperationIntent::Check => "target/hegira/validation/check",
+            OperationIntent::Test => "target/hegira/validation/test",
+            OperationIntent::ReleaseBuild => "target/hegira/validation/build",
+            _ => {
+                return Err(OperationError::new(
+                    OperationErrorKind::Validation,
+                    "validation-cache-intent",
+                    "Validation caches support check, test and release builds only; development and database operations remain separate.",
+                ));
+            }
+        };
+        for step in &mut self.summary.steps {
+            if let OperationStep::Tool { environment, .. } = step {
+                for name in ["CARGO_TARGET_DIR", "CARGO_BUILD_TARGET_DIR"] {
+                    environment.insert(name.to_owned(), root.to_owned());
+                }
+                for name in [
+                    "CARGO_PROFILE_DEV_DEBUG",
+                    "CARGO_PROFILE_TEST_DEBUG",
+                    "CARGO_INCREMENTAL",
+                ] {
+                    environment.insert(name.to_owned(), "0".to_owned());
+                }
+                if self.summary.intent == OperationIntent::ReleaseBuild {
+                    environment.insert("LEPTOS_BIN_TARGET_DIR".to_owned(), root.to_owned());
+                }
+            }
+        }
+        if self.summary.intent == OperationIntent::ReleaseBuild {
+            self.summary.artifacts = Some(ReleaseBuildArtifacts {
+                owner: "hegira-validation-cache",
+                root: "target/hegira/validation/build",
+                server: "target/hegira/validation/build/release/app_server",
+                site: "target/hegira/validation/build/site",
+                browser_wasm: "target/hegira/validation/build/site/pkg/app_bg.wasm",
+            });
+        }
+        self.summary.validation_cache = Some(cache);
+        Ok(self)
+    }
+
     /// The safely resolved root is operational data, excluded from summaries.
     pub fn application_root(&self) -> &Path {
         &self.root
@@ -181,6 +255,9 @@ impl OperationPlan {
         }
         if let Some(artifacts) = &self.summary.artifacts {
             lines.push(format!("Expected artifacts (not built): {artifacts:?}"));
+        }
+        if let Some(cache) = self.summary.validation_cache {
+            lines.push(format!("Disposable validation cache: {} byte budget; pre/post LRU enforcement; inactive owned caches may be removed. Development output is excluded.", cache.budget_bytes));
         }
         if self.summary.policy.production_migration_approval_required {
             lines.push(
@@ -219,6 +296,8 @@ pub struct OperationPlanSummary {
     pub steps: Vec<OperationStep>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub artifacts: Option<ReleaseBuildArtifacts>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub validation_cache: Option<ValidationCache>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -466,6 +545,7 @@ pub fn plan_application_operation(
             steps,
             artifacts: (request.intent == OperationIntent::ReleaseBuild)
                 .then(ReleaseBuildArtifacts::default),
+            validation_cache: None,
         },
     })
 }

@@ -181,18 +181,28 @@ commands change. Never describe planned work as implemented.
   development provider/profile and localhost bind, but trusted startup can
   migrate, seed, and access configured dependencies. Review runtime settings
   and inherited database overrides before execution. Release builds additionally
-  require explicitly installed `wasm-opt` 123 and select only the separately
-  claimed `target/hegira/release-build` output root. Existing unclaimed output,
-  symlinks, and external hard links fail closed. Successful reports include
+  require explicitly installed `wasm-opt` 123. Ordinary release builds select
+  the separately claimed `target/hegira/release-build` output root. Existing
+  unclaimed output, symlinks, and external hard links fail closed. Successful reports include
   verified application-relative server/site/WASM locations, not deployment
   approval. Never fabricate the cache's ownership marker to adopt unrelated
   data. This output claim grants neither ordinary Cargo-cache cleanup nor a
   disk-budget guarantee. Reset, rollback, seed, and arbitrary SQL are not public
   CLI database capabilities.
+  Explicit `--validation-cache` check/test/release-build plans instead select
+  separately claimed disposable `target/hegira/validation/{check,test,build}`
+  output, with configurable 64 GiB default pre/post allocated-byte enforcement
+  and inactive LRU reclamation. Directory leases inherited by trusted children
+  protect active caches even after CLI interruption. `artifacts cache-status`
+  is read-only; `artifacts prune` requires explicit preview or execution and
+  revalidates claims, no-follow paths, activity and recovery before deletion.
+  Validation release receipts refer to disposable cache outputs. Developer,
+  watch, database, ordinary release, global cache and Docker output remain
+  outside this budget and deletion authority; never fabricate ownership claims.
   Its Linux `artifacts status` command reports read-only local target usage,
-  developer versus validated release-output ownership, operation activity,
-  exclusions, and explicitly unenforced budgets in human/schema-1 JSON output.
-  One bounded no-follow metadata walk never builds, creates claims, or cleans;
+  developer versus validated release/validation ownership, operation activity,
+  exclusions, and the absence of an overall output budget in human/schema-1 JSON.
+  Bounded no-follow metadata walks never build, create claims, or clean;
   unsafe/partial trees cannot grant ownership or deletion authority.
   Generation validates project identity and destination before rendering and
   requires a new destination under an existing parent without symlinks. Safe

@@ -23,6 +23,22 @@ mod database_protocol;
 #[cfg(target_os = "linux")]
 pub(crate) use artifact_usage::inspect_artifact_usage;
 
+pub(crate) fn maintain_validation_cache(
+    plan: &OperationPlan,
+    budget: super::ValidationCache,
+    action: crate::artifacts::CacheAction,
+) -> Result<crate::artifacts::CacheReport, OperationError> {
+    #[cfg(target_os = "linux")]
+    {
+        platform::cache::maintain(plan, budget, action)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (plan, budget, action);
+        Err(unsupported())
+    }
+}
+
 #[cfg(not(target_os = "linux"))]
 pub(crate) fn inspect_artifact_usage(
     _: &OperationPlan,
@@ -310,6 +326,30 @@ mod anchors {
     impl Eq for Directory {}
 
     impl Directory {
+        /// Cache traversal also rejects same-device bind mounts. NOFOLLOW and
+        /// st_dev alone cannot establish this deletion boundary.
+        #[cfg(target_os = "linux")]
+        pub(super) fn open_child(&self, name: &std::ffi::CStr) -> Result<Self, OperationError> {
+            use std::os::unix::ffi::OsStrExt;
+            self.verify()?;
+            let fd = fs::openat2(
+                &self.fd,
+                name,
+                DIRECTORY,
+                Mode::empty(),
+                fs::ResolveFlags::BENEATH
+                    | fs::ResolveFlags::NO_SYMLINKS
+                    | fs::ResolveFlags::NO_XDEV,
+            )
+            .map_err(|_| unsafe_path())?;
+            let identity = identity(&fd)?;
+            Ok(Self {
+                path: self.path.join(std::ffi::OsStr::from_bytes(name.to_bytes())),
+                fd: Arc::new(fd),
+                identity,
+            })
+        }
+
         pub(super) fn open(path: &Path) -> Result<Self, OperationError> {
             if !path.is_absolute() {
                 return Err(unsafe_path());
@@ -428,6 +468,7 @@ mod anchors {
 #[cfg(target_os = "linux")]
 mod platform {
     mod artifacts;
+    pub(crate) mod cache;
     mod database;
     mod leptos;
     mod readiness;
@@ -653,13 +694,16 @@ mod platform {
         // The independent open description owns this advisory directory lock.
         // No persistent lock file is created or unlinked; close releases it.
         ensure_no_recovery(plan)?;
-        let current = plan_application_operation(
+        let mut current = plan_application_operation(
             repository_root,
             &OperationRequest {
                 application: ApplicationContextRequest::explicit(&plan.root, &plan.root),
                 intent: plan.summary.intent,
             },
         )?;
+        if let Some(cache) = plan.summary.validation_cache {
+            current = current.with_validation_cache(cache)?;
+        }
         if current != *plan {
             return Err(changed());
         }
@@ -685,110 +729,134 @@ mod platform {
         } else {
             None
         };
-        let build_outputs = if plan.summary.intent == OperationIntent::ReleaseBuild {
-            Some(artifacts::BuildOutputs::prepare(plan)?)
+        let mut validation_cache = if plan.summary.validation_cache.is_some() {
+            Some(cache::Session::prepare(plan)?)
         } else {
             None
         };
+        let mut result = (|| {
+            let build_outputs = if plan.summary.intent == OperationIntent::ReleaseBuild {
+                Some(artifacts::BuildOutputs::prepare(plan)?)
+            } else {
+                None
+            };
 
-        for (index, step) in plan.summary.steps.iter().enumerate() {
-            if let Some(outcome) = control.outcome() {
-                return Ok(report(plan, index, outcome));
-            }
-            plan.anchor.verify()?;
-            ensure_no_recovery(plan)?;
-            validate_prerequisite_paths(plan)?;
-            toolchain.verify(plan)?;
-            if let Some(session) = &development {
-                session.verify(plan, toolchain)?;
-            }
-            if let Some(outputs) = &build_outputs {
-                outputs.verify(plan)?;
-            }
-            if let OperationStep::ApplicationDatabase {
-                operation,
-                profile,
-                database: provider,
-            } = step
-            {
-                database::validate_entry_point(plan)?;
+            for (index, step) in plan.summary.steps.iter().enumerate() {
+                if let Some(outcome) = control.outcome() {
+                    return Ok(report(plan, index, outcome));
+                }
+                plan.anchor.verify()?;
+                ensure_no_recovery(plan)?;
+                validate_prerequisite_paths(plan)?;
+                toolchain.verify(plan)?;
+                if let Some(cache) = &validation_cache {
+                    cache.verify(plan)?;
+                }
+                if let Some(session) = &development {
+                    session.verify(plan, toolchain)?;
+                }
+                if let Some(outputs) = &build_outputs {
+                    outputs.verify(plan)?;
+                }
+                if let OperationStep::ApplicationDatabase {
+                    operation,
+                    profile,
+                    database: provider,
+                } = step
+                {
+                    database::validate_entry_point(plan)?;
+                    let mut command = Command::new(&cargo_path);
+                    command
+                        .arg0("cargo")
+                        .args(database::arguments(*operation, *provider))
+                        .current_dir(&root_path)
+                        .env("PATH", &toolchain.search_path)
+                        .env("RUSTUP_AUTO_INSTALL", "0")
+                        .env_remove("RUSTUP_TOOLCHAIN")
+                        .env("APP_ENV", profile.name())
+                        .env("APP__DATABASE__BACKEND", database::provider_name(*provider))
+                        .stdin(Stdio::null())
+                        .process_group(0);
+                    let (outcome, result) = database::run(command, plan, control)?;
+                    let mut report = report(
+                        plan,
+                        if outcome == ExecutionOutcome::Succeeded {
+                            index + 1
+                        } else {
+                            index
+                        },
+                        outcome,
+                    );
+                    report.database = result;
+                    return Ok(report);
+                }
+                let OperationStep::Tool {
+                    arguments,
+                    environment,
+                    ..
+                } = step
+                else {
+                    unreachable!("all steps validated before spawning");
+                };
                 let mut command = Command::new(&cargo_path);
                 command
                     .arg0("cargo")
-                    .args(database::arguments(*operation, *provider))
+                    .args(arguments)
                     .current_dir(&root_path)
                     .env("PATH", &toolchain.search_path)
                     .env("RUSTUP_AUTO_INSTALL", "0")
                     .env_remove("RUSTUP_TOOLCHAIN")
-                    .env("APP_ENV", profile.name())
-                    .env("APP__DATABASE__BACKEND", database::provider_name(*provider))
+                    .envs(environment)
                     .stdin(Stdio::null())
                     .process_group(0);
-                let (outcome, result) = database::run(command, plan, control)?;
-                let mut report = report(
-                    plan,
-                    if outcome == ExecutionOutcome::Succeeded {
-                        index + 1
-                    } else {
-                        index
-                    },
-                    outcome,
-                );
-                report.database = result;
-                return Ok(report);
-            }
-            let OperationStep::Tool {
-                arguments,
-                environment,
-                ..
-            } = step
-            else {
-                unreachable!("all steps validated before spawning");
-            };
-            let mut command = Command::new(&cargo_path);
-            command
-                .arg0("cargo")
-                .args(arguments)
-                .current_dir(&root_path)
-                .env("PATH", &toolchain.search_path)
-                .env("RUSTUP_AUTO_INSTALL", "0")
-                .env_remove("RUSTUP_TOOLCHAIN")
-                .envs(environment)
-                .stdin(Stdio::null())
-                .process_group(0);
-            if let Some(session) = &development {
-                session.configure(&mut command)?;
-            }
-            match output {
-                ChildOutput::Inherit => {
-                    command.stdout(Stdio::inherit()).stderr(Stdio::inherit());
+                if let Some(session) = &development {
+                    session.configure(&mut command)?;
                 }
-                ChildOutput::Discard => {
-                    command.stdout(Stdio::null()).stderr(Stdio::null());
+                if let Some(cache) = &validation_cache {
+                    cache.configure(&mut command);
                 }
-            }
-            let child = command.spawn().map_err(|_| failure(
+                match output {
+                    ChildOutput::Inherit => {
+                        command.stdout(Stdio::inherit()).stderr(Stdio::inherit());
+                    }
+                    ChildOutput::Discard => {
+                        command.stdout(Stdio::null()).stderr(Stdio::null());
+                    }
+                }
+                let child = command.spawn().map_err(|_| failure(
                 OperationErrorKind::Internal, "execution-spawn", "Cannot start the approved application tool; no child output or OS details are included."
             ))?;
-            let outcome = OwnedChild::new(child)?.run(control)?;
-            if outcome != ExecutionOutcome::Succeeded {
-                return Ok(report(plan, index, outcome));
+                let outcome = OwnedChild::new(child)?.run(control)?;
+                if outcome != ExecutionOutcome::Succeeded {
+                    return Ok(report(plan, index, outcome));
+                }
             }
+            if let Some(outputs) = &build_outputs {
+                // Trusted builders must not silently rewrite reviewed dependency locks.
+                development
+                    .as_ref()
+                    .expect("release frontend preflight")
+                    .verify(plan, toolchain)?;
+                outputs.complete(plan)?;
+            }
+            // A cancellation arriving during the final cleanup still is not success.
+            Ok(report(
+                plan,
+                plan.summary.steps.len(),
+                control.outcome().unwrap_or(ExecutionOutcome::Succeeded),
+            ))
+        })();
+        // OwnedChild cleanup has completed on every path before reclamation.
+        // The active cache remains protected, including on child failure/cancellation.
+        if let Some(cache) = &mut validation_cache {
+            cache.finish(plan)?;
         }
-        if let Some(outputs) = &build_outputs {
-            // Trusted builders must not silently rewrite reviewed dependency locks.
-            development
-                .as_ref()
-                .expect("release frontend preflight")
-                .verify(plan, toolchain)?;
-            outputs.complete(plan)?;
+        if let (Ok(report), Some(outcome)) = (&mut result, control.outcome()) {
+            report.outcome = outcome;
+            report.artifacts = None;
+            report.database = None;
         }
-        // A cancellation arriving during the final cleanup still is not success.
-        Ok(report(
-            plan,
-            plan.summary.steps.len(),
-            control.outcome().unwrap_or(ExecutionOutcome::Succeeded),
-        ))
+        result
     }
 
     fn report(
@@ -798,7 +866,8 @@ mod platform {
     ) -> ExecutionReport {
         let artifacts = (plan.summary.intent == OperationIntent::ReleaseBuild
             && outcome == ExecutionOutcome::Succeeded)
-            .then(ReleaseBuildArtifacts::default);
+            .then(|| plan.summary.artifacts.clone())
+            .flatten();
         ExecutionReport {
             output_schema: OPERATION_EXECUTION_SCHEMA,
             intent: plan.summary.intent,

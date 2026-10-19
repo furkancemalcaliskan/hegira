@@ -142,13 +142,23 @@ fn all_six_compositions_report_empty_trees_without_tools_or_writes() {
             assert_eq!(value["operation_activity"], "idle");
             assert_eq!(value["budget_bytes"], Value::Null);
             assert_eq!(value["budget_status"], "not-enforced");
-            assert_eq!(value["regions"].as_array().unwrap().len(), 2);
+            assert_eq!(value["regions"].as_array().unwrap().len(), 3);
             for region in value["regions"].as_array().unwrap() {
                 assert_eq!(region["status"], "missing");
                 assert_eq!(region["logical_bytes"], 0);
                 assert_eq!(region["cleanup_eligible"], false);
             }
             assert_eq!(value, status(&root, 0));
+            for args in [
+                vec!["artifacts", "cache-status", "--json"],
+                vec!["artifacts", "prune", "--dry-run", "--json"],
+            ] {
+                let output = run(&root, &args);
+                assert!(output.status.success());
+                let cache: Value = serde_json::from_slice(&output.stdout).unwrap();
+                assert_eq!(cache["allocated_bytes"], 0);
+                assert_eq!(cache["caches"], json!([]));
+            }
             let explicit = run(
                 &root.join("apps/web"),
                 &[
@@ -189,7 +199,10 @@ fn mixed_output_is_counted_once_per_region_including_sparse_and_hidden_files() {
     let before = snapshot(&root);
     let value = status(&root, 0);
     assert_eq!(value["regions"][0]["path"], "target");
-    assert_eq!(value["regions"][0]["excluded_paths"], json!([RELEASE]));
+    assert_eq!(
+        value["regions"][0]["excluded_paths"],
+        json!([RELEASE, "target/hegira/validation"])
+    );
     assert_eq!(value["regions"][0]["owner"], "developer-or-unclaimed");
     assert_eq!(value["regions"][0]["logical_bytes"], 10);
     assert_eq!(value["regions"][0]["unique_files"], 2);

@@ -43,6 +43,14 @@ pub(crate) struct ValidationCommand {
     #[arg(long, value_name = "PATH", requires = "execute")]
     tool_directory: Vec<PathBuf>,
 
+    /// Use disposable CLI-owned validation output with pre/post budget enforcement.
+    #[arg(long)]
+    validation_cache: bool,
+
+    /// Total validation-cache budget in MiB (default: 65536); never applies to developer output.
+    #[arg(long, value_name = "MIB", requires = "validation_cache")]
+    cache_budget_mib: Option<u64>,
+
     /// Emit a versioned redacted report; discard arbitrary child output during execution.
     #[arg(long)]
     json: bool,
@@ -259,7 +267,17 @@ fn run_operation(
         },
         intent,
     };
-    let plan = match plan_application_operation(&repository, &request) {
+    let plan = match plan_application_operation(&repository, &request).and_then(|plan| {
+        if command.validation_cache {
+            plan.with_validation_cache(super::ValidationCache::from_mib(
+                command
+                    .cache_budget_mib
+                    .unwrap_or(super::ValidationCache::DEFAULT_BUDGET_MIB),
+            )?)
+        } else {
+            Ok(plan)
+        }
+    }) {
         Ok(plan) => plan,
         Err(error) => return emit(&command, None, Err(error), output, diagnostics),
     };

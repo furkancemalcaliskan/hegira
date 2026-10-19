@@ -191,6 +191,21 @@ fn main() {
         std::env::var("RUSTUP_TOOLCHAIN").unwrap_or_default(),
     )
     .unwrap();
+    if let Ok(bytes) = fs::read_to_string("cache-payload-bytes") {
+        let target = std::env::var("CARGO_TARGET_DIR").unwrap();
+        let expected = if args.first().map(String::as_str) == Some("leptos") { "build" } else if args.first().map(String::as_str) == Some("test") { "test" } else {
+            // The test operation's second step is a hydration check in its test cache.
+            if target.ends_with("/test") { "test" } else { "check" }
+        };
+        assert_eq!(target, format!("target/hegira/validation/{expected}"));
+        assert_eq!(std::env::var("CARGO_BUILD_TARGET_DIR").unwrap(), target);
+        for key in ["CARGO_INCREMENTAL", "CARGO_PROFILE_DEV_DEBUG", "CARGO_PROFILE_TEST_DEBUG"] {
+            assert_eq!(std::env::var(key).unwrap(), "0");
+        }
+        let count: usize = bytes.trim().parse().unwrap();
+        fs::write(format!("{target}/payload"), vec![b'x'; count]).unwrap();
+        fs::write("cache-payload-ready", "ready").unwrap();
+    }
     if args.first().map(String::as_str) == Some("run") {
         assert_eq!(
             &args[..9],
@@ -241,7 +256,7 @@ fn main() {
         if args.get(1).map(String::as_str) == Some("build") {
             assert!(args.iter().any(|arg| arg == "--release"));
             let target = std::env::var("CARGO_TARGET_DIR").unwrap();
-            assert_eq!(target, "target/hegira/release-build");
+            assert!(target == "target/hegira/release-build" || target == "target/hegira/validation/build");
             assert_eq!(std::env::var("LEPTOS_BIN_TARGET_DIR").unwrap(), target);
             assert_eq!(
                 std::env::var("LEPTOS_SITE_ROOT").unwrap(),
