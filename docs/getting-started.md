@@ -351,7 +351,7 @@ create no storage or ownership claims, probe no tools, and perform no cleanup.
 Execution keeps the existing application/toolchain trust requirements. This mode
 is suitable for application CI using the selected provider/composition; it does
 not run the framework's provider matrix or authorize ignored integration tests.
-The provider-aware generated quality workflow is a separate capability.
+Fresh applications use this mode in their [generated quality workflow](#generated-ownership-and-hegiratoml).
 
 The fixed application-relative namespace is `target/hegira/validation`.
 The CLI creates its exact application-bound root claim only in an absent
@@ -720,6 +720,19 @@ The historical edge does not add or adopt them. The owner configures hosting,
 branch protection, review, merge methods, and initial source import explicitly;
 generation performs no Git/GitHub mutation. These checks do not verify future
 squash/merge commits, milestone completion, or product quality.
+
+The generated `.github/workflows/quality.yml` separately validates source format
+and architecture, native/WASM checks and tests, locked release output, disposable
+selected-provider startup, and Rust/frontend supply-chain policy. Its unconditional
+`quality` aggregate requires every constituent to succeed, including on fork PRs
+with read-only permissions and no secrets. The composite action, three CI scripts,
+Node contract fixtures, `deny.toml`, and `.cargo/audit.toml` accompany it. These eight
+files have generated-once ownership; existing applications adopt them manually.
+The CI CLI source is pinned to a reviewed compatible revision supporting bounded
+validation caches, independently of the application's pinned framework release.
+See the rendered development guide for the exact pins, cache limits, disposable
+database consent, and conditional dormant-RSA advisory exception. Generation
+does not install tools, run CI, access a database, or configure required checks.
 
 The CLI currently exposes application creation, read-only inspection, upgrade
 readiness, dry-run plans and explicit atomic apply, a reviewable bundled-component

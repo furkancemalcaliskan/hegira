@@ -188,6 +188,17 @@ matrix. It executes the generated dependency-free fixtures in all six
 compositions, checks exact generated-once ownership and owner-edit preservation,
 and creates only temporary local Git repositories; it needs no remote or secrets.
 
+The same CLI gate renders all six compositions for the generated application
+quality contract. Node fixtures execute the aggregate shell against failed,
+cancelled, skipped, and missing results, exercise operation/audit failure
+propagation and lock preservation with controlled tools, and verify disposable
+database selection, credentials, and cleanup with an HTTP fixture and Docker stub.
+These fixtures require local loopback sockets, not a real database or Docker daemon.
+They also verify exact generated-once CI ownership and preservation after Identity
+installation. Real application/runtime coverage remains in the generated-application
+gate below; workflow YAML can additionally be checked with `actionlint` against a
+fresh rendered application's `.github/workflows/quality.yml`.
+
 The Linux `artifact_usage` CLI suite verifies read-only ownership/usage reports
 across all six compositions, mixed developer/release output, sparse large files,
 hard-link deduplication and external-link rejection, active operation locks,

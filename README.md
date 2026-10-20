@@ -90,6 +90,10 @@ agents, with thin Claude/Cursor adapters and owner-controlled contribution polic
 Generated-once repository/PR policy scripts, configuration, and a read-only GitHub
 workflow validate application conventions; remote hosting and protection setup
 remain explicit application-owner actions.
+The generated `quality` workflow checks formatting, architecture, selected-provider
+native/WASM compilation, tests, release output, disposable database startup, and
+Rust/frontend supply-chain policy. It uses explicitly bounded CLI-owned validation
+output and a stable aggregate that requires every constituent to succeed.
 The canonical package locks its source inputs with a
 deterministic SHA-256 digest so repository-local or untracked files cannot silently enter
 generated output. Package and framework identity, declared paths, regular-file types, and the

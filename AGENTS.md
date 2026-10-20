@@ -60,6 +60,11 @@ commands change. Never describe planned work as implemented.
   Its Infrastructure operation surface owns startup migration and Identity
   seed composition plus explicitly authorized disposable-database reset for
   validation; it does not use compatibility migration helpers or `db_migrator`.
+  Generated-once application quality automation checks the selected provider,
+  native/WASM, locked release output, disposable startup, and supply-chain policy
+  through an unconditional aggregate. It uses bounded CLI-owned validation caches
+  and a reviewed compatible CI tool revision separately from framework dependency
+  pins; source upgrades preserve owner-customized automation.
   Both variants additionally provide `apps/server`'s separately selected
   `app_database` binary through `database-operations`. Its Infrastructure
   database-operation subset validates configuration before isolated status or

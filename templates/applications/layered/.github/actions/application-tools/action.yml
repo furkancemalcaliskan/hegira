@@ -1,0 +1,50 @@
+name: Application quality tools
+description: Prepare pinned tools outside the application and retain complete CLI source
+inputs:
+  cli:
+    description: Build the reviewed source CLI
+    default: 'true'
+  frontend:
+    description: Install locked frontend and release prerequisites
+    default: 'false'
+  security:
+    description: Install pinned dependency audit tools
+    default: 'false'
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      with:
+        repository: furkancemalcaliskan/hegira
+        # Reviewed #391 merge: supports validation caches; not an invented release tag.
+        ref: b869b3ae3b60da7052ca91c500547081f9fc9f54
+        path: tooling/hegira
+        persist-credentials: false
+    - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec
+      with:
+        toolchain: 1.96.1
+        targets: wasm32-unknown-unknown
+        components: rustfmt, clippy
+    - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+      with:
+        node-version-file: application/.node-version
+    - name: Build compatible source CLI
+      if: inputs.cli == 'true'
+      shell: bash
+      working-directory: application
+      run: sh scripts/ci-tools.sh cli
+    - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2
+      if: inputs.frontend == 'true'
+      with:
+        tool: cargo-leptos@0.3.7
+        fallback: none
+    - name: Prepare locked browser and release tools
+      if: inputs.frontend == 'true'
+      shell: bash
+      working-directory: application
+      run: sh scripts/ci-tools.sh frontend
+    - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2
+      if: inputs.security == 'true'
+      with:
+        tool: cargo-audit@0.22.2,cargo-deny@0.20.2
+        fallback: none

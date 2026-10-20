@@ -1,0 +1,122 @@
+name: application-quality
+
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: application-quality-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  HEGIRA_SOURCE: ${{ github.workspace }}/tooling/hegira
+  APPLICATION_CI_BUDGET_MIB: '8192'
+
+defaults:
+  run:
+    working-directory: application
+
+jobs:
+  source:
+    name: source
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          path: application
+          persist-credentials: false
+      - uses: ./application/.github/actions/application-tools
+        with:
+          cli: 'false'
+      - name: Format, architecture and application CI contracts
+        run: sh scripts/ci.sh source
+
+  native:
+    name: native
+    needs: source
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          path: application
+          persist-credentials: false
+      - uses: ./application/.github/actions/application-tools
+      - name: Locked {{database_adapter}} native and WASM checks
+        run: sh scripts/ci.sh check
+      - name: Native tests and WASM check without ignored database tests
+        run: sh scripts/ci.sh test
+      - name: Reclaim only inactive owned validation output
+        if: always()
+        run: sh scripts/ci.sh cleanup
+
+  release:
+    name: release
+    needs: source
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          path: application
+          persist-credentials: false
+      - uses: ./application/.github/actions/application-tools
+        with:
+          frontend: 'true'
+      - name: Locked selected-provider production bundle
+        run: sh scripts/ci.sh build
+      - name: Boot with a new disposable {{database_adapter}} database
+        env:
+          APPLICATION_CI_DISPOSABLE: 'true'
+        run: sh scripts/ci.sh integration
+      - name: Reclaim only inactive owned validation output
+        if: always()
+        run: sh scripts/ci.sh cleanup
+
+  supply-chain:
+    name: supply-chain
+    needs: source
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          path: application
+          persist-credentials: false
+      - uses: ./application/.github/actions/application-tools
+        with:
+          cli: 'false'
+          security: 'true'
+      - name: Locked Rust and frontend supply-chain policy
+        run: sh scripts/ci.sh security
+
+  quality:
+    name: quality
+    if: always()
+    needs: [source, native, release, supply-chain]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    # The aggregate needs no checkout, source execution or token permissions.
+    permissions: {}
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - name: Require every constituent to succeed
+        env:
+          SOURCE_RESULT: ${{ needs.source.result }}
+          NATIVE_RESULT: ${{ needs.native.result }}
+          RELEASE_RESULT: ${{ needs.release.result }}
+          SUPPLY_CHAIN_RESULT: ${{ needs.supply-chain.result }}
+        run: |
+          test "$SOURCE_RESULT" = success
+          test "$NATIVE_RESULT" = success
+          test "$RELEASE_RESULT" = success
+          test "$SUPPLY_CHAIN_RESULT" = success

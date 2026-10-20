@@ -77,7 +77,7 @@ metadata, not changed-file scope or authorization; owner review remains required
    default token permissions. Fork runs use `pull_request`, require no secrets
    or write permission, and may still require GitHub's first-time contributor
    approval. The workflow never uses `pull_request_target`.
-3. Require the `repository-policy` status on both branches and prevent direct
+3. Require `repository-policy` and `quality` on both branches and prevent direct
    pushes. Configure reviews, conversation resolution, and any CODEOWNERS for
    policy/configuration/workflow changes according to owner policy. Review such
    changes carefully: a PR can edit the policy source it runs. Hosting protections
@@ -90,6 +90,17 @@ metadata, not changed-file scope or authorization; owner review remains required
    This workflow also checks repository source on pushes to both target branches
    and on manual dispatch. `edited` PR events recheck title/body/base changes.
 
-This workflow validates repository conventions only. It does not compile/test
-product behavior or grant database, release, publication, or deployment authority.
-Use the [development checks](development.md) appropriate to the product change.
+The repository-policy workflow validates conventions. The separate
+[quality workflow](../.github/workflows/quality.yml) requires source, native,
+release/disposable integration and supply-chain jobs. Its aggregate runs even
+on constituent failure/cancellation and accepts only success from every job.
+Both workflows keep token permissions read-only and checkout credentials
+unpersisted; the aggregate needs no token or source checkout. There are no path
+filters, deployment/image publication steps, or secret-bearing fork runs.
+Owner hosting setup remains explicit; generation does not change remote rules.
+
+CI tool pins, source revision, budget, temporary database scope and security
+policies are documented in [development](development.md#application-quality-ci).
+These generated-once files remain owner-controlled after installation/upgrades;
+existing applications adopt reviewed CI files manually. A green quality result
+does not grant database access outside the job, publication or deployment authority.

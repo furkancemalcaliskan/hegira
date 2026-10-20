@@ -18,6 +18,10 @@ instead of changing a checksum already recorded by a database.
 The [repository policy](repository.md), its configuration, scripts, GitHub
 workflow, and PR template are also generated-once. Owner edits survive component
 installation and source upgrades; these files grant no Git/GitHub mutation authority.
+The [quality workflow](../.github/workflows/quality.yml), its composite action,
+CI scripts and fixtures, and Rust audit/deny policies have the same ownership.
+Review tool-source pins and selected-provider integration settings when customizing
+them. The historical source-upgrade edge does not install these artifacts.
 
 Using the compatible CLI helper in the [development guide](development.md),
 inspect supported source-upgrade readiness and preview a direct transition:

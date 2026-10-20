@@ -101,6 +101,17 @@ do not weaken quality gates or security defaults. Keep runtime secrets out of
 build environments and browser assets. A successful release build is not
 deployment approval and its ownership marker grants no cleanup of developer output.
 
+The generated quality workflow covers this application's selected provider,
+native/WASM checks/tests, locked release bundle, disposable boot and supply-chain
+policy; its unconditional `quality` result requires every child job to succeed.
+Read [CI setup and limits](docs/development.md#application-quality-ci) before
+running its scripts. CI explicitly selects bounded CLI-owned validation output;
+developer/watch output is not capped or owned by cleanup. Require both `quality`
+and `repository-policy` through owner hosting setup. Preserve immutable tool pins,
+locked dependencies, fork read-only permissions, unconditional failure propagation,
+and the exact disposable database boundary. Never introduce real credentials or
+weaken audit/bans to obtain a green result. CI files are generated-once owner source.
+
 ## Issue, branch, commit, and pull request conventions
 
 Before implementation, verify the owner-accepted issue, scope, dependencies,

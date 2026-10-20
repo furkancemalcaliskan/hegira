@@ -1723,8 +1723,8 @@ fn explicit_sibling_destination_still_works() {
 #[test]
 fn provider_snapshots_and_interactive_requests_match() {
     for (database, expected) in [
-        ("sqlite", 10124183412166273914_u64),
-        ("postgres", 7193849730834706993_u64),
+        ("sqlite", 6660908455913023028_u64),
+        ("postgres", 1840035223675351512_u64),
     ] {
         let root = TestDirectory::new(database);
         let explicit = root.path().join("explicit");
@@ -2072,6 +2072,84 @@ fn application_policy_runs_in_all_six_states_and_preserves_owner_edits() {
                 assert_eq!(claims.len(), 1);
                 assert_eq!(claims[0].class, SourceOwnershipClass::GeneratedOnce);
                 assert!(claims[0].integration.is_none());
+            }
+        }
+    }
+}
+
+const APPLICATION_QUALITY: [&str; 8] = [
+    ".github/workflows/quality.yml",
+    ".github/actions/application-tools/action.yml",
+    ".cargo/audit.toml",
+    "deny.toml",
+    "scripts/ci.sh",
+    "scripts/ci-tools.sh",
+    "scripts/ci-integration.mjs",
+    "scripts/ci.test.mjs",
+];
+
+#[test]
+fn application_quality_is_provider_correct_executable_and_generated_once_in_six_states() {
+    use application_manifest::{ApplicationManifest, SourceOwnershipClass};
+    for composition in ["default", "minimal", "identity-added"] {
+        for database in ["sqlite", "postgres"] {
+            let parent = TestDirectory::new("application-quality");
+            let application = parent.path().join("application");
+            let mut args = vec![
+                "new",
+                "quality-app",
+                "--destination",
+                path_argument(&application),
+                "--database",
+                database,
+            ];
+            if composition != "default" {
+                args.extend(["--composition", "minimal"]);
+            }
+            assert!(hegira(&args).status.success());
+            if composition == "identity-added" {
+                assert!(
+                    hegira_at(&application, &["component", "add", "identity"])
+                        .status
+                        .success()
+                );
+            }
+            let result = Command::new("node")
+                .args(["--test", "scripts/ci.test.mjs"])
+                .current_dir(&application)
+                .output()
+                .unwrap();
+            assert!(
+                result.status.success(),
+                "{composition}/{database}: {}\n{}",
+                String::from_utf8_lossy(&result.stdout),
+                String::from_utf8_lossy(&result.stderr)
+            );
+            let manifest = ApplicationManifest::read(application.join("hegira.toml")).unwrap();
+            let claims = manifest.upgrade.unwrap().ownership.claims;
+            for path in APPLICATION_QUALITY {
+                assert!(application.join(path).is_file());
+                let claim = claims
+                    .iter()
+                    .filter(|claim| claim.path == path)
+                    .collect::<Vec<_>>();
+                assert_eq!(claim.len(), 1, "{path}");
+                assert_eq!(claim[0].class, SourceOwnershipClass::GeneratedOnce);
+                assert!(claim[0].integration.is_none());
+                fs::write(application.join(path), "Owner customized quality source.\n").unwrap();
+            }
+            if composition == "minimal" {
+                assert!(
+                    hegira_at(&application, &["component", "add", "identity"])
+                        .status
+                        .success()
+                );
+                for path in APPLICATION_QUALITY {
+                    assert_eq!(
+                        fs::read_to_string(application.join(path)).unwrap(),
+                        "Owner customized quality source.\n"
+                    );
+                }
             }
         }
     }

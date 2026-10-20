@@ -96,6 +96,14 @@ fn historical_upgrade_preserves_customized_application_documentation_without_ado
                 "scripts/repository-policy.mjs",
                 "scripts/repository-policy.sh",
                 "scripts/repository-policy.test.mjs",
+                ".github/workflows/quality.yml",
+                ".github/actions/application-tools/action.yml",
+                ".cargo/audit.toml",
+                "deny.toml",
+                "scripts/ci.sh",
+                "scripts/ci-tools.sh",
+                "scripts/ci-integration.mjs",
+                "scripts/ci.test.mjs",
             ];
             for path in paths {
                 fs::create_dir_all(application.join(path).parent().unwrap()).unwrap();
