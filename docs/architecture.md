@@ -939,6 +939,19 @@ Leptos, SQLx, Redis, and vendor SDKs. Transactions live at use-case boundaries.
 The server explicitly composes configuration, persistence, providers, routes,
 telemetry, runtime roles, and worker loops after validation succeeds.
 
+Generated application CI is application-owned scaffolding. Its read-only GitHub
+workflow runs source, selected-provider native/WASM, release plus disposable startup,
+and supply-chain checks before an unconditional `quality` aggregate. Cargo
+execution uses the CLI's bounded validation-cache namespace and explicit tool
+trust; cleanup uses only its inactive-owned-cache pruner. Tool bootstrap, registry,
+frontend, and container storage remain outside that application cache budget.
+The CI tool source is pinned to a reviewed compatible revision separately from
+framework dependencies. Actions and tools have explicit pins; credentials for
+disposable integration targets are ephemeral and application logs are discarded.
+All CI artifacts are generated-once and preserved during component installation
+and direct source upgrades. GitHub YAML expressions are preserved as literal data
+only in workflow/action YAML; the renderer never evaluates them.
+
 The application infrastructure layer owns the immutable host migration history
 needed for supported upgrades together with application-specific migrations.
 It composes those sources with selected module migration sources. Historical

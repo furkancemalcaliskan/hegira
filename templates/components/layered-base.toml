@@ -3,10 +3,13 @@ id = "layered-base"
 version = "v0.7.0"
 source = "applications/layered"
 include = [
+  ".cargo/audit.toml",
   ".cursor/rules/application.mdc",
   ".github/PULL_REQUEST_TEMPLATE.md",
+  ".github/actions/application-tools",
   ".github/repository-policy.json",
   ".github/workflows/repository-policy.yml",
+  ".github/workflows/quality.yml",
   ".node-version",
   ".dockerignore",
   ".gitignore",
@@ -19,9 +22,14 @@ include = [
   "docs/development.md",
   "docs/ownership.md",
   "docs/repository.md",
+  "deny.toml",
   "hegira.toml",
   "rust-toolchain.toml",
   "scripts/prepare-wasm-bindgen.sh",
+  "scripts/ci.sh",
+  "scripts/ci-tools.sh",
+  "scripts/ci-integration.mjs",
+  "scripts/ci.test.mjs",
   "scripts/repository-policy.mjs",
   "scripts/repository-policy.sh",
   "scripts/repository-policy.test.mjs",

@@ -139,7 +139,78 @@ symlink, or external hard link fails closed. Never fabricate its
 `.hegira-release-build.json` ownership marker. Keep unrelated data outside that
 root. Ordinary developer output (`target/debug`, `target/release`, `target/site`),
 prepared tools, global Cargo/Git caches, and Docker storage are separate. Current
-application operations provide no automatic cleanup or disk-budget guarantee.
+ordinary application output has no automatic cleanup or disk-budget guarantee.
+Explicit `--validation-cache` on check/test/build instead selects disposable
+`target/hegira/validation/{check,test,build}` output with a configurable
+65536 MiB default allocated-byte budget, pre/post enforcement and inactive LRU
+reclamation. It is not a live quota. `hegira artifacts cache-status` inspects that
+state; `hegira artifacts prune --dry-run` previews reclamation before any explicit
+`--execute`. Never forge claims. Validation build receipts refer to disposable
+outputs; use ordinary release builds when retaining the original bundle location.
+
+## Application quality CI
+
+The generated [quality workflow](../.github/workflows/quality.yml) runs the
+application's selected provider/composition, without the framework's matrix.
+Its `source` job checks format, inward dependency boundaries and CI contract
+fixtures. `native` runs locked native checks/tests and WASM hydration through
+the public CLI; ignored database tests remain excluded. `release` builds the
+locked bundle and verifies migration startup, readiness, health and SSR against
+new disposable `{{database_adapter}}` state. `supply-chain` checks Cargo audit,
+licenses/sources/bans, and every frontend dependency class at high severity.
+The unconditional `quality` job fails if any constituent fails, is skipped or
+is cancelled. There are no path filters, publication steps or production secrets.
+
+[Tool setup](../.github/actions/application-tools/action.yml) retains a complete
+source CLI checkout beside the application, pinned to the reviewed #391 merge
+`b869b3ae3b60da7052ca91c500547081f9fc9f54`. This operational tool pin is separate
+from the application's release-pinned framework dependencies; it does not
+pretend that unreleased CLI commands exist in the public v0.7.0 CLI. Review and
+align the pin explicitly when moving to a new framework/package release.
+Action sources are immutable commits; Rust is 1.96.1, Cargo Leptos 0.3.7,
+Cargo Audit 0.22.2, Cargo Deny 0.20.2 and Binaryen 123. Binaryen's archive and
+the lock-matched wasm-bindgen installer authenticate SHA-256 before use.
+Node uses the selected major from [.node-version](../.node-version).
+
+CI selects an 8192 MiB application validation budget. Check output is pruned
+before the test graph grows; the release graph stays until disposable boot
+finishes. Cleanup invokes only the CLI's reauthenticated owned-cache prune,
+including after failures. No remote application Cargo cache is restored or
+published, so there is no cache marker adoption. CLI bootstrap/tool installs,
+registry/Git/npm caches, and Docker are separate job-owned ephemeral state,
+outside the application budget. Adjust budgets/timeouts for reviewed runner
+capacity; pre/post enforcement cannot prevent a transient disk-full failure.
+Ordinary developer/watch output remains outside cleanup authority.
+
+For reviewed local reproduction on Linux x64, provide an absolute
+`RUNNER_TEMP` directory outside the application, the exact reviewed
+`HEGIRA_SOURCE` checkout, and the pinned prerequisites from the workflow.
+`sh scripts/ci-tools.sh cli` builds the source CLI outside the application;
+`sh scripts/ci-tools.sh frontend` explicitly installs browser/release tools
+and runs `npm ci`. Then select one phase with `sh scripts/ci.sh source`,
+`check`, `test`, `build`, `security`, or `cleanup`. These commands execute trusted
+code, not a sandbox, and verify both committed dependency locks even on failure.
+Run no CI phase with production secrets or inherited service credentials.
+
+`APPLICATION_CI_DISPOSABLE=true sh scripts/ci.sh integration` separately
+authorizes a fresh local boot. It accepts no database URL. SQLite creates only
+a private temporary file; PostgreSQL creates only one digest-pinned container
+with tmpfs data, a random password and random localhost port. It overrides
+inherited database targets, disables provisioning/Identity seeding/workers,
+and permits only migrations of the new target. Server output and database
+credentials are not printed. The owned server/container and private files are
+removed on normal completion/failure/signals; SIGKILL or runner loss relies on
+the disposable runner lifecycle. This is neither a production boot/deployment
+approval nor authority to reset another target.
+
+The generated [audit exception](../.cargo/audit.toml) covers only SQLx's dormant
+MySQL/RSA lock entry. Before auditing, the security phase must prove
+`rsa@0.9.10` is unreachable with all application features and targets; failure
+or a nonempty graph blocks CI. Remove the exception and review policy before
+enabling that dependency. The [deny policy](../deny.toml) retains informational
+unsoundness bans and rejects unknown sources. These generated-once policies,
+workflows and scripts belong to the application owner; installation and source
+upgrades preserve customizations. See [repository setup](repository.md).
 
 ## Database operations
 
