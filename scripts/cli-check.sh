@@ -26,7 +26,7 @@ run_step "Pagination fixture format" rustfmt --edition 2024 --check \
   "$repo_root/scripts/resource-pagination-contract.rs" \
   "$repo_root/scripts/resource-pagination-ui-contract.rs"
 run_step "Upgrade baseline Clippy" cargo clippy --locked -p upgrade_test_support --all-targets -- -D warnings
-run_step "Upgrade baseline contracts" cargo test --locked -p upgrade_test_support
+run_step "Upgrade baseline contracts and importer replay" cargo test --locked -p upgrade_test_support --all-targets
 run_step "Application mutation Clippy" cargo clippy --locked -p application_mutator --all-targets -- -D warnings
 run_step "Atomic mutation, upgrade retirement, preconditions, and recovery contracts" cargo test --locked -p application_mutator
 run_step "Resource generator Clippy" cargo clippy --locked -p resource_generator --all-targets -- -D warnings

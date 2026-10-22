@@ -160,7 +160,7 @@ export function validateUpgradeScripts(root) {
     ["scripts/layered-template-check.sh", 'echo "==> Isolated application database entry-point matrix"'],
     ["scripts/layered-template-check.sh", '--features "database-operations,db-$database"'],
     ["scripts/layered-template-check.sh", "--bin app_database --test database_operations"],
-    ["scripts/cli-check.sh", "cargo test --locked -p upgrade_test_support"],
+    ["scripts/cli-check.sh", "cargo test --locked -p upgrade_test_support --all-targets"],
     ["scripts/cli-check.sh", "cargo test --locked -p application_mutator"],
     ["scripts/cli-check.sh", "cargo test --locked -p hegira_cli"],
     ["scripts/generated-application-check.sh",

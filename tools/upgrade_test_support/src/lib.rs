@@ -29,6 +29,83 @@ const MAX_TOTAL_OBJECT_BYTES: u64 = 16 * 1024 * 1024;
 const MAX_FILES_PER_TREE: usize = 256;
 const FIXTURE_PATH: &str = "test-fixtures/application-baselines/v0.6.0";
 
+/// Only reviewed, published releases can be selected; legacy callers retain v0.6.0.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BaselineVersion {
+    V0_6_0,
+    V0_7_0,
+}
+
+pub const V0_7_0_PROVENANCE: &str = r#"schema = 1
+authentication = "git-ssh-tag"
+signer_fingerprint = "SHA256:Nq2p1V/hlkhUrXEv1UiPMlLKnZ4w5D7ux7/ki5XDRDA"
+published_release = "https://github.com/furkancemalcaliskan/hegira/releases/tag/v0.7.0"
+published_at = "2026-10-04T15:13:18Z"
+producer = "released-source-hegira-cli"
+identity_added_lock = "matching-released-default-composition"
+"#;
+
+impl BaselineVersion {
+    pub const ALL: [Self; 2] = [Self::V0_6_0, Self::V0_7_0];
+
+    pub const fn tag(self) -> &'static str {
+        match self {
+            Self::V0_6_0 => RELEASE_TAG,
+            Self::V0_7_0 => "v0.7.0",
+        }
+    }
+
+    pub fn expected_release(self) -> BaselineRelease {
+        let (tag_object, commit, source_tree, package_digest, lock_revision, provenance_digest) =
+            match self {
+                Self::V0_6_0 => (
+                    RELEASE_TAG_OBJECT,
+                    RELEASE_COMMIT,
+                    RELEASE_SOURCE_TREE,
+                    PACKAGE_DIGEST,
+                    LOCK_REVISION,
+                    None,
+                ),
+                Self::V0_7_0 => (
+                    "f83979ef149eb1ed0017edee143cd502c070ce07",
+                    "635c163d50375f7d250311426c67413da382ed23",
+                    "2547cb85aae856024771cbe4432a2a88e4703574",
+                    "sha256:34ddf6356d441791c93f306f5ea6aeb5927cab1062d2e6d7f8b8928ee198b053",
+                    "7a9ed5bce734f5459fee62d3a2069ce1cfc7d212",
+                    Some(V0_7_0_PROVENANCE_DIGEST),
+                ),
+            };
+        BaselineRelease {
+            tag: self.tag().to_owned(),
+            tag_object: tag_object.to_owned(),
+            commit: commit.to_owned(),
+            source_tree: source_tree.to_owned(),
+            framework_repository: FRAMEWORK_REPOSITORY.to_owned(),
+            package_id: PACKAGE_ID.to_owned(),
+            package_version: self.tag().to_owned(),
+            package_digest: package_digest.to_owned(),
+            lock_revision: lock_revision.to_owned(),
+            application: APPLICATION_NAME.to_owned(),
+            provenance_digest: provenance_digest.map(str::to_owned),
+        }
+    }
+
+    fn manifest_digest(self) -> &'static str {
+        match self {
+            Self::V0_6_0 => {
+                "sha256:14f576d2378f4ce1fcbd82aa10a25e1159c9db0cc30b2519fd4671a95d81c71a"
+            }
+            Self::V0_7_0 => V0_7_0_MANIFEST_DIGEST,
+        }
+    }
+}
+
+// Calculated from the authenticated import, never from evolving templates.
+const V0_7_0_PROVENANCE_DIGEST: &str =
+    "sha256:017f5f6f1b26f3a82437ec24699a528887d2bc2a8fc841b275d35576c4210606";
+const V0_7_0_MANIFEST_DIGEST: &str =
+    "sha256:8307ab374455467b007545764faaa1c0e2d56f9d95b324be10946d5992cd85e1";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum BaselineComposition {
     Default,
@@ -96,6 +173,7 @@ pub struct BaselineRelease {
     pub package_digest: String,
     pub lock_revision: String,
     pub application: String,
+    pub provenance_digest: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -173,6 +251,19 @@ impl BaselineCatalog {
         Self::load(repository.as_ref().join(FIXTURE_PATH))
     }
 
+    pub fn from_repository_release(
+        repository: impl AsRef<Path>,
+        version: BaselineVersion,
+    ) -> Result<Self> {
+        Self::load_for_release(
+            repository
+                .as_ref()
+                .join("test-fixtures/application-baselines")
+                .join(version.tag()),
+            version,
+        )
+    }
+
     pub fn repository_fixture() -> Result<Self> {
         let root = Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
@@ -182,14 +273,28 @@ impl BaselineCatalog {
     }
 
     pub fn load(root: impl AsRef<Path>) -> Result<Self> {
+        Self::load_for_release(root, BaselineVersion::V0_6_0)
+    }
+
+    pub fn load_for_release(root: impl AsRef<Path>, version: BaselineVersion) -> Result<Self> {
         let root = root.as_ref();
         reject_symlink(root)?;
         reject_symlink(&root.join("trees"))?;
         reject_symlink(&root.join("objects"))?;
         let release_bytes = read_bounded(&root.join("release.toml"), MAX_RELEASE_BYTES)?;
+        // Pin the inventory as well as the objects. Rehashing a modified object,
+        // tree and release manifest together must not authenticate new history.
+        verify_digest(&release_bytes, version.manifest_digest())?;
         let manifest: ReleaseManifest = toml::from_slice(&release_bytes)
             .map_err(|_| error(BaselineErrorKind::InvalidManifest))?;
-        validate_release(&manifest)?;
+        validate_release(&manifest, version)?;
+        if let Some(digest) = &manifest.provenance_digest {
+            verify_digest(
+                &read_bounded(&root.join("provenance.toml"), MAX_RELEASE_BYTES)?,
+                digest,
+            )?;
+        }
+        validate_root(root, manifest.provenance_digest.is_some())?;
 
         let mut object_cache = BTreeMap::<String, Arc<[u8]>>::new();
         let mut snapshots = BTreeMap::new();
@@ -323,6 +428,8 @@ struct ReleaseManifest {
     package_digest: String,
     lock_revision: String,
     application: String,
+    #[serde(default)]
+    provenance_digest: Option<String>,
     baselines: Vec<BaselineDeclaration>,
 }
 
@@ -339,6 +446,7 @@ impl ReleaseManifest {
             package_digest: self.package_digest,
             lock_revision: self.lock_revision,
             application: self.application,
+            provenance_digest: self.provenance_digest,
         }
     }
 }
@@ -397,20 +505,43 @@ struct TreeFile {
     executable: bool,
 }
 
-fn validate_release(manifest: &ReleaseManifest) -> Result<()> {
+fn validate_release(manifest: &ReleaseManifest, version: BaselineVersion) -> Result<()> {
+    let expected = version.expected_release();
     if manifest.schema != RELEASE_SCHEMA
-        || manifest.tag != RELEASE_TAG
-        || manifest.tag_object != RELEASE_TAG_OBJECT
-        || manifest.commit != RELEASE_COMMIT
-        || manifest.source_tree != RELEASE_SOURCE_TREE
+        || manifest.tag != expected.tag
+        || manifest.tag_object != expected.tag_object
+        || manifest.commit != expected.commit
+        || manifest.source_tree != expected.source_tree
         || manifest.framework_repository != FRAMEWORK_REPOSITORY
         || manifest.package_id != PACKAGE_ID
-        || manifest.package_version != RELEASE_TAG
-        || manifest.package_digest != PACKAGE_DIGEST
-        || manifest.lock_revision != LOCK_REVISION
+        || manifest.package_version != expected.package_version
+        || manifest.package_digest != expected.package_digest
+        || manifest.lock_revision != expected.lock_revision
         || manifest.application != APPLICATION_NAME
+        || manifest.provenance_digest != expected.provenance_digest
     {
         return Err(error(BaselineErrorKind::Identity));
+    }
+    Ok(())
+}
+
+fn validate_root(root: &Path, provenance: bool) -> Result<()> {
+    let mut expected = BTreeSet::from(["release.toml", "trees", "objects"]);
+    if provenance {
+        expected.insert("provenance.toml");
+    }
+    for entry in fs::read_dir(root).map_err(|_| error(BaselineErrorKind::Io))? {
+        let entry = entry.map_err(|_| error(BaselineErrorKind::Io))?;
+        let name = entry
+            .file_name()
+            .into_string()
+            .map_err(|_| error(BaselineErrorKind::InvalidPath))?;
+        if !expected.remove(name.as_str()) {
+            return Err(error(BaselineErrorKind::UndeclaredEntry));
+        }
+    }
+    if !expected.is_empty() {
+        return Err(error(BaselineErrorKind::UndeclaredEntry));
     }
     Ok(())
 }
@@ -702,6 +833,248 @@ mod tests {
             BaselineCatalog::load(&copy).unwrap_err().kind(),
             BaselineErrorKind::UndeclaredEntry
         );
+    }
+
+    #[test]
+    fn v0_7_0_materializes_offline_with_exact_composition_ownership_and_locks() {
+        let fixture = TestDirectory::new("v0-7-offline");
+        let isolated = fixture.path.join("isolated-repository");
+        let data = isolated.join("test-fixtures/application-baselines/v0.7.0");
+        fs::create_dir_all(data.parent().unwrap()).unwrap();
+        copy_tree(&fixture_root().parent().unwrap().join("v0.7.0"), &data);
+        let catalog =
+            BaselineCatalog::from_repository_release(&isolated, BaselineVersion::V0_7_0).unwrap();
+        assert_eq!(
+            catalog.release(),
+            &BaselineVersion::V0_7_0.expected_release()
+        );
+        assert_eq!(catalog.requests().len(), 6);
+        assert!(!isolated.join(".git").exists());
+        assert!(!isolated.join("templates").exists());
+        assert_eq!(
+            fs::read(data.join("provenance.toml")).unwrap(),
+            V0_7_0_PROVENANCE.as_bytes()
+        );
+        for request in catalog.requests() {
+            let snapshot = catalog.snapshot(request).unwrap();
+            let manifest: toml::Value = toml::from_str(text(snapshot, "hegira.toml")).unwrap();
+            assert_eq!(manifest["schema"].as_integer(), Some(3));
+            assert_eq!(manifest["framework"]["version"].as_str(), Some("v0.7.0"));
+            assert_eq!(
+                manifest["composition"]["package"]["version"].as_str(),
+                Some("v0.7.0")
+            );
+            assert_eq!(
+                manifest["upgrade"]["framework"]["version"].as_str(),
+                Some("v0.7.0")
+            );
+            assert_eq!(
+                manifest["selection"]["databases"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|v| v.as_str().unwrap())
+                    .collect::<Vec<_>>(),
+                [request.database.as_str()]
+            );
+            assert_eq!(
+                manifest["selection"]["clients"].as_array().unwrap()[0].as_str(),
+                Some("leptos")
+            );
+            let modules = manifest["composition"]
+                .get("modules")
+                .and_then(toml::Value::as_array);
+            assert_eq!(
+                modules.map_or(0, Vec::len),
+                usize::from(request.composition != BaselineComposition::Minimal)
+            );
+            let components: Vec<_> = manifest["composition"]["components"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|item| item["id"].as_str().unwrap())
+                .collect();
+            assert_eq!(
+                components,
+                match request.composition {
+                    BaselineComposition::Default => vec!["layered-base", "layered-leptos-identity"],
+                    BaselineComposition::Minimal => vec!["layered-base", "layered-leptos-minimal"],
+                    BaselineComposition::IdentityAdded =>
+                        vec!["identity", "layered-base", "layered-leptos-minimal"],
+                }
+            );
+            let claims = manifest["upgrade"]["ownership"]["claims"]
+                .as_array()
+                .unwrap();
+            for provider in ["sqlite", "postgres"] {
+                let prefix = format!("crates/infrastructure/migrations/{provider}");
+                assert!(
+                    claims
+                        .iter()
+                        .any(|claim| claim["path"].as_str() == Some(&prefix)
+                            && claim["class"].as_str() == Some("immutable-history"))
+                );
+            }
+            for managed in ["Cargo.toml", "Cargo.lock", "hegira.toml"] {
+                assert!(
+                    claims
+                        .iter()
+                        .any(|claim| claim["path"].as_str() == Some(managed)
+                            && claim["class"].as_str() == Some("managed-integration"))
+                );
+            }
+            assert!(
+                text(snapshot, "Cargo.lock")
+                    .contains("?tag=v0.7.0#7a9ed5bce734f5459fee62d3a2069ce1cfc7d212")
+            );
+            assert!(
+                !snapshot
+                    .files()
+                    .contains_key(Path::new(".github/workflows/quality.yml"))
+            );
+            assert!(snapshot.files().keys().all(|path| !forbidden(path)));
+            for repeat in ["first", "second"] {
+                let output = fixture.path.join(format!("{}-{repeat}", request.id()));
+                snapshot.materialize(&output).unwrap();
+                for (path, file) in snapshot.files() {
+                    assert_eq!(fs::read(output.join(path)).unwrap(), file.bytes());
+                    #[cfg(unix)]
+                    {
+                        use std::os::unix::fs::PermissionsExt;
+                        assert_eq!(
+                            fs::metadata(output.join(path))
+                                .unwrap()
+                                .permissions()
+                                .mode()
+                                & 0o111
+                                != 0,
+                            file.executable()
+                        );
+                    }
+                }
+            }
+        }
+        assert_eq!(
+            BaselineCatalog::repository_fixture().unwrap().release().tag,
+            "v0.6.0"
+        );
+        assert!(
+            BaselineCatalog::load(&data).is_err(),
+            "legacy loading never silently selects a new release"
+        );
+    }
+
+    #[test]
+    fn coordinated_object_tree_and_inventory_rehashing_cannot_rewrite_either_release() {
+        let fixture = TestDirectory::new("reseal");
+        for version in BaselineVersion::ALL {
+            let source = fixture_root().parent().unwrap().join(version.tag());
+            let copy = fixture.path.join(version.tag());
+            copy_tree(&source, &copy);
+            let original = fs::read_dir(copy.join("objects"))
+                .unwrap()
+                .next()
+                .unwrap()
+                .unwrap()
+                .path();
+            let old = format!("sha256:{}", original.file_name().unwrap().to_str().unwrap());
+            let changed = b"coordinated replacement of reviewed history";
+            let new = format!("sha256:{:x}", Sha256::digest(changed));
+            fs::write(copy.join("objects").join(&new[7..]), changed).unwrap();
+            fs::remove_file(original).unwrap();
+            let mut release: toml::Value =
+                toml::from_str(&fs::read_to_string(copy.join("release.toml")).unwrap()).unwrap();
+            for baseline in release["baselines"].as_array_mut().unwrap() {
+                let path = copy.join(baseline["tree"].as_str().unwrap());
+                let mut tree: toml::Value =
+                    toml::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+                for file in tree["files"].as_array_mut().unwrap() {
+                    if file["digest"].as_str() == Some(&old) {
+                        file["digest"] = toml::Value::String(new.clone());
+                    }
+                }
+                let bytes = toml::to_string(&tree).unwrap();
+                baseline["tree_digest"] =
+                    toml::Value::String(format!("sha256:{:x}", Sha256::digest(bytes.as_bytes())));
+                fs::write(path, bytes).unwrap();
+            }
+            fs::write(
+                copy.join("release.toml"),
+                toml::to_string(&release).unwrap(),
+            )
+            .unwrap();
+            assert_eq!(
+                BaselineCatalog::load_for_release(&copy, version)
+                    .unwrap_err()
+                    .kind(),
+                BaselineErrorKind::DigestMismatch
+            );
+        }
+    }
+
+    #[test]
+    fn provenance_unknown_entries_wrong_releases_and_symlinks_fail_closed() {
+        let fixture = TestDirectory::new("v0-7-tamper");
+        let source = fixture_root().parent().unwrap().join("v0.7.0");
+        for (name, relative, content, expected) in [
+            (
+                "provenance",
+                "provenance.toml",
+                "changed provenance",
+                BaselineErrorKind::DigestMismatch,
+            ),
+            (
+                "unknown-object",
+                "objects/extra",
+                "extra",
+                BaselineErrorKind::UndeclaredEntry,
+            ),
+            (
+                "unknown-root",
+                "extra",
+                "extra",
+                BaselineErrorKind::UndeclaredEntry,
+            ),
+            (
+                "unknown-tree",
+                "trees/extra.toml",
+                "extra",
+                BaselineErrorKind::UndeclaredEntry,
+            ),
+            (
+                "wrong-release",
+                "release.toml",
+                "schema = 1\ntag = \"v0.8.0\"\n",
+                BaselineErrorKind::DigestMismatch,
+            ),
+        ] {
+            let copy = fixture.path.join(name);
+            copy_tree(&source, &copy);
+            fs::write(copy.join(relative), content).unwrap();
+            assert_eq!(
+                BaselineCatalog::load_for_release(&copy, BaselineVersion::V0_7_0)
+                    .unwrap_err()
+                    .kind(),
+                expected
+            );
+        }
+        #[cfg(unix)]
+        {
+            let copy = fixture.path.join("symlink");
+            copy_tree(&source, &copy);
+            fs::remove_file(copy.join("provenance.toml")).unwrap();
+            std::os::unix::fs::symlink(
+                source.join("provenance.toml"),
+                copy.join("provenance.toml"),
+            )
+            .unwrap();
+            assert_eq!(
+                BaselineCatalog::load_for_release(&copy, BaselineVersion::V0_7_0)
+                    .unwrap_err()
+                    .kind(),
+                BaselineErrorKind::InvalidPath
+            );
+        }
     }
 
     fn text<'a>(snapshot: &'a BaselineSnapshot, path: &str) -> &'a str {

@@ -1159,17 +1159,21 @@ versus closed stdin do not change deterministic output. Snapshot mismatches
 require explicit review; they are not auto-accepted and are not the sole API
 test. Upgrade commands have no interactive prompt protocol.
 
-Upgrade tests obtain v0.6.0 application source from committed, content-addressed
-release baselines rather than current templates or mutable remote content. One
-release manifest pins the annotated tag object, commit, source tree, package
-digest, and generated lock revision. Sorted tree manifests cover default,
+Upgrade test support obtains v0.6.0 and v0.7.0 application source from committed,
+content-addressed release baselines. Each release manifest pins the annotated
+tag object, commit, source tree, package digest, and generated lock revision.
+Sorted tree manifests cover default,
 minimal, and Identity-added SQLite and PostgreSQL states while a shared SHA-256
 object store avoids duplicate bytes. The test-only `upgrade_test_support` tool
 authenticates the complete closed fixture set before exposing an in-memory
 snapshot or materializing it into a previously absent disposable directory; it
-does not invoke Git, execute fixture content, or access the network.
+does not invoke Git, execute fixture content, or access the network. Version
+selection is closed and explicit; legacy entry points retain v0.6.0. Code-pinned
+inventories prevent coordinated rehashing of altered history. The v0.7.0 set
+also authenticates provenance from its maintainer-only signed-source import,
+including its released-default lock selection after Identity installation.
 
-Focused preservation tests customize these released baselines with product
+Current direct-edge preservation tests customize the v0.6.0 baselines with product
 code in every application layer, provider-specific generated resources where
 Identity is installed, runtime configuration values, and append-only application
 migrations. Sorted path/SHA-256 fingerprints prove that every file outside the

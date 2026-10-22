@@ -238,7 +238,9 @@ commands change. Never describe planned work as implemented.
   provider-specific, append-only application migration scaffolds without
   connecting to a database or changing historical migrations.
 - `tools/upgrade_test_support/` authenticates and materializes immutable
-  content-addressed v0.6.0 application baselines for upgrade tests. The closed
+  content-addressed v0.6.0 and v0.7.0 application baselines for upgrade tests.
+  Version selection is explicit; legacy callers retain v0.6.0. Inventories and
+  v0.7.0 import provenance are pinned alongside tree/object digests. The closed
   fixture matrix covers default, minimal, and Identity-added SQLite and
   PostgreSQL states without consulting current templates, Git, or the network.
 - `scripts/` contains local validation and release helpers.
