@@ -211,6 +211,8 @@ trees and pre-existing parent Git metadata remain unchanged. Public historical
 upgrades preserve real, manually adopted and owner-customized governance files
 without claiming them; immutable baseline source remains untouched. These checks
 exercise plans and controlled CI children, not real public-CLI release execution.
+Cleared child environments retain the selected tool PATH; a regression fixture
+requires policy validation to use a Node launcher outside system tool directories.
 
 The Linux `artifact_usage` CLI suite verifies read-only ownership/usage reports
 across all six compositions, mixed developer/release output, sparse large files,

@@ -7,6 +7,7 @@ use application_manifest::{ApplicationManifest, DatabaseAdapter, SourceOwnership
 use serde_json::{Value, json};
 use std::{
     collections::{BTreeMap, BTreeSet},
+    ffi::OsStr,
     fs,
     io::Write,
     path::{Path, PathBuf},
@@ -121,6 +122,60 @@ fn composed_check(application: &Path, context: &Value) -> Output {
         .write_all(&serde_json::to_vec(context).unwrap())
         .unwrap();
     child.wait_with_output().unwrap()
+}
+
+fn repository_policy(application: &Path, home: &Path, tool_path: &OsStr) -> Output {
+    Command::new("node")
+        .args(["scripts/repository-policy.mjs", "repository"])
+        .env_clear()
+        .env("PATH", tool_path)
+        .env("HOME", home)
+        .current_dir(application)
+        .output()
+        .expect("repository policy should run with the selected Node on PATH")
+}
+
+#[cfg(unix)]
+#[test]
+fn repository_policy_uses_selected_node_outside_the_system_path() {
+    use std::os::unix::fs::{PermissionsExt, symlink};
+
+    let parent = TestDirectory::new("selected-policy-node");
+    let application = render(parent.path(), "minimal", "sqlite", "node-selection");
+    let before = output_tree(&application);
+    let home = TestDirectory::new("selected-node-home");
+    let tools = parent.path().join("selected-tools");
+    fs::create_dir(&tools).unwrap();
+    let installed = success(
+        Command::new("node")
+            .args(["--print", "process.execPath"])
+            .env_clear()
+            .env("PATH", std::env::var_os("PATH").unwrap_or_default())
+            .output()
+            .unwrap(),
+    );
+    let installed = String::from_utf8(installed.stdout).unwrap();
+    symlink(installed.trim(), tools.join("actual-node")).unwrap();
+    let launcher = tools.join("node");
+    fs::write(
+        &launcher,
+        "#!/bin/sh\nprintf 'selected\\n' > \"$HOME/selected-node\"\nexec \"${0%/*}/actual-node\" \"$@\"\n",
+    )
+    .unwrap();
+    fs::set_permissions(launcher, fs::Permissions::from_mode(0o700)).unwrap();
+
+    // No system tool directories are on this PATH. The marker proves that the
+    // selected Node runs even on hosts that also have a system Node installed.
+    success(repository_policy(
+        &application,
+        home.path(),
+        tools.as_os_str(),
+    ));
+    assert_eq!(
+        fs::read(home.path().join("selected-node")).unwrap(),
+        b"selected\n"
+    );
+    assert_eq!(before, output_tree(&application));
 }
 
 #[test]
@@ -324,15 +379,11 @@ fn public_upgrades_preserve_real_owner_customized_governance_without_adopting_it
             // The preserved source remains executable, rather than merely
             // preserving placeholder text in paths with familiar names.
             let environment = TestDirectory::new("upgraded-policy-environment");
-            success(
-                Command::new("node")
-                    .args(["scripts/repository-policy.mjs", "repository"])
-                    .env_clear()
-                    .env("HOME", environment.path())
-                    .current_dir(&application)
-                    .output()
-                    .unwrap(),
-            );
+            success(repository_policy(
+                &application,
+                environment.path(),
+                &std::env::var_os("PATH").unwrap_or_default(),
+            ));
             assert_eq!(after, output_tree(&application));
         }
     }
