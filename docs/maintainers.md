@@ -364,14 +364,24 @@ is tested through the CLI dispatcher with a disposable missing source. These
 tests neither build generated applications nor require network access.
 
 Before the mutation and CLI suites, the same tooling gate authenticates the
-closed v0.6.0 released-application baseline matrix through
+closed v0.6.0 and v0.7.0 released-application baseline matrices through
 `upgrade_test_support`. It verifies the pinned tag object, commit, source tree,
 package digest, generated lock revision, every sorted tree manifest, and every
-referenced content object. Default, minimal, and Identity-added applications
-are covered for SQLite and PostgreSQL. Normal validation reads only committed
+referenced content object. The inventory itself is pinned so coordinated object,
+tree and inventory rehashing cannot replace reviewed history. Default, minimal,
+and Identity-added applications are covered for SQLite and PostgreSQL. Normal validation reads only committed
 data, executes no fixture content, and performs no Git or network operation.
 The maintainer-only importer writes an absent destination so a regenerated
 fixture can be recursively compared before an intentional baseline update.
+`sh scripts/import-v0.7.0-application-baselines.sh . /tmp/v0.7.0-baselines`
+verifies the pinned published tag's SSH signature, commit, source tree and package
+identity, builds the CLI from that archived release source, and renders all six
+states within a bounded repository-owned cache. The destination must be absent
+and outside the repository. Provenance records the reviewed release signing key,
+publication identity and matching released-default lock selection for Identity
+addition. Import replay tests pack the frozen data without executing it. Normal
+tests never run the maintainer importer or consult Git/network/current templates.
+See [baseline provenance and import](../test-fixtures/application-baselines/README.md).
 
 The same gate validates `application_mutator` plan ordering, explicit absent and
 content-digest preconditions, duplicate and conflicting path diagnostics,

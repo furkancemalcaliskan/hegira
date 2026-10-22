@@ -285,6 +285,7 @@ test("requires upgrade source, dispatcher, and focused owner commands", t => {
     ["scripts/database-operation-check.sh", 'DATABASE_OPERATION_COMPOSITION_CONFLICT=true "$test_binary" --test-threads=1'],
     ["scripts/layered-template-check.sh", "cargo test --locked -p template_renderer"],
     ["scripts/cli-check.sh", "cargo test --locked -p application_mutator"],
+    ["scripts/cli-check.sh", "cargo test --locked -p upgrade_test_support --all-targets"],
     ["scripts/cli-check.sh", "cargo test --locked -p hegira_cli"],
     ["scripts/upgraded-application-check.sh", "for database in sqlite postgres; do"],
     ["scripts/upgraded-application-check.sh", "validation_cache_release"],
@@ -299,7 +300,7 @@ test("requires upgrade source, dispatcher, and focused owner commands", t => {
   assert.ok(validateUpgradeScripts(root).some(error => error.includes("source is missing")));
 });
 
-test("rejects a filtered focused upgrade suite", t => {
+test("rejects a filtered upgrade suite or omitted importer targets", t => {
   const repository = fileURLToPath(new URL("..", import.meta.url));
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "hegira-upgrade-filter-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -307,11 +308,15 @@ test("rejects a filtered focused upgrade suite", t => {
   fs.cpSync(path.join(repository, "test-fixtures/upgrade-lifecycle"),
     path.join(root, "test-fixtures/upgrade-lifecycle"), { recursive: true });
   const file = path.join(root, "scripts/cli-check.sh");
-  fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace(
-    "cargo test --locked -p hegira_cli\n",
-    "cargo test --locked -p hegira_cli -- --skip upgrade\n",
-  ));
-  assert.ok(validateUpgradeScripts(root).some(error => error.includes("contract missing")));
+  const source = fs.readFileSync(file, "utf8");
+  for (const [from, to] of [
+    ["cargo test --locked -p hegira_cli\n", "cargo test --locked -p hegira_cli -- --skip upgrade\n"],
+    ["cargo test --locked -p upgrade_test_support --all-targets\n", "cargo test --locked -p upgrade_test_support\n"],
+  ]) {
+    assert.notEqual(source.replace(from, to), source);
+    fs.writeFileSync(file, source.replace(from, to));
+    assert.ok(validateUpgradeScripts(root).some(error => error.includes("contract missing")));
+  }
 });
 
 test("rejects generated application validation outside the quality gate", () => {
