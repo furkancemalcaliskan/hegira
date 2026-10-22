@@ -199,6 +199,19 @@ installation. Real application/runtime coverage remains in the generated-applica
 gate below; workflow YAML can additionally be checked with `actionlint` against a
 fresh rendered application's `.github/workflows/quality.yml`.
 
+The composed governance contract additionally runs the delivered policy shell and
+CI fixtures together in each of the six applications with a cleared environment
+and temporary home. It checks actual documented issue/release examples against
+the delivered policy, resolves documentation and adapter links, and compares
+provider/features across source manifests, public CLI previews, development
+instructions, and CI integration selections. Cross-file drift fixtures reject
+wrong application/release identities, provider substitutions, broken links,
+adapter delegation, hosting check names, and hidden aggregate failures. Source
+trees and pre-existing parent Git metadata remain unchanged. Public historical
+upgrades preserve real, manually adopted and owner-customized governance files
+without claiming them; immutable baseline source remains untouched. These checks
+exercise plans and controlled CI children, not real public-CLI release execution.
+
 The Linux `artifact_usage` CLI suite verifies read-only ownership/usage reports
 across all six compositions, mixed developer/release output, sparse large files,
 hard-link deduplication and external-link rejection, active operation locks,
