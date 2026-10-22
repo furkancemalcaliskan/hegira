@@ -142,14 +142,17 @@ Generated workspaces resolve their own dependency graphs rather than inheriting
 the framework lockfile. When reviewing dependency fixes, check both generated
 database profiles with all features, including optional S3, against the same
 policy using `cargo deny --manifest-path <application>/Cargo.toml --all-features
-check --config <framework>/deny.toml bans advisories` and audit their lockfiles.
+--config <framework>/deny.toml check bans advisories` and audit their lockfiles.
 Use disposable repository-validation copies for unreleased framework source.
 
 The root dependency lock and deny policy require Rustls 0.23.46 or newer for
 RUSTSEC-2026-0346 through RUSTSEC-2026-0349 and quinn-proto 0.11.18 or newer for
-RUSTSEC-2026-0338 through RUSTSEC-2026-0342. The container-based Cargo deny
-action explicitly selects Rust 1.96.1 inside its own container; the host runner's
-Rust installation does not supply that container toolchain. Identity's optional
+RUSTSEC-2026-0338 through RUSTSEC-2026-0342. The root lock additionally selects
+rustls-webpki 0.103.16 and webpki-roots 1.0.10 for the certificate-trust
+vulnerabilities RUSTSEC-2026-0382 and RUSTSEC-2026-0381 respectively.
+The container-based Cargo deny action explicitly selects Rust 1.96.1 inside its
+own container; the host runner's Rust installation does not supply that
+container toolchain. Identity's optional
 Swagger UI uses a locked official data package and supported ZIP extraction,
 avoiding the retired ZIP requirements of the former UI adapter. Its document
 schema and application contribution contract remain unchanged.
@@ -198,6 +201,21 @@ They also verify exact generated-once CI ownership and preservation after Identi
 installation. Real application/runtime coverage remains in the generated-application
 gate below; workflow YAML can additionally be checked with `actionlint` against a
 fresh rendered application's `.github/workflows/quality.yml`.
+
+The composed governance contract additionally runs the delivered policy shell and
+CI fixtures together in each of the six applications with a cleared environment
+and temporary home. It checks actual documented issue/release examples against
+the delivered policy, resolves documentation and adapter links, and compares
+provider/features across source manifests, public CLI previews, development
+instructions, and CI integration selections. Cross-file drift fixtures reject
+wrong application/release identities, provider substitutions, broken links,
+adapter delegation, hosting check names, and hidden aggregate failures. Source
+trees and pre-existing parent Git metadata remain unchanged. Public historical
+upgrades preserve real, manually adopted and owner-customized governance files
+without claiming them; immutable baseline source remains untouched. These checks
+exercise plans and controlled CI children, not real public-CLI release execution.
+Cleared child environments retain the selected tool PATH; a regression fixture
+requires policy validation to use a Node launcher outside system tool directories.
 
 The Linux `artifact_usage` CLI suite verifies read-only ownership/usage reports
 across all six compositions, mixed developer/release output, sparse large files,

@@ -9,6 +9,9 @@ use std::{
 
 static NEXT_DIRECTORY: AtomicU64 = AtomicU64::new(0);
 
+#[path = "support/governance_contract.rs"]
+mod governance_contract;
+
 fn hegira(arguments: &[&str]) -> Output {
     let environment = TestDirectory::new("process-environment");
     let result = Command::new(env!("CARGO_BIN_EXE_hegira"))
