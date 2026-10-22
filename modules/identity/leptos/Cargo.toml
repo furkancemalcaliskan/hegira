@@ -11,7 +11,7 @@ identity_application_contracts = { path = "../application_contracts" }
 identity_domain_shared = { path = "../domain_shared" }
 leptos_support = { path = "../../../crates/leptos_support", default-features = false }
 
-icons = { version = "0.18.3", features = ["leptos"] }
+icons = { version = "0.19.0", features = ["leptos"] }
 leptos = { version = "0.8.19" }
 leptos_router = { version = "0.8.13" }
 serde_json = "1.0.145"
