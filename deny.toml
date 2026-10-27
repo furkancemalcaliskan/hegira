@@ -24,6 +24,9 @@ allow = [
 [bans]
 # RustSec informational unsoundness advisories must not regress to warnings.
 deny = [
+    { name = "ctutils", version = "<0.4.4" }, # RUSTSEC-2026-0385
+    { name = "tokio", version = ">=0.3.2, <1.51.6" }, # RUSTSEC-2026-0386
+    { name = "tokio", version = ">=1.52.0, <1.53.3" }, # RUSTSEC-2026-0386
     { name = "event-listener", version = ">=5.1.0, <5.4.2" }, # RUSTSEC-2026-0221
     { name = "lru", version = "<0.18.2" }, # RUSTSEC-2026-0253
     { name = "rustls", version = "<0.23.46" }, # RUSTSEC-2026-0346 through RUSTSEC-2026-0349

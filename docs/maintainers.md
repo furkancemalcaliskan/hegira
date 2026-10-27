@@ -150,6 +150,13 @@ RUSTSEC-2026-0346 through RUSTSEC-2026-0349 and quinn-proto 0.11.18 or newer for
 RUSTSEC-2026-0338 through RUSTSEC-2026-0342. The root lock additionally selects
 rustls-webpki 0.103.16 and webpki-roots 1.0.10 for the certificate-trust
 vulnerabilities RUSTSEC-2026-0382 and RUSTSEC-2026-0381 respectively.
+The root lock also selects ctutils 0.4.4 for RUSTSEC-2026-0385 in the optional
+AWS storage dependency graph and Tokio 1.53.3 for RUSTSEC-2026-0386. The root
+deny policy rejects ctutils versions below 0.4.4 and Tokio's affected ranges
+(`>=0.3.2, <1.51.6` and `>=1.52.0, <1.53.3`), preserving the patched Tokio
+1.51 maintenance line. Historical application baselines and authenticated
+template/upgrade lockfiles retain their reviewed identities; a root dependency
+update does not rewrite those artifacts.
 The container-based Cargo deny action explicitly selects Rust 1.96.1 inside its
 own container; the host runner's Rust installation does not supply that
 container toolchain. Identity's optional
