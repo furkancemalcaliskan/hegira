@@ -1002,3 +1002,7 @@ fn canonical_directory(path: &Path, kind: &str) -> Result<PathBuf> {
     }
     Ok(canonical)
 }
+
+#[cfg(test)]
+#[path = "manifest_additive_tests.rs"]
+mod additive_upgrade_tests;

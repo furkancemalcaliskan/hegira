@@ -1730,6 +1730,264 @@ mod platform {
             assert_eq!(retry.kind(), MutationErrorKind::RecoveryRequired);
         }
 
+        // Authenticated released bytes exercise the publisher independently of
+        // renderer edge policy. These explicit synthetic plans are not releases.
+        struct ReleasedAdditiveFixture {
+            root: PathBuf,
+        }
+
+        const RELEASED_CREATES: [&str; 2] = [
+            "apps/server/src/bin/app_database.rs",
+            "crates/infrastructure/src/database_operations.rs",
+        ];
+        const RELEASED_SECRET: &str = "private-released-product-393";
+
+        fn released_baselines() -> upgrade_test_support::BaselineCatalog {
+            upgrade_test_support::BaselineCatalog::from_repository_release(
+                Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .parent()
+                    .unwrap()
+                    .parent()
+                    .unwrap(),
+                upgrade_test_support::BaselineVersion::V0_7_0,
+            )
+            .unwrap()
+        }
+
+        impl ReleasedAdditiveFixture {
+            fn new(snapshot: &upgrade_test_support::BaselineSnapshot) -> Self {
+                let root = std::env::temp_dir().join(format!(
+                    "hegira-released-additive-test-{}-{}",
+                    std::process::id(),
+                    NEXT_FIXTURE.fetch_add(1, Ordering::Relaxed)
+                ));
+                snapshot.materialize(&root).unwrap();
+                // File publication does not create missing parent directories.
+                stdfs::create_dir(root.join("apps/server/src/bin")).unwrap();
+                for path in [
+                    "crates/domain/src/product_owned.rs",
+                    "crates/infrastructure/migrations/20990101000000_owner_history.sql",
+                    "AGENTS.md",
+                    "README.md",
+                    ".github/workflows/quality.yml",
+                ] {
+                    stdfs::create_dir_all(root.join(path).parent().unwrap()).unwrap();
+                    stdfs::write(root.join(path), RELEASED_SECRET).unwrap();
+                }
+                Self { root }
+            }
+
+            fn plan(&self) -> ChangePlan {
+                let edits = ["Cargo.lock", "Cargo.toml", "hegira.toml"].map(|path| {
+                    let source = stdfs::read(self.root.join(path)).unwrap();
+                    let target = [
+                        source.as_slice(),
+                        b"\n# synthetic additive compatibility target\n",
+                    ]
+                    .concat();
+                    StructuredFileEdit::new(path, &source, target)
+                        .unwrap()
+                        .into()
+                });
+                let creates = RELEASED_CREATES.map(|path| {
+                    FileCreation::new(
+                        path,
+                        b"// synthetic operation source; never executed\n".to_vec(),
+                    )
+                    .unwrap()
+                    .into()
+                });
+                ChangePlan::new(edits.into_iter().chain(creates)).unwrap()
+            }
+        }
+
+        impl Drop for ReleasedAdditiveFixture {
+            fn drop(&mut self) {
+                let _ = stdfs::remove_dir_all(&self.root);
+            }
+        }
+
+        #[test]
+        fn released_additive_failure_at_every_boundary_restores_complete_source_and_modes() {
+            let baselines = released_baselines();
+            for request in baselines.requests() {
+                let points = [
+                    HookPoint::BeforeFilesystemPreflight,
+                    HookPoint::BeforePublication,
+                ]
+                .into_iter()
+                .chain(
+                    (0..5).flat_map(|i| [HookPoint::BeforeChange(i), HookPoint::AfterChange(i)]),
+                );
+                for injection in points {
+                    let fixture =
+                        ReleasedAdditiveFixture::new(baselines.snapshot(request).unwrap());
+                    let plan = fixture.plan();
+                    let source = fixture.root.join("Cargo.toml");
+                    stdfs::set_permissions(&source, stdfs::Permissions::from_mode(0o640)).unwrap();
+                    let mode = stdfs::metadata(&source).unwrap().mode();
+                    let before = snapshot(&fixture.root);
+                    let error = publish_with(&fixture.root, &plan, |point| {
+                        if point == injection {
+                            Err(injected())
+                        } else {
+                            Ok(())
+                        }
+                    })
+                    .unwrap_err();
+                    assert_eq!(
+                        error.kind(),
+                        MutationErrorKind::PublicationFailed,
+                        "{} {injection:?}",
+                        request.id()
+                    );
+                    assert_eq!(before, snapshot(&fixture.root));
+                    assert_eq!(mode, stdfs::metadata(&source).unwrap().mode());
+                    assert!(!fixture.root.join(MUTATION_MARKER).exists());
+                    // Recoverable rollback is retryable with the same digest plan.
+                    assert_eq!(
+                        publish_change_plan(&fixture.root, &plan)
+                            .unwrap()
+                            .changed_files(),
+                        5
+                    );
+                    for (path, bytes) in &before {
+                        if !["Cargo.lock", "Cargo.toml", "hegira.toml"]
+                            .contains(&path.to_str().unwrap())
+                        {
+                            assert_eq!(&stdfs::read(fixture.root.join(path)).unwrap(), bytes);
+                        }
+                    }
+                }
+            }
+        }
+
+        #[test]
+        fn released_additive_uncertain_rollback_preserves_private_staging_and_blocks_retry() {
+            let baselines = released_baselines();
+            for request in baselines.requests() {
+                let fixture = ReleasedAdditiveFixture::new(baselines.snapshot(request).unwrap());
+                let plan = fixture.plan();
+                let before = snapshot(&fixture.root);
+                let manifest = fixture.root.join("hegira.toml");
+                let error = publish_with(&fixture.root, &plan, |point| {
+                    if point == HookPoint::AfterChange(4) {
+                        stdfs::write(&manifest, RELEASED_SECRET).unwrap();
+                        return Err(injected());
+                    }
+                    Ok(())
+                })
+                .unwrap_err();
+                assert_eq!(error.kind(), MutationErrorKind::RollbackIncomplete);
+                assert_eq!(stdfs::read(&manifest).unwrap(), RELEASED_SECRET.as_bytes());
+                let marker = stdfs::read_to_string(fixture.root.join(MUTATION_MARKER)).unwrap();
+                for change in plan.changes() {
+                    assert!(marker.contains(change.path().as_str()));
+                }
+                assert!(!marker.contains(RELEASED_SECRET));
+                assert!(!marker.contains("[workspace]"));
+                assert!(!error.to_string().contains(RELEASED_SECRET));
+                assert_eq!(
+                    stdfs::metadata(fixture.root.join(MUTATION_MARKER))
+                        .unwrap()
+                        .mode()
+                        & 0o777,
+                    0o600
+                );
+                let retained = snapshot(&fixture.root);
+                assert!(retained.keys().any(|path| {
+                    path.file_name()
+                        .unwrap()
+                        .to_string_lossy()
+                        .starts_with(".hegira-mutation-")
+                }));
+                assert_eq!(
+                    publish_change_plan(&fixture.root, &plan)
+                        .unwrap_err()
+                        .kind(),
+                    MutationErrorKind::RecoveryRequired
+                );
+                assert_eq!(retained, snapshot(&fixture.root));
+                for (path, bytes) in &before {
+                    if !["Cargo.lock", "Cargo.toml", "hegira.toml"]
+                        .contains(&path.to_str().unwrap())
+                    {
+                        assert_eq!(&stdfs::read(fixture.root.join(path)).unwrap(), bytes);
+                    }
+                }
+            }
+        }
+
+        #[test]
+        fn released_additive_process_interruption_retains_recovery_and_never_returns_a_receipt() {
+            let baselines = released_baselines();
+            for request in baselines.requests() {
+                let fixture = ReleasedAdditiveFixture::new(baselines.snapshot(request).unwrap());
+                let plan = fixture.plan();
+                let before = snapshot(&fixture.root);
+                let output = child_test(
+                    "publisher::platform::tests::interrupted_released_additive_helper",
+                    (
+                        "HEGIRA_RELEASED_ADDITIVE_INTERRUPTION_ROOT",
+                        fixture.root.as_os_str().to_os_string(),
+                    ),
+                );
+                assert_eq!(
+                    output.status.code(),
+                    Some(89),
+                    "{}: {}",
+                    request.id(),
+                    String::from_utf8_lossy(&output.stderr)
+                );
+                let marker = stdfs::read_to_string(fixture.root.join(MUTATION_MARKER)).unwrap();
+                assert!(marker.contains("state=publishing"));
+                assert!(!marker.contains(RELEASED_SECRET));
+                assert_eq!(
+                    stdfs::read(fixture.root.join("hegira.toml")).unwrap(),
+                    before[Path::new("hegira.toml")]
+                );
+                assert!(fixture.root.join(RELEASED_CREATES[0]).is_file());
+                assert!(fixture.root.join(RELEASED_CREATES[1]).is_file());
+                let retained = snapshot(&fixture.root);
+                assert_eq!(
+                    publish_change_plan(&fixture.root, &plan)
+                        .unwrap_err()
+                        .kind(),
+                    MutationErrorKind::RecoveryRequired
+                );
+                assert_eq!(retained, snapshot(&fixture.root));
+                for (path, bytes) in &before {
+                    if !["Cargo.lock", "Cargo.toml"].contains(&path.to_str().unwrap()) {
+                        assert_eq!(&stdfs::read(fixture.root.join(path)).unwrap(), bytes);
+                    }
+                }
+            }
+        }
+
+        #[test]
+        #[ignore = "subprocess interruption helper"]
+        fn interrupted_released_additive_helper() {
+            let Some(root) = std::env::var_os("HEGIRA_RELEASED_ADDITIVE_INTERRUPTION_ROOT") else {
+                return;
+            };
+            let root = PathBuf::from(root);
+            assert_eq!(root.parent(), Some(std::env::temp_dir().as_path()));
+            assert!(
+                root.file_name()
+                    .and_then(OsStr::to_str)
+                    .is_some_and(|name| name.starts_with("hegira-released-additive-test-"))
+            );
+            let fixture = std::mem::ManuallyDrop::new(ReleasedAdditiveFixture { root });
+            let plan = fixture.plan();
+            let result = publish_with(&fixture.root, &plan, |point| {
+                if point == HookPoint::AfterChange(3) {
+                    std::process::exit(89);
+                }
+                Ok(())
+            });
+            panic!("released additive interruption helper returned: {result:?}");
+        }
+
         fn assert_upgrade_source_state(root: &Path) {
             assert_eq!(
                 stdfs::read(root.join("Cargo.toml")).unwrap(),

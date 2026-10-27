@@ -390,6 +390,33 @@ addition. Import replay tests pack the frozen data without executing it. Normal
 tests never run the maintainer importer or consult Git/network/current templates.
 See [baseline provenance and import](../test-fixtures/application-baselines/README.md).
 
+Before candidate identity alignment, renderer unit tests in
+`tools/template_renderer/src/manifest_additive_tests.rs` use all six immutable
+v0.7.0 inputs with explicit synthetic additive edges. They first authenticate
+the current package, then assemble a hypothetical target only inside the private
+test module and run the normal graph, ownership, source-authentication and
+planning checks. The production loader's compiled-release guard is unchanged;
+these fixtures are not a bundled v0.7.0-to-v0.8.0 edge or executable target locks.
+The matrix verifies absent creates, digest edits, occupied files (including
+identical target bytes), directories, symlinks, replaced parents, local ownership
+disagreement, and attempts to adopt the unclaimed server Cargo manifest.
+Product source, migration history and customized documentation, agents and
+workflows remain unchanged. File publication requires existing real parent
+directories; success fixtures explicitly prepare an empty `apps/server/src/bin`,
+while missing-parent cases fail without creating it.
+
+Publisher unit tests independently materialize the same six v0.7.0 baselines
+through the test-only `upgrade_test_support` dependency. Explicit synthetic
+five-file plans exercise failure before and after every publication boundary,
+complete rollback and retry, uncertain rollback retaining private staged files,
+and actual child-process interruption before manifest publication. Recovery
+markers and retained files survive failed retries; summaries, diagnostics and
+markers exclude product content. The guarded ignored interruption helper runs
+only as a child of the ordinary matrix test. Neither suite executes generated
+application code or database operations. Both remain in the existing unfiltered
+renderer and mutation gates, with policy tests rejecting filters that skip these
+contracts during subsequent release-edge alignment.
+
 The same gate validates `application_mutator` plan ordering, explicit absent and
 content-digest preconditions, duplicate and conflicting path diagnostics,
 canonical relative-path enforcement, content-redacted summaries, additive

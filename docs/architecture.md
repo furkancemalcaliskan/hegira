@@ -179,7 +179,7 @@ The direct local dependency allowlist is enforced from locked Cargo metadata by
 | `identity_sqlx` | `background_jobs`, `identity_application`, `identity_application_contracts`, `identity_domain`, `identity_domain_shared`, `persistence`, `search` |
 | `identity_http` | `http_support`, `identity_application`, `identity_application_contracts`, `leptos_support` |
 | `identity_leptos` | `identity_application`, `identity_application_contracts`, `identity_domain_shared`, `leptos_support` |
-| `application_mutator` | `application_manifest` |
+| `application_mutator` | `application_manifest`; test-only `upgrade_test_support` |
 | `hegira_cli` | `application_manifest`, `application_mutator`, `resource_generator`, `template_renderer`; test-only `upgrade_test_support` |
 | `resource_generator` | `application_manifest`, `application_mutator` |
 | `template_renderer` | `application_manifest`, `application_mutator`; test-only `resource_generator`, `upgrade_test_support` |
@@ -1097,6 +1097,17 @@ content.
 Blocked, unsupported, incompatible, and conflicting inputs are distinct typed,
 content-redacted outcomes. Planning performs no publication, database, network,
 or process operation.
+
+Compatibility tests additionally authenticate immutable v0.7.0 application
+inputs against explicit synthetic additive plans before release alignment.
+Their hypothetical target is assembled only in private unit tests after loading
+the authenticated current package; the production compiled-release guard and
+bundled edge are unchanged. Tests reject occupied/unclaimed paths and custom
+managed boundaries, preserve product/history/governance source, and verify
+rollback, process interruption and recovery blocking. File creation still
+requires existing real parent directories. See the
+[maintainer validation contract](maintainers.md) for fixture prerequisites and
+the distinction from a supported release transition.
 
 The bundled package declares one direct v0.6.0-to-v0.7.0 edge for default,
 minimal, and Identity-added layered applications with SQLite or PostgreSQL.
