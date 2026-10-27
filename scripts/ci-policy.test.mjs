@@ -300,22 +300,25 @@ test("requires upgrade source, dispatcher, and focused owner commands", t => {
   assert.ok(validateUpgradeScripts(root).some(error => error.includes("source is missing")));
 });
 
-test("rejects a filtered upgrade suite or omitted importer targets", t => {
+test("rejects filtered upgrade, additive recovery suites or omitted importer targets", t => {
   const repository = fileURLToPath(new URL("..", import.meta.url));
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "hegira-upgrade-filter-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   fs.cpSync(path.join(repository, "scripts"), path.join(root, "scripts"), { recursive: true });
   fs.cpSync(path.join(repository, "test-fixtures/upgrade-lifecycle"),
     path.join(root, "test-fixtures/upgrade-lifecycle"), { recursive: true });
-  const file = path.join(root, "scripts/cli-check.sh");
-  const source = fs.readFileSync(file, "utf8");
-  for (const [from, to] of [
-    ["cargo test --locked -p hegira_cli\n", "cargo test --locked -p hegira_cli -- --skip upgrade\n"],
-    ["cargo test --locked -p upgrade_test_support --all-targets\n", "cargo test --locked -p upgrade_test_support\n"],
+  for (const [script, from, to] of [
+    ["cli-check.sh", "cargo test --locked -p hegira_cli\n", "cargo test --locked -p hegira_cli -- --skip upgrade\n"],
+    ["cli-check.sh", "cargo test --locked -p upgrade_test_support --all-targets\n", "cargo test --locked -p upgrade_test_support\n"],
+    ["cli-check.sh", "cargo test --locked -p application_mutator\n", "cargo test --locked -p application_mutator -- --skip released_additive\n"],
+    ["layered-template-check.sh", "cargo test --locked -p template_renderer\n", "cargo test --locked -p template_renderer -- --skip additive_upgrade_tests\n"],
   ]) {
+    const file = path.join(root, "scripts", script);
+    const source = fs.readFileSync(file, "utf8");
     assert.notEqual(source.replace(from, to), source);
     fs.writeFileSync(file, source.replace(from, to));
     assert.ok(validateUpgradeScripts(root).some(error => error.includes("contract missing")));
+    fs.writeFileSync(file, source);
   }
 });
 
