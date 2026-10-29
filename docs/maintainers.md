@@ -1018,6 +1018,26 @@ lockfile to the merged candidate revision, advance all remaining workspace,
 package, and release files together, and remove the candidate metadata before
 promotion or tag validation.
 
+The current v0.8.0 source prerequisite records base `v0.7.0`, target `v0.8.0`,
+and accepted issue `394` in that metadata. Exactly the 22 framework and Identity
+packages consumed by the base canonical lockfile advance to `0.8.0`.
+`application_manifest`, `test_support`, and the five repository-only tools stay
+at `0.7.0`. The component package, template digests and locks, dated release
+files, and public v0.6.0-to-v0.7.0 upgrade edge retain their authenticated base
+identities. Normal repository policy validates this candidate split; explicit
+`sh scripts/release-policy.sh v0.8.0` must fail while candidate metadata exists.
+The production and released-upgrade lifecycle matrix remains required.
+
+After the prerequisite PR merges, read its actual `mergeCommit.oid` with
+`gh pr view <candidate-pr> --json state,mergeCommit` and verify that commit is
+an ancestor of the fetched `origin/develop` before recording it in the lockfile
+handoff. An unmerged PR, its branch head, or a future tag is not that reference;
+GitHub's squash commit does not exist until merge. Review the consumed package
+trees against that merged revision before final alignment. Subsequent changes
+to those trees require a reviewed replacement candidate rather than reusing an
+outdated source pin. Repository-only tooling and documentation changes do not
+grant permission to change consumed source or publish a release.
+
 Create and verify a signed annotated tag only from the verified `main` release
 commit:
 
