@@ -222,6 +222,50 @@ test("rejects candidate versions outside canonical release-source packages", (co
   );
 });
 
+function candidateFixture(context) {
+  const root = releaseFixture();
+  context.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.mkdirSync(path.join(root, ".github", "workflows"), { recursive: true });
+  fs.writeFileSync(path.join(root, ".github", "workflows", "release.yml"), validWorkflow);
+  const fixture = metadata({
+    metadata: {
+      hegira: {
+        release_candidate: { base: "v0.2.0", target: "v0.3.0", issue: 394 },
+      },
+    },
+  });
+  fixture.packages[0].version = "0.3.0";
+  assert.deepEqual(validateReleaseRepository(root, "v0.3.0", fixture, { allowCandidate: true }), []);
+  return { root, fixture };
+}
+
+test("candidate validation requires every consumed package to advance", context => {
+  const { root, fixture } = candidateFixture(context);
+  fixture.packages[0].version = "0.2.0";
+  const errors = validateReleaseRepository(root, "v0.3.0", fixture, { allowCandidate: true });
+  assert.ok(errors.some(error => error.includes("release source package version mismatch: runtime")));
+});
+
+test("candidate validation keeps base pins until the coherent identity handoff", context => {
+  const { root, fixture } = candidateFixture(context);
+  const lock = path.join(root, "templates", "applications", "layered", "Cargo.lock");
+  fs.writeFileSync(lock, fs.readFileSync(lock, "utf8").replace("?tag=v0.2.0#", "?tag=v0.3.0#"));
+  const errors = validateReleaseRepository(root, "v0.3.0", fixture, { allowCandidate: true });
+  assert.ok(errors.some(error => error.includes("framework source outside the release tag")));
+  assert.ok(errors.some(error => error.includes("base lockfile contains no framework source packages")));
+});
+
+test("candidate validation retains every generated production and upgrade lifecycle gate", context => {
+  const { root, fixture } = candidateFixture(context);
+  const workflow = path.join(root, ".github", "workflows", "release.yml");
+  for (const lifecycle of ["default", "identity-added", "upgrade-default", "upgrade-minimal", "upgrade-identity-added"]) {
+    const entry = `- lifecycle: ${lifecycle}\n`;
+    assert.ok(validWorkflow.includes(entry));
+    fs.writeFileSync(workflow, validWorkflow.replace(entry, "- lifecycle: omitted\n"));
+    assert.ok(validateReleaseRepository(root, "v0.3.0", fixture, { allowCandidate: true }).length > 0, lifecycle);
+  }
+});
+
 test("rejects malformed and non-increasing release candidates", () => {
   const fixture = metadata({
     metadata: {
