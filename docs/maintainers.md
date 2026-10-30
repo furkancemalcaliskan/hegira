@@ -821,6 +821,10 @@ inspect, doctor, and repeat-upgrade checks. Verified public source is never patc
 for local compilation. Separate validation copies add a post-upgrade application
 migration and database tests, use local framework dependencies, and resolve their
 own reviewed lockfiles. Source fingerprints are checked again after production smoke.
+The disposable production copy also selects the current checksum-authenticated
+wasm-bindgen installer for its newly resolved local-source lock. The verified
+public upgrade output retains its original owner installer and released lock;
+this validation-only tool selection grants no source-upgrade rewrite authority.
 
 Released application migration bytes come from the immutable baseline. Identity
 SQL is checked against the committed SHA-256 inventory extracted from the reviewed

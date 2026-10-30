@@ -1214,7 +1214,10 @@ checks to disposable fresh and released-schema databases, migration checksum/dat
 preservation, release assets, and production images for both providers and all three
 compositions. Released Identity SQL is verified against its v0.7.0 source inventory.
 Only separate validation copies receive local dependencies, test fixtures, and a
-post-upgrade application migration. Production HTTP probes retain authentication,
+post-upgrade application migration. Their production copies select the current
+checksum-authenticated wasm-bindgen installer for the locally resolved lock;
+verified public output retains its original owner script. Production HTTP probes
+retain authentication,
 authorization, cookie/Bearer, and minimal-composition boundaries. The gate never
 resets persistent data or modifies verified public upgrade output.
 CI runs its three composition selections as additional cells of the existing
