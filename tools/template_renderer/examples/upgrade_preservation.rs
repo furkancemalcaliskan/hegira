@@ -82,13 +82,14 @@ fn snapshot_database_history(
 ) -> PathBuf {
     use sha2::{Digest, Sha256};
     let inventory: serde_json::Value = serde_json::from_str(include_str!(
-        "../../../test-fixtures/upgrade-lifecycle/v0.6.0-identity-migrations.json"
+        "../../../test-fixtures/upgrade-lifecycle/v0.7.0-identity-migrations.json"
     ))
     .unwrap();
     assert_eq!(inventory["schema"], 1);
-    assert_eq!(inventory["release"], upgrade_test_support::RELEASE_TAG);
-    assert_eq!(inventory["commit"], upgrade_test_support::RELEASE_COMMIT);
-    let history = output.join(format!("{}-v060-migrations", request.id()));
+    let release = upgrade_test_support::BaselineVersion::V0_7_0.expected_release();
+    assert_eq!(inventory["release"], release.tag);
+    assert_eq!(inventory["commit"], release.commit);
+    let history = output.join(format!("{}-v070-migrations", request.id()));
     fs::create_dir(&history).unwrap();
     let database = request.database.as_str();
     for entry in
@@ -120,7 +121,7 @@ fn snapshot_database_history(
 }
 
 fn prepare_lifecycle(binary: &Path, staged: &Path, history: &Path, request: BaselineRequest) {
-    let target = staged.join(".hegira-validation/v060-migrations");
+    let target = staged.join(".hegira-validation/v070-migrations");
     fs::create_dir_all(&target).unwrap();
     for entry in fs::read_dir(history).unwrap() {
         let entry = entry.unwrap();
@@ -255,7 +256,7 @@ fn stage_dependencies(
             dependency.get("git").unwrap().as_str(),
             Some(manifest.framework.repository.as_str())
         );
-        assert_eq!(dependency.get("tag").unwrap().as_str(), Some("v0.7.0"));
+        assert_eq!(dependency.get("tag").unwrap().as_str(), Some("v0.8.0"));
         assert!(!dependency.contains_key("path"));
         dependency.remove("git");
         dependency.remove("tag");

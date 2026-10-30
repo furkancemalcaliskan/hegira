@@ -27,7 +27,7 @@ macro_rules! lifecycle {
                 &app_infrastructure::config::DatabaseBackend::$backend,
             ).unwrap();
             let source = Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("../../.hegira-validation/v060-migrations");
+                .join("../../.hegira-validation/v070-migrations");
             let baseline = Migrator::new(source.as_path()).await.unwrap();
             let fresh = <$pool>::connect(&fresh_url).await.unwrap();
             let tables: i64 = sqlx::query_scalar($empty).fetch_one(&fresh).await.unwrap();

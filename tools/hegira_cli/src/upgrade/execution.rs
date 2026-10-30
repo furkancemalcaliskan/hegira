@@ -26,8 +26,9 @@ struct Receipt {
     target: template_renderer::UpgradeReleaseSummary,
 }
 
-const NEXT_STEPS: [&str; 3] = [
-    "Review the managed Cargo.toml, Cargo.lock, and hegira.toml changes; do not regenerate the lockfile blindly.",
+const NEXT_STEPS: [&str; 4] = [
+    "Review the managed Cargo.toml, Cargo.lock, hegira.toml, and new Infrastructure database_operations.rs source; do not regenerate the lockfile blindly.",
+    "Before CLI database use, manually review and register the Infrastructure module/configuration loader, app_database binary, and database-operations feature as documented in the upgrade guide; existing application-owned registration files are preserved.",
     "Apply application-owned database migrations through the application's documented operation workflow, with backups and the correct environment.",
     "Run application tests, native/hydration checks, and deployment validation before starting or deploying services.",
 ];

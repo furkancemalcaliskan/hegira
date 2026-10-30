@@ -16,8 +16,8 @@ runs:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       with:
         repository: furkancemalcaliskan/hegira
-        # Reviewed #391 merge: supports validation caches; not an invented release tag.
-        ref: b869b3ae3b60da7052ca91c500547081f9fc9f54
+        # Use the same immutable published source release as the application catalog.
+        ref: {{framework_version}}
         path: tooling/hegira
         persist-credentials: false
     - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec

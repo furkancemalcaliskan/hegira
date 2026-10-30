@@ -177,7 +177,7 @@ export function validateUpgradeScripts(root) {
     ["scripts/upgraded-application-check.sh", 'docker build --tag "$UPGRADE_APP_IMAGE"'],
     ["scripts/upgraded-application-http.mjs", "cookie BFF mutation requires the trusted Origin"],
     ["scripts/upgrade-database-contract.rs", "released migration history changed"],
-    ["test-fixtures/upgrade-lifecycle/v0.6.0-identity-migrations.json", '"release": "v0.6.0"'],
+    ["test-fixtures/upgrade-lifecycle/v0.7.0-identity-migrations.json", '"release": "v0.7.0"'],
   ];
   for (const [file, contract] of contracts) {
     const location = path.join(root, file);

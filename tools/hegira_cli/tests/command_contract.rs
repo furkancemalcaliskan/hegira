@@ -940,11 +940,11 @@ fn new_generates_the_default_layered_application_without_prompts() {
         .expect("workspace manifest should exist");
     assert!(server_manifest.contains("default = [\"db-sqlite\"]"));
     assert!(workspace_manifest.contains("git = \"https://github.com/"));
-    assert!(workspace_manifest.contains("tag = \"v0.7.0\""));
+    assert!(workspace_manifest.contains("tag = \"v0.8.0\""));
     assert!(!workspace_manifest.contains(repository_root().to_string_lossy().as_ref()));
     let lockfile = fs::read_to_string(destination.join("Cargo.lock"))
         .expect("application lockfile should exist");
-    assert!(lockfile.contains("?tag=v0.7.0#"));
+    assert!(lockfile.contains("?tag=v0.8.0#"));
 }
 
 #[test]
@@ -1056,11 +1056,11 @@ fn inspect_reports_the_discovered_application_without_writing() {
     assert!(output.contains("Manifest schema: 3\n"));
     assert!(output.contains("Framework: https://github.com/furkancemalcaliskan/hegira.git"));
     assert!(output.contains("Composition status: compatible\n"));
-    assert!(output.contains("Component package: hegira-canonical @ v0.7.0\n"));
+    assert!(output.contains("Component package: hegira-canonical @ v0.8.0\n"));
     assert!(
-        output.contains("Components: layered-base @ v0.7.0, layered-leptos-identity @ v0.7.0\n")
+        output.contains("Components: layered-base @ v0.8.0, layered-leptos-identity @ v0.8.0\n")
     );
-    assert!(output.contains("Modules: identity @ v0.7.0\n"));
+    assert!(output.contains("Modules: identity @ v0.8.0\n"));
     assert!(output.contains("Capabilities: authentication, authorization\n"));
     assert!(output.contains("Databases: sqlite\n"));
     assert!(output.contains("Clients: leptos\n"));
@@ -1432,7 +1432,7 @@ fn doctor_incompatible_manifest_is_a_redacted_blocking_json_result() {
     );
     let manifest_path = application.join("hegira.toml");
     let manifest = fs::read_to_string(&manifest_path).unwrap();
-    fs::write(&manifest_path, manifest.replace("v0.7.0", "v9.9.9")).unwrap();
+    fs::write(&manifest_path, manifest.replace("v0.8.0", "v9.9.9")).unwrap();
     let before = output_tree(&application);
 
     let first = doctor_with_stubbed_tools(&fixture, &application, true, &["doctor", "--json"]);
@@ -1501,7 +1501,7 @@ fn inspect_json_is_versioned_deterministic_and_matches_explicit_resolution() {
     );
     assert_eq!(
         document["composition"]["components"][0]["version"],
-        "v0.7.0"
+        "v0.8.0"
     );
     assert_eq!(document["composition"]["modules"][0]["id"], "identity");
     assert_eq!(document["composition"]["databases"][0], "sqlite");
@@ -1726,8 +1726,8 @@ fn explicit_sibling_destination_still_works() {
 #[test]
 fn provider_snapshots_and_interactive_requests_match() {
     for (database, expected) in [
-        ("sqlite", 6660908455913023028_u64),
-        ("postgres", 1840035223675351512_u64),
+        ("sqlite", 4397831145653011592_u64),
+        ("postgres", 9803008888859801769_u64),
     ] {
         let root = TestDirectory::new(database);
         let explicit = root.path().join("explicit");
@@ -1759,7 +1759,7 @@ fn provider_snapshots_and_interactive_requests_match() {
         assert!(manifest.contains("clients = [\"leptos\"]"));
         assert!(manifest.contains("\"layered-leptos-identity\""));
         let workspace = fs::read_to_string(explicit.join("Cargo.toml")).unwrap();
-        assert!(workspace.contains("tag = \"v0.7.0\""));
+        assert!(workspace.contains("tag = \"v0.8.0\""));
         assert!(!workspace.contains(repository_root().to_str().unwrap()));
         assert!(!explicit.join(".git").exists());
         assert!(!explicit.join("target").exists());

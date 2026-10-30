@@ -64,8 +64,13 @@ fn public_source_upgrades_never_connect_to_database_or_run_seed() {
             }
             let after = tree(&root);
             assert_eq!(
-                before.keys().collect::<Vec<_>>(),
-                after.keys().collect::<Vec<_>>()
+                before
+                    .keys()
+                    .chain(std::iter::once(&std::path::PathBuf::from(
+                        "crates/infrastructure/src/database_operations.rs"
+                    )))
+                    .collect::<std::collections::BTreeSet<_>>(),
+                after.keys().collect::<std::collections::BTreeSet<_>>()
             );
             let changed: Vec<_> = before
                 .iter()
@@ -113,12 +118,15 @@ impl Fixture {
             .unwrap()
             .parent()
             .unwrap();
-        BaselineCatalog::from_repository(repository)
-            .unwrap()
-            .snapshot(request)
-            .unwrap()
-            .materialize(&root)
-            .unwrap();
+        BaselineCatalog::from_repository_release(
+            repository,
+            upgrade_test_support::BaselineVersion::V0_7_0,
+        )
+        .unwrap()
+        .snapshot(request)
+        .unwrap()
+        .materialize(&root)
+        .unwrap();
         root
     }
 }
@@ -225,9 +233,9 @@ fn all_released_compositions_report_one_direct_target_without_side_effects() {
             )
             .unwrap();
             let report = status(&root, "ready", 0);
-            assert_eq!(report["source"]["framework_version"], "v0.6.0");
-            assert_eq!(report["target"]["framework_version"], "v0.7.0");
-            assert_eq!(report["target"]["package"]["version"], "v0.7.0");
+            assert_eq!(report["source"]["framework_version"], "v0.7.0");
+            assert_eq!(report["target"]["framework_version"], "v0.8.0");
+            assert_eq!(report["target"]["package"]["version"], "v0.8.0");
             assert_eq!(report["managed_boundaries"], "pass");
             assert_eq!(report["recovery"], "pass");
             assert!(report["diagnostics"].as_array().unwrap().is_empty());
@@ -262,7 +270,7 @@ fn all_released_compositions_report_one_direct_target_without_side_effects() {
                 ApplicationManifest::read(root.join("hegira.toml"))
                     .unwrap()
                     .schema,
-                2
+                3
             );
         }
     }
@@ -312,17 +320,21 @@ fn unsupported_release_incompatible_composition_and_managed_conflict_are_distinc
     let root = fixture.baseline(BaselineComposition::Default, BaselineDatabase::Sqlite);
     let manifest_path = root.join("hegira.toml");
     let original = fs::read_to_string(&manifest_path).unwrap();
-    fs::write(&manifest_path, original.replace("v0.6.0", "v0.4.0")).unwrap();
+    fs::write(&manifest_path, original.replace("v0.7.0", "v0.4.0")).unwrap();
     let unsupported = status(&root, "unsupported", 3);
     assert!(unsupported["target"].is_null());
     assert!(preview(&root, &[], 3)["plan"].is_null());
-    fs::write(&manifest_path, original.replace("v0.6.0", "v0.7.0")).unwrap();
+    // A legacy schema cannot masquerade as the current release by version edits.
+    let mut legacy: toml::Table = original.replace("v0.7.0", "v0.8.0").parse().unwrap();
+    legacy.insert("schema".to_owned(), toml::Value::Integer(2));
+    legacy.remove("upgrade");
+    fs::write(&manifest_path, toml::to_string(&legacy).unwrap()).unwrap();
     assert_eq!(
         status(&root, "incompatible", 3)["diagnostics"][0]["code"],
         "current-manifest"
     );
     fs::write(&manifest_path, &original).unwrap();
-    fs::write(&manifest_path, format!("{original}\n[[composition.components]]\nid = \"custom-component\"\nversion = \"v0.6.0\"\n")).unwrap();
+    fs::write(&manifest_path, format!("{original}\n[[composition.components]]\nid = \"custom-component\"\nversion = \"v0.7.0\"\n")).unwrap();
     assert_eq!(
         status(&root, "incompatible", 3)["diagnostics"][0]["code"],
         "composition"
@@ -336,7 +348,7 @@ fn unsupported_release_incompatible_composition_and_managed_conflict_are_distinc
 }
 
 #[test]
-fn forged_current_schema_cannot_bypass_the_released_manifest_digest() {
+fn rewritten_current_manifest_cannot_bypass_the_released_manifest_digest() {
     let fixture = Fixture::new();
     let root = fixture.baseline(BaselineComposition::Default, BaselineDatabase::Sqlite);
     let repository = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -347,7 +359,7 @@ fn forged_current_schema_cannot_bypass_the_released_manifest_digest() {
     let catalog = template_renderer::ManifestCatalog::load(repository, "layered").unwrap();
     let boundary = catalog.authenticate_upgrade_source(&root).unwrap();
     let mut manifest = boundary.application().clone();
-    manifest.schema = 3;
+    manifest.application = "forged-application".to_owned();
     manifest.upgrade = Some(ApplicationUpgradeState {
         framework: manifest.framework.clone(),
         package: manifest.composition.as_ref().unwrap().package.clone(),
@@ -381,7 +393,7 @@ fn recovery_entries_block_without_reading_or_removing_them() {
         }
         let report = status(&root, "recovery-blocked", 4);
         assert_eq!(report["recovery"], "blocked");
-        assert_eq!(report["target"]["framework_version"], "v0.7.0");
+        assert_eq!(report["target"]["framework_version"], "v0.8.0");
         assert!(marker.exists());
     }
 }
@@ -526,12 +538,12 @@ fn dry_run_exposes_the_exact_typed_plan_for_every_released_profile_without_write
                 report["plan"],
                 serde_json::to_value(typed.summary()).unwrap()
             );
-            assert_eq!(report["plan"]["changes"].as_array().unwrap().len(), 3);
+            assert_eq!(report["plan"]["changes"].as_array().unwrap().len(), 4);
             assert_eq!(
                 report["preserved_boundaries"],
                 serde_json::json!(["application-owned", "generated-once", "immutable-history"])
             );
-            assert_eq!(preview(&root, &["--target", "v0.7.0"], 0), report);
+            assert_eq!(preview(&root, &["--target", "v0.8.0"], 0), report);
             assert_eq!(preview(&root.join("apps/web/src"), &[], 0), report);
             let explicit = run(
                 &fixture.0,
@@ -583,7 +595,7 @@ fn dry_run_exposes_the_exact_typed_plan_for_every_released_profile_without_write
 fn dry_run_rejects_skipped_targets_conflicts_and_recovery_without_a_plan() {
     let fixture = Fixture::new();
     let root = fixture.baseline(BaselineComposition::Default, BaselineDatabase::Sqlite);
-    for target in ["v0.8.0", "v0.6.0", "0.7.0", "https://private-runtime-value"] {
+    for target in ["v0.9.0", "v0.7.0", "0.8.0", "https://private-runtime-value"] {
         let output = preview(&root, &["--target", target], 3);
         assert_eq!(output["assessment"]["status"], "unsupported");
         assert!(output["plan"].is_null());
@@ -624,7 +636,7 @@ fn current_release_preview_is_a_no_op_and_repeated_apply_has_no_direct_edge() {
     let output = preview(&root, &[], 0);
     assert_eq!(output["outcome"], "no-upgrade");
     assert!(output["plan"].is_null());
-    assert!(preview(&root, &["--target", "v0.7.0"], 3)["plan"].is_null());
+    assert!(preview(&root, &["--target", "v0.8.0"], 3)["plan"].is_null());
     for args in [
         vec!["upgrade", "--dry-run", "status"],
         vec!["upgrade", "--apply"],
@@ -634,7 +646,7 @@ fn current_release_preview_is_a_no_op_and_repeated_apply_has_no_direct_edge() {
     for args in [
         vec!["upgrade"],
         vec!["upgrade", "--json"],
-        vec!["upgrade", "--target", "v0.7.0"],
+        vec!["upgrade", "--target", "v0.8.0"],
     ] {
         assert_eq!(run(&root, &args).status.code(), Some(3));
     }
@@ -657,7 +669,7 @@ fn public_apply_uses_the_preview_plan_and_preserves_every_unmanaged_byte() {
             let planned = preview(&root, &[], 0);
             let applied = run(
                 &root.join("apps/web/src"),
-                &["upgrade", "--target", "v0.7.0", "--json"],
+                &["upgrade", "--target", "v0.8.0", "--json"],
             );
             assert!(
                 applied.status.success(),
@@ -679,16 +691,16 @@ fn public_apply_uses_the_preview_plan_and_preserves_every_unmanaged_byte() {
             assert_eq!(applied["mode"], "apply");
             assert_eq!(applied["outcome"], "applied");
             assert_eq!(applied["plan"], planned["plan"]);
-            assert_eq!(applied["receipt"]["changed_files"], 3);
+            assert_eq!(applied["receipt"]["changed_files"], 4);
             assert_eq!(applied["receipt"]["target"], applied["plan"]["target"]);
-            assert_eq!(applied["next_steps"].as_array().unwrap().len(), 3);
+            assert_eq!(applied["next_steps"].as_array().unwrap().len(), 4);
             let current = ApplicationManifest::read(root.join("hegira.toml")).unwrap();
             assert_eq!(current.schema, 3);
-            assert_eq!(current.framework.version, "v0.7.0");
+            assert_eq!(current.framework.version, "v0.8.0");
             assert_eq!(current.selection, original.selection);
             let current_composition = current.composition.unwrap();
             let original_composition = original.composition.unwrap();
-            assert_eq!(current_composition.package.version, "v0.7.0");
+            assert_eq!(current_composition.package.version, "v0.8.0");
             assert_eq!(
                 current_composition.capabilities,
                 original_composition.capabilities
@@ -697,18 +709,23 @@ fn public_apply_uses_the_preview_plan_and_preserves_every_unmanaged_byte() {
                 current_composition
                     .components
                     .iter()
-                    .all(|component| component.version == "v0.7.0")
+                    .all(|component| component.version == "v0.8.0")
             );
             assert!(
                 current_composition
                     .modules
                     .iter()
-                    .all(|module| module.version == "v0.7.0")
+                    .all(|module| module.version == "v0.8.0")
             );
             let after = tree(&root);
             assert_eq!(
-                before.keys().collect::<Vec<_>>(),
-                after.keys().collect::<Vec<_>>()
+                before
+                    .keys()
+                    .chain(std::iter::once(&std::path::PathBuf::from(
+                        "crates/infrastructure/src/database_operations.rs"
+                    )))
+                    .collect::<std::collections::BTreeSet<_>>(),
+                after.keys().collect::<std::collections::BTreeSet<_>>()
             );
             let changed = before
                 .iter()
@@ -758,7 +775,7 @@ fn public_apply_has_deterministic_receipts_and_explicit_owner_operations() {
     let human = run(&root, &["upgrade"]);
     assert!(human.status.success());
     let human = String::from_utf8(human.stdout).unwrap();
-    assert!(human.contains("Applied receipt: 3 managed files"));
+    assert!(human.contains("Applied receipt: 4 managed files"));
     assert!(human.contains("do not regenerate the lockfile blindly"));
     assert!(human.contains("application-owned database migrations"));
     assert!(human.contains("native/hydration checks"));
@@ -820,7 +837,7 @@ fn concurrent_public_apply_cannot_issue_two_receipts() {
         let value: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
         if output.status.success() {
             assert_eq!(value["outcome"], "applied");
-            assert_eq!(value["receipt"]["changed_files"], 3);
+            assert_eq!(value["receipt"]["changed_files"], 4);
         } else {
             assert!(matches!(output.status.code(), Some(3 | 4)));
             assert_eq!(value["outcome"], "unavailable");
@@ -832,7 +849,7 @@ fn concurrent_public_apply_cannot_issue_two_receipts() {
             .unwrap()
             .framework
             .version,
-        "v0.7.0"
+        "v0.8.0"
     );
     assert!(!root.join(".hegira-mutation.lock").exists());
 }
@@ -868,11 +885,11 @@ fn reviewed_upgrade_snapshots_cover_successes_and_failures() {
     capture("planned", &["upgrade", "--dry-run"], 0);
     fs::write(
         root.join("hegira.toml"),
-        original.replace("v0.6.0", "v0.4.0"),
+        original.replace("v0.7.0", "v0.4.0"),
     )
     .unwrap();
     capture("unsupported", &["upgrade", "status"], 3);
-    fs::write(root.join("hegira.toml"), format!("{original}\n[[composition.components]]\nid = \"custom-component\"\nversion = \"v0.6.0\"\n")).unwrap();
+    fs::write(root.join("hegira.toml"), format!("{original}\n[[composition.components]]\nid = \"custom-component\"\nversion = \"v0.7.0\"\n")).unwrap();
     capture("incompatible", &["upgrade", "status"], 3);
     fs::write(
         root.join("hegira.toml"),
@@ -1044,10 +1061,77 @@ fn preview_matches_the_plan_consumed_by_existing_atomic_publication() {
             .unwrap()
             .framework
             .version,
-        "v0.7.0"
+        "v0.8.0"
     );
     assert_eq!(
         report["plan"],
         serde_json::to_value(plan.summary()).unwrap()
     );
+}
+
+#[test]
+fn real_upgrade_additions_reject_occupied_owner_paths_in_every_released_state() {
+    let target_source = Path::new(env!("CARGO_MANIFEST_DIR")).join(
+        "../../templates/applications/layered/crates/infrastructure/src/database_operations.rs",
+    );
+    for composition in BaselineComposition::ALL {
+        for database in BaselineDatabase::ALL {
+            for identical in [false, true] {
+                let fixture = Fixture::new();
+                let root = fixture.baseline(composition, database);
+                let path = root.join("crates/infrastructure/src/database_operations.rs");
+                let bytes = if identical {
+                    fs::read(&target_source).unwrap()
+                } else {
+                    b"private owner operation source".to_vec()
+                };
+                fs::write(&path, &bytes).unwrap();
+                let before = tree(&root);
+                assert_eq!(
+                    status(&root, "conflict", 4)["diagnostics"][0]["code"],
+                    "managed-source-occupied"
+                );
+                assert!(preview(&root, &[], 4)["plan"].is_null());
+                let output = run(&root, &["upgrade", "--json"]);
+                assert_eq!(output.status.code(), Some(4));
+                assert_eq!(tree(&root), before);
+                assert_eq!(fs::read(path).unwrap(), bytes);
+                assert!(!root.join(application_mutator::MUTATION_MARKER).exists());
+            }
+        }
+    }
+}
+
+#[test]
+fn skipped_release_and_provider_switch_requests_cannot_publish_source() {
+    let fixture = Fixture::new();
+    let root = fixture.0.join("skipped-v060");
+    upgrade_test_support::BaselineCatalog::from_repository_release(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../.."),
+        upgrade_test_support::BaselineVersion::V0_6_0,
+    )
+    .unwrap()
+    .snapshot(BaselineRequest::new(
+        BaselineComposition::Default,
+        BaselineDatabase::Sqlite,
+    ))
+    .unwrap()
+    .materialize(&root)
+    .unwrap();
+    let before = tree(&root);
+    status(&root, "unsupported", 3);
+    assert!(preview(&root, &[], 3)["plan"].is_null());
+    assert_eq!(tree(&root), before);
+
+    let root = fixture.baseline(BaselineComposition::Default, BaselineDatabase::Sqlite);
+    let before = tree(&root);
+    for args in [
+        vec!["upgrade", "--database", "postgres", "--json"],
+        vec!["upgrade", "--client", "other", "--json"],
+    ] {
+        let result = run(&root, &args);
+        assert_eq!(result.status.code(), Some(2));
+        assert!(result.stdout.is_empty());
+        assert_eq!(tree(&root), before);
+    }
 }

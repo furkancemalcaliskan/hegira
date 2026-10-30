@@ -120,7 +120,7 @@ The repository validation workflow separates these responsibilities:
   Identity through public dry-run and apply, and repeats provider, hydration,
   production-container, and authenticated CRUD coverage;
 - `generated-application (upgrade-default|upgrade-minimal|upgrade-identity-added)`
-  runs authenticated v0.6.0-to-v0.7.0 public upgrades and validates both providers
+  runs authenticated v0.7.0-to-v0.8.0 public upgrades and validates both providers
   through migration history/data preservation, native/hydration and release
   builds, production images, and HTTP/security contracts;
 - `quality` aggregates the four repository ownership gates under the existing
@@ -390,13 +390,14 @@ addition. Import replay tests pack the frozen data without executing it. Normal
 tests never run the maintainer importer or consult Git/network/current templates.
 See [baseline provenance and import](../test-fixtures/application-baselines/README.md).
 
-Before candidate identity alignment, renderer unit tests in
+Renderer unit tests in
 `tools/template_renderer/src/manifest_additive_tests.rs` use all six immutable
 v0.7.0 inputs with explicit synthetic additive edges. They first authenticate
 the current package, then assemble a hypothetical target only inside the private
 test module and run the normal graph, ownership, source-authentication and
 planning checks. The production loader's compiled-release guard is unchanged;
-these fixtures are not a bundled v0.7.0-to-v0.8.0 edge or executable target locks.
+these synthetic fixtures complement the real bundled v0.7.0-to-v0.8.0 edge and
+its reviewed executable target locks; they cannot substitute for its lifecycle gates.
 The matrix verifies absent creates, digest edits, occupied files (including
 identical target bytes), directories, symlinks, replaced parents, local ownership
 disagreement, and attempts to adopt the unclaimed server Cargo manifest.
@@ -775,7 +776,7 @@ sh scripts/cli-check.sh
 ```
 
 The layered-template gate also verifies source preservation and native/hydration
-compilation for customized v0.6.0-to-v0.7.0 default, minimal, and Identity-added
+compilation for customized v0.7.0-to-v0.8.0 default, minimal, and Identity-added
 applications with both providers. It materializes authenticated released
 baselines, customizes them through the typed generators, and runs the source-built
 public CLI through readiness, dry-run, apply, repeated apply, inspect, and doctor.
@@ -814,16 +815,20 @@ complete test suites run without upgrade-only filters or duplicated status check
 Policy tests reject missing cells, wrong cache identities, skipped/tolerated
 failures, missing dispatch, and missing focused owner commands.
 
-This gate materializes all six authenticated v0.6.0 baselines,
+This gate materializes all six authenticated v0.7.0 baselines,
 customizes application-owned source, and uses public readiness, preview, apply,
 inspect, doctor, and repeat-upgrade checks. Verified public source is never patched
 for local compilation. Separate validation copies add a post-upgrade application
 migration and database tests, use local framework dependencies, and resolve their
 own reviewed lockfiles. Source fingerprints are checked again after production smoke.
+The disposable production copy also selects the current checksum-authenticated
+wasm-bindgen installer for its newly resolved local-source lock. The verified
+public upgrade output retains its original owner installer and released lock;
+this validation-only tool selection grants no source-upgrade rewrite authority.
 
 Released application migration bytes come from the immutable baseline. Identity
 SQL is checked against the committed SHA-256 inventory extracted from the reviewed
-v0.6.0 commit, not assumed to match the current module. New module migrations cannot
+v0.7.0 commit, not assumed to match the current module. New module migrations cannot
 silently enter the released database fixture. Both fresh and upgrade databases must
 be empty and explicitly authorized; tests perform no database reset. The upgrade
 scenario records migration checksums, seeds product data before applying the current
@@ -926,13 +931,17 @@ when inherited startup flags request migration/seed.
 
 ## Application Upgrade Review
 
-The current public edge is exactly v0.6.0 → v0.7.0 for default, minimal, and
+The current public edge is exactly v0.7.0 → v0.8.0 for default, minimal, and
 Identity-added applications with SQLite or PostgreSQL. Its package-authenticated
-declaration is `templates/upgrades/v0-6-0-to-v0-7-0.toml`; its immutable source
+declaration is `templates/upgrades/v0-7-0-to-v0-8-0.toml`; its immutable source
 fixtures are under `test-fixtures/application-baselines/`. Do not rebuild those
 fixtures from current templates or assume a customized application matches a
 fixture in every application-owned path. Authentication binds the exact managed
-boundary; this edge changes only `Cargo.toml`, `Cargo.lock`, and `hegira.toml`.
+boundary; this edge edits `Cargo.toml`, `Cargo.lock`, and `hegira.toml` and
+creates only the absent `crates/infrastructure/src/database_operations.rs`.
+Its module, profile loader, server binary, and feature registration remain a
+[manual owner integration](getting-started.md#adopt-database-operations-after-a-source-upgrade);
+source upgrade neither edits those application-owned files nor executes a database.
 
 Review schema-3 ownership and the source/target composition together with the
 edge's declared manifest transitions and managed source/result digests. Package
@@ -983,7 +992,7 @@ The `release` workflow supports manual release-candidate validation from
   hydration, and release output;
 - validate fresh SQLite and PostgreSQL generated applications, supported
   v0.2.0 upgrades, and the rendered production container and HTTP contract;
-- validate released v0.6.0-to-v0.7.0 application upgrades across all three
+- validate released v0.7.0-to-v0.8.0 application upgrades across all three
   compositions and both providers before publication.
 
 A manual run uploads the source SBOM as a short-lived workflow artifact but
@@ -1018,15 +1027,21 @@ lockfile to the merged candidate revision, advance all remaining workspace,
 package, and release files together, and remove the candidate metadata before
 promotion or tag validation.
 
-The current v0.8.0 source prerequisite records base `v0.7.0`, target `v0.8.0`,
-and accepted issue `394` in that metadata. Exactly the 22 framework and Identity
-packages consumed by the base canonical lockfile advance to `0.8.0`.
-`application_manifest`, `test_support`, and the five repository-only tools stay
-at `0.7.0`. The component package, template digests and locks, dated release
-files, and public v0.6.0-to-v0.7.0 upgrade edge retain their authenticated base
-identities. Normal repository policy validates this candidate split; explicit
-`sh scripts/release-policy.sh v0.8.0` must fail while candidate metadata exists.
-The production and released-upgrade lifecycle matrix remains required.
+The v0.8.0 handoff consumes the actual #394 merge commit
+`fd89e7ef47e064f96a2affed34076acd53c0761a`. Both canonical lockfiles retain
+`tag = "v0.8.0"` and resolve to that candidate; the 22 consumed framework and
+Identity package trees remain identical. All remaining workspace tools, package,
+components, and release files now agree on v0.8.0, and candidate metadata is
+removed. The six direct v0.7.0-to-v0.8.0 target digests are authenticated together
+with these source identities. This is source preparation, not tag publication;
+the production and released-upgrade lifecycle matrix remains required.
+Disposable local-source resolution currently selects wasm-bindgen 0.2.130;
+the installer authenticates that reviewed CLI asset in addition to the retained
+canonical 0.2.128 and supported 0.2.129 assets. Canonical locks are not regenerated
+just to follow local validation resolution.
+Fresh application CI selects the matching immutable published CLI source release
+and checks its local tag before bootstrap. Existing application-owned CI is
+preserved and requires separate review of its compatible CLI selection.
 
 After the prerequisite PR merges, read its actual `mergeCommit.oid` with
 `gh pr view <candidate-pr> --json state,mergeCommit` and verify that commit is

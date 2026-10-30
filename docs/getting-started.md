@@ -478,8 +478,11 @@ affect sidecars. `migrate` runs the composed forward plan only on an existing
 target. Neither command provisions a database, seeds Identity, starts HTTP or
 workers, installs tools, or provides reset, rollback, repair, or arbitrary SQL.
 See [database operation semantics](operations.md#application-owned-database-entry-point).
-Older applications without this real entry point fail preflight rather than
-acquiring it through a managed ownership claim or the existing source upgrade.
+Older applications without this real entry point fail preflight. Source upgrade
+delivers an unregistered Infrastructure source only; complete the
+[manual owner integration](#adopt-database-operations-after-a-source-upgrade)
+before selecting database execution. Ownership claims cannot substitute for
+real source and registration.
 
 This is trusted application/toolchain execution, **not a sandbox**. Cargo and
 build scripts can write build output or have other effects; read-only database
@@ -681,9 +684,10 @@ credentials never belong in `hegira.toml`. See
 [Configuration](configuration.md) for the separate runtime contract.
 Valid schema-1 and schema-2 manifests remain readable for inspection, but the
 current CLI cannot treat them as writable schema-3 manifests by inference.
-The bundled v0.6.0-to-v0.7.0 edge supplies an explicit authenticated transition
-for its supported released states. Manually changing `schema` or ownership
-claims does not establish upgrade compatibility. Reading or validating the
+The bundled v0.7.0-to-v0.8.0 edge supplies an explicit authenticated transition
+for its supported released schema-3 states. Older releases require their own
+matching release tool and direct edge first. Manually changing `schema` or
+ownership claims does not establish upgrade compatibility. Reading or validating the
 manifest does not access the network or modify application files.
 
 Fresh applications also receive a brand-neutral `README.md` and
@@ -867,22 +871,22 @@ explicitly. Discovery uses the same no-follow, ambiguity-rejecting contract as
 `inspect`. Assessment authenticates the bundled package, exact source and direct
 target release identities, composition, ownership, managed source digests, and
 the declared manifest transition. The supported source states are the immutable
-v0.6.0 default, minimal, and Identity-added SQLite/PostgreSQL profiles, each with
-one direct v0.7.0 target. Compatible current v0.7.0 profiles report `no-upgrade`;
+v0.7.0 default, minimal, and Identity-added SQLite/PostgreSQL profiles, each with
+one direct v0.8.0 target. Compatible current v0.8.0 profiles report `no-upgrade`;
 their managed-boundary check is `not-applicable` because there is no outgoing
 edge to assess.
 
-Use the target v0.7.0 source tree or source release archive to run these upgrade
-commands; the source application's v0.6.0 CLI does not acquire a new edge by
+Use the target v0.8.0 source tree or source release archive to run these upgrade
+commands; the source application's v0.7.0 CLI does not acquire a new edge by
 reading its manifest. A prerelease checkout can exercise its bundled source
 contract, but does not prove that the target tag is published or resolvable.
 
 | Source composition | Databases | Direct target and preserved composition |
 | --- | --- | --- |
-| v0.6.0 default Identity | SQLite, PostgreSQL | v0.7.0 with Identity and authentication/authorization retained |
-| v0.6.0 minimal | SQLite, PostgreSQL | v0.7.0 without Identity, login, or protected resource generation |
-| v0.6.0 minimal plus installed Identity | SQLite, PostgreSQL | v0.7.0 with the installed Identity integrations retained |
-| Compatible v0.7.0 composition | SQLite, PostgreSQL | No outgoing upgrade; status/preview succeed, apply is unsupported |
+| v0.7.0 default Identity | SQLite, PostgreSQL | v0.8.0 with Identity and authentication/authorization retained |
+| v0.7.0 minimal | SQLite, PostgreSQL | v0.8.0 without Identity, login, or protected resource generation |
+| v0.7.0 minimal plus installed Identity | SQLite, PostgreSQL | v0.8.0 with the installed Identity integrations retained |
+| Compatible v0.8.0 composition | SQLite, PostgreSQL | No outgoing upgrade; status/preview succeed, apply is unsupported |
 
 Each supported transition preserves the application identity, selected database
 and Leptos client, product customizations outside its managed files, and existing
@@ -927,7 +931,7 @@ cargo run --locked --manifest-path /path/to/hegira/Cargo.toml \
 ```
 
 Omit `--json` for human output. `--application-root` uses the same discovery
-contract as readiness. Optional `--target v0.7.0` must exactly match the
+contract as readiness. Optional `--target v0.8.0` must exactly match the
 authenticated direct edge; skipped releases, downgrades, arbitrary coordinates,
 and unprefixed versions are rejected without echoing the supplied value.
 Invoking `upgrade` without `status` or `--dry-run` applies the supported edge.
@@ -951,8 +955,10 @@ Assessment exit codes and stdout/stderr behavior match `upgrade status`.
 Requesting a target when no direct edge exists is unsupported, not a no-op.
 
 Application-owned, generated-once, and immutable-history boundaries remain
-preserved. The current edge edits only `Cargo.lock`, `Cargo.toml`, and
-`hegira.toml`. Preview writes no file, cached plan, recovery marker, database,
+preserved. The current edge edits `Cargo.lock`, `Cargo.toml`, and
+`hegira.toml` and creates only the absent `crates/infrastructure/src/database_operations.rs`.
+The new source stays unregistered pending manual owner adoption. Preview writes
+no file, cached plan, recovery marker, database,
 or application modification timestamp. It does not execute subprocesses,
 access runtime secrets, or contact a network. A preview is not a reusable
 authorization token; later publication must enforce the same in-memory plan's
@@ -965,7 +971,7 @@ review `upgrade --dry-run` before invoking:
 
 ```sh
 cargo run --locked --manifest-path /path/to/hegira/Cargo.toml \
-  -p hegira_cli -- upgrade --target v0.7.0 --json
+  -p hegira_cli -- upgrade --target v0.8.0 --json
 ```
 
 `--target` is optional but, when supplied, must exactly match the authenticated
@@ -1000,14 +1006,63 @@ the lockfile, execute database migrations, start services, access runtime secret
 or run network/subprocess operations. Product source and immutable history remain
 untouched. A receipt is not evidence that the application is ready to deploy.
 
+## Adopt Database Operations After A Source Upgrade
+
+The v0.7.0-to-v0.8.0 edge delivers
+`crates/infrastructure/src/database_operations.rs` only if that exact path is
+absent. An occupied unclaimed path blocks the upgrade; move no owner source
+merely to bypass a conflict. The source is deliberately unregistered, so the
+existing application can still compile with its original startup path.
+`apps/server/Cargo.toml`, Infrastructure configuration and module registration,
+and server entry-point source remain application-owned or existing integrations.
+
+Before using public `db status` or `db migrate`, review the matching v0.8.0
+canonical application source and integrate these changes as an ordinary
+application-owned change. Review the [default configuration loader](../templates/applications/layered/crates/infrastructure/src/config.rs),
+[minimal configuration loader](../templates/applications/layered-minimal/crates/infrastructure/src/config.rs),
+[database binary](../templates/applications/layered/apps/server/src/bin/app_database.rs),
+and the [default](../templates/applications/layered/apps/server/Cargo.toml) or
+[minimal server manifest](../templates/applications/layered-minimal/apps/server/Cargo.toml)
+for your application's origin; Identity-added applications retain the minimal host:
+
+1. Factor `AppConfig::load_profile(&configuration::Profile)` from the existing
+   configuration loader, returning the built `configuration::Config`. Preserve
+   customized fields, defaults and validation; keep `AppConfig::load` using the
+   same profile builder and deserialization. The new operation module calls this
+   loader to select and validate an explicit profile before database access.
+2. Register `pub mod database_operations;` in Infrastructure. Review the delivered
+   module against your configuration and provider migration composition.
+3. Create `apps/server/src/bin/app_database.rs` using the matching canonical
+   adapter. Add its explicit `[[bin]]` registration and the `database-operations`
+   feature in `apps/server/Cargo.toml`, preserving custom bins and features.
+   The binary must require that feature and select the chosen `db-sqlite` or
+   `db-postgres` provider separately from HTTP startup.
+4. Run formatting, selected-provider compilation/tests, and read-only operation
+   previews. Runtime database access still requires explicit execution trust,
+   a matching profile, and separate production-migration approval. Review URLs
+   and backups before approving access.
+
+Do not manufacture `hegira.toml` ownership claims: execution verifies real
+registration, source, and profile files. A delivered source file or applied
+upgrade receipt does not authorize database execution.
+
+Application documentation, agent instructions, governance, CI workflows, audit
+policy, and frontend manifests/locks are preserved. Review the current generated
+examples and manually adopt compatible changes where wanted. In particular,
+update an old CI CLI source selection to a reviewed source release whose catalog
+matches v0.8.0, and review current security floors without discarding owner policy.
+Fresh v0.8.0 CI selects the immutable published v0.8.0 source tag; it cannot run
+against an unpublished tag merely because an upgrade receipt exists.
+
 ## After An Application Upgrade
 
 The application's owner, whether working directly or with an agent, completes
 these steps before starting or deploying the upgraded application:
 
 1. Review the plan, receipt, and source diff. For the bundled edge, only
-   `Cargo.toml`, `Cargo.lock`, and `hegira.toml` change. Confirm the exact target,
-   application identity, installed composition, and unchanged provider/client.
+   `Cargo.toml`, `Cargo.lock`, and `hegira.toml` change and only the absent
+   `crates/infrastructure/src/database_operations.rs` is added. Confirm the exact
+   target, application identity, installed composition, and unchanged provider/client.
 2. Review the lockfile alongside the manifest. Upgrade publishes authenticated
    lockfile bytes; it does not resolve registry or Git dependencies. Keep the
    reviewed release-pinned lock and use locked builds. Do not blindly run
@@ -1032,7 +1087,7 @@ inspect the source result without executing SQL or changing dependencies:
 
 ```sh
 git status --short
-git diff -- Cargo.toml Cargo.lock hegira.toml
+git diff -- Cargo.toml Cargo.lock hegira.toml crates/infrastructure/src/database_operations.rs
 ```
 
 Use the selected application's documented build and deployment commands, not
@@ -1045,7 +1100,7 @@ application-owned.
 Source upgrade preserves application-owned `apps/web/src/package.json` and
 `package-lock.json`; it does not install the canonical template's updated
 frontend dependencies. Existing applications must review their own npm graph
-separately, including applications upgraded from v0.6.0.
+separately, including applications upgraded from v0.7.0.
 
 The canonical frontend keeps Tailwind CLI 4.3.3 and uses this narrowly scoped
 override while that CLI pins an older watcher:

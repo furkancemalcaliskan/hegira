@@ -13,8 +13,9 @@ case "$RUNNER_TEMP/" in "$root/"*) echo 'runner tools must be outside the applic
 
 if [ "$1" = cli ]; then
   : "${HEGIRA_SOURCE:?select the reviewed complete CLI source checkout}"
-  [ "$(git -C "$HEGIRA_SOURCE" rev-parse HEAD)" = b869b3ae3b60da7052ca91c500547081f9fc9f54 ] || {
-    echo 'CI CLI source does not match the reviewed revision' >&2; exit 1;
+  release_commit=$(git -C "$HEGIRA_SOURCE" rev-parse --verify "refs/tags/{{framework_version}}^{commit}")
+  [ "$(git -C "$HEGIRA_SOURCE" rev-parse HEAD)" = "$release_commit" ] || {
+    echo 'CI CLI source does not match the selected release' >&2; exit 1;
   }
   CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
     cargo build --locked --manifest-path "$HEGIRA_SOURCE/Cargo.toml" \

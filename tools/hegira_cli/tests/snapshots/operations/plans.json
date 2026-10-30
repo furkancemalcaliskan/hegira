@@ -2,8 +2,8 @@
   "common": {
     "output_schema": 1,
     "application": "__APPLICATION__",
-    "framework_version": "v0.7.0",
-    "package": { "id": "hegira-canonical", "version": "v0.7.0" },
+    "framework_version": "v0.8.0",
+    "package": { "id": "hegira-canonical", "version": "v0.8.0" },
     "database": "@@DATABASE@@",
     "client": "leptos",
     "working_directory": "application-root",
@@ -22,27 +22,27 @@
   "compositions": {
     "default": {
       "components": [
-        { "id": "layered-base", "version": "v0.7.0" },
-        { "id": "layered-leptos-identity", "version": "v0.7.0" }
+        { "id": "layered-base", "version": "v0.8.0" },
+        { "id": "layered-leptos-identity", "version": "v0.8.0" }
       ],
-      "modules": [{ "id": "identity", "version": "v0.7.0" }],
+      "modules": [{ "id": "identity", "version": "v0.8.0" }],
       "capabilities": ["authentication", "authorization"]
     },
     "minimal": {
       "components": [
-        { "id": "layered-base", "version": "v0.7.0" },
-        { "id": "layered-leptos-minimal", "version": "v0.7.0" }
+        { "id": "layered-base", "version": "v0.8.0" },
+        { "id": "layered-leptos-minimal", "version": "v0.8.0" }
       ],
       "modules": [],
       "capabilities": []
     },
     "identity-added": {
       "components": [
-        { "id": "identity", "version": "v0.7.0" },
-        { "id": "layered-base", "version": "v0.7.0" },
-        { "id": "layered-leptos-minimal", "version": "v0.7.0" }
+        { "id": "identity", "version": "v0.8.0" },
+        { "id": "layered-base", "version": "v0.8.0" },
+        { "id": "layered-leptos-minimal", "version": "v0.8.0" }
       ],
-      "modules": [{ "id": "identity", "version": "v0.7.0" }],
+      "modules": [{ "id": "identity", "version": "v0.8.0" }],
       "capabilities": ["authentication", "authorization"]
     }
   },

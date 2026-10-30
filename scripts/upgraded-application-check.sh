@@ -105,6 +105,12 @@ for composition in $compositions; do
     # One source location for equal package names; copy only after the preceding build.
     rm -rf "$application" "$UPGRADE_SQLITE_DIRECTORY"
     cp -R "$staging_parent/fixtures/$case_id" "$application"
+    # The preserved owner installer supports the released lock. Only this
+    # disposable copy resolves a new local-source lock, so its Docker build
+    # needs the current reviewed installer for that lock's wasm-bindgen CLI.
+    # The public source retains the original script and is fingerprinted below.
+    cp "$repo_root/templates/applications/layered/scripts/prepare-wasm-bindgen.sh" \
+      "$application/scripts/prepare-wasm-bindgen.sh"
     mkdir -p "$UPGRADE_SQLITE_DIRECTORY" "$application/.hegira-validation/framework"
     if find "$repo_root/.cargo" "$repo_root/crates" "$repo_root/modules" "$repo_root/tools" \
       -name node_modules -prune -o -type l -print -quit | grep . >/dev/null; then
@@ -192,4 +198,4 @@ for composition in $compositions; do
     image_built=false
   done
 done
-echo "released v0.6.0 -> v0.7.0 $mode production lifecycle: ok"
+echo "released v0.7.0 -> v0.8.0 $mode production lifecycle: ok"

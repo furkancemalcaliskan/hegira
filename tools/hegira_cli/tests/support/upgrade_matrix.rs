@@ -20,12 +20,12 @@ pub fn verify(binary: &Path, root: &Path) {
     let applied = json(run(binary, root, &["upgrade", "--json"]), 0);
     assert_eq!(applied["outcome"], "applied");
     assert_eq!(applied["plan"], planned["plan"]);
-    assert_eq!(applied["receipt"]["changed_files"], 3);
+    assert_eq!(applied["receipt"]["changed_files"], 4);
     assert_eq!(applied["receipt"]["target"], applied["plan"]["target"]);
 
     let target = ApplicationManifest::read(root.join("hegira.toml")).unwrap();
     assert_eq!(target.schema, 3);
-    assert_eq!(target.framework.version, "v0.7.0");
+    assert_eq!(target.framework.version, "v0.8.0");
     assert_eq!(target.framework.repository, source.framework.repository);
     assert_eq!(target.application, source.application);
     assert_eq!(target.selection, source.selection);
@@ -36,7 +36,7 @@ pub fn verify(binary: &Path, root: &Path) {
     let old = source.composition.unwrap();
     let composition = target.composition.as_ref().unwrap();
     assert_eq!(composition.package.id, old.package.id);
-    assert_eq!(composition.package.version, "v0.7.0");
+    assert_eq!(composition.package.version, "v0.8.0");
     assert_eq!(composition.capabilities, old.capabilities);
     assert_eq!(
         composition
@@ -53,13 +53,13 @@ pub fn verify(binary: &Path, root: &Path) {
         composition
             .components
             .iter()
-            .all(|item| item.version == "v0.7.0")
+            .all(|item| item.version == "v0.8.0")
     );
     assert!(
         composition
             .modules
             .iter()
-            .all(|item| item.version == "v0.7.0")
+            .all(|item| item.version == "v0.8.0")
     );
     let identity = composition
         .modules
@@ -68,8 +68,13 @@ pub fn verify(binary: &Path, root: &Path) {
     assert_eq!(composition.capabilities.len(), if identity { 2 } else { 0 });
     let after = files(root);
     assert_eq!(
-        before.keys().collect::<Vec<_>>(),
-        after.keys().collect::<Vec<_>>()
+        before
+            .keys()
+            .chain(std::iter::once(&std::path::PathBuf::from(
+                "crates/infrastructure/src/database_operations.rs"
+            )))
+            .collect::<std::collections::BTreeSet<_>>(),
+        after.keys().collect::<std::collections::BTreeSet<_>>()
     );
     assert_eq!(
         before
@@ -87,12 +92,29 @@ pub fn verify(binary: &Path, root: &Path) {
         .collect();
     assert!(!framework_lines.is_empty());
     for line in framework_lines {
-        assert!(line.contains("tag = \"v0.7.0\""));
+        assert!(line.contains("tag = \"v0.8.0\""));
         assert!(!line.contains("path ="));
     }
     let lock = fs::read_to_string(root.join("Cargo.lock")).unwrap();
-    assert!(lock.contains(&format!("git+{}?tag=v0.7.0#", target.framework.repository)));
-    assert!(!lock.contains(&format!("git+{}?tag=v0.6.0#", target.framework.repository)));
+    assert!(lock.contains(&format!("git+{}?tag=v0.8.0#", target.framework.repository)));
+    assert!(!lock.contains(&format!("git+{}?tag=v0.7.0#", target.framework.repository)));
+
+    // A source receipt must never adopt the unclaimed server manifest or wire
+    // a binary/module into the owner's existing startup. Manual adoption is separate.
+    assert_eq!(
+        before.get(Path::new("apps/server/Cargo.toml")),
+        after.get(Path::new("apps/server/Cargo.toml"))
+    );
+    assert!(!root.join("apps/server/src/bin/app_database.rs").exists());
+    assert!(
+        !fs::read_to_string(root.join("crates/infrastructure/src/lib.rs"))
+            .unwrap()
+            .contains("pub mod database_operations;")
+    );
+    assert!(
+        root.join("crates/infrastructure/src/database_operations.rs")
+            .is_file()
+    );
 
     let inspection = read_only(binary, root, &["inspect", "--json"], 0);
     assert_eq!(inspection["output_schema"], 2);

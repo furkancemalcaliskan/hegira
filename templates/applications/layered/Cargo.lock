@@ -213,15 +213,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "arbitrary"
-version = "1.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c3d036a3c4ab069c7b410a2ce876bd74808d2d0888a82667669f8e783a898bf1"
-dependencies = [
- "derive_arbitrary",
-]
-
-[[package]]
 name = "arc-swap"
 version = "1.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -341,8 +332,8 @@ dependencies = [
 
 [[package]]
 name = "audit"
-version = "0.7.0"
-source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.7.0#7a9ed5bce734f5459fee62d3a2069ce1cfc7d212"
+version = "0.8.0"
+source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.8.0#fd89e7ef47e064f96a2affed34076acd53c0761a"
 dependencies = [
  "serde",
  "serde_json",
@@ -829,8 +820,8 @@ dependencies = [
 
 [[package]]
 name = "background_jobs"
-version = "0.7.0"
-source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.7.0#7a9ed5bce734f5459fee62d3a2069ce1cfc7d212"
+version = "0.8.0"
+source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.8.0#fd89e7ef47e064f96a2affed34076acd53c0761a"
 dependencies = [
  "chrono",
  "serde",
@@ -968,8 +959,8 @@ dependencies = [
 
 [[package]]
 name = "cache"
-version = "0.7.0"
-source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.7.0#7a9ed5bce734f5459fee62d3a2069ce1cfc7d212"
+version = "0.8.0"
+source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.8.0#fd89e7ef47e064f96a2affed34076acd53c0761a"
 dependencies = [
  "redis",
 ]
@@ -1115,8 +1106,8 @@ dependencies = [
 
 [[package]]
 name = "configuration"
-version = "0.7.0"
-source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.7.0#7a9ed5bce734f5459fee62d3a2069ce1cfc7d212"
+version = "0.8.0"
+source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.8.0#fd89e7ef47e064f96a2affed34076acd53c0761a"
 dependencies = [
  "config",
 ]
@@ -1355,9 +1346,9 @@ dependencies = [
 
 [[package]]
 name = "ctutils"
-version = "0.4.2"
+version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7d5515a3834141de9eafb9717ad39eea8247b5674e6066c404e8c4b365d2a29e"
+checksum = "12218662ccac37d9714f2191252553d67585b97df8c839cbe49e0bde278dc865"
 dependencies = [
  "cmov",
 ]
@@ -1425,17 +1416,6 @@ name = "derive-where"
 version = "1.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d08b3a0bcc0d079199cd476b2cae8435016ec11d1c0986c6901c5ac223041534"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.119",
-]
-
-[[package]]
-name = "derive_arbitrary"
-version = "1.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e567bd82dcff979e4b03460c307b3cdc9e96fde3d73bed1496d2bc75d9dd62a"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1584,7 +1564,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2064,8 +2044,8 @@ checksum = "9171a2ea8a68358193d15dd5d70c1c10a2afc3e7e4c5bc92bc9f025cebd7359c"
 
 [[package]]
 name = "http_support"
-version = "0.7.0"
-source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.7.0#7a9ed5bce734f5459fee62d3a2069ce1cfc7d212"
+version = "0.8.0"
+source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.8.0#fd89e7ef47e064f96a2affed34076acd53c0761a"
 dependencies = [
  "axum",
  "ipnet",
@@ -2151,7 +2131,7 @@ dependencies = [
  "tokio",
  "tokio-rustls",
  "tower-service",
- "webpki-roots 1.0.9",
+ "webpki-roots 1.0.10",
 ]
 
 [[package]]
@@ -2316,8 +2296,8 @@ checksum = "b9e0384b61958566e926dc50660321d12159025e767c18e043daf26b70104c39"
 
 [[package]]
 name = "identity_application"
-version = "0.7.0"
-source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.7.0#7a9ed5bce734f5459fee62d3a2069ce1cfc7d212"
+version = "0.8.0"
+source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.8.0#fd89e7ef47e064f96a2affed34076acd53c0761a"
 dependencies = [
  "async-trait",
  "audit",
@@ -2339,8 +2319,8 @@ dependencies = [
 
 [[package]]
 name = "identity_application_contracts"
-version = "0.7.0"
-source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.7.0#7a9ed5bce734f5459fee62d3a2069ce1cfc7d212"
+version = "0.8.0"
+source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.8.0#fd89e7ef47e064f96a2affed34076acd53c0761a"
 dependencies = [
  "chrono",
  "identity_domain",
@@ -2352,8 +2332,8 @@ dependencies = [
 
 [[package]]
 name = "identity_domain"
-version = "0.7.0"
-source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.7.0#7a9ed5bce734f5459fee62d3a2069ce1cfc7d212"
+version = "0.8.0"
+source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.8.0#fd89e7ef47e064f96a2affed34076acd53c0761a"
 dependencies = [
  "chrono",
  "identity_domain_shared",
@@ -2362,13 +2342,13 @@ dependencies = [
 
 [[package]]
 name = "identity_domain_shared"
-version = "0.7.0"
-source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.7.0#7a9ed5bce734f5459fee62d3a2069ce1cfc7d212"
+version = "0.8.0"
+source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.8.0#fd89e7ef47e064f96a2affed34076acd53c0761a"
 
 [[package]]
 name = "identity_http"
-version = "0.7.0"
-source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.7.0#7a9ed5bce734f5459fee62d3a2069ce1cfc7d212"
+version = "0.8.0"
+source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.8.0#fd89e7ef47e064f96a2affed34076acd53c0761a"
 dependencies = [
  "axum",
  "http_support",
@@ -2378,14 +2358,15 @@ dependencies = [
  "serde",
  "tracing",
  "utoipa",
- "utoipa-swagger-ui",
+ "utoipa-swagger-ui-vendored",
  "uuid",
+ "zip",
 ]
 
 [[package]]
 name = "identity_leptos"
-version = "0.7.0"
-source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.7.0#7a9ed5bce734f5459fee62d3a2069ce1cfc7d212"
+version = "0.8.0"
+source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.8.0#fd89e7ef47e064f96a2affed34076acd53c0761a"
 dependencies = [
  "icons",
  "identity_application",
@@ -2401,8 +2382,8 @@ dependencies = [
 
 [[package]]
 name = "identity_sqlx"
-version = "0.7.0"
-source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.7.0#7a9ed5bce734f5459fee62d3a2069ce1cfc7d212"
+version = "0.8.0"
+source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.8.0#fd89e7ef47e064f96a2affed34076acd53c0761a"
 dependencies = [
  "background_jobs",
  "chrono",
@@ -2768,8 +2749,8 @@ dependencies = [
 
 [[package]]
 name = "leptos_support"
-version = "0.7.0"
-source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.7.0#7a9ed5bce734f5459fee62d3a2069ce1cfc7d212"
+version = "0.8.0"
+source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.8.0#fd89e7ef47e064f96a2affed34076acd53c0761a"
 dependencies = [
  "axum",
  "cookie",
@@ -2822,7 +2803,7 @@ dependencies = [
  "tokio",
  "tokio-rustls",
  "url",
- "webpki-roots 1.0.9",
+ "webpki-roots 1.0.10",
 ]
 
 [[package]]
@@ -2898,8 +2879,8 @@ checksum = "112b39cec0b298b6c1999fee3e31427f74f676e4cb9879ed1a121b43661a4154"
 
 [[package]]
 name = "mail"
-version = "0.7.0"
-source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.7.0#7a9ed5bce734f5459fee62d3a2069ce1cfc7d212"
+version = "0.8.0"
+source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.8.0#fd89e7ef47e064f96a2affed34076acd53c0761a"
 dependencies = [
  "background_jobs",
  "lettre",
@@ -3066,6 +3047,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "60993920e071b0c9b66f14e2b32740a4e27ffc82854dcd72035887f336a09a28"
 
 [[package]]
+name = "nix"
+version = "0.31.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cf20d2fde8ff38632c426f1165ed7436270b44f199fc55284c38276f9db47c3d"
+dependencies = [
+ "bitflags",
+ "cfg-if",
+ "cfg_aliases",
+ "libc",
+]
+
+[[package]]
 name = "nom"
 version = "7.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3156,8 +3149,8 @@ dependencies = [
 
 [[package]]
 name = "observability"
-version = "0.7.0"
-source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.7.0#7a9ed5bce734f5459fee62d3a2069ce1cfc7d212"
+version = "0.8.0"
+source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.8.0#fd89e7ef47e064f96a2affed34076acd53c0761a"
 dependencies = [
  "axum",
  "background_jobs",
@@ -3362,8 +3355,8 @@ checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 
 [[package]]
 name = "persistence"
-version = "0.7.0"
-source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.7.0#7a9ed5bce734f5459fee62d3a2069ce1cfc7d212"
+version = "0.8.0"
+source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.8.0#fd89e7ef47e064f96a2affed34076acd53c0761a"
 dependencies = [
  "serde",
  "sqlx",
@@ -3478,8 +3471,8 @@ checksum = "b4596b6d070b27117e987119b4dac604f3c58cfb0b191112e24771b2faeac1a6"
 
 [[package]]
 name = "platform_core"
-version = "0.7.0"
-source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.7.0#7a9ed5bce734f5459fee62d3a2069ce1cfc7d212"
+version = "0.8.0"
+source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.8.0#fd89e7ef47e064f96a2affed34076acd53c0761a"
 
 [[package]]
 name = "portable-atomic"
@@ -3665,9 +3658,9 @@ dependencies = [
 
 [[package]]
 name = "quinn-proto"
-version = "0.11.17"
+version = "0.11.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "04759210543be93709136e28212294a659ef5001836ff4eab4d663e4529bba83"
+checksum = "a9746dbde176634f4f2f1faf2404e30a31b2bc1e9cafb5329c95d8177a18c9fc"
 dependencies = [
  "bytes",
  "getrandom 0.4.3",
@@ -3696,7 +3689,7 @@ dependencies = [
  "once_cell",
  "socket2",
  "tracing",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -4000,7 +3993,7 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
- "webpki-roots 1.0.9",
+ "webpki-roots 1.0.10",
 ]
 
 [[package]]
@@ -4099,47 +4092,12 @@ dependencies = [
 
 [[package]]
 name = "runtime"
-version = "0.7.0"
-source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.7.0#7a9ed5bce734f5459fee62d3a2069ce1cfc7d212"
+version = "0.8.0"
+source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.8.0#fd89e7ef47e064f96a2affed34076acd53c0761a"
 dependencies = [
  "serde",
  "tokio",
  "tracing",
-]
-
-[[package]]
-name = "rust-embed"
-version = "8.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e9e7760e252aaba7b09f4be00e36476cf585bdb68a53552ac954cdf504ab4bc9"
-dependencies = [
- "rust-embed-impl",
- "rust-embed-utils",
- "walkdir",
-]
-
-[[package]]
-name = "rust-embed-impl"
-version = "8.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3bcfc4d6f53af43755f7a723e4b6b8794fcce052a178dd8c6c1dadc5f5343097"
-dependencies = [
- "mime_guess",
- "proc-macro2",
- "quote",
- "rust-embed-utils",
- "syn 2.0.119",
- "walkdir",
-]
-
-[[package]]
-name = "rust-embed-utils"
-version = "8.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "42ffa149f6aa81b58a5b3011d01a857c4ed12c7a732d2c51947a4c7c692185f0"
-dependencies = [
- "sha2 0.11.0",
- "walkdir",
 ]
 
 [[package]]
@@ -4169,9 +4127,9 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.23.45"
+version = "0.23.46"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0d41d731c7d2f962d1ccc364cec258de3c0e93b38c2fb3ba97ac74513048d634"
+checksum = "48e13bd8c0e9365c43cfa5c9e8f9ad49d3c8444926c9aac819e0e4dc503c8fdf"
 dependencies = [
  "aws-lc-rs",
  "log",
@@ -4207,9 +4165,9 @@ dependencies = [
 
 [[package]]
 name = "rustls-webpki"
-version = "0.103.15"
+version = "0.103.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f3c3cf1d8b1e7d4927e2d154c3fcb02979afb9939629c62cd9048d4f07b60ac2"
+checksum = "4443b1b6d39d7c663139942cc4558262562d2c84123bb6282ef177009ca8b281"
 dependencies = [
  "aws-lc-rs",
  "ring",
@@ -4255,8 +4213,8 @@ checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 
 [[package]]
 name = "search"
-version = "0.7.0"
-source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.7.0#7a9ed5bce734f5459fee62d3a2069ce1cfc7d212"
+version = "0.8.0"
+source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.8.0#fd89e7ef47e064f96a2affed34076acd53c0761a"
 dependencies = [
  "background_jobs",
  "chrono",
@@ -4271,8 +4229,8 @@ dependencies = [
 
 [[package]]
 name = "security"
-version = "0.7.0"
-source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.7.0#7a9ed5bce734f5459fee62d3a2069ce1cfc7d212"
+version = "0.8.0"
+source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.8.0#fd89e7ef47e064f96a2affed34076acd53c0761a"
 dependencies = [
  "chrono",
 ]
@@ -4480,8 +4438,8 @@ dependencies = [
 
 [[package]]
 name = "settings"
-version = "0.7.0"
-source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.7.0#7a9ed5bce734f5459fee62d3a2069ce1cfc7d212"
+version = "0.8.0"
+source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.8.0#fd89e7ef47e064f96a2affed34076acd53c0761a"
 dependencies = [
  "serde",
  "serde_json",
@@ -4849,8 +4807,8 @@ checksum = "6ce2be8dc25455e1f91df71bfa12ad37d7af1092ae736f3a6cd0e37bc7810596"
 
 [[package]]
 name = "storage"
-version = "0.7.0"
-source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.7.0#7a9ed5bce734f5459fee62d3a2069ce1cfc7d212"
+version = "0.8.0"
+source = "git+https://github.com/furkancemalcaliskan/hegira.git?tag=v0.8.0#fd89e7ef47e064f96a2affed34076acd53c0761a"
 dependencies = [
  "aws-config",
  "aws-sdk-s3",
@@ -5112,9 +5070,9 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
 name = "tokio"
-version = "1.53.1"
+version = "1.53.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "202caea871b69668250d242070849eb495be178ed697a3e98aebce5bc81a0bed"
+checksum = "ce3335fa71841cda333a58d7615b03901380ecf09d59b3296d21f8bbac0dde4e"
 dependencies = [
  "bytes",
  "libc",
@@ -5503,6 +5461,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "typed-path"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9ce898823d8cd0f028662d2f349694b1af0a5cc9be83f1d213a00d3147445e1e"
+
+[[package]]
 name = "typeid"
 version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5620,22 +5584,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "utoipa-swagger-ui"
-version = "9.0.2"
+name = "utoipa-swagger-ui-vendored"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d047458f1b5b65237c2f6dc6db136945667f40a7668627b3490b9513a3d43a55"
-dependencies = [
- "axum",
- "base64 0.22.1",
- "mime_guess",
- "regex",
- "rust-embed",
- "serde",
- "serde_json",
- "url",
- "utoipa",
- "zip",
-]
+checksum = "552a64d6a0d251ae28bc021838800943cce60c9ec2e60ff331f54e79f696268f"
 
 [[package]]
 name = "uuid"
@@ -5844,14 +5796,14 @@ version = "0.26.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "521bc38abb08001b01866da9f51eb7c5d647a19260e00054a8c7fd5f9e57f7a9"
 dependencies = [
- "webpki-roots 1.0.9",
+ "webpki-roots 1.0.10",
 ]
 
 [[package]]
 name = "webpki-roots"
-version = "1.0.9"
+version = "1.0.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7dcd9d09a39985f5344844e66b0c530a33843579125f23e21e9f0f220850f22a"
+checksum = "1c1c8e20c8a38fc7d65abfe74eb7280e4aa667e8eec8bc84996d2874810748d9"
 dependencies = [
  "rustls-pki-types",
 ]
@@ -5872,7 +5824,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
@@ -6237,15 +6189,18 @@ dependencies = [
 
 [[package]]
 name = "zip"
-version = "3.0.0"
+version = "9.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "12598812502ed0105f607f941c386f43d441e00148fce9dec3ca5ffb0bde9308"
+checksum = "1156b39d142a34b999c2310a50455e0cb3760bf7efad0122f796d813bee26ccb"
 dependencies = [
- "arbitrary",
  "crc32fast",
  "flate2",
+ "getrandom 0.4.3",
  "indexmap",
  "memchr",
+ "nix",
+ "typed-path",
+ "windows-sys 0.61.2",
  "zopfli",
 ]
 
