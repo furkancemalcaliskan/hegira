@@ -162,11 +162,12 @@ The unconditional `quality` job fails if any constituent fails, is skipped or
 is cancelled. There are no path filters, publication steps or production secrets.
 
 [Tool setup](../.github/actions/application-tools/action.yml) retains a complete
-source CLI checkout beside the application, pinned to the reviewed #391 merge
-`b869b3ae3b60da7052ca91c500547081f9fc9f54`. This operational tool pin is separate
-from the application's release-pinned framework dependencies; it does not
-pretend that unreleased CLI commands exist in the public v0.7.0 CLI. Review and
-align the pin explicitly when moving to a new framework/package release.
+source CLI checkout beside the application, selected from the same immutable
+`{{framework_version}}` source release as its catalog and framework dependencies.
+Bootstrap verifies that HEAD is the selected local release tag before building.
+The tag must already be published; a prerelease checkout does not make it
+available. Existing applications retain their owner-customized CI and must
+review their CLI source selection when adopting a new package release.
 Action sources are immutable commits; Rust is 1.96.1, Cargo Leptos 0.3.7,
 Cargo Audit 0.22.2, Cargo Deny 0.20.2 and Binaryen 123. Binaryen's archive and
 the lock-matched wasm-bindgen installer authenticate SHA-256 before use.

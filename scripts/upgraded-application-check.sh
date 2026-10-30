@@ -192,4 +192,4 @@ for composition in $compositions; do
     image_built=false
   done
 done
-echo "released v0.6.0 -> v0.7.0 $mode production lifecycle: ok"
+echo "released v0.7.0 -> v0.8.0 $mode production lifecycle: ok"

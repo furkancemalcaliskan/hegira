@@ -6,34 +6,34 @@
     "output_schema": 1,
     "status": "ready",
     "source": {
-      "framework_version": "v0.6.0",
-      "package": {
-        "id": "hegira-canonical",
-        "version": "v0.6.0"
-      }
-    },
-    "target": {
       "framework_version": "v0.7.0",
       "package": {
         "id": "hegira-canonical",
         "version": "v0.7.0"
       }
     },
+    "target": {
+      "framework_version": "v0.8.0",
+      "package": {
+        "id": "hegira-canonical",
+        "version": "v0.8.0"
+      }
+    },
     "composition": {
       "components": [
         {
           "id": "layered-base",
-          "version": "v0.6.0"
+          "version": "v0.7.0"
         },
         {
           "id": "layered-leptos-identity",
-          "version": "v0.6.0"
+          "version": "v0.7.0"
         }
       ],
       "modules": [
         {
           "id": "identity",
-          "version": "v0.6.0"
+          "version": "v0.7.0"
         }
       ],
       "capabilities": [
@@ -53,23 +53,22 @@
   },
   "plan": {
     "schema": 1,
-    "edge": "v0-6-0-to-v0-7-0",
+    "edge": "v0-7-0-to-v0-8-0",
     "source": {
-      "framework_repository": "https://github.com/furkancemalcaliskan/hegira.git",
-      "framework_version": "v0.6.0",
-      "package": "hegira-canonical",
-      "package_version": "v0.6.0"
-    },
-    "target": {
       "framework_repository": "https://github.com/furkancemalcaliskan/hegira.git",
       "framework_version": "v0.7.0",
       "package": "hegira-canonical",
       "package_version": "v0.7.0"
     },
-    "source_package_digest": "sha256:cff6969dadc6e0155af7b944877dba5c61b6e0c4c3ea041d9a8a2665949c285e",
-    "source_baseline_digest": "sha256:9e4ac33b3a0307234eb971806484076b99692ef2457fa2efb5a96267500ea261",
+    "target": {
+      "framework_repository": "https://github.com/furkancemalcaliskan/hegira.git",
+      "framework_version": "v0.8.0",
+      "package": "hegira-canonical",
+      "package_version": "v0.8.0"
+    },
+    "source_package_digest": "sha256:34ddf6356d441791c93f306f5ea6aeb5927cab1062d2e6d7f8b8928ee198b053",
+    "source_baseline_digest": "sha256:aecfa2a171e8eb760d62041ae76350f00ae4b10be35f9cec580b60f56b5812c5",
     "manifest_transitions": [
-      "schema",
       "framework",
       "package",
       "components",
@@ -116,11 +115,11 @@
         "ownership": "managed-integration",
         "precondition": {
           "kind": "matches-digest",
-          "sha256": "c6cb0aec5f366a1015b3549d174cb56fb60cb6acb8df1e587f6f5e43b8c492ff"
+          "sha256": "e10876086dddb27e5c931ae5512c937ac226e954a845492d9dcac15debbb0e00"
         },
         "result": {
           "kind": "present",
-          "sha256": "e10876086dddb27e5c931ae5512c937ac226e954a845492d9dcac15debbb0e00"
+          "sha256": "74256f83ff872aeb2117a9fb23b403e64c841cd218cf6376646d1fcc9441d1b2"
         }
       },
       {
@@ -131,11 +130,25 @@
         "ownership": "managed-integration",
         "precondition": {
           "kind": "matches-digest",
-          "sha256": "1ba1cd11d85c189fc0f1a1f31bae34531ec3b50d53f32add603cf8fb7dc6e152"
+          "sha256": "1f348942804ea524f7a2899c67382ee0af899e84dcc4011699e893cf02e1bd5f"
         },
         "result": {
           "kind": "present",
-          "sha256": "7bf28812e2a060ebcb9697d877cd3456ec556a56ab0014255a0c6b1851d91f42"
+          "sha256": "e178991a9ac4f45d5f3dbc2f2b278104c86f5e91e10874ecbe09a8d95cbed7ba"
+        }
+      },
+      {
+        "path": "crates/infrastructure/src/database_operations.rs",
+        "operation": "create",
+        "component": "layered-leptos-identity",
+        "integration": "database-operations",
+        "ownership": "managed-integration",
+        "precondition": {
+          "kind": "absent"
+        },
+        "result": {
+          "kind": "present",
+          "sha256": "9ed801e060a0c53a79c69bdb8353971c329d00fdef4199fa8460d8b7a6f287d3"
         }
       },
       {
@@ -146,11 +159,11 @@
         "ownership": "managed-integration",
         "precondition": {
           "kind": "matches-digest",
-          "sha256": "4d4048a4403bfb5ab53c6c0b082773ccbae5e9acb2f1e9319007f5c648d5334d"
+          "sha256": "def65e49a41b74200c3e659a8139392549f1bed30680250cb1cb409c3be1415f"
         },
         "result": {
           "kind": "present",
-          "sha256": "e3b838e23ceb02b50749f73ba9d04b3cdfe32ab882c96753ff3e83890f5c273a"
+          "sha256": "cca1ab245bb2223348db849c29d26976876b2ca540eb306f9461709cdc840c1d"
         }
       }
     ]
@@ -161,17 +174,18 @@
     "immutable-history"
   ],
   "receipt": {
-    "changed_files": 3,
-    "edge": "v0-6-0-to-v0-7-0",
+    "changed_files": 4,
+    "edge": "v0-7-0-to-v0-8-0",
     "target": {
       "framework_repository": "https://github.com/furkancemalcaliskan/hegira.git",
-      "framework_version": "v0.7.0",
+      "framework_version": "v0.8.0",
       "package": "hegira-canonical",
-      "package_version": "v0.7.0"
+      "package_version": "v0.8.0"
     }
   },
   "next_steps": [
-    "Review the managed Cargo.toml, Cargo.lock, and hegira.toml changes; do not regenerate the lockfile blindly.",
+    "Review the managed Cargo.toml, Cargo.lock, hegira.toml, and new Infrastructure database_operations.rs source; do not regenerate the lockfile blindly.",
+    "Before CLI database use, manually review and register the Infrastructure module/configuration loader, app_database binary, and database-operations feature as documented in the upgrade guide; existing application-owned registration files are preserved.",
     "Apply application-owned database migrations through the application's documented operation workflow, with backups and the correct environment.",
     "Run application tests, native/hydration checks, and deployment validation before starting or deploying services."
   ]

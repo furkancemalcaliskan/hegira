@@ -69,5 +69,6 @@ Select v0.7.0 explicitly with
 `BaselineCatalog::from_repository_release(root, BaselineVersion::V0_7_0)`.
 Existing catalog entry points continue to select v0.6.0. The required
 `sh scripts/cli-check.sh` gate tests both versions and the data packer's offline
-replay/tampering cases. The current public source-upgrade edge remains
-v0.6.0 to v0.7.0; baseline selection belongs to test support.
+replay/tampering cases. The current public source-upgrade edge is
+v0.7.0 to v0.8.0; baseline selection belongs to test support. The archived
+v0.6.0-to-v0.7.0 edge and both published baseline inventories remain immutable.

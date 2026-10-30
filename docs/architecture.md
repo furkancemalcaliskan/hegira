@@ -945,8 +945,9 @@ and supply-chain checks before an unconditional `quality` aggregate. Cargo
 execution uses the CLI's bounded validation-cache namespace and explicit tool
 trust; cleanup uses only its inactive-owned-cache pruner. Tool bootstrap, registry,
 frontend, and container storage remain outside that application cache budget.
-The CI tool source is pinned to a reviewed compatible revision separately from
-framework dependencies. Actions and tools have explicit pins; credentials for
+The CI tool source selects the same immutable published release tag as the
+application catalog and verifies HEAD against that local tag before bootstrap.
+Actions and tools have explicit pins; credentials for
 disposable integration targets are ephemeral and application logs are discarded.
 All CI artifacts are generated-once and preserved during component installation
 and direct source upgrades. GitHub YAML expressions are preserved as literal data
@@ -979,8 +980,10 @@ and database production validation precedes connection. It reuses the same
 `migration_plan`, never normal initialization, ensure, seed, or worker paths.
 Its exact binary, Cargo registration, Infrastructure module/config integration,
 and operation-source claims are declared for governed upgrades. Claims alone
-do not authorize source publication: the existing v0.6.0-to-v0.7.0 edge still
-changes only three files and does not install this entry point.
+do not authorize source publication. The v0.7.0-to-v0.8.0 edge delivers only an
+unregistered Infrastructure operation source in addition to the three release
+files. The owner must separately integrate the module, configuration loader,
+server binary and feature before the real entry point can pass preflight.
 
 ## Rendering And Validation
 
@@ -1099,21 +1102,25 @@ content-redacted outcomes. Planning performs no publication, database, network,
 or process operation.
 
 Compatibility tests additionally authenticate immutable v0.7.0 application
-inputs against explicit synthetic additive plans before release alignment.
-Their hypothetical target is assembled only in private unit tests after loading
+inputs against explicit synthetic additive plans alongside the supported
+bundled release edge. Their hypothetical target is assembled only in private unit tests after loading
 the authenticated current package; the production compiled-release guard and
-bundled edge are unchanged. Tests reject occupied/unclaimed paths and custom
-managed boundaries, preserve product/history/governance source, and verify
+baseline authentication remain enforced. Tests reject occupied/unclaimed paths and
+custom managed boundaries, preserve product/history/governance source, and verify
 rollback, process interruption and recovery blocking. File creation still
 requires existing real parent directories. See the
 [maintainer validation contract](maintainers.md) for fixture prerequisites and
 the distinction from a supported release transition.
 
-The bundled package declares one direct v0.6.0-to-v0.7.0 edge for default,
+The bundled package declares one direct v0.7.0-to-v0.8.0 edge for default,
 minimal, and Identity-added layered applications with SQLite or PostgreSQL.
-It authenticates the released baseline and changes only `hegira.toml`, the
-workspace `Cargo.toml`, and `Cargo.lock`. Default and later-installed Identity
-compositions retain their explicit server, HTTP, migration-source, configuration,
+It authenticates the released baseline, edits `hegira.toml`, the workspace
+`Cargo.toml`, and `Cargo.lock`, and creates the exact absent
+`crates/infrastructure/src/database_operations.rs`. This new module remains
+unregistered until the owner reviews the configuration loader and explicitly
+integrates the server binary, feature, and Infrastructure module. Existing
+application-owned registration files cannot be adopted by an ownership claim.
+Default and later-installed Identity compositions retain their explicit server, HTTP, migration-source, configuration,
 and Leptos integrations because these application files do not change across
 this release edge; the version-pinned official packages advance together.
 Product layers, runtime configuration values, generated resources, and migration
@@ -1122,12 +1129,12 @@ through read-only `upgrade status`, `upgrade --dry-run`, and explicit `upgrade`
 application through the existing mutation publisher.
 Authentication checks the edge-declared managed files, not byte equality of the
 entire application against the released fixture. Product source and generated
-resources may therefore evolve independently. For this edge, all three managed
+resources may therefore evolve independently. For this edge, all three existing managed
 files must still match their authenticated source digests: even an unrelated
 dependency or lockfile customization is a conflict, not an instruction to merge.
 The general plan contract supports declared managed creates, edits, and
-retirements, but this bundled edge uses only edits. It does not remove components,
-skip releases, downgrade, run migration SQL, or supply another client adapter.
+retirements; this bundled edge uses three edits and one absent-file create. It
+does not remove components, skip releases, downgrade, run migration SQL, or supply another client adapter.
 Readiness authenticates the package, application ownership and managed boundary,
 then shares the planner's pure target-manifest validation without constructing
 a change plan. Recovery-marker inspection is anchored and no-follow; any marker
@@ -1184,11 +1191,11 @@ inventories prevent coordinated rehashing of altered history. The v0.7.0 set
 also authenticates provenance from its maintainer-only signed-source import,
 including its released-default lock selection after Identity installation.
 
-Current direct-edge preservation tests customize the v0.6.0 baselines with product
+Current direct-edge preservation tests customize the v0.7.0 baselines with product
 code in every application layer, provider-specific generated resources where
 Identity is installed, runtime configuration values, and append-only application
 migrations. Sorted path/SHA-256 fingerprints prove that every file outside the
-three declared release-managed files and every historical migration remains
+four declared release-managed paths and every historical migration remains
 unchanged. Minimal applications retain their capability boundary and reject
 protected resource generation. Conflicting managed edits block planning, and
 edits made after planning block publication without changing product files.
@@ -1205,7 +1212,7 @@ while reusing compatible framework artifacts.
 The separate upgraded-application lifecycle validator extends those public-source
 checks to disposable fresh and released-schema databases, migration checksum/data
 preservation, release assets, and production images for both providers and all three
-compositions. Released Identity SQL is verified against its v0.6.0 source inventory.
+compositions. Released Identity SQL is verified against its v0.7.0 source inventory.
 Only separate validation copies receive local dependencies, test fixtures, and a
 post-upgrade application migration. Production HTTP probes retain authentication,
 authorization, cookie/Bearer, and minimal-composition boundaries. The gate never

@@ -1,13 +1,13 @@
-package=hegira-canonical@v0.7.0
-framework=https://github.com/furkancemalcaliskan/hegira.git#v0.7.0
-digest=sha256:976aa564821778af5dab977ad387c7b086a301c18b09ee4dcff595616ee8924c
+package=hegira-canonical@v0.8.0
+framework=https://github.com/furkancemalcaliskan/hegira.git#v0.8.0
+digest=sha256:bd8a3afd3d244a3e897b9b3afbfa137271cb94522de7c2c2f1df0810c338783e
 components=layered-base,layered-leptos-identity
 971deab3ed8abfea .cargo/audit.toml
 a185b5c4932fdb88 .cursor/rules/application.mdc
 6986e1a96f1eaa98 .dockerignore
 4845a8e7ed4a8aa1 .env.example
 08885ae773145597 .github/PULL_REQUEST_TEMPLATE.md
-d6e1bf7d20e25d0c .github/actions/application-tools/action.yml
+473b0c5bd4b76705 .github/actions/application-tools/action.yml
 dc239ff2b1b4a749 .github/repository-policy.json
 ebb4ef89f3c5d06f .github/workflows/quality.yml
 7e778ee7105d4560 .github/workflows/repository-policy.yml
@@ -15,8 +15,8 @@ ebb4ef89f3c5d06f .github/workflows/quality.yml
 60458e1827934c3d .node-version
 1ecef501566d6be6 AGENTS.md
 3a0d357346d3c4dc CLAUDE.md
-5b6ceb35f21ec030 Cargo.lock
-0ab183cd1a2096ab Cargo.toml
+296936856fc14a12 Cargo.lock
+992945322131c979 Cargo.toml
 abb13fca335cf059 Dockerfile
 42e043ee9bfba3c4 README.md
 7020439f5f70d85f apps/server/Cargo.toml
@@ -96,19 +96,19 @@ a5cee92157b6a0cb crates/infrastructure/src/operations.rs
 857f63ea42fb64c6 crates/presentation/Cargo.toml
 28acfa4312676a72 crates/presentation/src/http.rs
 d9d3e75ec6021d05 crates/presentation/src/lib.rs
-3b165eb05889cd54 deny.toml
+2bdaa605816217e7 deny.toml
 1309f45751c079e0 docker-compose.yml
 3bc19c2ee6472ab7 docs/architecture.md
-f6e07a13eeefbf38 docs/development.md
-f1fae1ed92dfd5d5 docs/ownership.md
+fcce517d434d193f docs/development.md
+d4a1973957b48633 docs/ownership.md
 6188f9e3efeea190 docs/repository.md
-8bfcccb63a5253e8 hegira.toml
+0f5bd92df21e64d1 hegira.toml
 64a3f64b8bdc337f rust-toolchain.toml
 e4e1fe26a1539175 scripts/ci-integration.mjs
-d3f2c75538607384 scripts/ci-tools.sh
+97ed087ebc3c8913 scripts/ci-tools.sh
 418e6d65d8a2614e scripts/ci.sh
-ad761ac6b13f7ff2 scripts/ci.test.mjs
-d1e261656118b330 scripts/prepare-wasm-bindgen.sh
+95096c3da4740d24 scripts/ci.test.mjs
+5cdd556addd8fd23 scripts/prepare-wasm-bindgen.sh
 27911e6f4ba3affd scripts/repository-policy.mjs
 e132080b2a4f2807 scripts/repository-policy.sh
 167fc347af7ea742 scripts/repository-policy.test.mjs

@@ -26,7 +26,7 @@ export function qualityErrors(source, setup = tools, commands = script) {
     require(uses[1] === "./application/.github/actions/application-tools" || /@[a-f0-9]{40}$/.test(uses[1]), "immutable action source");
   }
   require((source.match(/persist-credentials: false/g) ?? []).length === 4 && /persist-credentials: false/.test(setup), "no persisted checkout credentials");
-  require(/ref: b869b3ae3b60da7052ca91c500547081f9fc9f54/.test(setup), "reviewed compatible CLI source");
+  require(/ref: {{framework_version}}/.test(setup), "matching release CLI source");
   for (const pin of ["toolchain: 1.96.1", "targets: wasm32-unknown-unknown", "cargo-leptos@0.3.7", "cargo-audit@0.22.2", "cargo-deny@0.20.2"]) {
     require(setup.includes(pin), `tool pin ${pin}`);
   }
@@ -207,5 +207,23 @@ test("integration requires explicit disposable consent and boots only newly owne
       assert.deepEqual(f.commands().map(args => args[0]), ["run"], "invalid identities grant no inspection or cleanup authority");
     }
     assert.deepEqual(readdirSync(f.runner).sort(), ["hegira-ci-bootstrap"]);
+  } finally { f.close(); }
+});
+
+
+test("CLI bootstrap rejects absent release tags and mismatched source before Cargo", () => {
+  const f = fixture();
+  try {
+    copyFileSync(join(root, "scripts/ci-tools.sh"), join(f.application, "scripts/ci-tools.sh"));
+    const git = join(f.bin, "git");
+    writeFileSync(git, '#!/bin/sh\ncase "$*" in *HEAD) printf "%s\\n" "${CI_CONTRACT_HEAD:-reviewed}" ;; *) [ "${CI_CONTRACT_TAG:-present}" = present ] || exit 1; printf "%s\\n" reviewed ;; esac\n');
+    chmodSync(git, 0o700);
+    const run = (extra = {}) => spawnSync("sh", ["scripts/ci-tools.sh", "cli"], { cwd: f.application, env: { ...f.env, HEGIRA_SOURCE: join(f.parent, "source"), ...extra }, encoding: "utf8" });
+    assert.notEqual(run({ CI_CONTRACT_TAG: "absent" }).status, 0);
+    assert.notEqual(run({ CI_CONTRACT_HEAD: "unreviewed" }).status, 0);
+    assert.deepEqual(f.commands(), []);
+    assert.equal(run().status, 0);
+    assert.equal(f.commands()[0][0], "build");
+    assert.ok(f.commands()[0].includes("--locked"));
   } finally { f.close(); }
 });

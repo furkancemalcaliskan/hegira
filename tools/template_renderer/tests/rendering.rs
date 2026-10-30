@@ -139,22 +139,66 @@ fn staging_rejects_symlinked_generated_content() {
 }
 
 #[test]
-fn legacy_upgrade_keeps_exactly_three_source_publications() {
-    let catalog = ManifestCatalog::load(repository_root(), "layered").unwrap();
-    let edge = &catalog.upgrade_edges()[0];
-    assert_eq!(edge.id, "v0-6-0-to-v0-7-0");
-    assert!(edge.managed_integrations.is_empty());
-    for composition in &edge.compositions {
-        let mut paths = composition
-            .managed_integrations
+fn archived_legacy_edge_retains_its_exact_publication_contract() {
+    let bytes = fs::read(
+        repository_root().join("test-fixtures/upgrade-lifecycle/v0.6.0-to-v0.7.0-edge.toml"),
+    )
+    .unwrap();
+    assert_eq!(
+        format!("{:x}", Sha256::digest(&bytes)),
+        "67fe9a23164952a3adfddc8c105b52b11a20a834f9a58440d8e13eb50e7dce1f"
+    );
+    let edge: toml::Table = toml::from_str(std::str::from_utf8(&bytes).unwrap()).unwrap();
+    assert_eq!(edge["id"].as_str(), Some("v0-6-0-to-v0-7-0"));
+    for composition in edge["compositions"].as_array().unwrap() {
+        let transitions = composition["managed_integrations"].as_array().unwrap();
+        let mut paths = transitions
             .iter()
-            .map(|transition| transition.path.as_str())
+            .map(|item| item["path"].as_str().unwrap())
             .collect::<Vec<_>>();
         paths.sort_unstable();
         assert_eq!(paths, ["Cargo.lock", "Cargo.toml", "hegira.toml"]);
-        assert!(composition.managed_integrations.iter().all(|transition| {
-            transition.kind == template_renderer::ManagedIntegrationTransitionKind::Edit
-        }));
+        assert!(
+            transitions
+                .iter()
+                .all(|item| item["kind"].as_str() == Some("edit"))
+        );
+    }
+}
+
+#[test]
+fn current_edge_adds_only_an_absent_unregistered_operation_source() {
+    let catalog = ManifestCatalog::load(repository_root(), "layered").unwrap();
+    let edge = &catalog.upgrade_edges()[0];
+    assert_eq!(edge.id, "v0-7-0-to-v0-8-0");
+    assert_eq!(edge.compositions.len(), 6);
+    for composition in &edge.compositions {
+        assert_eq!(composition.source.database, composition.target.database);
+        assert_eq!(composition.source.client, composition.target.client);
+        assert_eq!(composition.source.components, composition.target.components);
+        assert_eq!(composition.source.modules, composition.target.modules);
+        assert_eq!(
+            composition.source.capabilities,
+            composition.target.capabilities
+        );
+        let creates = composition
+            .managed_integrations
+            .iter()
+            .filter(|item| item.kind == template_renderer::ManagedIntegrationTransitionKind::Create)
+            .collect::<Vec<_>>();
+        assert_eq!(creates.len(), 1);
+        assert_eq!(
+            creates[0].path,
+            "crates/infrastructure/src/database_operations.rs"
+        );
+        assert_eq!(composition.managed_integrations.len(), 4);
+        assert!(
+            !composition
+                .target_ownership
+                .claims
+                .iter()
+                .any(|claim| claim.path == "apps/server/Cargo.toml")
+        );
     }
 }
 
@@ -268,7 +312,7 @@ fn canonical_package_resolves_the_versioned_component_module_and_capability_grap
 
     assert_eq!(graph.schema, 1);
     assert_eq!(graph.package.id, "hegira-canonical");
-    assert_eq!(graph.package.version, "v0.7.0");
+    assert_eq!(graph.package.version, "v0.8.0");
     assert_eq!(
         graph
             .components
@@ -279,7 +323,7 @@ fn canonical_package_resolves_the_versioned_component_module_and_capability_grap
     );
     assert_eq!(graph.modules.len(), 1);
     assert_eq!(graph.modules[0].id, "identity");
-    assert_eq!(graph.modules[0].version, "v0.7.0");
+    assert_eq!(graph.modules[0].version, "v0.8.0");
     assert_eq!(
         graph.capabilities,
         [
@@ -437,7 +481,7 @@ fn layered_template_renders_release_dependencies_and_binary_assets() {
     );
     let manifest = fs::read_to_string(output.join("Cargo.toml")).expect("manifest should exist");
     assert!(manifest.contains(
-        r#"identity_application = { git = "https://github.com/furkancemalcaliskan/hegira.git", tag = "v0.7.0", default-features = false }"#
+        r#"identity_application = { git = "https://github.com/furkancemalcaliskan/hegira.git", tag = "v0.8.0", default-features = false }"#
     ));
     for compatibility_dependency in [
         "application",
@@ -485,12 +529,12 @@ fn layered_template_renders_release_dependencies_and_binary_assets() {
     let application_manifest = ApplicationManifest::read(output.join("hegira.toml"))
         .expect("generated application manifest should be valid");
     assert_eq!(application_manifest.application, "application");
-    assert_eq!(application_manifest.framework.version, "v0.7.0");
+    assert_eq!(application_manifest.framework.version, "v0.8.0");
     let composition = application_manifest
         .composition
         .expect("generated application manifest should record composition state");
     assert_eq!(composition.package.id, "hegira-canonical");
-    assert_eq!(composition.package.version, "v0.7.0");
+    assert_eq!(composition.package.version, "v0.8.0");
     assert_eq!(composition.modules.len(), 1);
     assert_eq!(composition.modules[0].id, "identity");
     assert_eq!(
@@ -570,12 +614,12 @@ fn package_authenticates_and_resolves_declarative_upgrade_edges() {
     };
     let resolved = catalog
         .resolve_upgrade_edge(&UpgradeEdgeRequest {
-            source: upgrade_release("v0.6.0"),
+            source: upgrade_release("v0.7.0"),
             composition: state.clone(),
         })
         .expect("exact source state should resolve");
-    assert_eq!(resolved.id, "v0-6-0-to-v0-7-0");
-    assert_eq!(resolved.target, upgrade_release("v0.7.0"));
+    assert_eq!(resolved.id, "v0-7-0-to-v0-8-0");
+    assert_eq!(resolved.target, upgrade_release("v0.8.0"));
     assert_eq!(resolved.composition.target, state);
 
     let error = catalog
@@ -591,7 +635,7 @@ fn package_authenticates_and_resolves_declarative_upgrade_edges() {
 
     let edge_path = fixture
         .path()
-        .join("templates/upgrades/v0-6-0-to-v0-7-0.toml");
+        .join("templates/upgrades/v0-7-0-to-v0-8-0.toml");
     let tampered = fs::read_to_string(&edge_path)
         .unwrap()
         .replace("application-manifest", "application-manifest-v2");
@@ -636,7 +680,11 @@ fn released_application_baselines_upgrade_only_declared_managed_files() {
     };
 
     let repository = repository_root();
-    let baselines = BaselineCatalog::from_repository(&repository).unwrap();
+    let baselines = BaselineCatalog::from_repository_release(
+        &repository,
+        upgrade_test_support::BaselineVersion::V0_7_0,
+    )
+    .unwrap();
     let catalog = ManifestCatalog::load(&repository, "layered").unwrap();
     let parent = TestDirectory::new("released-upgrade-matrix");
     for composition in BaselineComposition::ALL {
@@ -661,24 +709,32 @@ fn released_application_baselines_upgrade_only_declared_managed_files() {
             let first = catalog.plan_upgrade(&application).unwrap();
             let second = catalog.plan_upgrade(&application).unwrap();
             assert_eq!(first, second, "{}", request.id());
-            assert_eq!(first.source().framework.version, "v0.6.0");
-            assert_eq!(first.target().framework.version, "v0.7.0");
+            assert_eq!(first.source().framework.version, "v0.7.0");
+            assert_eq!(first.target().framework.version, "v0.8.0");
             let changed = first
                 .change_plan()
                 .changes()
                 .iter()
                 .map(|change| change.path().as_str().to_owned())
                 .collect::<Vec<_>>();
-            assert_eq!(changed, ["Cargo.lock", "Cargo.toml", "hegira.toml"]);
+            assert_eq!(
+                changed,
+                [
+                    "Cargo.lock",
+                    "Cargo.toml",
+                    "crates/infrastructure/src/database_operations.rs",
+                    "hegira.toml"
+                ]
+            );
             let summary = serde_json::to_string(&first.summary()).unwrap();
             assert!(!summary.contains("application-owned product change"));
             assert!(!summary.contains("application-owned identity setting"));
             assert!(!summary.contains("baseline-application"));
 
             let receipt = publish_change_plan(&application, first.change_plan()).unwrap();
-            assert_eq!(receipt.changed_files(), 3);
+            assert_eq!(receipt.changed_files(), 4);
             let after = output_tree(&application);
-            assert_eq!(before.len(), after.len());
+            assert_eq!(before.len() + 1, after.len());
             for (path, bytes) in &before {
                 if !changed.iter().any(|managed| path == Path::new(managed)) {
                     assert_eq!(
@@ -693,10 +749,10 @@ fn released_application_baselines_upgrade_only_declared_managed_files() {
             let manifest = ApplicationManifest::read(application.join("hegira.toml")).unwrap();
             assert_eq!(manifest.schema, 3);
             assert_eq!(manifest.application, "baseline-application");
-            assert_eq!(manifest.framework.version, "v0.7.0");
+            assert_eq!(manifest.framework.version, "v0.8.0");
             assert_eq!(
                 manifest.composition.as_ref().unwrap().package.version,
-                "v0.7.0"
+                "v0.8.0"
             );
             assert_eq!(manifest.selection.databases.len(), 1);
             assert_eq!(manifest.selection.clients.len(), 1);
@@ -705,8 +761,8 @@ fn released_application_baselines_upgrade_only_declared_managed_files() {
                 composition == BaselineComposition::Minimal
             );
             let cargo = fs::read_to_string(application.join("Cargo.toml")).unwrap();
-            assert!(cargo.contains("tag = \"v0.7.0\""));
-            assert!(!cargo.contains("tag = \"v0.6.0\""));
+            assert!(cargo.contains("tag = \"v0.8.0\""));
+            assert!(!cargo.contains("tag = \"v0.7.0\""));
             for name in [
                 "identity_application",
                 "identity_http",
@@ -721,7 +777,7 @@ fn released_application_baselines_upgrade_only_declared_managed_files() {
                     composition != BaselineComposition::Minimal
                 );
                 if let Some(declaration) = declaration {
-                    assert!(declaration.contains("tag = \"v0.7.0\""));
+                    assert!(declaration.contains("tag = \"v0.8.0\""));
                     assert!(declaration.contains("default-features = false"));
                 }
             }
@@ -736,14 +792,14 @@ fn released_application_baselines_upgrade_only_declared_managed_files() {
                 )
                 .unwrap();
                 let expected = source
-                    .replace("tag = \"v0.6.0\"", "tag = \"v0.7.0\"")
+                    .replace("tag = \"v0.7.0\"", "tag = \"v0.8.0\"")
                     .parse::<toml::Table>()
                     .unwrap();
                 assert_eq!(cargo.parse::<toml::Table>().unwrap(), expected);
             }
             let lock = fs::read_to_string(application.join("Cargo.lock")).unwrap();
-            assert!(lock.contains("?tag=v0.7.0#"));
-            assert!(!lock.contains("?tag=v0.6.0#"));
+            assert!(lock.contains("?tag=v0.8.0#"));
+            assert!(!lock.contains("?tag=v0.7.0#"));
             let expected_lock = if composition == BaselineComposition::Minimal {
                 repository.join("templates/applications/layered-minimal/Cargo.lock")
             } else {
@@ -792,7 +848,7 @@ application = "custom-application"
 
 [framework]
 repository = "https://github.com/furkancemalcaliskan/hegira.git"
-version = "v0.6.0"
+version = "v0.7.0"
 
 [selection]
 databases = ["sqlite"]
@@ -803,19 +859,19 @@ capabilities = ["authentication", "authorization"]
 
 [composition.package]
 id = "hegira-canonical"
-version = "v0.6.0"
+version = "v0.7.0"
 
 [[composition.components]]
 id = "layered-base"
-version = "v0.6.0"
+version = "v0.7.0"
 
 [[composition.components]]
 id = "layered-leptos-identity"
-version = "v0.6.0"
+version = "v0.7.0"
 
 [[composition.modules]]
 id = "identity"
-version = "v0.6.0"
+version = "v0.7.0"
 "#;
     fs::write(application.join("hegira.toml"), manifest).unwrap();
     let source_cargo = test_upgrade_source_cargo(fixture.path());
@@ -835,7 +891,7 @@ version = "v0.6.0"
     let catalog = ManifestCatalog::load(fixture.path(), "layered").unwrap();
 
     let authenticated = catalog.authenticate_upgrade_source(&application).unwrap();
-    assert_eq!(authenticated.edge().id, "v0-6-0-to-v0-7-0");
+    assert_eq!(authenticated.edge().id, "v0-7-0-to-v0-8-0");
     assert_eq!(authenticated.managed_sources().len(), 2);
     assert_eq!(
         authenticated.managed_sources()[0].source(),
@@ -844,9 +900,9 @@ version = "v0.6.0"
     let first_plan = catalog.plan_upgrade(&application).unwrap();
     let second_plan = catalog.plan_upgrade(&application).unwrap();
     assert_eq!(first_plan, second_plan);
-    assert_eq!(first_plan.edge_id(), "v0-6-0-to-v0-7-0");
-    assert_eq!(first_plan.source().framework.version, "v0.6.0");
-    assert_eq!(first_plan.target().framework.version, "v0.7.0");
+    assert_eq!(first_plan.edge_id(), "v0-7-0-to-v0-8-0");
+    assert_eq!(first_plan.source().framework.version, "v0.7.0");
+    assert_eq!(first_plan.target().framework.version, "v0.8.0");
     assert_eq!(first_plan.change_plan().changes().len(), 2);
     let cargo_change = first_plan
         .change_plan()
@@ -871,14 +927,14 @@ version = "v0.6.0"
         FilePrecondition::MatchesDigest(ContentDigest::calculate(&source_cargo))
     );
     let cargo_result = std::str::from_utf8(cargo_change.resulting_content().unwrap()).unwrap();
-    assert!(cargo_result.contains("tag = \"v0.7.0\""));
-    assert!(!cargo_result.contains("tag = \"v0.6.0\""));
+    assert!(cargo_result.contains("tag = \"v0.8.0\""));
+    assert!(!cargo_result.contains("tag = \"v0.7.0\""));
     let target_manifest = ApplicationManifest::from_toml(
         std::str::from_utf8(change.resulting_content().unwrap()).unwrap(),
     )
     .unwrap();
     assert_eq!(target_manifest.application, "custom-application");
-    assert_eq!(target_manifest.framework.version, "v0.7.0");
+    assert_eq!(target_manifest.framework.version, "v0.8.0");
     assert_eq!(
         target_manifest
             .composition
@@ -886,7 +942,7 @@ version = "v0.6.0"
             .unwrap()
             .package
             .version,
-        "v0.7.0"
+        "v0.8.0"
     );
     assert_eq!(
         target_manifest.upgrade.as_ref().unwrap().ownership,
@@ -923,12 +979,12 @@ version = "v0.6.0"
             .unwrap()
             .framework
             .version,
-        "v0.7.0"
+        "v0.8.0"
     );
     assert!(
         fs::read_to_string(published.join("Cargo.toml"))
             .unwrap()
-            .contains("tag = \"v0.7.0\"")
+            .contains("tag = \"v0.8.0\"")
     );
     assert_eq!(
         fs::read(published.join("product-owned.txt")).unwrap(),
@@ -953,7 +1009,7 @@ version = "v0.6.0"
 
     fs::write(
         application.join("hegira.toml"),
-        manifest.replace("v0.6.0", "v0.4.0"),
+        manifest.replace("v0.7.0", "v0.4.0"),
     )
     .unwrap();
     let release = catalog.plan_upgrade(&application).unwrap_err();
@@ -1492,28 +1548,28 @@ fn install_test_upgrade_edge(repository: &Path) {
     let source_cargo = test_upgrade_source_cargo(repository);
     let source_cargo_digest = format!("sha256:{:x}", Sha256::digest(&source_cargo));
     fs::write(
-        upgrades.join("v0-6-0-to-v0-7-0.toml"),
+        upgrades.join("v0-7-0-to-v0-8-0.toml"),
         format!(
             r#"schema = 1
-id = "v0-6-0-to-v0-7-0"
+id = "v0-7-0-to-v0-8-0"
 source_package_digest = "sha256:{source_package_digest}"
 manifest_transitions = ["schema", "framework", "package", "components", "modules", "ownership"]
 
 [source.framework]
 repository = "https://github.com/furkancemalcaliskan/hegira.git"
-version = "v0.6.0"
+version = "v0.7.0"
 
 [source.package]
 id = "hegira-canonical"
-version = "v0.6.0"
+version = "v0.7.0"
 
 [target.framework]
 repository = "https://github.com/furkancemalcaliskan/hegira.git"
-version = "v0.7.0"
+version = "v0.8.0"
 
 [target.package]
 id = "hegira-canonical"
-version = "v0.7.0"
+version = "v0.8.0"
 
 [[compositions]]
 id = "layered-leptos-identity-sqlite"
@@ -1589,7 +1645,7 @@ target_sha256 = "{target_cargo_digest}"
         .expect("component package manifest should be readable")
         .replace(
             "upgrade_edges = []",
-            "upgrade_edges = [\"upgrades/v0-6-0-to-v0-7-0.toml\"]",
+            "upgrade_edges = [\"upgrades/v0-7-0-to-v0-8-0.toml\"]",
         );
     fs::write(&package_path, package).expect("upgrade edge should be declared");
     update_test_package_digest(repository);
@@ -1602,12 +1658,12 @@ fn test_upgrade_source_cargo(repository: &Path) -> Vec<u8> {
             "{{framework_repository}}",
             "https://github.com/furkancemalcaliskan/hegira.git",
         )
-        .replace("{{framework_version}}", "v0.6.0")
+        .replace("{{framework_version}}", "v0.7.0")
         .into_bytes()
 }
 
 fn set_test_upgrade_source_digest(repository: &Path, source: &[u8]) {
-    let edge_path = repository.join("templates/upgrades/v0-6-0-to-v0-7-0.toml");
+    let edge_path = repository.join("templates/upgrades/v0-7-0-to-v0-8-0.toml");
     let edge = fs::read_to_string(&edge_path).unwrap();
     let expected = format!("source_sha256 = \"sha256:{}\"", "b".repeat(64));
     let replacement = format!("source_sha256 = \"sha256:{:x}\"", Sha256::digest(source));

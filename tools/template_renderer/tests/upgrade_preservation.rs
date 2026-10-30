@@ -60,7 +60,7 @@ fn customized_released_applications_preserve_product_source_and_history() {
     // changes before updating them; the before/after upgrade checks stay exact.
     assert_eq!(
         snapshot,
-        include_str!("snapshots/customized-v0.6.0.txt"),
+        include_str!("snapshots/customized-v0.7.0.txt"),
         "review released product-source fixtures before changing their fingerprints"
     );
 }
@@ -69,7 +69,11 @@ fn customized_released_applications_preserve_product_source_and_history() {
 fn historical_upgrade_preserves_customized_application_documentation_without_adoption() {
     use upgrade_test_support::BaselineCatalog;
     let parent = TestDirectory::new("documentation");
-    let baselines = BaselineCatalog::from_repository(repository()).unwrap();
+    let baselines = BaselineCatalog::from_repository_release(
+        repository(),
+        upgrade_test_support::BaselineVersion::V0_7_0,
+    )
+    .unwrap();
     let catalog = ManifestCatalog::load(repository(), "layered").unwrap();
     for composition in BaselineComposition::ALL {
         for database in BaselineDatabase::ALL {

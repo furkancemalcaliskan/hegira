@@ -177,8 +177,11 @@ for health, migrations, backup, and recovery.
 
 `hegira.toml` records release, composition, adapter selection, and source
 ownership; it is not runtime configuration. The current authenticated
-v0.6.0-to-v0.7.0 source upgrade changes only that manifest, `Cargo.toml`, and
-`Cargo.lock`. It preserves application-owned `config/` profiles and does not
+v0.7.0-to-v0.8.0 source upgrade edits that manifest, `Cargo.toml`, and
+`Cargo.lock` and adds an unregistered Infrastructure `database_operations.rs`.
+Before database use, the owner must
+[integrate its profile loader and entry point](getting-started.md#adopt-database-operations-after-a-source-upgrade).
+It preserves application-owned `config/` profiles and does not
 read runtime secrets, connect to providers, execute SQL, or enable optional
 capabilities. Keeping the selected database/client in the manifest does not
 override runtime settings or bypass startup validation.

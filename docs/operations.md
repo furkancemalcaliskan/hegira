@@ -99,9 +99,12 @@ including when `--json` appears in an invalid request; help reads no config.
 
 The existing production image still packages the HTTP server, not this
 separately selected binary. Application operators own its build/invocation and
-deployment approval. The current v0.6.0-to-v0.7.0 source upgrade changes only
-three files and does not install this entry point. Managed claims are not
-blanket rewrite permission or proof that a binary is present.
+deployment approval. The v0.7.0-to-v0.8.0 source upgrade adds an unregistered
+Infrastructure operation source alongside the three release-file edits. It
+preserves existing server registration and configuration; complete the
+[manual owner integration](getting-started.md#adopt-database-operations-after-a-source-upgrade)
+before CLI database execution. Managed claims are not blanket rewrite permission
+or proof that a binary is present.
 
 ### Explicit CLI Database Operations
 

@@ -244,16 +244,18 @@ supported direct transition through the atomic mutation boundary. See
 [Upgrade readiness](docs/getting-started.md#assess-application-upgrade-readiness)
 for supported release states, recovery checks, and process outcomes.
 
-The bundled transition supports v0.6.0 → v0.7.0 for default, minimal, and
-Identity-added applications with either supported database. It changes only
-`Cargo.toml`, `Cargo.lock`, and `hegira.toml`; customized managed files fail
+The bundled transition supports v0.7.0 → v0.8.0 for default, minimal, and
+Identity-added applications with either supported database. It edits
+`Cargo.toml`, `Cargo.lock`, and `hegira.toml` and creates only the absent
+`crates/infrastructure/src/database_operations.rs`; customized managed files fail
 closed rather than being merged. Application-owned product code, generated-once
 scaffolding, and immutable migration history are preserved. Review the
 [ownership contract](docs/getting-started.md#generated-ownership-and-hegiratoml),
 [post-upgrade checks](docs/getting-started.md#after-an-application-upgrade), and
 [conflict and recovery guidance](docs/getting-started.md#resolve-upgrade-conflicts-and-recovery)
 before applying a transition. Source upgrade does not execute database migrations
-or deploy the application.
+or deploy the application. The new operation source remains unregistered until
+the owner completes the [manual database integration](docs/getting-started.md#adopt-database-operations-after-a-source-upgrade).
 
 From a generated application, create an append-only migration scaffold for
 the database adapter selected in `hegira.toml`:
@@ -347,7 +349,7 @@ the sole owner of application database, provider, upgrade, container,
 hydration, and HTTP integration coverage. Its isolated default and
 Identity-added cells and released-upgrade default, minimal, and Identity-added
 cells run in parallel while the stable `quality` result waits for all five.
-Each upgrade cell validates both providers through the public v0.6.0-to-v0.7.0
+Each upgrade cell validates both providers through the public v0.7.0-to-v0.8.0
 workflow, preserved migrations/data, and production behavior.
 
 PostgreSQL tests marked `ignored` require a disposable `DATABASE_URL` because

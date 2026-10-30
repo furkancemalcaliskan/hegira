@@ -297,7 +297,11 @@ fn composed_contract_rejects_cross_file_drift() {
 
 #[test]
 fn public_upgrades_preserve_real_owner_customized_governance_without_adopting_it() {
-    let baselines = BaselineCatalog::from_repository(repository_root()).unwrap();
+    let baselines = BaselineCatalog::from_repository_release(
+        repository_root(),
+        upgrade_test_support::BaselineVersion::V0_7_0,
+    )
+    .unwrap();
     for composition in BaselineComposition::ALL {
         for database in BaselineDatabase::ALL {
             let parent = TestDirectory::new("governance-upgrade");
@@ -349,10 +353,10 @@ fn public_upgrades_preserve_real_owner_customized_governance_without_adopting_it
                 fs::copy(fresh.join(path), application.join(path)).unwrap();
             }
             let owned = governance_bytes(&application);
-            let before = output_tree(&application);
+            let before: BTreeMap<_, _> = output_tree(&application).into_iter().collect();
             success(hegira_at(&application, &["upgrade", "status", "--json"]));
             success(hegira_at(&application, &["upgrade", "--dry-run", "--json"]));
-            assert_eq!(before, output_tree(&application));
+            assert_eq!(before, output_tree(&application).into_iter().collect());
             success(hegira_at(&application, &["upgrade", "--json"]));
             assert_eq!(owned, governance_bytes(&application));
             let target = ApplicationManifest::read(application.join("hegira.toml")).unwrap();
@@ -365,16 +369,22 @@ fn public_upgrades_preserve_real_owner_customized_governance_without_adopting_it
                     .iter()
                     .all(|claim| !governance_paths().contains(claim.path.as_str()))
             );
-            let after = output_tree(&application);
+            let after: BTreeMap<_, _> = output_tree(&application).into_iter().collect();
             let changed: Vec<_> = before
                 .iter()
-                .zip(&after)
-                .filter_map(|((path, bytes), (next_path, next_bytes))| {
-                    assert_eq!(path, next_path);
-                    (bytes != next_bytes).then_some(path.to_str().unwrap())
+                .filter_map(|(path, bytes)| {
+                    (after.get(path) != Some(bytes)).then_some(path.to_str().unwrap())
                 })
                 .collect();
-            assert_eq!(before.len(), after.len());
+            assert_eq!(before.len() + 1, after.len());
+            assert_eq!(
+                after
+                    .keys()
+                    .filter(|path| !before.contains_key(*path))
+                    .map(|path| path.to_str().unwrap())
+                    .collect::<Vec<_>>(),
+                ["crates/infrastructure/src/database_operations.rs"]
+            );
             assert_eq!(changed, ["Cargo.lock", "Cargo.toml", "hegira.toml"]);
             // The preserved source remains executable, rather than merely
             // preserving placeholder text in paths with familiar names.
@@ -384,7 +394,7 @@ fn public_upgrades_preserve_real_owner_customized_governance_without_adopting_it
                 environment.path(),
                 &std::env::var_os("PATH").unwrap_or_default(),
             ));
-            assert_eq!(after, output_tree(&application));
+            assert_eq!(after, output_tree(&application).into_iter().collect());
         }
     }
 }

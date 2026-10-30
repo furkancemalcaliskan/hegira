@@ -63,8 +63,8 @@ commands change. Never describe planned work as implemented.
   Generated-once application quality automation checks the selected provider,
   native/WASM, locked release output, disposable startup, and supply-chain policy
   through an unconditional aggregate. It uses bounded CLI-owned validation caches
-  and a reviewed compatible CI tool revision separately from framework dependency
-  pins; source upgrades preserve owner-customized automation.
+  and the matching immutable published CLI source release; source upgrades
+  preserve owner-customized automation.
   Both variants additionally provide `apps/server`'s separately selected
   `app_database` binary through `database-operations`. Its Infrastructure
   database-operation subset validates configuration before isolated status or
@@ -267,9 +267,13 @@ implementation.
 
 ## Existing-Application Upgrade Boundaries
 
-The bundled direct edge supports only v0.6.0 → v0.7.0 default, minimal, and
-Identity-added applications with SQLite or PostgreSQL. It changes only
-`Cargo.toml`, `Cargo.lock`, and `hegira.toml`. Application-owned product code,
+The bundled direct edge supports only v0.7.0 → v0.8.0 default, minimal, and
+Identity-added applications with SQLite or PostgreSQL. It edits
+`Cargo.toml`, `Cargo.lock`, and `hegira.toml` and creates the exact absent
+`crates/infrastructure/src/database_operations.rs`. The added source is unregistered;
+existing server registration and configuration remain owner-controlled. Complete
+the documented manual adoption before CLI database execution. Application-owned
+product code,
 generated-once scaffolding, and immutable migration history are preserved.
 Managed ownership is not blanket rewrite permission: the exact authenticated
 edge and observed digests must authorize each transition. Customized managed
