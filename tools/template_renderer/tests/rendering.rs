@@ -800,11 +800,15 @@ fn released_application_baselines_upgrade_only_declared_managed_files() {
             let lock = fs::read_to_string(application.join("Cargo.lock")).unwrap();
             assert!(lock.contains("?tag=v0.8.0#"));
             assert!(!lock.contains("?tag=v0.7.0#"));
-            let expected_lock = if composition == BaselineComposition::Minimal {
-                repository.join("templates/applications/layered-minimal/Cargo.lock")
-            } else {
-                repository.join("templates/applications/layered/Cargo.lock")
-            };
+            let expected_lock = repository.join(match composition {
+                BaselineComposition::Default => "templates/applications/layered/Cargo.lock",
+                BaselineComposition::Minimal => {
+                    "templates/upgrades/locks/v0-8-0-minimal.Cargo.lock"
+                }
+                BaselineComposition::IdentityAdded => {
+                    "templates/upgrades/locks/v0-8-0-identity-added.Cargo.lock"
+                }
+            });
             assert_eq!(
                 fs::read(application.join("Cargo.lock")).unwrap(),
                 fs::read(expected_lock).unwrap()
@@ -1073,6 +1077,74 @@ fn package_rejects_an_incomplete_declared_source_set() {
     assert_eq!(error.kind(), RendererErrorKind::Catalog);
     assert!(error.to_string().contains("content digest mismatch"));
     assert!(!output.exists());
+}
+
+#[test]
+fn upgrade_locks_are_authenticated_package_data_without_rendered_artifacts() {
+    let repository = repository_root();
+    let output = TestDirectory::new("upgrade-lock-render");
+    let snapshot =
+        plan_snapshot(&canonical_request(&repository, output.path().join("app"))).unwrap();
+    assert!(!snapshot.contains("upgrades/locks"));
+    for coordinated in [false, true] {
+        let fixture = TestDirectory::new("upgrade-lock-tamper");
+        copy_directory(
+            &repository.join("templates"),
+            &fixture.path().join("templates"),
+        );
+        let lock = fixture
+            .path()
+            .join("templates/upgrades/locks/v0-8-0-minimal.Cargo.lock");
+        let before = fs::read(&lock).unwrap();
+        let mut changed = before.clone();
+        changed.extend_from_slice(b"\n# private tampered source\n");
+        fs::write(&lock, &changed).unwrap();
+        if coordinated {
+            let edge = fixture
+                .path()
+                .join("templates/upgrades/v0-7-0-to-v0-8-0.toml");
+            let text = fs::read_to_string(&edge).unwrap();
+            fs::write(
+                edge,
+                text.replace(
+                    &format!("sha256:{:x}", Sha256::digest(before)),
+                    &format!("sha256:{:x}", Sha256::digest(changed)),
+                ),
+            )
+            .unwrap();
+        }
+        let destination = fixture.path().join("application");
+        let error = render(&canonical_request(fixture.path(), destination.clone())).unwrap_err();
+        assert!(!destination.exists());
+        assert!(!error.to_string().contains("private tampered source"));
+        if coordinated {
+            assert!(error.to_string().contains("content digest mismatch"));
+        }
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn upgrade_locks_cannot_follow_symlinks_outside_the_package() {
+    let fixture = TestDirectory::new("upgrade-lock-symlink");
+    copy_directory(
+        &repository_root().join("templates"),
+        &fixture.path().join("templates"),
+    );
+    let path = fixture
+        .path()
+        .join("templates/upgrades/locks/v0-8-0-minimal.Cargo.lock");
+    let outside = fixture.path().join("outside.lock");
+    fs::rename(&path, &outside).unwrap();
+    std::os::unix::fs::symlink(&outside, path).unwrap();
+    let destination = fixture.path().join("application");
+    assert_eq!(
+        render(&canonical_request(fixture.path(), destination.clone()))
+            .unwrap_err()
+            .kind(),
+        RendererErrorKind::Safety
+    );
+    assert!(!destination.exists());
 }
 
 #[test]

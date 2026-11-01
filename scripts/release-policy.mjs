@@ -14,6 +14,8 @@ const REQUIRED_WORKFLOW_CONTRACTS = [
   ["official module validation", "scripts/official-modules-check.sh"],
   ["tooling validation", "scripts/layered-template-check.sh"],
   ["CLI validation", "scripts/cli-check.sh"],
+  ["minimal upgrade lock audit", "cargo audit --file templates/upgrades/locks/v0-8-0-minimal.Cargo.lock"],
+  ["Identity-added upgrade lock audit", "cargo audit --file templates/upgrades/locks/v0-8-0-identity-added.Cargo.lock"],
   [
     "parallel generated lifecycle context",
     "name: generated-application (${{ matrix.lifecycle }})",
@@ -312,6 +314,32 @@ export function validateCanonicalApplicationLock(root, releaseRef) {
     errors.push(
       "canonical application lockfile resolves framework packages to multiple revisions",
     );
+  }
+  // Upgrade-only locks preserve released owner manifests rather than fresh scaffolding.
+  const declaration = packageManifest.match(/^upgrade_lockfiles = (.+)$/m)?.[1];
+  let assets = [];
+  try {
+    assets = declaration ? JSON.parse(declaration) : [];
+    if (!Array.isArray(assets) || assets.some(asset => typeof asset !== "string" ||
+        !/^upgrades\/locks\/[a-z0-9-]+\.Cargo\.lock$/.test(asset)) ||
+        assets.some((asset, index) => index > 0 && assets[index - 1] >= asset)) {
+      throw new Error("invalid declaration");
+    }
+  } catch {
+    errors.push("canonical upgrade lockfile declaration is invalid");
+    assets = [];
+  }
+  for (const asset of assets) {
+    const file = path.join(root, "templates", asset);
+    if (!fs.existsSync(file) || !fs.lstatSync(file).isFile()) {
+      errors.push("canonical upgrade lockfile is missing or unsafe");
+      continue;
+    }
+    const sources = fs.readFileSync(file, "utf8").split("\n")
+      .filter(line => line.startsWith(`source = "git+${repository}`));
+    if (!sources.length || sources.some(source => source !== expectedSources[0])) {
+      errors.push("canonical upgrade lockfile disagrees with the release source");
+    }
   }
   return errors;
 }

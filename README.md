@@ -349,8 +349,10 @@ the sole owner of application database, provider, upgrade, container,
 hydration, and HTTP integration coverage. Its isolated default and
 Identity-added cells and released-upgrade default, minimal, and Identity-added
 cells run in parallel while the stable `quality` result waits for all five.
-Each upgrade cell validates both providers through the public v0.7.0-to-v0.8.0
-workflow, preserved migrations/data, and production behavior.
+The default cell also validates fresh minimal applications with both providers.
+Each upgrade cell checks unchanged public release locks before local staging and
+validates both providers through the public v0.7.0-to-v0.8.0 workflow, explicit
+database status/approved migration, preserved history/data, and production behavior.
 
 PostgreSQL tests marked `ignored` require a disposable `DATABASE_URL` because
 they reset the target database.

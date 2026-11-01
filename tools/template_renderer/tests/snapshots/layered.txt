@@ -1,6 +1,6 @@
 package=hegira-canonical@v0.8.0
 framework=https://github.com/furkancemalcaliskan/hegira.git#v0.8.0
-digest=sha256:bd8a3afd3d244a3e897b9b3afbfa137271cb94522de7c2c2f1df0810c338783e
+digest=sha256:14b9da777e8f903203f988007d769050b88b771a9902c5a735fac6e0eb7432a8
 components=layered-base,layered-leptos-identity
 971deab3ed8abfea .cargo/audit.toml
 a185b5c4932fdb88 .cursor/rules/application.mdc

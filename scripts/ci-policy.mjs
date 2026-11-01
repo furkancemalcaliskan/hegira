@@ -30,6 +30,8 @@ const REQUIRED_CONTRACTS = [
   ["explicit disposable PostgreSQL authentication", "POSTGRES_HOST_AUTH_METHOD: trust"],
   ["dependency policy", "EmbarkStudios/cargo-deny-action@v2"],
   ["dependency audit", "cargo audit --file Cargo.lock"],
+  ["minimal upgrade lock audit", "cargo audit --file templates/upgrades/locks/v0-8-0-minimal.Cargo.lock"],
+  ["Identity-added upgrade lock audit", "cargo audit --file templates/upgrades/locks/v0-8-0-identity-added.Cargo.lock"],
 ];
 
 const QUALITY_DEPENDENCIES = [
@@ -133,6 +135,9 @@ export function validateUpgradeLifecycleMatrix(job) {
       errors.push(`upgrade lifecycle matrix entry/cache is missing: ${composition}`);
     }
   }
+  if (!job.includes("        if: matrix.lifecycle == 'default'\n        run: sh scripts/generated-application-check.sh minimal")) {
+    errors.push("fresh minimal lifecycle must run in the existing default cell");
+  }
   if (/^    if:/m.test(job) || job.includes("continue-on-error:")) {
     errors.push("upgrade lifecycle validation may not be conditional or tolerate failures");
   }
@@ -167,6 +172,11 @@ export function validateUpgradeScripts(root) {
       'exec sh "$repo_root/scripts/upgraded-application-check.sh" "${1#upgrade-}"'],
     ["scripts/upgraded-application-check.sh", "for database in sqlite postgres; do"],
     ["scripts/upgraded-application-check.sh", "--production"],
+    ["scripts/upgraded-application-check.sh", "--example public_upgrade_locks"],
+    ["scripts/upgraded-application-check.sh", "--fresh-minimal"],
+    ["scripts/upgraded-application-check.sh", "locked native cache reuse"],
+    ["scripts/upgrade-database-contract.rs", "production-migration-approval"],
+    ["scripts/upgrade-database-contract.rs", "HEGIRA_UPGRADE_CLI"],
     ["scripts/upgraded-application-check.sh", "composition/provider=$case_id phase=$phase"],
     ["scripts/upgraded-application-check.sh", "failed/interrupted"],
     ["scripts/upgraded-application-check.sh", "validation_cache_prepare"],

@@ -164,6 +164,7 @@ impl Fixture {
                     },
                     source_sha256: source.map(|file| digest(file.bytes())),
                     target_source_component: None,
+                    target_lockfile: None,
                     target_sha256: Some(digest(&target)),
                 });
             }
@@ -231,6 +232,10 @@ impl Fixture {
         let path = self.root.join("templates/package.toml");
         let mut package: toml::Table = fs::read_to_string(&path).unwrap().parse().unwrap();
         package.insert("upgrade_edges".to_owned(), toml::Value::Array(Vec::new()));
+        package.insert(
+            "upgrade_lockfiles".to_owned(),
+            toml::Value::Array(Vec::new()),
+        );
         fs::write(&path, toml::to_string(&package).unwrap()).unwrap();
         let digest = ManifestCatalog::calculate_package_digest(&self.root, "layered").unwrap();
         package.insert("content_digest".to_owned(), digest.into());

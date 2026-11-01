@@ -5,8 +5,15 @@ import { createInterface } from "node:readline";
 
 // A receipt in the already locked repository-owned Cargo cache, never the app.
 const read = process.argv[2] === "--read";
+assert([read ? 4 : 3, read ? 5 : 4].includes(process.argv.length));
 const root = path.resolve(process.argv[read ? 3 : 2]);
-const receipt = path.join(root, "database-operation-test-binary.json");
+const target = process.argv[read ? 4 : 3] ?? "database_operation_contract";
+const receipts = new Map([
+  ["database_operation_contract", "database-operation-test-binary.json"],
+  ["upgrade_lifecycle", "upgrade-lifecycle-test-binary.json"],
+]);
+assert(receipts.has(target), "Unsupported validation target");
+const receipt = path.join(root, receipts.get(target));
 function validate(executable) {
   assert.equal(typeof executable, "string");
   assert.equal(path.resolve(executable), executable);
@@ -24,7 +31,7 @@ if (read) {
     const message = JSON.parse(line);
     if (message.reason === "build-finished") finished = message.success === true;
     if (message.reason === "compiler-artifact" &&
-        message.target.name === "database_operation_contract" && message.executable) {
+        message.target.name === target && message.executable) {
       artifacts.push(message.executable);
     }
   }

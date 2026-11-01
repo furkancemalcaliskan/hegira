@@ -1,7 +1,7 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     fmt::{Display, Formatter},
-    path::Path,
+    path::{Path, PathBuf},
 };
 
 use application_manifest::{
@@ -87,6 +87,8 @@ pub struct ManagedIntegrationTransition {
     pub source_sha256: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub target_source_component: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_lockfile: Option<PathBuf>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub target_sha256: Option<String>,
 }
@@ -269,8 +271,16 @@ pub(crate) fn validate_upgrade_graph(
     package: &ComponentPackageManifest,
     components: &BTreeMap<String, ComponentManifest>,
     component_paths: &BTreeMap<(String, String), String>,
+    lockfiles: &BTreeMap<PathBuf, String>,
     edges: &mut [UpgradeEdgeManifest],
 ) -> Result<()> {
+    if lockfiles.keys().collect::<Vec<_>>() != package.upgrade_lockfiles.iter().collect::<Vec<_>>()
+    {
+        return Err(graph_error(
+            UpgradeGraphDiagnosticKind::UndeclaredManagedPath,
+            "component-package.upgrade-lockfiles",
+        ));
+    }
     if edges.len() > MAX_UPGRADE_EDGES {
         return Err(graph_error(
             UpgradeGraphDiagnosticKind::LimitExceeded,
@@ -405,7 +415,12 @@ pub(crate) fn validate_upgrade_graph(
 
         sort_unique(&mut edge.manifest_transitions)?;
         edge.managed_integrations.sort();
-        validate_managed_integrations(&edge.managed_integrations, components, component_paths)?;
+        validate_managed_integrations(
+            &edge.managed_integrations,
+            components,
+            component_paths,
+            lockfiles,
+        )?;
 
         for composition in &edge.compositions {
             let applicable_components = composition
@@ -418,6 +433,7 @@ pub(crate) fn validate_upgrade_graph(
                 &composition.managed_integrations,
                 components,
                 component_paths,
+                lockfiles,
             )?;
             if composition
                 .managed_integrations
@@ -478,6 +494,7 @@ fn validate_managed_integrations(
     integrations: &[ManagedIntegrationTransition],
     components: &BTreeMap<String, ComponentManifest>,
     component_paths: &BTreeMap<(String, String), String>,
+    lockfiles: &BTreeMap<PathBuf, String>,
 ) -> Result<()> {
     let mut seen = BTreeSet::new();
     for transition in integrations {
@@ -505,7 +522,18 @@ fn validate_managed_integrations(
                 ));
             }
         }
-        validate_transition_digests(transition, component_paths)?;
+        if transition.target_lockfile.is_some()
+            && (transition.kind != ManagedIntegrationTransitionKind::Edit
+                || transition.path != "Cargo.lock"
+                || transition.integration != "framework-lockfile"
+                || transition.target_source_component.is_some())
+        {
+            return Err(graph_error(
+                UpgradeGraphDiagnosticKind::InvalidManagedPath,
+                "managed-integration.target-lockfile",
+            ));
+        }
+        validate_transition_digests(transition, component_paths, lockfiles)?;
         if !seen.insert((
             &transition.component,
             &transition.path,
@@ -533,6 +561,7 @@ fn ownership_declares(
 fn validate_transition_digests(
     transition: &ManagedIntegrationTransition,
     component_paths: &BTreeMap<(String, String), String>,
+    lockfiles: &BTreeMap<PathBuf, String>,
 ) -> Result<()> {
     let source_required = matches!(
         transition.kind,
@@ -567,14 +596,17 @@ fn validate_transition_digests(
             .target_source_component
             .as_ref()
             .unwrap_or(&transition.component);
-        let actual = component_paths
-            .get(&(target_component.clone(), transition.path.clone()))
-            .ok_or_else(|| {
-                graph_error(
-                    UpgradeGraphDiagnosticKind::UndeclaredManagedPath,
-                    "managed-integration.path",
-                )
-            })?;
+        let actual = if let Some(path) = &transition.target_lockfile {
+            lockfiles.get(path)
+        } else {
+            component_paths.get(&(target_component.clone(), transition.path.clone()))
+        }
+        .ok_or_else(|| {
+            graph_error(
+                UpgradeGraphDiagnosticKind::UndeclaredManagedPath,
+                "managed-integration.path",
+            )
+        })?;
         if actual != target {
             return Err(graph_error(
                 UpgradeGraphDiagnosticKind::InvalidDigest,
@@ -1032,6 +1064,47 @@ mod tests {
     }
 
     #[test]
+    fn packaged_lock_targets_cannot_select_arbitrary_paths_or_bypass_digests() {
+        let mut transition = edge().managed_integrations.remove(1);
+        transition.path = "Cargo.lock".to_owned();
+        transition.integration = "framework-lockfile".to_owned();
+        let path = PathBuf::from("upgrades/locks/reviewed.Cargo.lock");
+        transition.target_lockfile = Some(path.clone());
+        let lockfiles = BTreeMap::from([(path.clone(), digest('a'))]);
+        let validate = |item: ManagedIntegrationTransition, files: &BTreeMap<PathBuf, String>| {
+            validate_managed_integrations(&[item], &components(), &component_paths(), files)
+        };
+        validate(transition.clone(), &lockfiles).unwrap();
+        assert!(validate(transition.clone(), &BTreeMap::new()).is_err());
+        assert!(validate(transition.clone(), &BTreeMap::from([(path, digest('c'))])).is_err());
+        for mutation in [
+            "path",
+            "integration",
+            "create",
+            "retire",
+            "component",
+            "traversal",
+        ] {
+            let mut changed = transition.clone();
+            match mutation {
+                "path" => changed.path = "application-owned.rs".to_owned(),
+                "integration" => changed.integration = "application-manifest".to_owned(),
+                "create" => {
+                    changed.kind = ManagedIntegrationTransitionKind::Create;
+                    changed.source_sha256 = None;
+                }
+                "retire" => {
+                    changed.kind = ManagedIntegrationTransitionKind::Retire;
+                    changed.target_sha256 = None;
+                }
+                "component" => changed.target_source_component = Some("base".to_owned()),
+                _ => changed.target_lockfile = Some(PathBuf::from("../private.lock")),
+            }
+            assert!(validate(changed, &lockfiles).is_err(), "{mutation}");
+        }
+    }
+
+    #[test]
     fn declaration_permutations_produce_byte_identical_resolution() {
         let components = components();
         let mut canonical = vec![edge()];
@@ -1175,6 +1248,7 @@ mod tests {
                     kind: ManagedIntegrationTransitionKind::Edit,
                     source_sha256: Some(digest('b')),
                     target_source_component: None,
+                    target_lockfile: None,
                     target_sha256: Some(digest('a')),
                 })
                 .collect();
@@ -1282,7 +1356,13 @@ mod tests {
         edges: &mut [UpgradeEdgeManifest],
         components: &BTreeMap<String, ComponentManifest>,
     ) -> Result<()> {
-        validate_upgrade_graph(&package(), components, &component_paths(), edges)
+        validate_upgrade_graph(
+            &package(),
+            components,
+            &component_paths(),
+            &BTreeMap::new(),
+            edges,
+        )
     }
 
     fn error_after(
@@ -1346,6 +1426,7 @@ mod tests {
             ],
             modules: vec!["identity".to_owned()],
             upgrade_edges: vec![PathBuf::from("upgrades/v0-5-0-to-v0-6-0.toml")],
+            upgrade_lockfiles: Vec::new(),
             content_digest: format!("sha256:{}", "0".repeat(64)),
         }
     }
@@ -1472,6 +1553,7 @@ mod tests {
                     kind: ManagedIntegrationTransitionKind::Edit,
                     source_sha256: Some(digest('b')),
                     target_source_component: None,
+                    target_lockfile: None,
                     target_sha256: Some(digest('a')),
                 },
                 ManagedIntegrationTransition {
@@ -1481,6 +1563,7 @@ mod tests {
                     kind: ManagedIntegrationTransitionKind::Edit,
                     source_sha256: Some(digest('b')),
                     target_source_component: None,
+                    target_lockfile: None,
                     target_sha256: Some(digest('a')),
                 },
             ],

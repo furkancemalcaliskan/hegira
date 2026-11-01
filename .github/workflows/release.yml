@@ -48,6 +48,13 @@ jobs:
           node-version-file: .node-version
       - name: Audit canonical frontend dependencies
         run: sh scripts/frontend-check.sh
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit@0.22.2
+      - name: Audit authenticated upgrade lockfiles
+        run: |
+          cargo audit --file templates/upgrades/locks/v0-8-0-minimal.Cargo.lock
+          cargo audit --file templates/upgrades/locks/v0-8-0-identity-added.Cargo.lock
       - name: Generate source SBOM from the clean checkout
         uses: anchore/sbom-action@v0
         with:
@@ -221,6 +228,9 @@ jobs:
           } >>"$GITHUB_STEP_SUMMARY"
       - name: Validate ${{ matrix.lifecycle }} lifecycle across development and production
         run: sh scripts/generated-application-check.sh "${{ matrix.lifecycle }}"
+      - name: Validate fresh minimal lifecycle for both providers
+        if: matrix.lifecycle == 'default'
+        run: sh scripts/generated-application-check.sh minimal
 
   publish:
     if: github.event_name == 'push'

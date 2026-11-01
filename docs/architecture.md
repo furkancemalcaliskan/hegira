@@ -1048,8 +1048,14 @@ or module profiles differ; shared declarations apply to every selected
 composition. A managed integration may explicitly take its target bytes from
 another declared package component at the same path. Its ownership stays with
 the installed component, while the target path and digest must match the
-authenticated package snapshot. This lets an Identity-added application use
-the canonical Identity lockfile without installing the default UI component.
+authenticated package snapshot. The package may also declare sorted, unique
+`upgrade_lockfiles` assets under `upgrades/locks/`. Their bytes participate in
+the same immutable no-follow snapshot, closed file set and package digest.
+Only an edit to the managed `Cargo.lock` / `framework-lockfile` integration may
+select a declared `target_lockfile`, with its exact target SHA-256; it cannot
+also select another source component. These assets preserve the released
+minimal or Identity-added owner dependency graph rather than substituting fresh
+server scaffolding. They are never emitted by ordinary application rendering.
 Edges cannot contain executable commands or change the framework source,
 package identity, database adapter, or client adapter.
 

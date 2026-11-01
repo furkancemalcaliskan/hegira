@@ -8,6 +8,7 @@ if [ "$#" -gt 1 ]; then
 fi
 # Released upgrades share the aggregate lifecycle gate, not its creation workspace.
 case "${1:-default}" in
+  minimal) exec sh "$repo_root/scripts/upgraded-application-check.sh" fresh-minimal ;;
   upgrade-default|upgrade-minimal|upgrade-identity-added)
     exec sh "$repo_root/scripts/upgraded-application-check.sh" "${1#upgrade-}"
     ;;
@@ -27,7 +28,7 @@ case "$mode" in
     default_http_port=38082
     default_postgres_port=35433
     ;;
-  *) echo "usage: sh scripts/generated-application-check.sh [default|identity-added|upgrade-default|upgrade-minimal|upgrade-identity-added]" >&2; exit 2 ;;
+  *) echo "usage: sh scripts/generated-application-check.sh [default|minimal|identity-added|upgrade-default|upgrade-minimal|upgrade-identity-added]" >&2; exit 2 ;;
 esac
 phase_label=
 phase_started=
@@ -240,6 +241,34 @@ for database in sqlite postgres; do
     cargo run --locked --quiet -p hegira_cli -- new postgres-application \
       --destination "$source" --database postgres --client leptos --component identity
   fi
+done
+# Resolve only an explicitly separate owner review copy after additive installation.
+# Public new output itself must work unchanged with its committed lock.
+for database in sqlite postgres; do
+  source="$staging_parent/$database-source"
+  application_fingerprint "$source" >"$staging_parent/$database-public-before.sha256"
+  if [ "$mode" = identity-added ]; then
+    review="$staging_parent/$database-public-lock-review"
+    cp -R "$source" "$review"
+    # Installation is source-only. Seed the explicit owner review from the
+    # authenticated current Identity lock, retaining its exact real candidate
+    # source even before the v0.8.0 tag is published. Do not fabricate a tag or
+    # change any public dependency declaration or installed source.
+    cp "$canonical_lock" "$review/Cargo.lock"
+    (cd "$review"; cargo metadata --all-features --format-version 1 >/dev/null)
+    (cd "$review"; cargo metadata --locked --all-features --format-version 1 >/dev/null)
+    framework_sources() {
+      sed -n '/^source = "git+https:\/\/github.com\/furkancemalcaliskan\/hegira.git/p' "$1" | LC_ALL=C sort -u
+    }
+    framework_sources "$canonical_lock" >"$staging_parent/$database-reviewed-pins"
+    framework_sources "$review/Cargo.lock" >"$staging_parent/$database-resolved-pins"
+    cmp "$staging_parent/$database-reviewed-pins" "$staging_parent/$database-resolved-pins"
+    echo "Identity installation owner lock review passed with unchanged public Git pins ($database)"
+  else
+    (cd "$source"; cargo metadata --locked --all-features --format-version 1 >/dev/null)
+  fi
+  application_fingerprint "$source" >"$staging_parent/$database-public-after.sha256"
+  cmp "$staging_parent/$database-public-before.sha256" "$staging_parent/$database-public-after.sha256"
 done
 test -f "$staging_parent/sqlite-source/Cargo.lock"
 test -f "$staging_parent/postgres-source/Cargo.lock"
