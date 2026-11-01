@@ -128,8 +128,14 @@ not provide module management, arbitrary source merging, or unattended upgrades.
 Its stable process outcomes are success (`0`), internal error (`1`), usage
 error (`2`), validation error (`3`), and conflict (`4`). Human-readable help
 and version output use standard output; diagnostics use standard error except
-typed upgrade assessments and execution results, and JSON operation reports,
-which use standard output even when unsuccessful.
+typed upgrade assessments and execution results, and JSON operation/artifact
+reports, which use standard output even when unsuccessful.
+
+Choose the appropriate source, execution or maintenance command using the
+[application workflow table](docs/getting-started.md#choose-an-application-workflow).
+Application source changes, trusted process execution, database migration and
+deployment are separate decisions. Read the [tool and application trust boundary](SECURITY.md#local-tool-and-application-trust)
+before executing an application or sharing raw child output.
 
 `hegira doctor --operation check` diagnoses an operation's application files
 and declared prerequisites without running it. Narrow native tool-version
@@ -286,6 +292,12 @@ cargo run --locked --manifest-path /path/to/hegira/Cargo.toml \
 
 Use `--plural <NAME>` for an irregular plural. The command reports the manual
 migration and validation steps after publication; it does not execute them.
+
+New Leptos resource lists include 50-row pagination, navigation and refresh with
+record counts. Application services retain authorization before repository
+access; UI permission gates do not replace it. Existing customized pages are
+preserved. See [resource generation](docs/getting-started.md#generate-a-layered-resource)
+for supported fields, provider selection and pagination behavior.
 
 ## Documentation
 
