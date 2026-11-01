@@ -50,6 +50,9 @@ migration sources and obtaining separate explicit intent for database access.
 The CLI delegates to the application-owned entry point rather than invoking
 this framework API directly. The observed
 report is a point-in-time snapshot, not approval to migrate, repair, or deploy.
+See the [database profile matrix](configuration.md#database-operation-profiles)
+for the public CLI's provider requirements, including minimal's in-memory test
+default, which is unsuitable for file-backed database operations.
 
 ### Application-Owned Database Entry Point
 
@@ -134,6 +137,13 @@ interrupted migration may have changed the database. CLI result envelopes and
 exit codes are distinct from invoking `app_database` directly. See
 [application database commands](getting-started.md#operate-an-application-database)
 for reviewed invocation examples and report boundaries.
+
+For example, a history failure makes `app_database` return `4`. Through
+`hegira db`, that failed child is reported as `child-failed` with `exit_code=4`,
+while Hegira itself returns `1`. Hegira's `4` identifies a CLI state conflict,
+such as pending recovery or concurrent execution. A successful preview returns
+`0` without an execution result and does not certify runtime configuration or
+database history.
 
 ## Health And Readiness
 

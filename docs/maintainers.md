@@ -38,10 +38,11 @@ Ordinary issue pull request titles omit the issue number:
 
 Link the issue in the pull request body with `Closes #<issue>`. Ordinary issue
 pull requests target `develop` and use squash merge. Set the resulting squash
-commit title to the issue-prefixed commit format before merging. Dependabot
-pull requests are the standing exception to the issue and branch requirements;
-they keep their generated titles but still require review and all checks
-required by `develop`.
+commit title to the issue-prefixed commit format before merging. The exact
+Dependabot and narrowly scoped funding-metadata maintenance exceptions are
+defined in [Contributing](../CONTRIBUTING.md#authorized-changes). They retain
+their documented titles and branch rules and still require review and the
+target branch's checks; they grant no general exception to the issue contract.
 
 Promote a completed milestone from `develop` to `main` only after its required
 issues and validation gates pass. The promotion pull request uses a merge
@@ -92,6 +93,11 @@ bounded cache. GitHub reports its dependency as successful only after all
 five cells succeed. Generated-application database, release-build,
 production-container, and HTTP/security validation is therefore
 release-blocking without requiring another protected-branch context.
+The default cell runs fresh default and fresh minimal applications sequentially;
+the latter uses its own bounded cache. Together the five cells cover three fresh
+and three upgraded compositions, each with SQLite and PostgreSQL. This repository
+matrix is separate from generated application CI, which selects only the
+application's recorded provider and preserves owner-controlled automation.
 
 A plain push to an issue branch does not trigger the push-based validation
 workflows. Updating an open pull request triggers its `pull_request` checks.
@@ -1018,8 +1024,8 @@ The `release` workflow supports manual release-candidate validation from
   a disposable PostgreSQL database;
 - validate typed rendering tooling, the independent layered workspace,
   hydration, and release output;
-- validate fresh SQLite and PostgreSQL generated applications, supported
-  v0.2.0 upgrades, and the rendered production container and HTTP contract;
+- validate fresh default, minimal and Identity-added applications with SQLite
+  and PostgreSQL, supported v0.2.0 upgrades, and production container/HTTP contracts;
 - validate released v0.7.0-to-v0.8.0 application upgrades across all three
   compositions and both providers before publication.
 

@@ -51,7 +51,7 @@ are initialized. A bad capability selection therefore fails deterministically
 instead of appearing later as a connection or missing-provider error. Disabled
 optional providers do not require their Cargo features.
 
-## Compile-Time Features
+## Database Operation Profiles
 
 The separate application-owned `app_database` binary uses the same profile
 files, defaults, and `APP__` overrides, but deserializes only environment,
@@ -73,6 +73,24 @@ overrides remain the operator's responsibility. Production migration requires
 independent `--approve-production-migration` in addition to tool/application
 trust, but this flag does not certify the actual target. See
 [CLI database operations](getting-started.md#operate-an-application-database).
+
+The public CLI validates this baseline profile/provider contract before execution:
+
+| Profile | Default Identity application | Minimal application, including Identity added later |
+| --- | --- | --- |
+| `sqlite` | SQLite | SQLite |
+| `development` | PostgreSQL | PostgreSQL |
+| `test` | PostgreSQL | SQLite |
+| `production` | PostgreSQL | PostgreSQL |
+
+The `test` distinction comes from the application's original template, not just
+whether Identity is currently installed. Minimal's committed test profile uses
+an in-memory SQLite URL, which database operations reject: explicitly select an
+existing file-backed disposable target when testing those commands. Profile
+selection never certifies a database as disposable; review inherited URL
+overrides even when status is the requested operation.
+
+## Compile-Time Features
 
 Cargo features decide which providers enter the binary. Runtime settings only
 select among providers that were compiled. Startup validates this contract
@@ -123,7 +141,8 @@ Small local application:
 db-sqlite + runtime.role=all + database sessions + log mailer
 ```
 
-Minimal production application (the committed `production` profile):
+Default Identity application with optional providers disabled (the committed
+`production` profile):
 
 ```text
 db-postgres + runtime.role=web + database sessions + memory rate limiting
@@ -140,8 +159,10 @@ optional Meilisearch, S3, Prometheus, and OTLP
 SQLite is intended for local development, tests, and single-process small
 deployments. Do not run independently scaled SQLite web and worker replicas.
 
-The minimal profile is deliberately compatible with a binary compiled using
-only `ssr,db-postgres`. To select Redis, SMTP, S3, Meilisearch, Prometheus, or
+This production profile is deliberately compatible with a binary compiled using
+only `ssr,db-postgres`. It still includes Identity; the separate `minimal`
+composition has no authentication or authorization until Identity is installed.
+To select Redis, SMTP, S3, Meilisearch, Prometheus, or
 OTLP at runtime, first compile the corresponding Cargo feature and then
 override the provider configuration. Runtime configuration never adds a
 provider that was omitted from the binary.

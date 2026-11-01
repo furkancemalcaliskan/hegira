@@ -122,11 +122,12 @@ minimal application until Identity has been installed.
 Installation is additive only. Dry-run and apply consume the same typed,
 content-redacted plan; apply publishes manifest, dependency, configuration,
 migration-source, server, HTTP, OpenAPI, and Leptos contributions through the
-application mutation transaction. The CLI currently provides no removal,
-unattended upgrades, remote package source, or database migration execution or
-rollback. Explicit direct application upgrades are a separate command contract;
-publication rollback on recoverable source failures is not a public downgrade
-or database rollback command. The application owner must review configuration,
+application mutation transaction. Installation provides no removal, unattended
+upgrade, remote package source, or database execution. Separate `hegira db status`
+and `db migrate` commands delegate explicitly approved database operations to the
+application's entry point. Direct source upgrades use their own authenticated
+command contract. Publication rollback on recoverable source failures is not a
+public downgrade or database rollback command. The application owner must review configuration,
 regenerate `Cargo.lock`, apply the selected provider migrations, and validate
 the application after installation.
 
@@ -452,7 +453,7 @@ It delegates new-application component planning and atomic publication to
 to the public command. Help, version information, successful creation
 instructions, inspection results, and mutation plans are written to standard
 output; usage and failure diagnostics are written to standard error, except
-upgrade assessments and JSON check/test reports, whose typed unsuccessful
+upgrade assessments and JSON operation/artifact reports, whose typed unsuccessful
 outcomes also remain on stdout.
 
 The process outcomes are `0` for success, `1` for an internal error, `2` for
@@ -469,8 +470,8 @@ external commands.
 The CLI library provides common `--dry-run` and `--json` options for mutation
 commands. A command constructs and validates one typed `ChangePlan`, then hands
 that same value to the shared execution path for either preview or publication;
-dry-run does not open or write the application root. Human output lists every
-ordered relative path and operation. Machine output is deterministic,
+dry-run performs no publication and does not write the application root. Human
+output lists every ordered relative path and operation. Machine output is deterministic,
 explicitly versioned, and includes the content-redacted plan summary rather
 than file bodies, runtime configuration, credentials, environment values, or
 machine-local framework paths. Empty plans are successful no-ops, planning and
@@ -851,6 +852,20 @@ active or unowned data. It is not a live quota or hostile-code sandbox.
 `artifacts prune --execute` obtains execution coordination anew and refuses
 pending application recovery. Interrupted partial deletion fails subsequent
 ownership validation rather than repairing/adopting state automatically.
+
+Application storage has distinct ownership and budget boundaries:
+
+| Output | Budget and cleanup authority |
+| --- | --- |
+| Ordinary Cargo check/test and development/watch output | No overall Hegira budget; application owner maintains it |
+| `target/hegira/release-build` | Separately claimed ordinary release output; uncapped and excluded from validation pruning |
+| `target/hegira/validation/{check,test,build}` | Explicit CLI validation caches; 65536 MiB default pre/post budget and inactive owned-cache reclamation |
+| Framework repository `target/validation/` | Separate maintainer-script lifecycle; no ownership over a generated application's output |
+| Global Cargo/Rustup, npm and Docker storage | Excluded from the application validation-cache budget and pruner |
+
+Read-only artifact measurements and idle status grant no deletion authority.
+See [application cache maintenance](getting-started.md#bound-application-validation-caches)
+and the [repository cache policy](maintainers.md#validation-build-cache-lifecycle).
 
 ### Application creation and source publication
 

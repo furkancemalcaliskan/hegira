@@ -295,6 +295,20 @@ files fail closed; there is no automatic conflict merge or force-upgrade.
 - Do not run database operations, regenerate dependencies, start services, or
   deploy as an inferred consequence of a source-upgrade request.
 
+## Application Operation Review
+
+Use the [workflow boundaries](docs/getting-started.md#choose-an-application-workflow)
+when selecting commands. Source mutation apply syntax differs from operation
+execution; a preview or doctor result is not an execution token. For database
+commands, verify the [profile/provider contract](docs/configuration.md#database-operation-profiles)
+and the real entry point, including manual adoption after a source upgrade.
+Report child outcomes using the CLI contract rather than treating a child's
+exit code as Hegira's exit code. Human application-operation logs can contain
+unredacted output; database logs follow their separate bounded protocol.
+Keep ordinary developer output, claimed release output, explicit validation
+caches and repository validation storage distinct. An ownership or idle report
+grants neither a global disk budget nor cleanup of unclaimed data.
+
 ## Setup And Run
 
 Create the current canonical application with the source-runnable CLI, then

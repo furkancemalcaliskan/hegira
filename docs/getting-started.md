@@ -38,6 +38,34 @@ registry. Keep that tree available at its original location; copying the binary
 alone is not a standalone installation. Rebuild after relocating the source.
 Node, Docker, and `cargo-leptos` are not needed just to generate files.
 
+Examples using bare `hegira` below mean this source-built binary, invoked by
+its absolute path or from a directory you explicitly added to `PATH`. Keep the
+matching complete source tree available. A generated application has no
+`hegira_cli` workspace package; use the framework's `--manifest-path` when
+invoking it through Cargo from an application directory.
+
+## Choose An Application Workflow
+
+The command selects the kind of work; a successful preview or doctor report
+does not authorize a different operation or a later execution.
+
+| Task | Review | Explicit action and boundary |
+| --- | --- | --- |
+| Inspect composition or prerequisites | `inspect`, `doctor`, `doctor --operation check` | Read-only inspection; `--probe-tools` separately runs selected trusted native version/target probes |
+| Generate source or install Identity | `generate resource`, `generate migration` or `component add identity` with `--dry-run` | Apply without `--dry-run` publishes source; dependency resolution, migration execution and startup remain separate |
+| Upgrade released source | `upgrade status`, then `upgrade --dry-run` | `upgrade` publishes only the authenticated source plan; owner database integration remains manual |
+| Check or test | `check --dry-run`, `test --dry-run` | `--execute` plus application/tool trust runs trusted code, which may have side effects |
+| Develop or build | `dev --dry-run`, `build --release --dry-run` | Trusted execution needs explicit frontend tools; dev startup can migrate/seed, while build creates artifacts without deployment approval |
+| Inspect or migrate a database | `db status` or `db migrate` with `--profile <PROFILE> --dry-run` | Explicit trusted execution delegates to `app_database`; production migration needs independent approval |
+| Reclaim validation caches | `artifacts cache-status`, `artifacts prune --dry-run` | `artifacts prune --execute` revalidates inactive CLI-owned caches; it cannot adopt or delete developer output |
+
+Source mutation commands and operation commands have different apply syntax:
+`upgrade`, `generate`, and `component add` apply without `--dry-run`; operation
+execution and cache pruning require `--execute`. Neither syntax grants Git
+publication, database reset, or deployment authority. Review the
+[security boundary](../SECURITY.md#local-tool-and-application-trust) and each
+operation's profile, output and ownership contract below.
+
 ## Check And Test An Application
 
 From an existing application or one of its subdirectories, review the current
@@ -732,8 +760,10 @@ selected-provider startup, and Rust/frontend supply-chain policy. Its unconditio
 with read-only permissions and no secrets. The composite action, three CI scripts,
 Node contract fixtures, `deny.toml`, and `.cargo/audit.toml` accompany it. These eight
 files have generated-once ownership; existing applications adopt them manually.
-The CI CLI source is pinned to a reviewed compatible revision supporting bounded
-validation caches, independently of the application's pinned framework release.
+The generated CI CLI source selects the same immutable published release tag as
+the application catalog and verifies that local tag before bootstrap. This
+compatible CLI supports the selected bounded validation-cache workflow; an
+unpublished tag is not made available by rendering or a source-upgrade receipt.
 See the rendered development guide for the exact pins, cache limits, disposable
 database consent, and conditional dormant-RSA advisory exception. Generation
 does not install tools, run CI, access a database, or configure required checks.
@@ -747,9 +777,10 @@ package graph, and uses the shared `--dry-run` and `--json` mutation contract.
 An already installed component, an unknown component, or a component without a
 bundled additive contribution unit fails without changing the application. The
 command never downloads a package, executes component code, or interprets a
-remote coordinate. The CLI does not provide component removal, module
-management, migration execution or rollback, unreviewed upgrades, remote
-component installation, or additional client templates. Optional runtime
+remote coordinate. Database status and forward migration are separate explicit
+operations described above. The CLI does not provide component removal, module
+management, database reset/rollback/repair, arbitrary SQL, unreviewed upgrades,
+remote component installation, or additional client templates. Optional runtime
 providers are configured explicitly in the application; they are not extra
 `new` selections.
 
@@ -1406,6 +1437,9 @@ uses its local English labels. Empty and boundary pages disable unavailable
 navigation. Successful changes and refresh reload the selected page and move
 back to the last valid page if records were removed. Loading and failed list
 requests hide previous rows and counts; refresh retries a failed request.
+Pagination bounds provider offsets and ignores responses from an earlier request
+after navigation or refresh. Its state is presentation only; application service
+authorization still protects every list/count operation.
 Generation preserves existing customized resource pages rather than adding
 pagination to them automatically.
 
