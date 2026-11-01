@@ -288,8 +288,8 @@ path = "Cargo.lock"
 integration = "framework-lockfile"
 kind = "edit"
 source_sha256 = "sha256:e10876086dddb27e5c931ae5512c937ac226e954a845492d9dcac15debbb0e00"
-target_source_component = "layered-leptos-identity"
-target_sha256 = "sha256:74256f83ff872aeb2117a9fb23b403e64c841cd218cf6376646d1fcc9441d1b2"
+target_lockfile = "upgrades/locks/v0-8-0-identity-added.Cargo.lock"
+target_sha256 = "sha256:b5799855a081d6123db12568c40ca6891b91a8d5c6dd5cda0cdc74a5b89fd64f"
 
 [[compositions.managed_integrations]]
 component = "layered-leptos-minimal"
@@ -387,8 +387,8 @@ path = "Cargo.lock"
 integration = "framework-lockfile"
 kind = "edit"
 source_sha256 = "sha256:e10876086dddb27e5c931ae5512c937ac226e954a845492d9dcac15debbb0e00"
-target_source_component = "layered-leptos-identity"
-target_sha256 = "sha256:74256f83ff872aeb2117a9fb23b403e64c841cd218cf6376646d1fcc9441d1b2"
+target_lockfile = "upgrades/locks/v0-8-0-identity-added.Cargo.lock"
+target_sha256 = "sha256:b5799855a081d6123db12568c40ca6891b91a8d5c6dd5cda0cdc74a5b89fd64f"
 
 [[compositions.managed_integrations]]
 component = "layered-leptos-minimal"
@@ -487,7 +487,8 @@ path = "Cargo.lock"
 integration = "framework-lockfile"
 kind = "edit"
 source_sha256 = "sha256:b44f46d0ae38d38b1388d51d2130f3eeb2ee454dbf2e1890f3ad649211db5377"
-target_sha256 = "sha256:732e9c80b19c01a8b9f8775e8d7d8b96521f6a7eb228889e3855a841cfefd2d9"
+target_lockfile = "upgrades/locks/v0-8-0-minimal.Cargo.lock"
+target_sha256 = "sha256:3fe2e886c719ea2f7b23df9181524355726685643be25a8293fe1e263a1e9816"
 
 [[compositions.managed_integrations]]
 component = "layered-leptos-minimal"
@@ -586,7 +587,8 @@ path = "Cargo.lock"
 integration = "framework-lockfile"
 kind = "edit"
 source_sha256 = "sha256:b44f46d0ae38d38b1388d51d2130f3eeb2ee454dbf2e1890f3ad649211db5377"
-target_sha256 = "sha256:732e9c80b19c01a8b9f8775e8d7d8b96521f6a7eb228889e3855a841cfefd2d9"
+target_lockfile = "upgrades/locks/v0-8-0-minimal.Cargo.lock"
+target_sha256 = "sha256:3fe2e886c719ea2f7b23df9181524355726685643be25a8293fe1e263a1e9816"
 
 [[compositions.managed_integrations]]
 component = "layered-leptos-minimal"

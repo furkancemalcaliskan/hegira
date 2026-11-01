@@ -1031,12 +1031,16 @@ for your application's origin; Identity-added applications retain the minimal ho
    same profile builder and deserialization. The new operation module calls this
    loader to select and validate an explicit profile before database access.
 2. Register `pub mod database_operations;` in Infrastructure. Review the delivered
-   module against your configuration and provider migration composition.
+   module against your configuration and provider migration composition. Its async
+   tests require an Infrastructure `tokio` dev-dependency if absent.
 3. Create `apps/server/src/bin/app_database.rs` using the matching canonical
    adapter. Add its explicit `[[bin]]` registration and the `database-operations`
    feature in `apps/server/Cargo.toml`, preserving custom bins and features.
    The binary must require that feature and select the chosen `db-sqlite` or
-   `db-postgres` provider separately from HTTP startup.
+   `db-postgres` provider separately from HTTP startup. Add the optional
+   `serde_json` server dependency and its workspace declaration if absent, and
+   retain `bin-target = "app_server"` in Leptos metadata after adding a second
+   binary. Review the resulting owner lockfile change separately.
 4. Run formatting, selected-provider compilation/tests, and read-only operation
    previews. Runtime database access still requires explicit execution trust,
    a matching profile, and separate production-migration approval. Review URLs
@@ -1064,7 +1068,9 @@ these steps before starting or deploying the upgraded application:
    `crates/infrastructure/src/database_operations.rs` is added. Confirm the exact
    target, application identity, installed composition, and unchanged provider/client.
 2. Review the lockfile alongside the manifest. Upgrade publishes authenticated
-   lockfile bytes; it does not resolve registry or Git dependencies. Keep the
+   lockfile bytes matching the released composition; it does not resolve registry
+   or Git dependencies. Minimal and Identity-added upgrades use separate authenticated
+   locks because their preserved server manifests differ from fresh scaffolding. Keep the
    reviewed release-pinned lock and use locked builds. Do not blindly run
    `cargo update` or regenerate the lockfile to hide a conflict. If the
    application needs a different dependency graph, make that an explicit,

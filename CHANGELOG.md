@@ -6,6 +6,11 @@ All notable changes are documented here. Releases follow Semantic Versioning.
 
 ## [0.8.0] - 2026-10-31
 
+- Verify unchanged public upgrade locks for all six released states, preserve
+  composition-specific owner dependency graphs with authenticated upgrade locks,
+  and exercise explicit database operations and fresh minimal production coverage
+  within existing lifecycle CI contexts.
+
 Source preparation; publication still requires the governed release gates.
 
 ### Added

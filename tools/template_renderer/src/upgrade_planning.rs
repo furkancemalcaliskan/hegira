@@ -907,6 +907,7 @@ mod tests {
             kind,
             source_sha256: None,
             target_source_component: None,
+            target_lockfile: None,
             target_sha256: None,
         }
     }

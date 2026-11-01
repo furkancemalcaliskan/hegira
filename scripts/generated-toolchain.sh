@@ -64,6 +64,13 @@ verify_prerequisites() {
   fi
 }
 
+select_tool_directory() {
+  bindgen_version=$("$installer" version "$1")
+  printf '%s\n' "$bindgen_version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' ||
+    error "invalid locked wasm-bindgen version"
+  bin_dir="$repo_root/target/validation/tools/wasm-bindgen/$bindgen_version/bin"
+}
+
 prepare_application() {
   application_root="$1"
   require_container="$2"
@@ -75,6 +82,7 @@ prepare_application() {
   )
   lockfile="$application_root/Cargo.lock"
   verify_prerequisites "$lockfile" "$require_container"
+  select_tool_directory "$lockfile"
   "$installer" install "$lockfile" "$bin_dir"
 }
 
@@ -83,7 +91,6 @@ if [ "$#" -lt 2 ] || [ "$#" -gt 3 ]; then
 fi
 command_name="$1"
 lockfile="$2"
-bin_dir="$repo_root/target/validation/tools/wasm-bindgen/bin"
 if [ "$command_name" = application ]; then
   application_root="$lockfile"
   case "$application_root" in
@@ -112,6 +119,7 @@ case "$lockfile" in
 esac
 [ -f "$lockfile" ] || error "Cargo lockfile is missing: $lockfile"
 verify_prerequisites "$lockfile" "$require_container"
+select_tool_directory "$lockfile"
 
 case "$command_name" in
   prepare)

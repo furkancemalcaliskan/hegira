@@ -226,7 +226,7 @@ fn read_only(binary: &Path, root: &Path, arguments: &[&str], exit: i32) -> Value
     value
 }
 
-fn files(root: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
+pub(crate) fn files(root: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
     fn visit(root: &Path, directory: &Path, output: &mut BTreeMap<PathBuf, Vec<u8>>) {
         for entry in fs::read_dir(directory).unwrap() {
             let entry = entry.unwrap();

@@ -101,6 +101,9 @@ jobs:
           key: generated-\${{ matrix.lifecycle }}-targets-native-wasm32-profiles-dev-test-release-providers-sqlite-postgres-features-ssr-db-sqlite-db-postgres-hydrate-lock-\${{ hashFiles('Cargo.lock', 'templates/applications/layered/Cargo.lock') }}-source-\${{ steps.source-identity.outputs.tree }}
       - run: echo "\${{ steps.generated-cache.outputs.cache-hit }}"
       - run: sh scripts/generated-application-check.sh "\${{ matrix.lifecycle }}"
+      - name: Validate fresh minimal
+        if: matrix.lifecycle == 'default'
+        run: sh scripts/generated-application-check.sh minimal
   quality:
     if: always()
     needs:
@@ -129,7 +132,10 @@ jobs:
         with:
           command: check
           rust-version: "1.96.1"
-      - run: cargo audit --file Cargo.lock
+      - run: |
+          cargo audit --file Cargo.lock
+          cargo audit --file templates/upgrades/locks/v0-8-0-minimal.Cargo.lock
+          cargo audit --file templates/upgrades/locks/v0-8-0-identity-added.Cargo.lock
 `;
 
 const validGeneratedApplicationScript = `#!/usr/bin/env sh
@@ -277,7 +283,7 @@ test("requires upgrade source, dispatcher, and focused owner commands", t => {
     path.join(root, "test-fixtures/upgrade-lifecycle"), { recursive: true });
   assert.deepEqual(validateUpgradeScripts(root), []);
   for (const [file, contract] of [
-    ["scripts/generated-application-check.sh", 'exec sh "$repo_root/scripts/upgraded-application-check.sh"'],
+    ["scripts/generated-application-check.sh", 'exec sh "$repo_root/scripts/upgraded-application-check.sh" "${1#upgrade-}"'],
     ["scripts/framework-check.sh", "cargo test --locked -p application_manifest"],
     ["scripts/database-operation-check.sh", "for composition in default minimal identity-added; do"],
     ["scripts/database-operation-check.sh", 'providers="sqlite postgres"'],
@@ -576,4 +582,10 @@ test("rejects disabled concurrency cancellation", () => {
   assert.ok(
     errors.some((error) => error.includes("cancel superseded")),
   );
+});
+
+test("fresh minimal cannot disappear from the required default cell", () => {
+  const errors = validateRepositoryValidationWorkflow(validWorkflow.replace(
+    "        run: sh scripts/generated-application-check.sh minimal", "        run: true"));
+  assert.ok(errors.some(error => error.includes("fresh minimal lifecycle")));
 });

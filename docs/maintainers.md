@@ -697,6 +697,7 @@ Cargo defaults and remain outside this lifecycle.
 | `build/layered-template-check` | Canonical layered render; native and WASM dev/test/release profiles; PostgreSQL and all features; pinned application toolchain and generated lock | Stable LRU cache |
 | `build/generated-feature-check` | Canonical external-consumer render; native or WASM check profile; requested provider/capability set; generated lock | Stable LRU cache |
 | `build/generated-application-check` | Default public CLI output; native, WASM, test, and release profiles; SQLite and PostgreSQL lifecycle contracts; generated lock | Stable LRU cache |
+| `build/upgraded-application-fresh-minimal` | Fresh public minimal output; both providers, locked native/WASM/release builds and explicit database operations | Stable LRU cache |
 | `build/identity-added-application-check` | Minimal public CLI output plus Identity; native, WASM, test, and release profiles; SQLite and PostgreSQL lifecycle contracts; generated lock | Stable LRU cache |
 | `build/composition-matrix-check` | Minimal and Identity-added compositions; native and WASM check profiles; SQLite and PostgreSQL; generated lock | Stable LRU cache |
 | `build/upgraded-application-{all,default,minimal,identity-added}` | Authenticated released applications; native, WASM, test, and release profiles; selected compositions and both database providers; disposable owner-reviewed lock | Stable LRU cache |
@@ -807,6 +808,9 @@ sh scripts/upgraded-application-check.sh identity-added
 
 The same validator runs in PR, integration-push, and release lifecycle matrix
 cells through `sh scripts/generated-application-check.sh upgrade-<composition>`.
+The default cell additionally runs `sh scripts/generated-application-check.sh minimal`
+for fresh module-free SQLite and PostgreSQL applications. This keeps five stable
+job contexts while covering all three fresh and upgraded compositions.
 All five cells must succeed for `quality` or tag-triggered publication to succeed.
 There are no path filters, secret-bearing PR jobs, or optional upgrade cells.
 Focused manifest, renderer/package/planner, publisher/recovery, and CLI upgrade
@@ -815,7 +819,19 @@ complete test suites run without upgrade-only filters or duplicated status check
 Policy tests reject missing cells, wrong cache identities, skipped/tolerated
 failures, missing dispatch, and missing focused owner commands.
 
-This gate materializes all six authenticated v0.7.0 baselines,
+Before local-dependency staging, the gate exercises all six pristine released
+baselines through the public upgrade workflow and runs unchanged
+`cargo metadata --locked --all-features` against their real public Git pins.
+Minimal and Identity-added transitions use package-authenticated upgrade-only
+locks matching their preserved released owner manifests. Fresh output also
+receives a public-pin lock check. Identity installation deliberately does not
+resolve dependencies: its public-pin graph is resolved and checked in an explicit
+separate owner-review copy before local staging. That copy explicitly starts
+from the package-authenticated current Identity lock and proves the resulting
+framework Git source is unchanged, so unpublished-tag availability cannot cause
+an implicit pin rewrite. The source-only installation output remains untouched.
+
+This gate also materializes all six authenticated v0.7.0 baselines,
 customizes application-owned source, and uses public readiness, preview, apply,
 inspect, doctor, and repeat-upgrade checks. Verified public source is never patched
 for local compilation. Separate validation copies add a post-upgrade application
@@ -833,9 +849,21 @@ silently enter the released database fixture. Both fresh and upgrade databases m
 be empty and explicitly authorized; tests perform no database reset. The upgrade
 scenario records migration checksums, seeds product data before applying the current
 plan, verifies history/data preservation and the post-upgrade migration, and proves
-that repeating migrations is a no-op. PostgreSQL runs in an isolated Compose project;
+that repeating migrations is a no-op. The fixture explicitly adopts the documented
+owner database entry point only in its private validation copy. Current status
+and forward migration run through the public CLI with explicit trusted tool
+selections and provider-matching profiles (`sqlite` or PostgreSQL `production`);
+production migration without independent approval must fail without writes. The test harness is compiled to a validated artifact receipt and launched
+outside Cargo, so the CLI can acquire Cargo's cache lock. Only the old fixture
+setup applies historical SQL directly. PostgreSQL runs in an isolated Compose project;
 SQLite files live only in the bounded validation workspace.
 
+Each native check is repeated unchanged to measure warm-cache reuse; allocated
+cache bytes must not increase. Phase logs report both measurements and the final
+cache footprint, while existing pre/post LRU budget enforcement remains active.
+Repository wasm-bindgen tools use separate
+`target/validation/tools/wasm-bindgen/<locked-version>/bin` directories so concurrent
+fresh/released-lock and locally resolved checks cannot replace each other's CLI.
 Each selected profile receives native/hydration checks, existing application tests,
 locked release assets, and a production image compiled by the canonical Debian
 builder. Only the selected provider feature is changed in the disposable Dockerfile;

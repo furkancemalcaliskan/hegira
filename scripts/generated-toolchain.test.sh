@@ -83,4 +83,38 @@ grep -Fq "82d12bb940e2d4e72e0d5605387fc1b8ca179044e012b620f0ce4e7440e8320e" \
 grep -Fq "node-version-file: .node-version" "$repo_root/.github/workflows/backend.yml"
 grep -Fq "node-version-file: .node-version" "$repo_root/.github/workflows/release.yml"
 
+# Concurrent gates can require different locks: verifying one must not replace
+# the other's versioned executable or resolve through the previous global bin.
+tool_repository="$fixture/tool-repository"
+mkdir -p "$tool_repository/scripts" "$tool_repository/templates/applications/layered/scripts" "$fixture/tool-stubs"
+cp "$repo_root/scripts/generated-toolchain.sh" "$tool_repository/scripts/"
+cp "$installer" "$tool_repository/templates/applications/layered/scripts/"
+cp "$repo_root/rust-toolchain.toml" "$tool_repository/"
+for tool in rustc rustup cargo node npm; do
+  cat >"$fixture/tool-stubs/$tool" <<'EOF'
+#!/bin/sh
+case "${0##*/}" in
+  rustc) echo 'rustc 1.96.1' ;;
+  rustup) echo wasm32-unknown-unknown ;;
+  cargo) echo 'cargo-leptos 0.3.7' ;;
+  node) echo v22.0.0 ;;
+  npm) echo 10.0.0 ;;
+esac
+EOF
+  chmod +x "$fixture/tool-stubs/$tool"
+done
+for version in 0.2.128 0.2.130 0.2.128; do
+  lock_root="$fixture/lock-$version"
+  mkdir -p "$lock_root/apps/web/src"
+  printf '[[package]]\nname = "wasm-bindgen"\nversion = "%s"\n' "$version" >"$lock_root/Cargo.lock"
+  # Match the production lockfileVersion reader's line-oriented JSON format.
+  printf '{\n  "lockfileVersion": 3,\n  "packages": {}\n}\n' >"$lock_root/apps/web/src/package-lock.json"
+  selected="$tool_repository/target/validation/tools/wasm-bindgen/$version/bin"
+  mkdir -p "$selected"
+  printf '#!/bin/sh\necho "wasm-bindgen %s"\n' "$version" >"$selected/wasm-bindgen"
+  chmod +x "$selected/wasm-bindgen"
+  actual=$(PATH="$fixture/tool-stubs:$PATH" sh "$tool_repository/scripts/generated-toolchain.sh" verify "$lock_root/Cargo.lock")
+  test "$actual" = "$selected"
+done
+
 echo "generated tooling contract: ok"

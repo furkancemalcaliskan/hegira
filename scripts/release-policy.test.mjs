@@ -69,6 +69,9 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version-file: .node-version
+      - run: |
+          cargo audit --file templates/upgrades/locks/v0-8-0-minimal.Cargo.lock
+          cargo audit --file templates/upgrades/locks/v0-8-0-identity-added.Cargo.lock
       - run: sh scripts/frontend-check.sh
       - run: sh scripts/release-policy.sh
       - uses: anchore/sbom-action@v0
@@ -120,6 +123,9 @@ jobs:
           key: generated-\${{ matrix.lifecycle }}-targets-native-wasm32-profiles-dev-test-release-providers-sqlite-postgres-features-ssr-db-sqlite-db-postgres-hydrate-lock-\${{ hashFiles('Cargo.lock', 'templates/applications/layered/Cargo.lock') }}-source-\${{ steps.source-identity.outputs.tree }}
       - run: echo "\${{ steps.generated-cache.outputs.cache-hit }}"
       - run: sh scripts/generated-application-check.sh "\${{ matrix.lifecycle }}"
+      - name: Validate fresh minimal
+        if: matrix.lifecycle == 'default'
+        run: sh scripts/generated-application-check.sh minimal
   publish:
     if: github.event_name == 'push'
     needs:
@@ -573,3 +579,21 @@ test("rejects publication outside tag push events", () => {
     errors.some((error) => error.includes("restricted to tag push events")),
   );
 });
+
+for (const change of ["revision", "tag", "missing", "symlink", "traversal"]) {
+  test(`upgrade lock assets cannot bypass the release source: ${change}`, t => {
+    const root = releaseFixture();
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const asset = "upgrades/locks/v0-2-0-minimal.Cargo.lock";
+    const manifest = path.join(root, "templates/package.toml");
+    fs.appendFileSync(manifest, `upgrade_lockfiles = ["${change === "traversal" ? "../private.lock" : asset}"]\n`);
+    const target = path.join(root, "templates", asset);
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    let source = fs.readFileSync(path.join(root, "templates/applications/layered/Cargo.lock"), "utf8");
+    if (change === "revision") source = source.replace("0123456789abcdef0123456789abcdef01234567", "a".repeat(40));
+    if (change === "tag") source = source.replace("tag=v0.2.0", "tag=v0.1.0");
+    if (change === "symlink") fs.symlinkSync(path.join(root, "templates/applications/layered/Cargo.lock"), target);
+    else if (change !== "missing") fs.writeFileSync(target, source);
+    assert.ok(validateCanonicalApplicationLock(root, "v0.2.0").some(error => error.includes("upgrade lockfile")));
+  });
+}

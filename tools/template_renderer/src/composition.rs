@@ -661,6 +661,7 @@ mod tests {
             components: vec!["base".to_owned(), "identity".to_owned()],
             modules: vec!["identity".to_owned()],
             upgrade_edges: Vec::new(),
+            upgrade_lockfiles: Vec::new(),
             content_digest: format!("sha256:{}", "0".repeat(64)),
         }
     }

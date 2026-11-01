@@ -95,6 +95,9 @@ commands change. Never describe planned work as implemented.
   Schema-3 package manifests may additionally declare digest-authenticated,
   data-only direct upgrade edges with exact release and composition states;
   resolving an edge performs no source mutation or external operation.
+  Declared upgrade-only lock assets are authenticated by the same package snapshot
+  and digest. Only exact managed Cargo.lock edits may select them; ordinary
+  rendering never emits these assets.
   Package-controlled
   framework source variables cannot be overridden by a normal render.
 - `tools/template_renderer/` contains the reusable deterministic and atomic

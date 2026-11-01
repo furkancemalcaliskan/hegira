@@ -349,6 +349,7 @@ fn synthetic_edge_cannot_adopt_an_unclaimed_existing_application_manifest() {
                 kind: ManagedIntegrationTransitionKind::Edit,
                 source_sha256: Some(digest(source)),
                 target_source_component: None,
+                target_lockfile: None,
                 target_sha256: Some(digest(&target)),
             });
     }
@@ -396,6 +397,7 @@ fn target_claims_cannot_adopt_occupied_agent_or_workflow_files() {
                     kind: ManagedIntegrationTransitionKind::Create,
                     source_sha256: None,
                     target_source_component: None,
+                    target_lockfile: None,
                     target_sha256: Some(digest(&target)),
                 });
         }

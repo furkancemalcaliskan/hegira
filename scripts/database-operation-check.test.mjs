@@ -42,4 +42,10 @@ test("Cargo artifact selection is closed, streaming, and cannot publish a failed
     assert.notEqual(run(messages).status, 0);
     assert.equal(fs.readFileSync(receipt, "utf8"), before);
   }
+  const upgrade = { ...artifact, target: { name: "upgrade_lifecycle" } };
+  const named = (target, messages) => spawnSync(process.execPath, [program, root, target], { input: input(messages), encoding: "utf8" });
+  assert.equal(named("upgrade_lifecycle", [upgrade, finish]).status, 0);
+  assert.equal(fs.readFileSync(receipt, "utf8"), before, "upgrade receipt cannot replace the database contract receipt");
+  for (const target of ["../outside", "app_server", "__proto__"]) assert.notEqual(named(target, [upgrade, finish]).status, 0);
+  assert.notEqual(named("upgrade_lifecycle", [artifact, finish]).status, 0, "wrong named artifact cannot publish a receipt");
 });

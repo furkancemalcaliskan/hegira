@@ -194,6 +194,9 @@ jobs:
           } >>"$GITHUB_STEP_SUMMARY"
       - name: Validate ${{ matrix.lifecycle }} lifecycle across development and production
         run: sh scripts/generated-application-check.sh "${{ matrix.lifecycle }}"
+      - name: Validate fresh minimal lifecycle for both providers
+        if: matrix.lifecycle == 'default'
+        run: sh scripts/generated-application-check.sh minimal
 
   quality:
     name: quality
@@ -237,4 +240,7 @@ jobs:
         with:
           tool: cargo-audit@0.22.2
       - name: Audit Rust dependencies
-        run: cargo audit --file Cargo.lock
+        run: |
+          cargo audit --file Cargo.lock
+          cargo audit --file templates/upgrades/locks/v0-8-0-minimal.Cargo.lock
+          cargo audit --file templates/upgrades/locks/v0-8-0-identity-added.Cargo.lock

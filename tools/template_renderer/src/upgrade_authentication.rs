@@ -221,13 +221,17 @@ impl ManifestCatalog {
             let target = match transition.kind {
                 ManagedIntegrationTransitionKind::Create
                 | ManagedIntegrationTransitionKind::Edit => Some(
-                    self.component_file(
-                        transition
-                            .target_source_component
-                            .as_deref()
-                            .unwrap_or(&transition.component),
-                        path,
-                    )
+                    (if let Some(lockfile) = &transition.target_lockfile {
+                        self.upgrade_lockfile(lockfile)
+                    } else {
+                        self.component_file(
+                            transition
+                                .target_source_component
+                                .as_deref()
+                                .unwrap_or(&transition.component),
+                            path,
+                        )
+                    })
                     .map_err(|_| {
                         error(
                             UpgradeAuthenticationDiagnosticKind::PackageContract,
