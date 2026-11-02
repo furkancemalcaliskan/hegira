@@ -1010,6 +1010,18 @@ or pinned commit is publicly available. Verify canonical release-source and
 upgrade identities before publication; do not substitute local dependency paths
 or publish a tag while release-candidate metadata remains active.
 
+Before promotion, use the existing manual `repository-validation` workflow to
+verify the reviewed develop candidate. Record the intended full commit and tree,
+dispatch `gh workflow run backend.yml --ref develop`, then verify the returned
+run's `head_sha` matches that commit. A mutable branch name alone is not evidence
+of the source that ran. Record completed checks, source/lock/baseline identities,
+storage measurements and informational warnings in the versioned release notes.
+A local source SBOM must come from the same clean tracked tree, with tool version
+and digest recorded; it is not a published release asset or release attestation.
+Retain reviewed candidate evidence outside disposable validation caches as
+owner-controlled output; that location has no implied Cargo-cache budget.
+
+This pre-promotion validation does not replace the exact promoted-main gate.
 The `release` workflow supports manual release-candidate validation from
 `main` and publication from a pushed `vMAJOR.MINOR.PATCH` tag. Both paths:
 
