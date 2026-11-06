@@ -48,6 +48,13 @@ jobs:
           node-version-file: .node-version
       - name: Audit canonical frontend dependencies
         run: sh scripts/frontend-check.sh
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit@0.22.2
+      - name: Audit authenticated upgrade lockfiles
+        run: |
+          cargo audit --file templates/upgrades/locks/v0-8-0-minimal.Cargo.lock
+          cargo audit --file templates/upgrades/locks/v0-8-0-identity-added.Cargo.lock
       - name: Generate source SBOM from the clean checkout
         uses: anchore/sbom-action@v0
         with:
@@ -83,6 +90,22 @@ jobs:
     needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_DB: hegira_test
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d hegira_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres@localhost:5432/hegira_test
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.96.1
@@ -90,7 +113,12 @@ jobs:
           components: clippy
       - uses: Swatinem/rust-cache@v2
       - name: Validate application-independent framework packages
-        run: sh scripts/framework-check.sh
+        run: WITH_IGNORED_DB_TESTS=true sh scripts/framework-check.sh
+      - name: Verify public database operation authorization and history
+        env:
+          ALLOW_DATABASE_OPERATION_DISPOSABLE_TARGETS: "true"
+          DATABASE_OPERATION_POSTGRES_URL: postgres://postgres@localhost:5432/hegira_test
+        run: sh scripts/database-operation-check.sh
 
   official-modules:
     needs: validate
@@ -200,6 +228,9 @@ jobs:
           } >>"$GITHUB_STEP_SUMMARY"
       - name: Validate ${{ matrix.lifecycle }} lifecycle across development and production
         run: sh scripts/generated-application-check.sh "${{ matrix.lifecycle }}"
+      - name: Validate fresh minimal lifecycle for both providers
+        if: matrix.lifecycle == 'default'
+        run: sh scripts/generated-application-check.sh minimal
 
   publish:
     if: github.event_name == 'push'

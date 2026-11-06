@@ -68,8 +68,62 @@ fi
     --bin-cargo-args=--locked --lib-cargo-args=--locked
 )
 
-echo "==> Public CLI released-application upgrade matrix and preservation"
 cargo build --locked -p hegira_cli --bin hegira
+
+echo "==> Isolated application database entry-point matrix"
+for composition in default minimal identity-added; do
+  for database in sqlite postgres; do
+    echo "==> Database entry point: $composition/$database"
+    source_parent="$staging_parent/database-operation-sources"
+    mkdir -p "$source_parent"
+    source="$source_parent/$composition-$database"
+    if [ "$composition" = default ]; then
+      cargo run --locked --quiet -p hegira_cli -- new database-application \
+        --destination "$source" --database "$database"
+    else
+      cargo run --locked --quiet -p hegira_cli -- new database-application \
+        --destination "$source" --database "$database" --composition minimal
+    fi
+    source_flag=--generated-source
+    if [ "$composition" = default ]; then
+      set --
+    else
+      set -- --component layered-base --component layered-leptos-minimal
+    fi
+    if [ "$composition" = identity-added ]; then
+      cargo run --locked --quiet -p hegira_cli -- component add identity \
+        --application-root "$source"
+      source_flag=--identity-added-source
+    fi
+    # Only this freshly generated, repository-owned disposable staging root.
+    operation_root="$staging_parent/database-operation-application"
+    rm -rf "$operation_root"
+    cargo run --locked --quiet -p template_renderer \
+      --example repository_validation_renderer -- render \
+      --repository-root "$repo_root" --template layered \
+      --output "$operation_root" --framework-root "$repo_root" \
+      "$source_flag" "$source" "$@" --set application_name=database-application \
+      --set database_adapter="$database" --set database_feature="db-$database"
+    (
+      cd "$operation_root"
+      cargo generate-lockfile
+      rustfmt --edition 2024 --check apps/server/src/bin/app_database.rs \
+        apps/server/tests/database_operations.rs \
+        crates/infrastructure/src/database_operations.rs
+      cargo test --locked -p app_server --no-default-features \
+        --features "database-operations,db-$database" \
+        --bin app_database --test database_operations
+      cargo test --locked -p app_infrastructure --no-default-features \
+        --features "db-$database" --lib database_operations::
+      cargo clippy --locked -p app_server --all-targets --no-default-features \
+        --features "database-operations,db-$database" -- -D warnings
+      node "$repo_root/scripts/architecture-boundaries.mjs" \
+        check-generated --root "$operation_root"
+    )
+  done
+done
+
+echo "==> Public CLI released-application upgrade matrix and preservation"
 cargo run --locked --quiet -p template_renderer --example upgrade_preservation -- \
   "$repo_root" "$staging_parent/upgrade-preservation" "$CARGO_TARGET_DIR/debug/hegira"
 for composition in default minimal identity-added; do

@@ -1,0 +1,6 @@
+{
+  "schema": 1,
+  "application": "{{application_name}}",
+  "dependabot": false,
+  "maintenance": []
+}

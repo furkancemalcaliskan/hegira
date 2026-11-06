@@ -38,10 +38,11 @@ Ordinary issue pull request titles omit the issue number:
 
 Link the issue in the pull request body with `Closes #<issue>`. Ordinary issue
 pull requests target `develop` and use squash merge. Set the resulting squash
-commit title to the issue-prefixed commit format before merging. Dependabot
-pull requests are the standing exception to the issue and branch requirements;
-they keep their generated titles but still require review and all checks
-required by `develop`.
+commit title to the issue-prefixed commit format before merging. The exact
+Dependabot and narrowly scoped funding-metadata maintenance exceptions are
+defined in [Contributing](../CONTRIBUTING.md#authorized-changes). They retain
+their documented titles and branch rules and still require review and the
+target branch's checks; they grant no general exception to the issue contract.
 
 Promote a completed milestone from `develop` to `main` only after its required
 issues and validation gates pass. The promotion pull request uses a merge
@@ -92,6 +93,11 @@ bounded cache. GitHub reports its dependency as successful only after all
 five cells succeed. Generated-application database, release-build,
 production-container, and HTTP/security validation is therefore
 release-blocking without requiring another protected-branch context.
+The default cell runs fresh default and fresh minimal applications sequentially;
+the latter uses its own bounded cache. Together the five cells cover three fresh
+and three upgraded compositions, each with SQLite and PostgreSQL. This repository
+matrix is separate from generated application CI, which selects only the
+application's recorded provider and preserves owner-controlled automation.
 
 A plain push to an issue branch does not trigger the push-based validation
 workflows. Updating an open pull request triggers its `pull_request` checks.
@@ -120,7 +126,7 @@ The repository validation workflow separates these responsibilities:
   Identity through public dry-run and apply, and repeats provider, hydration,
   production-container, and authenticated CRUD coverage;
 - `generated-application (upgrade-default|upgrade-minimal|upgrade-identity-added)`
-  runs authenticated v0.6.0-to-v0.7.0 public upgrades and validates both providers
+  runs authenticated v0.7.0-to-v0.8.0 public upgrades and validates both providers
   through migration history/data preservation, native/hydration and release
   builds, production images, and HTTP/security contracts;
 - `quality` aggregates the four repository ownership gates under the existing
@@ -142,8 +148,27 @@ Generated workspaces resolve their own dependency graphs rather than inheriting
 the framework lockfile. When reviewing dependency fixes, check both generated
 database profiles with all features, including optional S3, against the same
 policy using `cargo deny --manifest-path <application>/Cargo.toml --all-features
-check --config <framework>/deny.toml bans advisories` and audit their lockfiles.
+--config <framework>/deny.toml check bans advisories` and audit their lockfiles.
 Use disposable repository-validation copies for unreleased framework source.
+
+The root dependency lock and deny policy require Rustls 0.23.46 or newer for
+RUSTSEC-2026-0346 through RUSTSEC-2026-0349 and quinn-proto 0.11.18 or newer for
+RUSTSEC-2026-0338 through RUSTSEC-2026-0342. The root lock additionally selects
+rustls-webpki 0.103.16 and webpki-roots 1.0.10 for the certificate-trust
+vulnerabilities RUSTSEC-2026-0382 and RUSTSEC-2026-0381 respectively.
+The root lock also selects ctutils 0.4.4 for RUSTSEC-2026-0385 in the optional
+AWS storage dependency graph and Tokio 1.53.3 for RUSTSEC-2026-0386. The root
+deny policy rejects ctutils versions below 0.4.4 and Tokio's affected ranges
+(`>=0.3.2, <1.51.6` and `>=1.52.0, <1.53.3`), preserving the patched Tokio
+1.51 maintenance line. Historical application baselines and authenticated
+template/upgrade lockfiles retain their reviewed identities; a root dependency
+update does not rewrite those artifacts.
+The container-based Cargo deny action explicitly selects Rust 1.96.1 inside its
+own container; the host runner's Rust installation does not supply that
+container toolchain. Identity's optional
+Swagger UI uses a locked official data package and supported ZIP extraction,
+avoiding the retired ZIP requirements of the former UI adapter. Its document
+schema and application contribution contract remain unchanged.
 
 ## Local Validation
 
@@ -173,6 +198,119 @@ contracts together with deterministic existing-application change planning:
 ```sh
 sh scripts/cli-check.sh
 ```
+
+Node.js 22+ and Git must be on PATH for the CLI's generated application-policy
+matrix. It executes the generated dependency-free fixtures in all six
+compositions, checks exact generated-once ownership and owner-edit preservation,
+and creates only temporary local Git repositories; it needs no remote or secrets.
+
+The same CLI gate renders all six compositions for the generated application
+quality contract. Node fixtures execute the aggregate shell against failed,
+cancelled, skipped, and missing results, exercise operation/audit failure
+propagation and lock preservation with controlled tools, and verify disposable
+database selection, credentials, and cleanup with an HTTP fixture and Docker stub.
+These fixtures require local loopback sockets, not a real database or Docker daemon.
+They also verify exact generated-once CI ownership and preservation after Identity
+installation. Real application/runtime coverage remains in the generated-application
+gate below; workflow YAML can additionally be checked with `actionlint` against a
+fresh rendered application's `.github/workflows/quality.yml`.
+
+The composed governance contract additionally runs the delivered policy shell and
+CI fixtures together in each of the six applications with a cleared environment
+and temporary home. It checks actual documented issue/release examples against
+the delivered policy, resolves documentation and adapter links, and compares
+provider/features across source manifests, public CLI previews, development
+instructions, and CI integration selections. Cross-file drift fixtures reject
+wrong application/release identities, provider substitutions, broken links,
+adapter delegation, hosting check names, and hidden aggregate failures. Source
+trees and pre-existing parent Git metadata remain unchanged. Public historical
+upgrades preserve real, manually adopted and owner-customized governance files
+without claiming them; immutable baseline source remains untouched. These checks
+exercise plans and controlled CI children, not real public-CLI release execution.
+Cleared child environments retain the selected tool PATH; a regression fixture
+requires policy validation to use a Node launcher outside system tool directories.
+
+The Linux `artifact_usage` CLI suite verifies read-only ownership/usage reports
+across all six compositions, mixed developer/release output, sparse large files,
+hard-link deduplication and external-link rejection, active operation locks,
+unsafe claims, symlinks, special files, bounded traversal, redaction, and stable
+process outcomes. Tree metadata snapshots prove that source and output are
+unchanged. Temporary Unix socket fixtures require local socket creation; no
+network listener, build, database, Docker state, or cleanup command is invoked
+by artifact inspection. See [Application artifact usage](getting-started.md#inspect-application-artifact-usage)
+for measurement limits and the separation of uncapped developer output from
+explicitly bounded validation caches.
+
+The `operation_execution` validation-cache cases exercise typed read-only
+previews, stable check/test/build reuse, allocated-byte budgets before and after
+execution (including failed children), deterministic LRU previews/publication,
+developer/lock preservation, active-operation conflicts, and inherited directory
+leases after CLI SIGKILL. Unsafe/foreign claims, symlinks, external hard links,
+unknown entries and malformed access state block reclamation. These controlled
+native builder tests do not run the generated application's runtime or database.
+See [Application validation caches](getting-started.md#bound-application-validation-caches)
+for explicit application CI selection; the repository's own caches below
+`target/validation` retain the separate lifecycle documented below.
+
+The CLI suite also tests the `operations` planning library against all six
+default, minimal, and Identity-added SQLite/PostgreSQL states. It verifies
+ordered locked arguments, provider/profile selection, explicit production
+migration approval requirements, deterministic redacted summaries, invalid
+composition and path rejection, and unchanged application trees after planning.
+These planning tests spawn no operation process, probe no tool, and connect to
+no service. A separate Linux execution suite builds a small native controlled
+Cargo substitute and tests the explicit-consent library without compiling or
+running a generated application. It covers exact argument arrays and anchored
+working directories, explicit tool selection and substitution rejection,
+missing/unsafe prerequisite paths, recovery blocking, concurrent execution,
+spawn failure, nonzero exit, external signals, cancellation/termination,
+SIGKILL escalation for a stopped child, descendant cleanup, and direct-child
+reaping. The same controlled fixture also invokes public `dev`/`check`/`test`/`build`
+commands: all six compositions preserve the preview's plan during explicit
+execution; parsing, help, JSON output, child-output suppression, prerequisite
+failures, exact completed-step counts, and actual SIGINT/SIGTERM delivery are
+tested. No generated application is compiled and no database, provider, or
+Docker service is used. Development tests additionally cover pinned tool
+versions, installed npm receipts, missing WASM/frontend prerequisites,
+metadata rejection, bounded probe output, cancellation during preflight,
+loopback/profile selection, locked nested Cargo metadata/build invocations,
+exclusion of general npm tool directories, foreground signals/failure, and
+private tool-directory cleanup. Leptos plans remain non-executable without
+an explicit frontend/toolchain preflight, even when a dependency directory
+exists. Release tests add explicit optimizer selection/version checks, safe
+owned-root creation/reuse, unclaimed-output rejection, symlink and external
+hard-link rejection, normal developer-cache preservation, incomplete-artifact
+and lock-change rejection, terminated builds, and expectation-versus-verified
+artifact reports. These are controlled builder tests, not real production
+application compilation or deployment. The generated-application release and
+container gates remain separate. Operation-doctor tests cover every intent in
+all six compositions, deterministic human/JSON diagnostics, process-free
+inspection, isolated native version/target probes, sanitized probe environment,
+missing/mismatched tools, unsafe selections, frontend receipts/assets, invalid
+manifest/provider/client/profile state, recovery and concurrent-operation
+blocking, existing-output ownership, and bounded/cancelled probe cleanup.
+They verify that application source and output claims remain unchanged and
+that no application hook, build, frontend script, or database is invoked.
+Reviewed operation snapshots live in
+`tools/hegira_cli/tests/snapshots/operations/`. The public six-composition matrix
+compares complete JSON plans, successful execution envelopes, and human previews
+against independently specified data. Only explicit fixture application and
+provider/profile placeholders are substituted; observed output is never
+normalized or reduced to a hash. The public process matrix also fixes full
+JSON/human success, child failure, child signal, SIGINT cancellation, SIGTERM
+termination, native Cargo spawn failure, and prerequisite/recovery diagnostics,
+including exit codes, output channels, and artifact-receipt absence on failure.
+Native preview traps detect accidental tool invocation even outside the
+application directory. Signal tests use bounded waits and cleanup guards,
+verify stopped children and private-tool cleanup, preserve source and recovery
+state, and verify that another operation can run after interruption. These tests
+run in the existing tooling gate and therefore the required quality aggregate;
+they do not add a CI path filter or replace generated-application validation.
+Review semantic differences against actual CLI output before editing a snapshot;
+there is no automatic acceptance/update command.
+See the
+[execution boundary](architecture.md#trusted-application-process-execution-library)
+for inherited environment/output limits and Linux support.
 
 The complementary composition matrix can be run with
 `sh scripts/composition-matrix-check.sh`. It exercises the explicit minimal
@@ -239,14 +377,52 @@ is tested through the CLI dispatcher with a disposable missing source. These
 tests neither build generated applications nor require network access.
 
 Before the mutation and CLI suites, the same tooling gate authenticates the
-closed v0.6.0 released-application baseline matrix through
+closed v0.6.0 and v0.7.0 released-application baseline matrices through
 `upgrade_test_support`. It verifies the pinned tag object, commit, source tree,
 package digest, generated lock revision, every sorted tree manifest, and every
-referenced content object. Default, minimal, and Identity-added applications
-are covered for SQLite and PostgreSQL. Normal validation reads only committed
+referenced content object. The inventory itself is pinned so coordinated object,
+tree and inventory rehashing cannot replace reviewed history. Default, minimal,
+and Identity-added applications are covered for SQLite and PostgreSQL. Normal validation reads only committed
 data, executes no fixture content, and performs no Git or network operation.
 The maintainer-only importer writes an absent destination so a regenerated
 fixture can be recursively compared before an intentional baseline update.
+`sh scripts/import-v0.7.0-application-baselines.sh . /tmp/v0.7.0-baselines`
+verifies the pinned published tag's SSH signature, commit, source tree and package
+identity, builds the CLI from that archived release source, and renders all six
+states within a bounded repository-owned cache. The destination must be absent
+and outside the repository. Provenance records the reviewed release signing key,
+publication identity and matching released-default lock selection for Identity
+addition. Import replay tests pack the frozen data without executing it. Normal
+tests never run the maintainer importer or consult Git/network/current templates.
+See [baseline provenance and import](../test-fixtures/application-baselines/README.md).
+
+Renderer unit tests in
+`tools/template_renderer/src/manifest_additive_tests.rs` use all six immutable
+v0.7.0 inputs with explicit synthetic additive edges. They first authenticate
+the current package, then assemble a hypothetical target only inside the private
+test module and run the normal graph, ownership, source-authentication and
+planning checks. The production loader's compiled-release guard is unchanged;
+these synthetic fixtures complement the real bundled v0.7.0-to-v0.8.0 edge and
+its reviewed executable target locks; they cannot substitute for its lifecycle gates.
+The matrix verifies absent creates, digest edits, occupied files (including
+identical target bytes), directories, symlinks, replaced parents, local ownership
+disagreement, and attempts to adopt the unclaimed server Cargo manifest.
+Product source, migration history and customized documentation, agents and
+workflows remain unchanged. File publication requires existing real parent
+directories; success fixtures explicitly prepare an empty `apps/server/src/bin`,
+while missing-parent cases fail without creating it.
+
+Publisher unit tests independently materialize the same six v0.7.0 baselines
+through the test-only `upgrade_test_support` dependency. Explicit synthetic
+five-file plans exercise failure before and after every publication boundary,
+complete rollback and retry, uncertain rollback retaining private staged files,
+and actual child-process interruption before manifest publication. Recovery
+markers and retained files survive failed retries; summaries, diagnostics and
+markers exclude product content. The guarded ignored interruption helper runs
+only as a child of the ordinary matrix test. Neither suite executes generated
+application code or database operations. Both remain in the existing unfiltered
+renderer and mutation gates, with policy tests rejecting filters that skip these
+contracts during subsequent release-edge alignment.
 
 The same gate validates `application_mutator` plan ordering, explicit absent and
 content-digest preconditions, duplicate and conflicting path diagnostics,
@@ -299,6 +475,21 @@ composition, controlled Infrastructure registration, and append-only migration
 history. Generated Rust is parsed before publication, and an existing module
 registration fails before migration planning. HTTP and UI source remains
 outside this persistence plan.
+
+The generated-application lifecycle gate adds repository-only pagination
+fixtures to its disposable default and Identity-added applications. The actual
+generated services and selected SQLx repositories run against in-memory SQLite
+and an explicitly authorized, isolated PostgreSQL schema. Assertions cover
+empty, first, last and out-of-range pages, signed offset limits, bound values,
+deterministic UUID ordering, unpaged totals, deletion, failure and retry.
+Authorization probes require every list request to authorize before the
+repository port can read either rows or totals, including permission revocation
+between pages. PostgreSQL execution remains ignored without the lifecycle
+gate's disposable-target opt-in. Presentation-state assertions also run in
+the CLI gate and in each generated page, including repeated corrective reloads,
+failed corrections and stale responses. Native tests and hydration builds use
+the same generated fixtures; no test fixture enters canonical application source
+or immutable upgrade baselines.
 
 Migration-generator fixtures cover manifest-selected SQLite and PostgreSQL
 paths, append-only numeric identities, deterministic scaffolds and plans,
@@ -512,6 +703,7 @@ Cargo defaults and remain outside this lifecycle.
 | `build/layered-template-check` | Canonical layered render; native and WASM dev/test/release profiles; PostgreSQL and all features; pinned application toolchain and generated lock | Stable LRU cache |
 | `build/generated-feature-check` | Canonical external-consumer render; native or WASM check profile; requested provider/capability set; generated lock | Stable LRU cache |
 | `build/generated-application-check` | Default public CLI output; native, WASM, test, and release profiles; SQLite and PostgreSQL lifecycle contracts; generated lock | Stable LRU cache |
+| `build/upgraded-application-fresh-minimal` | Fresh public minimal output; both providers, locked native/WASM/release builds and explicit database operations | Stable LRU cache |
 | `build/identity-added-application-check` | Minimal public CLI output plus Identity; native, WASM, test, and release profiles; SQLite and PostgreSQL lifecycle contracts; generated lock | Stable LRU cache |
 | `build/composition-matrix-check` | Minimal and Identity-added compositions; native and WASM check profiles; SQLite and PostgreSQL; generated lock | Stable LRU cache |
 | `build/upgraded-application-{all,default,minimal,identity-added}` | Authenticated released applications; native, WASM, test, and release profiles; selected compositions and both database providers; disposable owner-reviewed lock | Stable LRU cache |
@@ -591,7 +783,7 @@ sh scripts/cli-check.sh
 ```
 
 The layered-template gate also verifies source preservation and native/hydration
-compilation for customized v0.6.0-to-v0.7.0 default, minimal, and Identity-added
+compilation for customized v0.7.0-to-v0.8.0 default, minimal, and Identity-added
 applications with both providers. It materializes authenticated released
 baselines, customizes them through the typed generators, and runs the source-built
 public CLI through readiness, dry-run, apply, repeated apply, inspect, and doctor.
@@ -622,6 +814,9 @@ sh scripts/upgraded-application-check.sh identity-added
 
 The same validator runs in PR, integration-push, and release lifecycle matrix
 cells through `sh scripts/generated-application-check.sh upgrade-<composition>`.
+The default cell additionally runs `sh scripts/generated-application-check.sh minimal`
+for fresh module-free SQLite and PostgreSQL applications. This keeps five stable
+job contexts while covering all three fresh and upgraded compositions.
 All five cells must succeed for `quality` or tag-triggered publication to succeed.
 There are no path filters, secret-bearing PR jobs, or optional upgrade cells.
 Focused manifest, renderer/package/planner, publisher/recovery, and CLI upgrade
@@ -630,23 +825,51 @@ complete test suites run without upgrade-only filters or duplicated status check
 Policy tests reject missing cells, wrong cache identities, skipped/tolerated
 failures, missing dispatch, and missing focused owner commands.
 
-This gate materializes all six authenticated v0.6.0 baselines,
+Before local-dependency staging, the gate exercises all six pristine released
+baselines through the public upgrade workflow and runs unchanged
+`cargo metadata --locked --all-features` against their real public Git pins.
+Minimal and Identity-added transitions use package-authenticated upgrade-only
+locks matching their preserved released owner manifests. Fresh output also
+receives a public-pin lock check. Identity installation deliberately does not
+resolve dependencies: its public-pin graph is resolved and checked in an explicit
+separate owner-review copy before local staging. That copy explicitly starts
+from the package-authenticated current Identity lock and proves the resulting
+framework Git source is unchanged, so unpublished-tag availability cannot cause
+an implicit pin rewrite. The source-only installation output remains untouched.
+
+This gate also materializes all six authenticated v0.7.0 baselines,
 customizes application-owned source, and uses public readiness, preview, apply,
 inspect, doctor, and repeat-upgrade checks. Verified public source is never patched
 for local compilation. Separate validation copies add a post-upgrade application
 migration and database tests, use local framework dependencies, and resolve their
 own reviewed lockfiles. Source fingerprints are checked again after production smoke.
+The disposable production copy also selects the current checksum-authenticated
+wasm-bindgen installer for its newly resolved local-source lock. The verified
+public upgrade output retains its original owner installer and released lock;
+this validation-only tool selection grants no source-upgrade rewrite authority.
 
 Released application migration bytes come from the immutable baseline. Identity
 SQL is checked against the committed SHA-256 inventory extracted from the reviewed
-v0.6.0 commit, not assumed to match the current module. New module migrations cannot
+v0.7.0 commit, not assumed to match the current module. New module migrations cannot
 silently enter the released database fixture. Both fresh and upgrade databases must
 be empty and explicitly authorized; tests perform no database reset. The upgrade
 scenario records migration checksums, seeds product data before applying the current
 plan, verifies history/data preservation and the post-upgrade migration, and proves
-that repeating migrations is a no-op. PostgreSQL runs in an isolated Compose project;
+that repeating migrations is a no-op. The fixture explicitly adopts the documented
+owner database entry point only in its private validation copy. Current status
+and forward migration run through the public CLI with explicit trusted tool
+selections and provider-matching profiles (`sqlite` or PostgreSQL `production`);
+production migration without independent approval must fail without writes. The test harness is compiled to a validated artifact receipt and launched
+outside Cargo, so the CLI can acquire Cargo's cache lock. Only the old fixture
+setup applies historical SQL directly. PostgreSQL runs in an isolated Compose project;
 SQLite files live only in the bounded validation workspace.
 
+Each native check is repeated unchanged to measure warm-cache reuse; allocated
+cache bytes must not increase. Phase logs report both measurements and the final
+cache footprint, while existing pre/post LRU budget enforcement remains active.
+Repository wasm-bindgen tools use separate
+`target/validation/tools/wasm-bindgen/<locked-version>/bin` directories so concurrent
+fresh/released-lock and locally resolved checks cannot replace each other's CLI.
 Each selected profile receives native/hydration checks, existing application tests,
 locked release assets, and a production image compiled by the canonical Debian
 builder. Only the selected provider feature is changed in the disposable Dockerfile;
@@ -672,15 +895,87 @@ sh scripts/backend-check.sh
 
 Never point the ignored database tests at persistent or production data.
 
+Framework persistence tests include read-only migration status. SQLite fixtures
+verify missing-file/metadata behavior, ordered provider state, invalid history,
+database and existing WAL byte preservation, and the documented coordination
+sidecar exception. The ignored PostgreSQL integration contract requires explicit
+`DATABASE_URL` and disposable-database opt-in; it creates only unique test-owned
+schemas, compares relations and history before/after inspection, covers missing
+database and invalid/checksum/duplicate/failed history, and removes its schemas.
+It never resets or adopts an existing application schema. The framework jobs
+in repository and source-release validation opt in against their own ephemeral
+PostgreSQL service, so failure propagates to the existing quality/release gate.
+For a focused check against an explicitly selected disposable target, run
+`cargo test --locked -p persistence --all-features --test migration_status -- --ignored`
+through the documented bounded framework validation cache.
+
+The tooling gate's layered-template check creates fresh default, minimal, and
+Identity-added applications through the public CLI for both providers. It
+verifies exact database entry-point output/ownership and stages local framework
+dependencies only in disposable copies, then runs isolated binary/process and
+Infrastructure preflight tests, formatting, Clippy, and dependency boundaries.
+SQLite process tests own their files and prove status/no-provision behavior,
+explicit forward migration without Identity seed, and rejected corrupt history.
+The default and Identity-added generated-application PostgreSQL lifecycle also
+runs the ignored entry-point test against its disposable database. That test
+owns a unique schema, never resets an existing schema, checks repeated migration
+and unseeded Identity state, and removes only its newly created schema.
+
+The focused CLI gate additionally covers public `db status`/`db migrate`
+parsing, read-only previews for all six compositions, profile/provider matching,
+real entry-point and recovery preflight, fixed delegation arguments, and separate
+production migration approval at both command and library boundaries. Controlled
+native child fixtures verify bounded closed results, raw-output suppression,
+failure/non-success behavior, and cancellation cleanup without contacting a
+database. These process fixtures do not replace the application-owned SQLite
+and disposable PostgreSQL lifecycle tests above. Actual database operations
+still require an explicitly reviewed target and trusted application/toolchain;
+CI or doctor success is not production migration authorization.
+
+The framework CI job additionally invokes the real public database-operation
+matrix as a separate unconditional step after the focused framework package gate.
+Both repository and source-release jobs explicitly authorize their own ephemeral
+PostgreSQL target and require all six cells. Failures
+propagate through the existing framework/quality gate; no status check or repository
+secret is added.
+
+Run the focused file-owned subset with
+`sh scripts/database-operation-check.sh sqlite`. The complete matrix requires
+`ALLOW_DATABASE_OPERATION_DISPOSABLE_TARGETS=true` and an explicit
+`DATABASE_OPERATION_POSTGRES_URL` without URL query overrides. Never select
+persistent or production data. Each PostgreSQL case creates a uniquely named
+schema with no adoption/reset, uses only that schema, and drops it even after a
+joined test assertion fails. SQLite files and application copies live in the
+bounded `database-operation-check` cache workspace and are cleaned on exit.
+
+Public status checks compare schema, all history fields, existing product data,
+SQLite database bytes, and PostgreSQL table-row fingerprints. Production denial,
+profile/provider mismatch, checksum/unknown/failed history, missing targets, and
+explicit repeat migration are tested. Test-only appended migrations inject a
+constraint failure after a successful prior migration: its committed history
+remains, the failed migration's DDL/history rolls back, and retry verifies that
+locking is released. A duplicate version fixture separately fails composition
+before database access. The fixture package is explicitly recompiled when that
+extra migration is injected; existing macro artifacts are not trusted to discover
+a new SQL directory entry. No canonical or historical migration is modified.
+Tests run outside the compiling Cargo process because the public CLI invokes
+Cargo itself. Source-upgrade CLI tests additionally tripwire PostgreSQL connection
+attempts and preserve an external SQLite sentinel across all six baselines, even
+when inherited startup flags request migration/seed.
+
 ## Application Upgrade Review
 
-The current public edge is exactly v0.6.0 → v0.7.0 for default, minimal, and
+The current public edge is exactly v0.7.0 → v0.8.0 for default, minimal, and
 Identity-added applications with SQLite or PostgreSQL. Its package-authenticated
-declaration is `templates/upgrades/v0-6-0-to-v0-7-0.toml`; its immutable source
+declaration is `templates/upgrades/v0-7-0-to-v0-8-0.toml`; its immutable source
 fixtures are under `test-fixtures/application-baselines/`. Do not rebuild those
 fixtures from current templates or assume a customized application matches a
 fixture in every application-owned path. Authentication binds the exact managed
-boundary; this edge changes only `Cargo.toml`, `Cargo.lock`, and `hegira.toml`.
+boundary; this edge edits `Cargo.toml`, `Cargo.lock`, and `hegira.toml` and
+creates only the absent `crates/infrastructure/src/database_operations.rs`.
+Its module, profile loader, server binary, and feature registration remain a
+[manual owner integration](getting-started.md#adopt-database-operations-after-a-source-upgrade);
+source upgrade neither edits those application-owned files nor executes a database.
 
 Review schema-3 ownership and the source/target composition together with the
 edge's declared manifest transitions and managed source/result digests. Package
@@ -715,6 +1010,18 @@ or pinned commit is publicly available. Verify canonical release-source and
 upgrade identities before publication; do not substitute local dependency paths
 or publish a tag while release-candidate metadata remains active.
 
+Before promotion, use the existing manual `repository-validation` workflow to
+verify the reviewed develop candidate. Record the intended full commit and tree,
+dispatch `gh workflow run backend.yml --ref develop`, then verify the returned
+run's `head_sha` matches that commit. A mutable branch name alone is not evidence
+of the source that ran. Record completed checks, source/lock/baseline identities,
+storage measurements and informational warnings in the versioned release notes.
+A local source SBOM must come from the same clean tracked tree, with tool version
+and digest recorded; it is not a published release asset or release attestation.
+Retain reviewed candidate evidence outside disposable validation caches as
+owner-controlled output; that location has no implied Cargo-cache budget.
+
+This pre-promotion validation does not replace the exact promoted-main gate.
 The `release` workflow supports manual release-candidate validation from
 `main` and publication from a pushed `vMAJOR.MINOR.PATCH` tag. Both paths:
 
@@ -729,9 +1036,9 @@ The `release` workflow supports manual release-candidate validation from
   a disposable PostgreSQL database;
 - validate typed rendering tooling, the independent layered workspace,
   hydration, and release output;
-- validate fresh SQLite and PostgreSQL generated applications, supported
-  v0.2.0 upgrades, and the rendered production container and HTTP contract;
-- validate released v0.6.0-to-v0.7.0 application upgrades across all three
+- validate fresh default, minimal and Identity-added applications with SQLite
+  and PostgreSQL, supported v0.2.0 upgrades, and production container/HTTP contracts;
+- validate released v0.7.0-to-v0.8.0 application upgrades across all three
   compositions and both providers before publication.
 
 A manual run uploads the source SBOM as a short-lived workflow artifact but
@@ -765,6 +1072,32 @@ fail. The final release-preparation pull request must pin the canonical
 lockfile to the merged candidate revision, advance all remaining workspace,
 package, and release files together, and remove the candidate metadata before
 promotion or tag validation.
+
+The v0.8.0 handoff consumes the actual #394 merge commit
+`fd89e7ef47e064f96a2affed34076acd53c0761a`. Both canonical lockfiles retain
+`tag = "v0.8.0"` and resolve to that candidate; the 22 consumed framework and
+Identity package trees remain identical. All remaining workspace tools, package,
+components, and release files now agree on v0.8.0, and candidate metadata is
+removed. The six direct v0.7.0-to-v0.8.0 target digests are authenticated together
+with these source identities. This is source preparation, not tag publication;
+the production and released-upgrade lifecycle matrix remains required.
+Disposable local-source resolution currently selects wasm-bindgen 0.2.130;
+the installer authenticates that reviewed CLI asset in addition to the retained
+canonical 0.2.128 and supported 0.2.129 assets. Canonical locks are not regenerated
+just to follow local validation resolution.
+Fresh application CI selects the matching immutable published CLI source release
+and checks its local tag before bootstrap. Existing application-owned CI is
+preserved and requires separate review of its compatible CLI selection.
+
+After the prerequisite PR merges, read its actual `mergeCommit.oid` with
+`gh pr view <candidate-pr> --json state,mergeCommit` and verify that commit is
+an ancestor of the fetched `origin/develop` before recording it in the lockfile
+handoff. An unmerged PR, its branch head, or a future tag is not that reference;
+GitHub's squash commit does not exist until merge. Review the consumed package
+trees against that merged revision before final alignment. Subsequent changes
+to those trees require a reviewed replacement candidate rather than reusing an
+outdated source pin. Repository-only tooling and documentation changes do not
+grant permission to change consumed source or publish a release.
 
 Create and verify a signed annotated tag only from the verified `main` release
 commit:

@@ -55,11 +55,97 @@ fn customized_released_applications_preserve_product_source_and_history() {
         .into_iter()
         .map(|(id, digest)| format!("{id} {digest}\n"))
         .collect::<String>();
+    // These are released baselines customized by the current resource generator,
+    // not the immutable baseline inventory. Review generated page/localization
+    // changes before updating them; the before/after upgrade checks stay exact.
     assert_eq!(
         snapshot,
-        include_str!("snapshots/customized-v0.6.0.txt"),
+        include_str!("snapshots/customized-v0.7.0.txt"),
         "review released product-source fixtures before changing their fingerprints"
     );
+}
+
+#[test]
+fn historical_upgrade_preserves_customized_application_documentation_without_adoption() {
+    use upgrade_test_support::BaselineCatalog;
+    let parent = TestDirectory::new("documentation");
+    let baselines = BaselineCatalog::from_repository_release(
+        repository(),
+        upgrade_test_support::BaselineVersion::V0_7_0,
+    )
+    .unwrap();
+    let catalog = ManifestCatalog::load(repository(), "layered").unwrap();
+    for composition in BaselineComposition::ALL {
+        for database in BaselineDatabase::ALL {
+            let request = BaselineRequest::new(composition, database);
+            let application = parent.0.join(request.id());
+            baselines
+                .snapshot(request)
+                .unwrap()
+                .materialize(&application)
+                .unwrap();
+            fs::create_dir_all(application.join("docs")).unwrap();
+            let paths = [
+                "AGENTS.md",
+                "CLAUDE.md",
+                ".cursor/rules/application.mdc",
+                "README.md",
+                "docs/architecture.md",
+                "docs/development.md",
+                "docs/ownership.md",
+                "docs/repository.md",
+                ".github/PULL_REQUEST_TEMPLATE.md",
+                ".github/repository-policy.json",
+                ".github/workflows/repository-policy.yml",
+                "scripts/repository-policy.mjs",
+                "scripts/repository-policy.sh",
+                "scripts/repository-policy.test.mjs",
+                ".github/workflows/quality.yml",
+                ".github/actions/application-tools/action.yml",
+                ".cargo/audit.toml",
+                "deny.toml",
+                "scripts/ci.sh",
+                "scripts/ci-tools.sh",
+                "scripts/ci-integration.mjs",
+                "scripts/ci.test.mjs",
+            ];
+            for path in paths {
+                fs::create_dir_all(application.join(path).parent().unwrap()).unwrap();
+                fs::write(
+                    application.join(path),
+                    format!("# Owner documentation\n\n{} / {path}\n", request.id()),
+                )
+                .unwrap();
+            }
+            let before = support::fingerprints(&application);
+            let plan = catalog.plan_upgrade(&application).unwrap();
+            assert_eq!(
+                plan.change_plan()
+                    .changes()
+                    .iter()
+                    .map(|change| change.path().as_str())
+                    .collect::<Vec<_>>(),
+                support::MANAGED_FILES
+            );
+            application_mutator::publish_change_plan(&application, plan.change_plan()).unwrap();
+            let after = support::fingerprints(&application);
+            for path in paths {
+                assert_eq!(before[Path::new(path)], after[Path::new(path)]);
+            }
+            let manifest =
+                application_manifest::ApplicationManifest::read(application.join("hegira.toml"))
+                    .unwrap();
+            assert!(
+                manifest
+                    .upgrade
+                    .unwrap()
+                    .ownership
+                    .claims
+                    .iter()
+                    .all(|claim| !paths.contains(&claim.path.as_str()))
+            );
+        }
+    }
 }
 
 #[test]

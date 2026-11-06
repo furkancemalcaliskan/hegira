@@ -1,0 +1,371 @@
+//! Controlled native Cargo substitute used only by execution-boundary tests.
+use std::{fs, io::Write, process::Command, thread, time::Duration};
+
+fn wait_forever() -> ! {
+    loop {
+        thread::sleep(Duration::from_millis(20));
+    }
+}
+
+fn main() {
+    // Every accidental preview tool invocation leaves an external observation,
+    // including probes that clear the environment or change working directory.
+    let executable = std::env::current_exe().unwrap();
+    let tools = executable.parent().unwrap();
+    if tools.join("preview-trap-marker").exists() {
+        fs::write(tools.join("preview-trap-observed"), "unexpected process").unwrap();
+        std::process::exit(31);
+    }
+    let args: Vec<_> = std::env::args().skip(1).collect();
+    let name = std::env::args().next().unwrap();
+    let name = std::path::Path::new(&name)
+        .file_name()
+        .unwrap()
+        .to_str()
+        .unwrap();
+    if std::env::current_dir().unwrap() == std::path::Path::new("/") {
+        // Doctor probes must never enter an application or inherit hook/secrets.
+        let executable = std::env::current_exe().unwrap();
+        let tools = executable.parent().unwrap();
+        let mode = fs::read_to_string(tools.join("doctor-mode")).unwrap_or_default();
+        for key in [
+            "APP__DATABASE__URL",
+            "APP__SECURITY__JWT_SECRET",
+            "NODE_OPTIONS",
+            "RUSTC_WRAPPER",
+            "HEGIRA_OPERATION_PROXY",
+        ] {
+            assert!(std::env::var_os(key).is_none());
+        }
+        assert_eq!(std::env::var("RUSTUP_AUTO_INSTALL").unwrap(), "0");
+        let mut log = fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(tools.join("doctor-probes.log"))
+            .unwrap();
+        writeln!(log, "{name}: {args:?}").unwrap();
+        if mode.trim() == "hang" {
+            fs::write(
+                tools.join("doctor-probe.pid"),
+                std::process::id().to_string(),
+            )
+            .unwrap();
+            wait_forever();
+        }
+        if mode.trim() == "oversize" {
+            println!("{}", "private-tool-output-must-not-appear".repeat(1000));
+            return;
+        }
+        assert!(
+            args == ["--version"]
+                || (name == "cargo-leptos" && args == ["leptos", "--version"])
+                || (name == "rustc"
+                    && args
+                        == [
+                            "--print",
+                            "target-libdir",
+                            "--target",
+                            "wasm32-unknown-unknown"
+                        ])
+        );
+        let rust = fs::read_to_string(tools.join("doctor-rust-version")).unwrap();
+        assert_eq!(std::env::var("RUSTUP_TOOLCHAIN").unwrap(), rust);
+        match name {
+            "cargo" | "rustc" if args == ["--version"] => println!(
+                "{name} {}",
+                if mode.trim() == name { "0.0.0" } else { &rust }
+            ),
+            "rustc" => println!(
+                "{}",
+                fs::read_to_string(tools.join("doctor-target")).unwrap()
+            ),
+            "cargo-leptos" => println!(
+                "cargo-leptos {}",
+                if mode.trim() == "leptos" {
+                    "0.3.6"
+                } else {
+                    "0.3.7"
+                }
+            ),
+            "node" => println!("v{}.0.0", if mode.trim() == "node" { 20 } else { 22 }),
+            "wasm-bindgen" => println!(
+                "wasm-bindgen {}",
+                if mode.trim() == "wasm" {
+                    "0.0.0".to_owned()
+                } else {
+                    fs::read_to_string(tools.join("doctor-wasm-version")).unwrap()
+                }
+            ),
+            "wasm-opt" => println!(
+                "wasm-opt version {}",
+                if mode.trim() == "optimizer" { 122 } else { 123 }
+            ),
+            _ => panic!("unexpected doctor tool"),
+        }
+        return;
+    }
+    if ["cargo-leptos", "wasm-bindgen", "wasm-opt", "rustc", "node"].contains(&name) {
+        let mode = fs::read_to_string("probe-mode").unwrap_or_default();
+        if mode.trim() == "hang" {
+            fs::write("probe.pid", std::process::id().to_string()).unwrap();
+            wait_forever();
+        }
+        if mode.trim() == "oversize" {
+            println!("{}", "x".repeat(20_000));
+            return;
+        }
+        match name {
+            "wasm-opt" => println!(
+                "wasm-opt version {}",
+                if mode.trim() == "optimizer" { 122 } else { 123 }
+            ),
+            "cargo-leptos" => println!(
+                "cargo-leptos {}",
+                if mode.trim() == "leptos" {
+                    "0.3.6"
+                } else {
+                    "0.3.7"
+                }
+            ),
+            "wasm-bindgen" => println!(
+                "wasm-bindgen {}",
+                if mode.trim() == "wasm" {
+                    "0.0.0".to_owned()
+                } else {
+                    fs::read_to_string("probe-wasm-version").unwrap()
+                }
+            ),
+            "rustc" if args.first().map(String::as_str) == Some("--print") => {
+                println!("{}", fs::read_to_string("probe-target").unwrap())
+            }
+            "rustc" => println!(
+                "rustc {}",
+                fs::read_to_string("probe-rust-version").unwrap()
+            ),
+            "node" if args.first().map(String::as_str) == Some("--version") => {
+                println!("v{}.0.0", if mode.trim() == "node" { 20 } else { 22 })
+            }
+            "node" => println!(
+                "tailwindcss v{}",
+                fs::read_to_string("probe-tailwind-version").unwrap()
+            ),
+            _ => unreachable!(),
+        }
+        return;
+    }
+    if matches!(args.first().map(String::as_str), Some("metadata" | "build")) {
+        assert_eq!(args.iter().filter(|arg| *arg == "--locked").count(), 1);
+        let mut log = fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open("proxy.log")
+            .unwrap();
+        writeln!(log, "{args:?}").unwrap();
+        return;
+    }
+    if args.first().map(String::as_str) == Some("descendant") {
+        fs::write("descendant.pid", std::process::id().to_string()).unwrap();
+        wait_forever();
+    }
+    let mode = fs::read_to_string("child-mode").unwrap();
+    let mut log = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open("child.log")
+        .unwrap();
+    writeln!(log, "{args:?}").unwrap();
+    fs::write("child.pid", std::process::id().to_string()).unwrap();
+    fs::write(
+        "child.cwd",
+        std::env::current_dir().unwrap().to_str().unwrap(),
+    )
+    .unwrap();
+    fs::write("child.path", std::env::var("PATH").unwrap()).unwrap();
+    fs::write(
+        "child.auto-install",
+        std::env::var("RUSTUP_AUTO_INSTALL").unwrap(),
+    )
+    .unwrap();
+    fs::write(
+        "child.override",
+        std::env::var("RUSTUP_TOOLCHAIN").unwrap_or_default(),
+    )
+    .unwrap();
+    if let Ok(bytes) = fs::read_to_string("cache-payload-bytes") {
+        let target = std::env::var("CARGO_TARGET_DIR").unwrap();
+        let expected = if args.first().map(String::as_str) == Some("leptos") { "build" } else if args.first().map(String::as_str) == Some("test") { "test" } else {
+            // The test operation's second step is a hydration check in its test cache.
+            if target.ends_with("/test") { "test" } else { "check" }
+        };
+        assert_eq!(target, format!("target/hegira/validation/{expected}"));
+        assert_eq!(std::env::var("CARGO_BUILD_TARGET_DIR").unwrap(), target);
+        for key in ["CARGO_INCREMENTAL", "CARGO_PROFILE_DEV_DEBUG", "CARGO_PROFILE_TEST_DEBUG"] {
+            assert_eq!(std::env::var(key).unwrap(), "0");
+        }
+        let count: usize = bytes.trim().parse().unwrap();
+        fs::write(format!("{target}/payload"), vec![b'x'; count]).unwrap();
+        fs::write("cache-payload-ready", "ready").unwrap();
+    }
+    if args.first().map(String::as_str) == Some("run") {
+        assert_eq!(
+            &args[..9],
+            [
+                "run", "--locked", "--quiet", "-p", "app_server", "--bin",
+                "app_database", "--no-default-features", "--features"
+            ]
+        );
+        assert_eq!(args[10], "--");
+        assert_eq!(args[12], "--json");
+        assert_eq!(args.len(), 13);
+        assert!(matches!(args[11].as_str(), "status" | "migrate"));
+        let provider = std::env::var("APP__DATABASE__BACKEND").unwrap();
+        assert_eq!(args[9], format!("database-operations,db-{provider}"));
+        fs::write("child.profile", std::env::var("APP_ENV").unwrap()).unwrap();
+        fs::write("child.provider", &provider).unwrap();
+        fs::write(
+            "child.database-url",
+            std::env::var("APP__DATABASE__URL").unwrap_or_default(),
+        )
+        .unwrap();
+        eprintln!("private-driver-output-must-not-appear");
+        match mode.trim() {
+            "db-failure" => {
+                println!("private-failed-child-output");
+                std::process::exit(4);
+            }
+            "db-malformed" => {
+                println!("private-invalid-json");
+                return;
+            }
+            "db-oversize" => {
+                println!("{}", "private-overflow".repeat(100000));
+                return;
+            }
+            "db-wait" => wait_forever(),
+            "db-report" => {
+                print!("{}", fs::read_to_string("database-result.json").unwrap());
+                return;
+            }
+            _ => (),
+        }
+        println!("{{\"output_schema\":1,\"outcome\":\"success\",\"operation\":\"{}\",\"provider\":\"{provider}\",\"status\":{{\"output_schema\":1,\"history\":\"present\",\"migrations\":[{{\"module_id\":\"application\",\"version\":1,\"state\":\"applied\"}}]}}}}", args[11]);
+        return;
+    }
+    if args.first().map(String::as_str) == Some("leptos") {
+        assert_eq!(std::env::var("LEPTOS_BIN_CARGO_COMMAND").unwrap(), "cargo");
+        if args.get(1).map(String::as_str) == Some("build") {
+            assert!(args.iter().any(|arg| arg == "--release"));
+            let target = std::env::var("CARGO_TARGET_DIR").unwrap();
+            assert!(target == "target/hegira/release-build" || target == "target/hegira/validation/build");
+            assert_eq!(std::env::var("LEPTOS_BIN_TARGET_DIR").unwrap(), target);
+            assert_eq!(
+                std::env::var("LEPTOS_SITE_ROOT").unwrap(),
+                "CARGO_TARGET_DIR/site"
+            );
+            assert_eq!(
+                std::env::var("LEPTOS_ASSETS_DIR").unwrap(),
+                "../web/src/public"
+            );
+            for args in [
+                vec!["metadata", "--format-version", "1"],
+                vec!["build", "--locked"],
+            ] {
+                assert!(
+                    Command::new(std::env::var_os("CARGO").unwrap())
+                        .args(args)
+                        .status()
+                        .unwrap()
+                        .success()
+                );
+            }
+            if mode.trim() == "failure" {
+                std::process::exit(23);
+            }
+            if mode.trim() == "wait" {
+                wait_forever();
+            }
+            if mode.trim() == "rewrite-lock" {
+                fs::write("Cargo.lock", "unreviewed fixture lock").unwrap();
+                return;
+            }
+            if mode.trim() == "incomplete" {
+                return;
+            }
+            fs::create_dir_all(format!("{target}/release")).unwrap();
+            fs::create_dir_all(format!("{target}/site/pkg")).unwrap();
+            fs::copy(
+                std::env::current_exe().unwrap(),
+                format!("{target}/release/app_server"),
+            )
+            .unwrap();
+            fs::write(format!("{target}/site/pkg/app_bg.wasm"), b"\0asm\x01\0\0\0").unwrap();
+            fs::write(format!("{target}/site/pkg/app.js"), "controlled JavaScript").unwrap();
+            fs::write(
+                format!("{target}/site/pkg/app.css"),
+                "controlled stylesheet",
+            )
+            .unwrap();
+            return;
+        }
+        fs::write("child.profile", std::env::var("APP_ENV").unwrap()).unwrap();
+        fs::write(
+            "child.backend",
+            std::env::var("APP__DATABASE__BACKEND").unwrap(),
+        )
+        .unwrap();
+        fs::write("child.bind", std::env::var("APP__SERVER__ADDR").unwrap()).unwrap();
+        fs::write(
+            "child.leptos-bind",
+            std::env::var("LEPTOS_SITE_ADDR").unwrap(),
+        )
+        .unwrap();
+        for args in [
+            vec!["metadata", "--format-version", "1"],
+            vec!["build", "--locked"],
+        ] {
+            assert!(
+                Command::new(std::env::var_os("CARGO").unwrap())
+                    .args(args)
+                    .status()
+                    .unwrap()
+                    .success()
+            );
+        }
+    }
+    match mode.trim() {
+        "success" => {}
+        "noisy" => {
+            println!("fixture-child-output-only");
+            eprintln!("fixture-child-diagnostic-only");
+        }
+        "failure" => std::process::exit(23),
+        "failure-hydration" if args.iter().any(|arg| arg == "wasm32-unknown-unknown") => {
+            std::process::exit(24);
+        }
+        "failure-hydration" => {}
+        "wait" => wait_forever(),
+        "release" => {
+            while !std::path::Path::new("child-release").exists() {
+                thread::sleep(Duration::from_millis(5));
+            }
+        }
+        "descendant" | "leftover" => {
+            let _ = fs::remove_file("descendant.pid");
+            // Children remain in the executor-created process group.
+            let child = Command::new(std::env::current_exe().unwrap())
+                .arg("descendant")
+                .spawn()
+                .unwrap();
+            while !std::path::Path::new("descendant.pid").exists() {
+                thread::sleep(Duration::from_millis(5));
+            }
+            if mode.trim() == "leftover" {
+                // Deliberately exercise cleanup after the leader exits.
+                drop(child);
+            } else {
+                wait_forever();
+            }
+        }
+        _ => std::process::exit(24),
+    }
+}

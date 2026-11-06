@@ -1,20 +1,32 @@
-package=hegira-canonical@v0.7.0
-framework=https://github.com/furkancemalcaliskan/hegira.git#v0.7.0
-digest=sha256:34ddf6356d441791c93f306f5ea6aeb5927cab1062d2e6d7f8b8928ee198b053
+package=hegira-canonical@v0.8.0
+framework=https://github.com/furkancemalcaliskan/hegira.git#v0.8.0
+digest=sha256:14b9da777e8f903203f988007d769050b88b771a9902c5a735fac6e0eb7432a8
 components=layered-base,layered-leptos-identity
+971deab3ed8abfea .cargo/audit.toml
+a185b5c4932fdb88 .cursor/rules/application.mdc
 6986e1a96f1eaa98 .dockerignore
 4845a8e7ed4a8aa1 .env.example
+08885ae773145597 .github/PULL_REQUEST_TEMPLATE.md
+473b0c5bd4b76705 .github/actions/application-tools/action.yml
+dc239ff2b1b4a749 .github/repository-policy.json
+ebb4ef89f3c5d06f .github/workflows/quality.yml
+7e778ee7105d4560 .github/workflows/repository-policy.yml
 5993ab4d526be466 .gitignore
 60458e1827934c3d .node-version
-5b6ceb35f21ec030 Cargo.lock
-0ab183cd1a2096ab Cargo.toml
+1ecef501566d6be6 AGENTS.md
+3a0d357346d3c4dc CLAUDE.md
+296936856fc14a12 Cargo.lock
+992945322131c979 Cargo.toml
 abb13fca335cf059 Dockerfile
-acb1f40708fef3bc apps/server/Cargo.toml
+42e043ee9bfba3c4 README.md
+7020439f5f70d85f apps/server/Cargo.toml
+388f6e0e83c44ae6 apps/server/src/bin/app_database.rs
 3bde3764afe35806 apps/server/src/lib.rs
 9ea27e2845c55bb5 apps/server/src/main.rs
 bcead05dce4336dc apps/server/src/server.rs
 5f7ffc9d0f5ba7bb apps/server/src/worker_operations.rs
 50ed8852150fc65a apps/server/tests/database_contracts.rs
+09bd66720d74da03 apps/server/tests/database_operations.rs
 b249b1f80f690d85 apps/web/Cargo.toml
 5cdf33ea1fc44058 apps/web/src/app/layout.rs
 2e684ad1c47b141c apps/web/src/app/mod.rs
@@ -26,7 +38,7 @@ bccc6ef21e0cc054 apps/web/src/app/providers.rs
 e76d30fbdb62c2d7 apps/web/src/app/topbar.rs
 b58033514afd0df2 apps/web/src/dashboard.rs
 4be5e3e4a4cb60f7 apps/web/src/lib.rs
-a93b3bac94422302 apps/web/src/package-lock.json
+6e5bf634bf1bf612 apps/web/src/package-lock.json
 d908f010cbdd6b8b apps/web/src/package.json
 370740627a45bc7c apps/web/src/public/assets/branding/hegira-logo.png
 2c5dbabcccc716da apps/web/src/root.rs
@@ -64,8 +76,9 @@ fba197e4c0ea8f58 crates/infrastructure/migrations/postgres/007_app_settings.sql
 f3ba72816961bb19 crates/infrastructure/migrations/sqlite/008_catalog_products.sql
 e4f90a35c538e114 crates/infrastructure/migrations/sqlite/009_retire_catalog_persistence.sql
 c7fcf44104381606 crates/infrastructure/src/audit/mod.rs
-b3bd5ad804b3b836 crates/infrastructure/src/config.rs
+beb01f93100b6520 crates/infrastructure/src/config.rs
 963ba6d322a3632c crates/infrastructure/src/database.rs
+91c5d9e809523d74 crates/infrastructure/src/database_operations.rs
 9f4566e08ef15f01 crates/infrastructure/src/identity/authorization/mod.rs
 ed912714d31a65c0 crates/infrastructure/src/identity/authorization/service.rs
 f5dd22f136f9f656 crates/infrastructure/src/identity/mod.rs
@@ -74,7 +87,7 @@ cf1381fa5f66e850 crates/infrastructure/src/identity/oauth/mod.rs
 10be0f8fa396f120 crates/infrastructure/src/identity/services.rs
 2c4d87b9763b4f68 crates/infrastructure/src/identity/sessions/mod.rs
 4f0c462e9fee0d87 crates/infrastructure/src/identity/sessions/redis_session.rs
-a9ff15cbbfb6a6a4 crates/infrastructure/src/lib.rs
+a6aa24bc3129934a crates/infrastructure/src/lib.rs
 a5cee92157b6a0cb crates/infrastructure/src/operations.rs
 7cb7827bbd706f3b crates/infrastructure/src/security/mod.rs
 0ed16015226b6cba crates/infrastructure/src/security/password_hasher.rs
@@ -83,7 +96,19 @@ a5cee92157b6a0cb crates/infrastructure/src/operations.rs
 857f63ea42fb64c6 crates/presentation/Cargo.toml
 28acfa4312676a72 crates/presentation/src/http.rs
 d9d3e75ec6021d05 crates/presentation/src/lib.rs
+2bdaa605816217e7 deny.toml
 1309f45751c079e0 docker-compose.yml
-e0e9fa32f493fbfb hegira.toml
+3bc19c2ee6472ab7 docs/architecture.md
+fcce517d434d193f docs/development.md
+d4a1973957b48633 docs/ownership.md
+6188f9e3efeea190 docs/repository.md
+0f5bd92df21e64d1 hegira.toml
 64a3f64b8bdc337f rust-toolchain.toml
-d1e261656118b330 scripts/prepare-wasm-bindgen.sh
+e4e1fe26a1539175 scripts/ci-integration.mjs
+97ed087ebc3c8913 scripts/ci-tools.sh
+418e6d65d8a2614e scripts/ci.sh
+95096c3da4740d24 scripts/ci.test.mjs
+5cdd556addd8fd23 scripts/prepare-wasm-bindgen.sh
+27911e6f4ba3affd scripts/repository-policy.mjs
+e132080b2a4f2807 scripts/repository-policy.sh
+167fc347af7ea742 scripts/repository-policy.test.mjs

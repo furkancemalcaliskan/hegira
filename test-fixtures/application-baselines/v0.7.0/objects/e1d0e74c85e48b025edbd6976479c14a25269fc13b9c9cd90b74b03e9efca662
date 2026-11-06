@@ -1,0 +1,43 @@
+[package]
+name = "app_infrastructure"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+configuration.workspace = true
+persistence.workspace = true
+platform_core.workspace = true
+serde.workspace = true
+sqlx.workspace = true
+tracing.workspace = true
+audit = { workspace = true }
+background_jobs = { workspace = true }
+cache = { workspace = true }
+identity_application = { workspace = true }
+identity_application_contracts = { workspace = true }
+identity_domain = { workspace = true }
+identity_domain_shared = { workspace = true }
+identity_sqlx = { workspace = true }
+mail = { workspace = true }
+observability = { workspace = true }
+runtime = { workspace = true }
+search = { workspace = true }
+argon2 = { workspace = true }
+base64 = { workspace = true }
+chrono = { workspace = true }
+hmac = { workspace = true }
+ipnet = { workspace = true }
+rand_core = { workspace = true }
+reqwest = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+uuid = { workspace = true }
+
+[features]
+default = ["db-sqlite"]
+db-postgres = ["persistence/db-postgres", "sqlx/postgres", "identity_sqlx/db-postgres"]
+db-sqlite = ["persistence/db-sqlite", "sqlx/sqlite", "identity_sqlx/db-sqlite"]
+

@@ -18,11 +18,14 @@ function fixture(t) {
   return path.join(scripts, "generated-application-check.sh");
 }
 
-test("upgrade cells dispatch exactly once and preserve failure/interruption outcomes", t => {
+test("upgrade and fresh minimal dispatch preserve failure/interruption outcomes", t => {
   const script = fixture(t);
-  for (const composition of ["default", "minimal", "identity-added"]) {
+  for (const [selection, composition] of [
+    ["upgrade-default", "default"], ["upgrade-minimal", "minimal"],
+    ["upgrade-identity-added", "identity-added"], ["minimal", "fresh-minimal"],
+  ]) {
     for (const status of [0, 1, 2, 130, 143]) {
-      const result = spawnSync("sh", [script, `upgrade-${composition}`], {
+      const result = spawnSync("sh", [script, selection], {
         encoding: "utf8", env: { ...process.env, TEST_EXIT: String(status) },
       });
       assert.equal(result.status, status);

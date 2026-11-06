@@ -9,6 +9,12 @@ use sqlx::migrate::{MigrateError, Migration, Migrator};
 
 use crate::DatabasePool;
 
+mod status;
+pub use status::{
+    MigrationHistoryState, MigrationState, MigrationStatus, MigrationStatusError,
+    MigrationStatusReport,
+};
+
 #[derive(Debug, Clone, Copy)]
 pub struct ModuleMigrationSource {
     module_id: &'static str,
@@ -35,6 +41,7 @@ impl ModuleMigrationSource {
 #[derive(Debug)]
 pub struct MigrationPlan {
     module_ids: Vec<&'static str>,
+    migration_owners: BTreeMap<i64, &'static str>,
     migrator: Migrator,
 }
 
@@ -79,6 +86,10 @@ impl MigrationPlan {
 
         Ok(Self {
             module_ids: module_ids.into_iter().collect(),
+            migration_owners: migrations
+                .iter()
+                .map(|(version, (owner, _))| (*version, *owner))
+                .collect(),
             migrator: Migrator {
                 migrations: Cow::Owned(
                     migrations

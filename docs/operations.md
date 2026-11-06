@@ -17,6 +17,134 @@ application-owned migration plan as a one-shot deployment step before rollout.
 Destructive reset requires an explicit disposable-database authorization token
 and must never target persistent or production data.
 
+### Read-Only Migration Status
+
+`persistence::migrations::MigrationPlan::status(&DatabaseConfig)` inspects an
+explicitly selected SQLite or PostgreSQL target using the same composed plan
+as migration execution. The schema-1 typed report distinguishes a missing
+database, missing `_sqlx_migrations` metadata, and present history; its entries
+are ordered by version and contain module identity plus applied/pending state.
+Unknown or duplicate history identities, unsuccessful records, and checksum
+conflicts return typed errors rather than a repair or an apparently healthy
+report. Views and unreadable/malformed metadata fail closed.
+
+Status never calls `Migrator::run`, provisions a database or migration table,
+seeds data, or reads runtime configuration on the caller's behalf. Startup
+`auto_migrate` settings grant it no write authority. It opens a dedicated
+connection rather than reusing a potentially write-capable runtime pool.
+PostgreSQL reads through one repeatable-read, read-only transaction, respecting
+the configured search path and limiting statements to five seconds. Permission,
+connection, and query failures expose no raw driver errors, credentials, SQL,
+history descriptions, or checksum bytes, including in Debug/source chains.
+
+SQLite requires a file-backed target, forces read-only/no-create flags and
+`query_only`, and does not change the database's journal mode or use `immutable`
+to bypass locking. In-memory databases, raw `file:` URIs, and custom VFS choices
+are rejected. A missing file remains missing. Data, schema, migration records,
+and existing WAL content remain unchanged, but normal SQLite WAL coordination
+can create/update `-wal`/`-shm` sidecars. This is not a promise of an untouched
+directory. See [SQLite WAL documentation](https://www.sqlite.org/wal.html).
+
+Infrastructure remains responsible for composing application and official-module
+migration sources and obtaining separate explicit intent for database access.
+The CLI delegates to the application-owned entry point rather than invoking
+this framework API directly. The observed
+report is a point-in-time snapshot, not approval to migrate, repair, or deploy.
+See the [database profile matrix](configuration.md#database-operation-profiles)
+for the public CLI's provider requirements, including minimal's in-memory test
+default, which is unsuitable for file-backed database operations.
+
+### Application-Owned Database Entry Point
+
+Fresh canonical source contains `apps/server/src/bin/app_database.rs`, a
+separate one-shot binary rather than a server startup mode. Build or invoke it
+from the generated application root with an explicit provider and feature:
+
+```sh
+APP_ENV=sqlite cargo run --locked -p app_server --bin app_database \
+  --no-default-features --features database-operations,db-sqlite -- status --json
+
+# Forward migration changes the selected existing database. Review its target
+# and backups first; status is not migration authorization.
+APP_ENV=sqlite cargo run --locked -p app_server --bin app_database \
+  --no-default-features --features database-operations,db-sqlite -- migrate --json
+```
+
+For PostgreSQL, select `db-postgres` and the intended `APP_ENV=development`,
+`test`, or `production` profile. The four supported profiles are closed;
+credentials and URL overrides remain in configuration/environment, never
+arguments or output. Configuration loading reuses application profile sources
+and defaults but validates only database-relevant settings. Production requires
+database ensure and automatic migration to be disabled. Normal HTTP startup
+policy is unchanged. This command trusts application source and accesses its
+configured database; it is not a sandbox. Public `hegira db` commands delegate
+to this binary with separate execution and production-migration approvals.
+
+`status` reuses the typed read-only inspection above, including its SQLite WAL
+coordination boundary. `migrate` first authenticates history against the
+composed plan, refuses a missing database, then opens an existing target with
+SQLite no-create flags or a normal PostgreSQL connection. It runs only forward
+migrations, closes the pool, and reports the observed resulting state. It never
+ensures a database, seeds Identity, starts HTTP/workers/schedulers, or initializes
+unrelated service providers. The migration table may be created by explicit
+forward migration. SQLx's existing transaction/locking semantics apply; a
+failure or interrupted migration is not a promise of zero database changes.
+There is no reset, rollback, seed, repair, or arbitrary-SQL command.
+
+`--json` emits one schema-1 object on stdout. Success contains `outcome`,
+`operation`, `provider`, and the nested migration status; failure contains a
+static error code and redacted message. No SQL, raw driver errors, credentials,
+history descriptions, or checksum bytes are exposed. Human success uses
+stdout and human failures use stderr. Exit codes are 0 for success, 2 for
+invalid arguments, 3 for configuration/composition, 4 for database/history
+failure, and 1 for output failure. Invalid arguments print only static usage,
+including when `--json` appears in an invalid request; help reads no config.
+
+The existing production image still packages the HTTP server, not this
+separately selected binary. Application operators own its build/invocation and
+deployment approval. The v0.7.0-to-v0.8.0 source upgrade adds an unregistered
+Infrastructure operation source alongside the three release-file edits. It
+preserves existing server registration and configuration; complete the
+[manual owner integration](getting-started.md#adopt-database-operations-after-a-source-upgrade)
+before CLI database execution. Managed claims are not blanket rewrite permission
+or proof that a binary is present.
+
+### Explicit CLI Database Operations
+
+`hegira db status` and `hegira db migrate` require an explicit matching
+`--profile` and exactly one of `--dry-run` or `--execute`. Preview reads only
+the manifest/composition and declares effects without loading runtime secrets,
+building, or connecting. Execution additionally requires `--trust-application`,
+absolute trusted `--cargo` and `--tool-directory` selections, and Linux.
+Production forward migration separately requires `--approve-production-migration`;
+that flag is invalid for status, previews, or other profiles. Inspection, source
+upgrades, and generation never authorize database access.
+
+The executor validates real application binary registration, source, and selected
+profile files before spawning the locked application command. It selects the
+manifest provider and explicit profile; inherited URL overrides still require
+owner review. This trusts build scripts and application code and is not a
+sandbox or independent verification of the target's production classification.
+Even database status can compile trusted code and write ordinary Cargo output.
+The entry point retains the database semantics and WAL caveat above.
+
+Raw child logs are discarded in both human and JSON modes. Only a bounded,
+closed schema-1 success result with matching provider/operation and valid ordered
+module migration states enters output. Failure, malformed output, oversized
+output, and cancellation never report success. Child-group cleanup, recovery
+blocking, and CLI exit codes follow the existing operation executor; an
+interrupted migration may have changed the database. CLI result envelopes and
+exit codes are distinct from invoking `app_database` directly. See
+[application database commands](getting-started.md#operate-an-application-database)
+for reviewed invocation examples and report boundaries.
+
+For example, a history failure makes `app_database` return `4`. Through
+`hegira db`, that failed child is reported as `child-failed` with `exit_code=4`,
+while Hegira itself returns `1`. Hegira's `4` identifies a CLI state conflict,
+such as pending recovery or concurrent execution. A successful preview returns
+`0` without an execution result and does not certify runtime configuration or
+database history.
+
 ## Health And Readiness
 
 - `/healthz` reports process liveness.

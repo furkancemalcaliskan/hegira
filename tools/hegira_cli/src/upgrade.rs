@@ -597,15 +597,18 @@ mod tests {
             .unwrap();
         let root =
             std::env::temp_dir().join(format!("hegira-status-package-{}", std::process::id()));
-        BaselineCatalog::from_repository(repository)
-            .unwrap()
-            .snapshot(BaselineRequest::new(
-                BaselineComposition::Default,
-                BaselineDatabase::Sqlite,
-            ))
-            .unwrap()
-            .materialize(&root)
-            .unwrap();
+        BaselineCatalog::from_repository_release(
+            repository,
+            upgrade_test_support::BaselineVersion::V0_7_0,
+        )
+        .unwrap()
+        .snapshot(BaselineRequest::new(
+            BaselineComposition::Default,
+            BaselineDatabase::Sqlite,
+        ))
+        .unwrap()
+        .materialize(&root)
+        .unwrap();
         let report = assess(&root, root.clone(), None);
         assert_eq!(report.status.name(), "internal-error");
         assert_eq!(report.status.exit(), CliExit::Internal);

@@ -1,0 +1,5 @@
+[advisories]
+# SQLx locks disabled MySQL/RSA dependencies. scripts/ci.sh security must first
+# prove this exact crate is unreachable from every enabled application feature.
+# Remove this exception and review the graph before enabling RSA or MySQL.
+ignore = ["RUSTSEC-2023-0071"]

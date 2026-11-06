@@ -2,10 +2,10 @@
   "output_schema": 1,
   "status": "no-upgrade",
   "source": {
-    "framework_version": "v0.7.0",
+    "framework_version": "v0.8.0",
     "package": {
       "id": "hegira-canonical",
-      "version": "v0.7.0"
+      "version": "v0.8.0"
     }
   },
   "target": null,
@@ -13,17 +13,17 @@
     "components": [
       {
         "id": "layered-base",
-        "version": "v0.7.0"
+        "version": "v0.8.0"
       },
       {
         "id": "layered-leptos-identity",
-        "version": "v0.7.0"
+        "version": "v0.8.0"
       }
     ],
     "modules": [
       {
         "id": "identity",
-        "version": "v0.7.0"
+        "version": "v0.8.0"
       }
     ],
     "capabilities": [

@@ -45,8 +45,18 @@ jobs:
     steps:
       - run: sh scripts/generated-feature-check.sh
   framework:
+    services:
+      postgres:
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+    env:
+      DATABASE_URL: postgres://postgres@localhost:5432/hegira_test
     steps:
-      - run: sh scripts/framework-check.sh
+      - run: WITH_IGNORED_DB_TESTS=true sh scripts/framework-check.sh
+      - env:
+          ALLOW_DATABASE_OPERATION_DISPOSABLE_TARGETS: "true"
+          DATABASE_OPERATION_POSTGRES_URL: postgres://postgres@localhost:5432/hegira_test
+        run: sh scripts/database-operation-check.sh
   official-modules:
     services:
       postgres:
@@ -91,6 +101,9 @@ jobs:
           key: generated-\${{ matrix.lifecycle }}-targets-native-wasm32-profiles-dev-test-release-providers-sqlite-postgres-features-ssr-db-sqlite-db-postgres-hydrate-lock-\${{ hashFiles('Cargo.lock', 'templates/applications/layered/Cargo.lock') }}-source-\${{ steps.source-identity.outputs.tree }}
       - run: echo "\${{ steps.generated-cache.outputs.cache-hit }}"
       - run: sh scripts/generated-application-check.sh "\${{ matrix.lifecycle }}"
+      - name: Validate fresh minimal
+        if: matrix.lifecycle == 'default'
+        run: sh scripts/generated-application-check.sh minimal
   quality:
     if: always()
     needs:
@@ -116,7 +129,13 @@ jobs:
           node-version-file: .node-version
       - run: sh scripts/frontend-check.sh
       - uses: EmbarkStudios/cargo-deny-action@v2
-      - run: cargo audit --file Cargo.lock
+        with:
+          command: check
+          rust-version: "1.96.1"
+      - run: |
+          cargo audit --file Cargo.lock
+          cargo audit --file templates/upgrades/locks/v0-8-0-minimal.Cargo.lock
+          cargo audit --file templates/upgrades/locks/v0-8-0-identity-added.Cargo.lock
 `;
 
 const validGeneratedApplicationScript = `#!/usr/bin/env sh
@@ -150,9 +169,14 @@ for database in sqlite postgres; do
   hegira -- generate resource --application-root "$validation_root" --dry-run --json
   hegira -- generate resource --application-root "$validation_root" --json
   test ! -e "$staging_parent/$database-source/$generated_resource_path"
-  cargo test --locked --workspace
+  cp pagination.rs "$validation_root/crates/infrastructure/tests/resource_pagination.rs"
+  cat "$repo_root/scripts/resource-pagination-ui-contract.rs" >>page.rs
+  cargo test --locked --workspace --features app_server/ssr,app_server/database-operations
+  cargo test --locked -p app_server --features database-operations,db-postgres --test database_operations
   cargo check --features hydrate
+  cargo check --locked -p app_web --all-targets --no-default-features --features hydrate
 done
+cargo test --features db-postgres --test resource_pagination -- --include-ignored
 docker build --tag "$GENERATED_APP_IMAGE" "$generated_root"
 curl "$base_url/readyz"
 curl "$base_url/api/validation-records"
@@ -160,6 +184,24 @@ curl "$base_url/api/validation-records"
 
 test("accepts separated repository ownership gates", () => {
   assert.deepEqual(validateRepositoryValidationWorkflow(validWorkflow), []);
+});
+
+test("framework migration status cannot lose its disposable PostgreSQL gate", () => {
+  for (const contract of [
+    "WITH_IGNORED_DB_TESTS=true sh scripts/framework-check.sh",
+    "DATABASE_URL: postgres://postgres@localhost:5432/hegira_test",
+    "ALLOW_DATABASE_OPERATION_DISPOSABLE_TARGETS: \"true\"",
+    "DATABASE_OPERATION_POSTGRES_URL: postgres://postgres@localhost:5432/hegira_test",
+    "run: sh scripts/database-operation-check.sh",
+  ]) {
+    assert.ok(validateRepositoryValidationWorkflow(validWorkflow.replace(contract, "true"))
+      .some(error => error.includes("migration status")));
+  }
+  for (const condition of ["    if: false\n", "    continue-on-error: true\n"]) {
+    assert.ok(validateRepositoryValidationWorkflow(validWorkflow.replace(
+      "  framework:\n", `  framework:\n${condition}`,
+    )).some(error => error.includes("migration status")));
+  }
 });
 
 test("frontend audit cannot be removed, skipped or tolerated in supply-chain", () => {
@@ -173,6 +215,18 @@ test("frontend audit cannot be removed, skipped or tolerated in supply-chain", (
       "  supply-chain:\n", `  supply-chain:\n${condition}`,
     )).some(error => error.includes("frontend audit")));
   }
+});
+
+test("cargo-deny must select the pinned Rust toolchain inside its container", () => {
+  for (const replacement of ["", '          rust-version: "stable"\n']) {
+    assert.ok(validateRepositoryValidationWorkflow(validWorkflow.replace(
+      '          rust-version: "1.96.1"\n', replacement,
+    )).some(error => error.includes("dependency policy requires the pinned Rust toolchain")));
+  }
+  assert.ok(validateRepositoryValidationWorkflow(validWorkflow.replace(
+    '          rust-version: "1.96.1"\n',
+    '      - uses: unrelated/action@v1\n        with:\n          rust-version: "1.96.1"\n',
+  )).some(error => error.includes("dependency policy requires the pinned Rust toolchain")));
 });
 
 for (const composition of ["default", "minimal", "identity-added"]) {
@@ -229,10 +283,15 @@ test("requires upgrade source, dispatcher, and focused owner commands", t => {
     path.join(root, "test-fixtures/upgrade-lifecycle"), { recursive: true });
   assert.deepEqual(validateUpgradeScripts(root), []);
   for (const [file, contract] of [
-    ["scripts/generated-application-check.sh", 'exec sh "$repo_root/scripts/upgraded-application-check.sh"'],
+    ["scripts/generated-application-check.sh", 'exec sh "$repo_root/scripts/upgraded-application-check.sh" "${1#upgrade-}"'],
     ["scripts/framework-check.sh", "cargo test --locked -p application_manifest"],
+    ["scripts/database-operation-check.sh", "for composition in default minimal identity-added; do"],
+    ["scripts/database-operation-check.sh", 'providers="sqlite postgres"'],
+    ["scripts/database-operation-check.sh", '\n    "$test_binary" --test-threads=1\n'],
+    ["scripts/database-operation-check.sh", 'DATABASE_OPERATION_COMPOSITION_CONFLICT=true "$test_binary" --test-threads=1'],
     ["scripts/layered-template-check.sh", "cargo test --locked -p template_renderer"],
     ["scripts/cli-check.sh", "cargo test --locked -p application_mutator"],
+    ["scripts/cli-check.sh", "cargo test --locked -p upgrade_test_support --all-targets"],
     ["scripts/cli-check.sh", "cargo test --locked -p hegira_cli"],
     ["scripts/upgraded-application-check.sh", "for database in sqlite postgres; do"],
     ["scripts/upgraded-application-check.sh", "validation_cache_release"],
@@ -247,19 +306,26 @@ test("requires upgrade source, dispatcher, and focused owner commands", t => {
   assert.ok(validateUpgradeScripts(root).some(error => error.includes("source is missing")));
 });
 
-test("rejects a filtered focused upgrade suite", t => {
+test("rejects filtered upgrade, additive recovery suites or omitted importer targets", t => {
   const repository = fileURLToPath(new URL("..", import.meta.url));
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "hegira-upgrade-filter-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   fs.cpSync(path.join(repository, "scripts"), path.join(root, "scripts"), { recursive: true });
   fs.cpSync(path.join(repository, "test-fixtures/upgrade-lifecycle"),
     path.join(root, "test-fixtures/upgrade-lifecycle"), { recursive: true });
-  const file = path.join(root, "scripts/cli-check.sh");
-  fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace(
-    "cargo test --locked -p hegira_cli\n",
-    "cargo test --locked -p hegira_cli -- --skip upgrade\n",
-  ));
-  assert.ok(validateUpgradeScripts(root).some(error => error.includes("contract missing")));
+  for (const [script, from, to] of [
+    ["cli-check.sh", "cargo test --locked -p hegira_cli\n", "cargo test --locked -p hegira_cli -- --skip upgrade\n"],
+    ["cli-check.sh", "cargo test --locked -p upgrade_test_support --all-targets\n", "cargo test --locked -p upgrade_test_support\n"],
+    ["cli-check.sh", "cargo test --locked -p application_mutator\n", "cargo test --locked -p application_mutator -- --skip released_additive\n"],
+    ["layered-template-check.sh", "cargo test --locked -p template_renderer\n", "cargo test --locked -p template_renderer -- --skip additive_upgrade_tests\n"],
+  ]) {
+    const file = path.join(root, "scripts", script);
+    const source = fs.readFileSync(file, "utf8");
+    assert.notEqual(source.replace(from, to), source);
+    fs.writeFileSync(file, source.replace(from, to));
+    assert.ok(validateUpgradeScripts(root).some(error => error.includes("contract missing")));
+    fs.writeFileSync(file, source);
+  }
 });
 
 test("rejects generated application validation outside the quality gate", () => {
@@ -336,6 +402,30 @@ test("accepts the generated and mutated application contract", () => {
     validateGeneratedApplicationScript(validGeneratedApplicationScript),
     [],
   );
+});
+
+test("database entry-point process and PostgreSQL gates cannot be removed", () => {
+  for (const contract of [
+    "app_server/ssr,app_server/database-operations",
+    "--features database-operations,db-postgres --test database_operations",
+  ]) {
+    assert.ok(validateGeneratedApplicationScript(
+      validGeneratedApplicationScript.replace(contract, ""),
+    ).some(error => error.includes("database")));
+  }
+});
+
+test("pagination fixtures and real PostgreSQL execution cannot be removed", () => {
+  for (const contract of [
+    '"$validation_root/crates/infrastructure/tests/resource_pagination.rs"',
+    'cat "$repo_root/scripts/resource-pagination-ui-contract.rs"',
+    '--features db-postgres --test resource_pagination -- --include-ignored',
+    'cargo check --locked -p app_web --all-targets --no-default-features --features hydrate',
+  ]) {
+    assert.ok(validateGeneratedApplicationScript(
+      validGeneratedApplicationScript.replace(contract, ""),
+    ).some(error => error.includes("pagination")));
+  }
 });
 
 test("rejects lifecycle validation without the installed Identity source", () => {
@@ -492,4 +582,10 @@ test("rejects disabled concurrency cancellation", () => {
   assert.ok(
     errors.some((error) => error.includes("cancel superseded")),
   );
+});
+
+test("fresh minimal cannot disappear from the required default cell", () => {
+  const errors = validateRepositoryValidationWorkflow(validWorkflow.replace(
+    "        run: sh scripts/generated-application-check.sh minimal", "        run: true"));
+  assert.ok(errors.some(error => error.includes("fresh minimal lifecycle")));
 });

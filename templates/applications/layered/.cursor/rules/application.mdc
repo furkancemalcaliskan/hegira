@@ -1,0 +1,11 @@
+---
+description: Canonical {{application_name}} application instructions
+globs:
+alwaysApply: true
+---
+
+The root [AGENTS.md](../../AGENTS.md) is the canonical application working contract
+for humans and agents. Read and follow it before planning, editing, validating,
+or performing an external action. This adapter adds no separate project rules.
+
+@AGENTS.md

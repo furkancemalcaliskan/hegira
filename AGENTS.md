@@ -34,6 +34,11 @@ commands change. Never describe planned work as implemented.
   search, security, settings, storage, configuration, persistence,
   background-work, HTTP, Leptos, observability, test-support, and runtime
   packages. These packages are application-independent framework source.
+  Persistence migration status inspects an explicitly selected target through
+  the composed plan without writing database data, schema, or history. SQLite
+  WAL coordination may affect sidecars; status never creates a missing database
+  or metadata table. Public CLI database commands delegate to the application's
+  entry point rather than calling this primitive directly.
 - `modules/identity/` contains the canonical Identity Domain Shared, Domain,
   Application Contracts, Application, SQLx, Axum HTTP, and Leptos adapter
   packages.
@@ -55,6 +60,16 @@ commands change. Never describe planned work as implemented.
   Its Infrastructure operation surface owns startup migration and Identity
   seed composition plus explicitly authorized disposable-database reset for
   validation; it does not use compatibility migration helpers or `db_migrator`.
+  Generated-once application quality automation checks the selected provider,
+  native/WASM, locked release output, disposable startup, and supply-chain policy
+  through an unconditional aggregate. It uses bounded CLI-owned validation caches
+  and the matching immutable published CLI source release; source upgrades
+  preserve owner-customized automation.
+  Both variants additionally provide `apps/server`'s separately selected
+  `app_database` binary through `database-operations`. Its Infrastructure
+  database-operation subset validates configuration before isolated status or
+  forward migration on an existing target; it never starts HTTP, ensures a
+  database, seeds Identity, or initializes workers and unrelated providers.
   `templates/applications/layered-minimal/` contains the explicit module-free
   outward-layer variant. It preserves the server, Leptos client, selected SQLx
   provider, configuration, and deployment boundaries while recording no
@@ -80,6 +95,9 @@ commands change. Never describe planned work as implemented.
   Schema-3 package manifests may additionally declare digest-authenticated,
   data-only direct upgrade edges with exact release and composition states;
   resolving an edge performs no source mutation or external operation.
+  Declared upgrade-only lock assets are authenticated by the same package snapshot
+  and digest. Only exact managed Cargo.lock edits may select them; ordinary
+  rendering never emits these assets.
   Package-controlled
   framework source variables cannot be overridden by a normal render.
 - `tools/template_renderer/` contains the reusable deterministic and atomic
@@ -124,6 +142,76 @@ commands change. Never describe planned work as implemented.
   Mutation output is deterministic, versioned, content-redacted, and derived
   from the same typed plan used for publication. The CLI also owns stable
   process outcomes and its user-facing diagnostic contract.
+  `doctor --operation` reuses the typed operation plan for read-only file,
+  composition, provider/profile, recovery, and release-output ownership
+  diagnostics. Native version/target probes require explicit `--probe-tools`,
+  absolute trusted Cargo, and external auxiliary-directory selections. They
+  run outside the application with a closed, Rustup-only environment,
+  bounded output/deadlines, and owned child cleanup. Doctor never executes
+  frontend scripts, build hooks, application code, or database operations,
+  creates output claims, installs tools, or cleans recovery state. Native
+  tools themselves remain trusted code, not sandboxed. Warnings and a zero
+  doctor exit are not execution consent or proof that an operation can run.
+  Its `operations` library additionally derives read-only typed development,
+  check, test, release-build, and database-operation plans from a safely resolved
+  current application and authenticated bundled composition. These plans do
+  not probe tools, load runtime configuration, execute commands, or grant
+  execution authority. Database steps declare the application-owned `app_database`
+  entry point; public `db status` and `db migrate` require an explicit matching
+  profile and preview or execution mode. Their separate approval-aware executor
+  validates real registration/source/profile files and delegates locked Cargo
+  execution to that binary, never a CLI SQL engine. Production migration requires
+  independent `--approve-production-migration` in addition to execution trust.
+  Its separate Linux native
+  check/test/development/release-build execution library requires explicit trust consent, an absolute trusted Cargo
+  selection, and trusted auxiliary tool directories. It anchors the approved
+  root and executable, re-authenticates composition, rejects pending recovery
+  and concurrent operations, and owns child-group termination and reaping.
+  Inherited environment and application/tool output are not sanitized; this is
+  not a sandbox. Development verifies pinned Rust/WASM, Cargo Leptos, Node,
+  npm receipts, and Tailwind before foreground watch/serve or release build.
+  Public `dev`, `check`, `test`, and `build --release` expose read-only
+  `--dry-run` or explicitly trusted `--execute` through the same typed plan.
+  Execution additionally requires `--trust-application`, absolute `--cargo`
+  and `--tool-directory` selections, and Linux. CLI signal handlers forward
+  SIGINT/SIGTERM into owned group cleanup; ignored database tests never run by
+  default. For dev/check/test/build, JSON execution discards child output; human
+  execution inherits it without redaction. Database execution discards raw logs
+  in both modes and accepts only a bounded, validated schema-1 application result.
+  It never provisions a database, seeds, or starts HTTP. Status preserves database
+  data/schema/history, with the documented SQLite WAL coordination exception;
+  compiling trusted application code can still write Cargo output. Review runtime
+  settings and inherited URL overrides before approving database access. Source
+  upgrades, inspection, doctor, and generation do not grant database authority.
+  `dev` additionally requires explicit lock-matched
+  `--wasm-bindgen` and uses a private allowlisted tool PATH and locked Cargo
+  proxy without installing tools or rewriting source. It explicitly selects a
+  development provider/profile and localhost bind, but trusted startup can
+  migrate, seed, and access configured dependencies. Review runtime settings
+  and inherited database overrides before execution. Release builds additionally
+  require explicitly installed `wasm-opt` 123. Ordinary release builds select
+  the separately claimed `target/hegira/release-build` output root. Existing
+  unclaimed output, symlinks, and external hard links fail closed. Successful reports include
+  verified application-relative server/site/WASM locations, not deployment
+  approval. Never fabricate the cache's ownership marker to adopt unrelated
+  data. This output claim grants neither ordinary Cargo-cache cleanup nor a
+  disk-budget guarantee. Reset, rollback, seed, and arbitrary SQL are not public
+  CLI database capabilities.
+  Explicit `--validation-cache` check/test/release-build plans instead select
+  separately claimed disposable `target/hegira/validation/{check,test,build}`
+  output, with configurable 64 GiB default pre/post allocated-byte enforcement
+  and inactive LRU reclamation. Directory leases inherited by trusted children
+  protect active caches even after CLI interruption. `artifacts cache-status`
+  is read-only; `artifacts prune` requires explicit preview or execution and
+  revalidates claims, no-follow paths, activity and recovery before deletion.
+  Validation release receipts refer to disposable cache outputs. Developer,
+  watch, database, ordinary release, global cache and Docker output remain
+  outside this budget and deletion authority; never fabricate ownership claims.
+  Its Linux `artifacts status` command reports read-only local target usage,
+  developer versus validated release/validation ownership, operation activity,
+  exclusions, and the absence of an overall output budget in human/schema-1 JSON.
+  Bounded no-follow metadata walks never build, create claims, or clean;
+  unsafe/partial trees cannot grant ownership or deletion authority.
   Generation validates project identity and destination before rendering and
   requires a new destination under an existing parent without symlinks. Safe
   atomic publication fails closed on unsupported platforms.
@@ -153,7 +241,9 @@ commands change. Never describe planned work as implemented.
   provider-specific, append-only application migration scaffolds without
   connecting to a database or changing historical migrations.
 - `tools/upgrade_test_support/` authenticates and materializes immutable
-  content-addressed v0.6.0 application baselines for upgrade tests. The closed
+  content-addressed v0.6.0 and v0.7.0 application baselines for upgrade tests.
+  Version selection is explicit; legacy callers retain v0.6.0. Inventories and
+  v0.7.0 import provenance are pinned alongside tree/object digests. The closed
   fixture matrix covers default, minimal, and Identity-added SQLite and
   PostgreSQL states without consulting current templates, Git, or the network.
 - `scripts/` contains local validation and release helpers.
@@ -166,6 +256,12 @@ commands change. Never describe planned work as implemented.
   `target/validation/`. Their 64 GiB default LRU budget is enforced before and
   after validation, active locks are protected, and status, prune, and complete
   cleanup commands never own normal developer Cargo output.
+  The framework CI job's separate public database-operation security matrix stages all six
+  current compositions, uses only owned SQLite files and explicitly authorized
+  disposable PostgreSQL schemas, and exercises status/approval/history/failure
+  isolation. Test-only migrations never enter canonical source. Its focused
+  SQLite subset is `sh scripts/database-operation-check.sh sqlite`; the full
+  matrix requires the documented explicit disposable PostgreSQL opt-in.
 - `.github/workflows/` contains validation and release automation.
 
 Do not create future-facing directories, manifests, modules, tools, clients, or
@@ -174,9 +270,13 @@ implementation.
 
 ## Existing-Application Upgrade Boundaries
 
-The bundled direct edge supports only v0.6.0 → v0.7.0 default, minimal, and
-Identity-added applications with SQLite or PostgreSQL. It changes only
-`Cargo.toml`, `Cargo.lock`, and `hegira.toml`. Application-owned product code,
+The bundled direct edge supports only v0.7.0 → v0.8.0 default, minimal, and
+Identity-added applications with SQLite or PostgreSQL. It edits
+`Cargo.toml`, `Cargo.lock`, and `hegira.toml` and creates the exact absent
+`crates/infrastructure/src/database_operations.rs`. The added source is unregistered;
+existing server registration and configuration remain owner-controlled. Complete
+the documented manual adoption before CLI database execution. Application-owned
+product code,
 generated-once scaffolding, and immutable migration history are preserved.
 Managed ownership is not blanket rewrite permission: the exact authenticated
 edge and observed digests must authorize each transition. Customized managed
@@ -194,6 +294,20 @@ files fail closed; there is no automatic conflict merge or force-upgrade.
   and deployment approval remain separate application-owner responsibilities.
 - Do not run database operations, regenerate dependencies, start services, or
   deploy as an inferred consequence of a source-upgrade request.
+
+## Application Operation Review
+
+Use the [workflow boundaries](docs/getting-started.md#choose-an-application-workflow)
+when selecting commands. Source mutation apply syntax differs from operation
+execution; a preview or doctor result is not an execution token. For database
+commands, verify the [profile/provider contract](docs/configuration.md#database-operation-profiles)
+and the real entry point, including manual adoption after a source upgrade.
+Report child outcomes using the CLI contract rather than treating a child's
+exit code as Hegira's exit code. Human application-operation logs can contain
+unredacted output; database logs follow their separate bounded protocol.
+Keep ordinary developer output, claimed release output, explicit validation
+caches and repository validation storage distinct. An ownership or idle report
+grants neither a global disk budget nor cleanup of unclaimed data.
 
 ## Setup And Run
 

@@ -69,14 +69,27 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version-file: .node-version
+      - run: |
+          cargo audit --file templates/upgrades/locks/v0-8-0-minimal.Cargo.lock
+          cargo audit --file templates/upgrades/locks/v0-8-0-identity-added.Cargo.lock
       - run: sh scripts/frontend-check.sh
       - run: sh scripts/release-policy.sh
       - uses: anchore/sbom-action@v0
         with:
           upload-release-assets: false
   framework:
+    services:
+      postgres:
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+    env:
+      DATABASE_URL: postgres://postgres@localhost:5432/hegira_test
     steps:
-      - run: sh scripts/framework-check.sh
+      - run: WITH_IGNORED_DB_TESTS=true sh scripts/framework-check.sh
+      - env:
+          ALLOW_DATABASE_OPERATION_DISPOSABLE_TARGETS: "true"
+          DATABASE_OPERATION_POSTGRES_URL: postgres://postgres@localhost:5432/hegira_test
+        run: sh scripts/database-operation-check.sh
   official-modules:
     steps:
       - run: sh scripts/official-modules-check.sh
@@ -110,6 +123,9 @@ jobs:
           key: generated-\${{ matrix.lifecycle }}-targets-native-wasm32-profiles-dev-test-release-providers-sqlite-postgres-features-ssr-db-sqlite-db-postgres-hydrate-lock-\${{ hashFiles('Cargo.lock', 'templates/applications/layered/Cargo.lock') }}-source-\${{ steps.source-identity.outputs.tree }}
       - run: echo "\${{ steps.generated-cache.outputs.cache-hit }}"
       - run: sh scripts/generated-application-check.sh "\${{ matrix.lifecycle }}"
+      - name: Validate fresh minimal
+        if: matrix.lifecycle == 'default'
+        run: sh scripts/generated-application-check.sh minimal
   publish:
     if: github.event_name == 'push'
     needs:
@@ -210,6 +226,50 @@ test("rejects candidate versions outside canonical release-source packages", (co
         error.includes("domain"),
     ),
   );
+});
+
+function candidateFixture(context) {
+  const root = releaseFixture();
+  context.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.mkdirSync(path.join(root, ".github", "workflows"), { recursive: true });
+  fs.writeFileSync(path.join(root, ".github", "workflows", "release.yml"), validWorkflow);
+  const fixture = metadata({
+    metadata: {
+      hegira: {
+        release_candidate: { base: "v0.2.0", target: "v0.3.0", issue: 394 },
+      },
+    },
+  });
+  fixture.packages[0].version = "0.3.0";
+  assert.deepEqual(validateReleaseRepository(root, "v0.3.0", fixture, { allowCandidate: true }), []);
+  return { root, fixture };
+}
+
+test("candidate validation requires every consumed package to advance", context => {
+  const { root, fixture } = candidateFixture(context);
+  fixture.packages[0].version = "0.2.0";
+  const errors = validateReleaseRepository(root, "v0.3.0", fixture, { allowCandidate: true });
+  assert.ok(errors.some(error => error.includes("release source package version mismatch: runtime")));
+});
+
+test("candidate validation keeps base pins until the coherent identity handoff", context => {
+  const { root, fixture } = candidateFixture(context);
+  const lock = path.join(root, "templates", "applications", "layered", "Cargo.lock");
+  fs.writeFileSync(lock, fs.readFileSync(lock, "utf8").replace("?tag=v0.2.0#", "?tag=v0.3.0#"));
+  const errors = validateReleaseRepository(root, "v0.3.0", fixture, { allowCandidate: true });
+  assert.ok(errors.some(error => error.includes("framework source outside the release tag")));
+  assert.ok(errors.some(error => error.includes("base lockfile contains no framework source packages")));
+});
+
+test("candidate validation retains every generated production and upgrade lifecycle gate", context => {
+  const { root, fixture } = candidateFixture(context);
+  const workflow = path.join(root, ".github", "workflows", "release.yml");
+  for (const lifecycle of ["default", "identity-added", "upgrade-default", "upgrade-minimal", "upgrade-identity-added"]) {
+    const entry = `- lifecycle: ${lifecycle}\n`;
+    assert.ok(validWorkflow.includes(entry));
+    fs.writeFileSync(workflow, validWorkflow.replace(entry, "- lifecycle: omitted\n"));
+    assert.ok(validateReleaseRepository(root, "v0.3.0", fixture, { allowCandidate: true }).length > 0, lifecycle);
+  }
 });
 
 test("rejects malformed and non-increasing release candidates", () => {
@@ -341,6 +401,24 @@ test("rejects missing versioned release notes", (context) => {
 
 test("accepts the source-only framework release workflow contract", () => {
   assert.deepEqual(validateReleaseWorkflow(validWorkflow), []);
+});
+
+test("release requires unconditional disposable PostgreSQL migration status", () => {
+  for (const contract of [
+    "WITH_IGNORED_DB_TESTS=true sh scripts/framework-check.sh",
+    "DATABASE_URL: postgres://postgres@localhost:5432/hegira_test",
+    "ALLOW_DATABASE_OPERATION_DISPOSABLE_TARGETS: \"true\"",
+    "DATABASE_OPERATION_POSTGRES_URL: postgres://postgres@localhost:5432/hegira_test",
+    "run: sh scripts/database-operation-check.sh",
+  ]) {
+    assert.ok(validateReleaseWorkflow(validWorkflow.replace(contract, "true"))
+      .some(error => error.includes("migration status")));
+  }
+  for (const condition of ["    if: false\n", "    continue-on-error: true\n"]) {
+    assert.ok(validateReleaseWorkflow(validWorkflow.replace(
+      "  framework:\n", `  framework:\n${condition}`,
+    )).some(error => error.includes("migration status")));
+  }
 });
 
 test("release frontend audit cannot be removed, skipped or tolerated", () => {
@@ -501,3 +579,21 @@ test("rejects publication outside tag push events", () => {
     errors.some((error) => error.includes("restricted to tag push events")),
   );
 });
+
+for (const change of ["revision", "tag", "missing", "symlink", "traversal"]) {
+  test(`upgrade lock assets cannot bypass the release source: ${change}`, t => {
+    const root = releaseFixture();
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const asset = "upgrades/locks/v0-2-0-minimal.Cargo.lock";
+    const manifest = path.join(root, "templates/package.toml");
+    fs.appendFileSync(manifest, `upgrade_lockfiles = ["${change === "traversal" ? "../private.lock" : asset}"]\n`);
+    const target = path.join(root, "templates", asset);
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    let source = fs.readFileSync(path.join(root, "templates/applications/layered/Cargo.lock"), "utf8");
+    if (change === "revision") source = source.replace("0123456789abcdef0123456789abcdef01234567", "a".repeat(40));
+    if (change === "tag") source = source.replace("tag=v0.2.0", "tag=v0.1.0");
+    if (change === "symlink") fs.symlinkSync(path.join(root, "templates/applications/layered/Cargo.lock"), target);
+    else if (change !== "missing") fs.writeFileSync(target, source);
+    assert.ok(validateCanonicalApplicationLock(root, "v0.2.0").some(error => error.includes("upgrade lockfile")));
+  });
+}

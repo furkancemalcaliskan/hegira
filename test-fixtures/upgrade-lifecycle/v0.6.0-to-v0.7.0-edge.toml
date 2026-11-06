@@ -34,6 +34,11 @@ claims = [
 [compositions.target_ownership]
 default = "application-owned"
 claims = [
+  { path = "apps/server/Cargo.toml", class = "managed-integration", integration = "database-entry-point-manifest" },
+  { path = "apps/server/src/bin/app_database.rs", class = "managed-integration", integration = "database-entry-point" },
+  { path = "crates/infrastructure/src/database_operations.rs", class = "managed-integration", integration = "database-operations" },
+  { path = "crates/infrastructure/src/config.rs", class = "managed-integration", integration = "database-operation-config" },
+  { path = "crates/infrastructure/src/lib.rs", class = "managed-integration", integration = "database-operation-module" },
   { path = "Cargo.lock", class = "managed-integration", integration = "framework-lockfile" },
   { path = "Cargo.toml", class = "managed-integration", integration = "framework-dependencies" },
   { path = "Dockerfile", class = "generated-once" },
@@ -91,7 +96,7 @@ path = "hegira.toml"
 integration = "application-manifest"
 kind = "edit"
 source_sha256 = "sha256:0a821670896bb1667613857c57169369379d97eb8cff59b49f741f57f133c4b0"
-target_sha256 = "sha256:1b6a7f0c631d092118e23005cb2399700592db0f142a5fe4f908771d9e1b5a95"
+target_sha256 = "sha256:6bb189b9afc079c851735f189b610813df3be8df1d33013f20dbef6897c68635"
 
 [[compositions]]
 id = "default-sqlite"
@@ -109,6 +114,11 @@ claims = [
 [compositions.target_ownership]
 default = "application-owned"
 claims = [
+  { path = "apps/server/Cargo.toml", class = "managed-integration", integration = "database-entry-point-manifest" },
+  { path = "apps/server/src/bin/app_database.rs", class = "managed-integration", integration = "database-entry-point" },
+  { path = "crates/infrastructure/src/database_operations.rs", class = "managed-integration", integration = "database-operations" },
+  { path = "crates/infrastructure/src/config.rs", class = "managed-integration", integration = "database-operation-config" },
+  { path = "crates/infrastructure/src/lib.rs", class = "managed-integration", integration = "database-operation-module" },
   { path = "Cargo.lock", class = "managed-integration", integration = "framework-lockfile" },
   { path = "Cargo.toml", class = "managed-integration", integration = "framework-dependencies" },
   { path = "Dockerfile", class = "generated-once" },
@@ -166,7 +176,7 @@ path = "hegira.toml"
 integration = "application-manifest"
 kind = "edit"
 source_sha256 = "sha256:4d4048a4403bfb5ab53c6c0b082773ccbae5e9acb2f1e9319007f5c648d5334d"
-target_sha256 = "sha256:1b6a7f0c631d092118e23005cb2399700592db0f142a5fe4f908771d9e1b5a95"
+target_sha256 = "sha256:6bb189b9afc079c851735f189b610813df3be8df1d33013f20dbef6897c68635"
 
 [[compositions]]
 id = "identity-added-postgres"
@@ -184,6 +194,11 @@ claims = [
 [compositions.target_ownership]
 default = "application-owned"
 claims = [
+  { path = "apps/server/Cargo.toml", class = "managed-integration", integration = "database-entry-point-manifest" },
+  { path = "apps/server/src/bin/app_database.rs", class = "managed-integration", integration = "database-entry-point" },
+  { path = "crates/infrastructure/src/database_operations.rs", class = "managed-integration", integration = "database-operations" },
+  { path = "crates/infrastructure/src/config.rs", class = "managed-integration", integration = "database-operation-config" },
+  { path = "crates/infrastructure/src/lib.rs", class = "managed-integration", integration = "database-operation-module" },
   { path = "Cargo.lock", class = "managed-integration", integration = "framework-lockfile" },
   { path = "Cargo.toml", class = "managed-integration", integration = "framework-dependencies" },
   { path = "Dockerfile", class = "generated-once" },
@@ -234,7 +249,7 @@ path = "Cargo.toml"
 integration = "framework-dependencies"
 kind = "edit"
 source_sha256 = "sha256:c701265208e8a0d77720bed8a8684508f836c72af8579d28e79261eec7a34c96"
-target_sha256 = "sha256:7be5c7bddd612a83a0d1f615668581aaea01568c59bf032fe37a519c8ecd5427"
+target_sha256 = "sha256:a008847c39a2a27300087d78a56d92b601193092b6a3e5797f2bc7491865fb01"
 
 [[compositions.managed_integrations]]
 component = "layered-base"
@@ -242,7 +257,7 @@ path = "hegira.toml"
 integration = "application-manifest"
 kind = "edit"
 source_sha256 = "sha256:c6cf70a6573d7d4233a3b6ea83469bcac8f6b8fed00a243a306fd615167996d7"
-target_sha256 = "sha256:1b6a7f0c631d092118e23005cb2399700592db0f142a5fe4f908771d9e1b5a95"
+target_sha256 = "sha256:6bb189b9afc079c851735f189b610813df3be8df1d33013f20dbef6897c68635"
 
 [[compositions]]
 id = "identity-added-sqlite"
@@ -260,6 +275,11 @@ claims = [
 [compositions.target_ownership]
 default = "application-owned"
 claims = [
+  { path = "apps/server/Cargo.toml", class = "managed-integration", integration = "database-entry-point-manifest" },
+  { path = "apps/server/src/bin/app_database.rs", class = "managed-integration", integration = "database-entry-point" },
+  { path = "crates/infrastructure/src/database_operations.rs", class = "managed-integration", integration = "database-operations" },
+  { path = "crates/infrastructure/src/config.rs", class = "managed-integration", integration = "database-operation-config" },
+  { path = "crates/infrastructure/src/lib.rs", class = "managed-integration", integration = "database-operation-module" },
   { path = "Cargo.lock", class = "managed-integration", integration = "framework-lockfile" },
   { path = "Cargo.toml", class = "managed-integration", integration = "framework-dependencies" },
   { path = "Dockerfile", class = "generated-once" },
@@ -310,7 +330,7 @@ path = "Cargo.toml"
 integration = "framework-dependencies"
 kind = "edit"
 source_sha256 = "sha256:c701265208e8a0d77720bed8a8684508f836c72af8579d28e79261eec7a34c96"
-target_sha256 = "sha256:7be5c7bddd612a83a0d1f615668581aaea01568c59bf032fe37a519c8ecd5427"
+target_sha256 = "sha256:a008847c39a2a27300087d78a56d92b601193092b6a3e5797f2bc7491865fb01"
 
 [[compositions.managed_integrations]]
 component = "layered-base"
@@ -318,7 +338,7 @@ path = "hegira.toml"
 integration = "application-manifest"
 kind = "edit"
 source_sha256 = "sha256:097ccbc4ac762ea231646e2967a2ff0e6e441c3c8f038ae104ae2fb1073d9c19"
-target_sha256 = "sha256:1b6a7f0c631d092118e23005cb2399700592db0f142a5fe4f908771d9e1b5a95"
+target_sha256 = "sha256:6bb189b9afc079c851735f189b610813df3be8df1d33013f20dbef6897c68635"
 
 [[compositions]]
 id = "minimal-postgres"
@@ -336,6 +356,11 @@ claims = [
 [compositions.target_ownership]
 default = "application-owned"
 claims = [
+  { path = "apps/server/Cargo.toml", class = "managed-integration", integration = "database-entry-point-manifest" },
+  { path = "apps/server/src/bin/app_database.rs", class = "managed-integration", integration = "database-entry-point" },
+  { path = "crates/infrastructure/src/database_operations.rs", class = "managed-integration", integration = "database-operations" },
+  { path = "crates/infrastructure/src/config.rs", class = "managed-integration", integration = "database-operation-config" },
+  { path = "crates/infrastructure/src/lib.rs", class = "managed-integration", integration = "database-operation-module" },
   { path = "Cargo.lock", class = "managed-integration", integration = "framework-lockfile" },
   { path = "Cargo.toml", class = "managed-integration", integration = "framework-dependencies" },
   { path = "Dockerfile", class = "generated-once" },
@@ -377,7 +402,7 @@ path = "Cargo.lock"
 integration = "framework-lockfile"
 kind = "edit"
 source_sha256 = "sha256:43414991706a33058cd961cc419270e43b191cd82ab4be86c91e3627a764f2d2"
-target_sha256 = "sha256:b44f46d0ae38d38b1388d51d2130f3eeb2ee454dbf2e1890f3ad649211db5377"
+target_sha256 = "sha256:02eaf173f690dc5e156b0a9037fda4bf7533a7cf9e9cda8476200c3c031281de"
 
 [[compositions.managed_integrations]]
 component = "layered-leptos-minimal"
@@ -385,7 +410,7 @@ path = "Cargo.toml"
 integration = "framework-dependencies"
 kind = "edit"
 source_sha256 = "sha256:6ad56c1425dc2798600448cd3055b3c50511dfcc965cbc75753966127df9d7cf"
-target_sha256 = "sha256:7be5c7bddd612a83a0d1f615668581aaea01568c59bf032fe37a519c8ecd5427"
+target_sha256 = "sha256:a008847c39a2a27300087d78a56d92b601193092b6a3e5797f2bc7491865fb01"
 
 [[compositions.managed_integrations]]
 component = "layered-base"
@@ -393,7 +418,7 @@ path = "hegira.toml"
 integration = "application-manifest"
 kind = "edit"
 source_sha256 = "sha256:dfaf81ed63917c9435c5048036feba7d4c736f7c852605209a29d6d8ff97a37a"
-target_sha256 = "sha256:1b6a7f0c631d092118e23005cb2399700592db0f142a5fe4f908771d9e1b5a95"
+target_sha256 = "sha256:6bb189b9afc079c851735f189b610813df3be8df1d33013f20dbef6897c68635"
 
 [[compositions]]
 id = "minimal-sqlite"
@@ -411,6 +436,11 @@ claims = [
 [compositions.target_ownership]
 default = "application-owned"
 claims = [
+  { path = "apps/server/Cargo.toml", class = "managed-integration", integration = "database-entry-point-manifest" },
+  { path = "apps/server/src/bin/app_database.rs", class = "managed-integration", integration = "database-entry-point" },
+  { path = "crates/infrastructure/src/database_operations.rs", class = "managed-integration", integration = "database-operations" },
+  { path = "crates/infrastructure/src/config.rs", class = "managed-integration", integration = "database-operation-config" },
+  { path = "crates/infrastructure/src/lib.rs", class = "managed-integration", integration = "database-operation-module" },
   { path = "Cargo.lock", class = "managed-integration", integration = "framework-lockfile" },
   { path = "Cargo.toml", class = "managed-integration", integration = "framework-dependencies" },
   { path = "Dockerfile", class = "generated-once" },
@@ -452,7 +482,7 @@ path = "Cargo.lock"
 integration = "framework-lockfile"
 kind = "edit"
 source_sha256 = "sha256:43414991706a33058cd961cc419270e43b191cd82ab4be86c91e3627a764f2d2"
-target_sha256 = "sha256:b44f46d0ae38d38b1388d51d2130f3eeb2ee454dbf2e1890f3ad649211db5377"
+target_sha256 = "sha256:02eaf173f690dc5e156b0a9037fda4bf7533a7cf9e9cda8476200c3c031281de"
 
 [[compositions.managed_integrations]]
 component = "layered-leptos-minimal"
@@ -460,7 +490,7 @@ path = "Cargo.toml"
 integration = "framework-dependencies"
 kind = "edit"
 source_sha256 = "sha256:6ad56c1425dc2798600448cd3055b3c50511dfcc965cbc75753966127df9d7cf"
-target_sha256 = "sha256:7be5c7bddd612a83a0d1f615668581aaea01568c59bf032fe37a519c8ecd5427"
+target_sha256 = "sha256:a008847c39a2a27300087d78a56d92b601193092b6a3e5797f2bc7491865fb01"
 
 [[compositions.managed_integrations]]
 component = "layered-base"
@@ -468,4 +498,4 @@ path = "hegira.toml"
 integration = "application-manifest"
 kind = "edit"
 source_sha256 = "sha256:eb403909d279b9b6172af91359b3951f05c0321000eba887583e6af0e0610ba0"
-target_sha256 = "sha256:1b6a7f0c631d092118e23005cb2399700592db0f142a5fe4f908771d9e1b5a95"
+target_sha256 = "sha256:6bb189b9afc079c851735f189b610813df3be8df1d33013f20dbef6897c68635"

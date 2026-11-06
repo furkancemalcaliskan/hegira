@@ -8,6 +8,7 @@ if [ "$#" -gt 1 ]; then
 fi
 # Released upgrades share the aggregate lifecycle gate, not its creation workspace.
 case "${1:-default}" in
+  minimal) exec sh "$repo_root/scripts/upgraded-application-check.sh" fresh-minimal ;;
   upgrade-default|upgrade-minimal|upgrade-identity-added)
     exec sh "$repo_root/scripts/upgraded-application-check.sh" "${1#upgrade-}"
     ;;
@@ -27,7 +28,7 @@ case "$mode" in
     default_http_port=38082
     default_postgres_port=35433
     ;;
-  *) echo "usage: sh scripts/generated-application-check.sh [default|identity-added|upgrade-default|upgrade-minimal|upgrade-identity-added]" >&2; exit 2 ;;
+  *) echo "usage: sh scripts/generated-application-check.sh [default|minimal|identity-added|upgrade-default|upgrade-minimal|upgrade-identity-added]" >&2; exit 2 ;;
 esac
 phase_label=
 phase_started=
@@ -241,6 +242,34 @@ for database in sqlite postgres; do
       --destination "$source" --database postgres --client leptos --component identity
   fi
 done
+# Resolve only an explicitly separate owner review copy after additive installation.
+# Public new output itself must work unchanged with its committed lock.
+for database in sqlite postgres; do
+  source="$staging_parent/$database-source"
+  application_fingerprint "$source" >"$staging_parent/$database-public-before.sha256"
+  if [ "$mode" = identity-added ]; then
+    review="$staging_parent/$database-public-lock-review"
+    cp -R "$source" "$review"
+    # Installation is source-only. Seed the explicit owner review from the
+    # authenticated current Identity lock, retaining its exact real candidate
+    # source even before the v0.8.0 tag is published. Do not fabricate a tag or
+    # change any public dependency declaration or installed source.
+    cp "$canonical_lock" "$review/Cargo.lock"
+    (cd "$review"; cargo metadata --all-features --format-version 1 >/dev/null)
+    (cd "$review"; cargo metadata --locked --all-features --format-version 1 >/dev/null)
+    framework_sources() {
+      sed -n '/^source = "git+https:\/\/github.com\/furkancemalcaliskan\/hegira.git/p' "$1" | LC_ALL=C sort -u
+    }
+    framework_sources "$canonical_lock" >"$staging_parent/$database-reviewed-pins"
+    framework_sources "$review/Cargo.lock" >"$staging_parent/$database-resolved-pins"
+    cmp "$staging_parent/$database-reviewed-pins" "$staging_parent/$database-resolved-pins"
+    echo "Identity installation owner lock review passed with unchanged public Git pins ($database)"
+  else
+    (cd "$source"; cargo metadata --locked --all-features --format-version 1 >/dev/null)
+  fi
+  application_fingerprint "$source" >"$staging_parent/$database-public-after.sha256"
+  cmp "$staging_parent/$database-public-before.sha256" "$staging_parent/$database-public-after.sha256"
+done
 test -f "$staging_parent/sqlite-source/Cargo.lock"
 test -f "$staging_parent/postgres-source/Cargo.lock"
 cmp "$staging_parent/sqlite-source/Cargo.lock" "$staging_parent/postgres-source/Cargo.lock"
@@ -364,6 +393,15 @@ for database in sqlite postgres; do
   cmp "$migration_artifacts/before-duplicate.sha256" "$migration_artifacts/after-duplicate.sha256"
 
   stage_framework_source "$validation_root"
+  # These fixtures belong only to the disposable validation copy. Public CLI
+  # output and immutable application/upgrade source remain unchanged.
+  mkdir -p "$validation_root/crates/infrastructure/tests"
+  cp "$repo_root/scripts/resource-pagination-contract.rs" \
+    "$validation_root/crates/infrastructure/tests/resource_pagination.rs"
+  cp "$validation_root/$generated_migration_path" \
+    "$validation_root/crates/infrastructure/tests/resource_pagination.sql"
+  cat "$repo_root/scripts/resource-pagination-ui-contract.rs" \
+    >>"$validation_root/apps/web/src/validation_record.rs"
   generated_tool_bin=$(sh "$repo_root/scripts/generated-toolchain.sh" application \
     "$validation_root")
   PATH="$generated_tool_bin:$PATH"
@@ -372,15 +410,17 @@ for database in sqlite postgres; do
   (
     cd "$validation_root"
     test -f Cargo.lock
-    cargo check --locked --workspace --all-targets --features app_server/ssr
+    cargo check --locked --workspace --all-targets --features app_server/ssr,app_server/database-operations
     HEGIRA_TEST_GENERATED_MIGRATION_VERSION="$generated_migration_version" \
     HEGIRA_TEST_GENERATED_MIGRATION_DESCRIPTION="validation record" \
     HEGIRA_TEST_GENERATED_RESOURCE_TABLE="validation_records" \
     HEGIRA_TEST_GENERATED_PERMISSION_PREFIX="validation-records" \
-      cargo test --locked --workspace --features app_server/ssr
+      cargo test --locked --workspace --features app_server/ssr,app_server/database-operations
     node "$repo_root/scripts/architecture-boundaries.mjs" \
       check-generated --root "$validation_root"
     cargo check --locked -p app_server --no-default-features --features hydrate \
+      --target wasm32-unknown-unknown
+    cargo check --locked -p app_web --all-targets --no-default-features --features hydrate \
       --target wasm32-unknown-unknown
     npm ci --prefix apps/web/src
     PATH="$validation_root/apps/web/src/node_modules/.bin:$PATH"
@@ -395,6 +435,14 @@ done
 phase_begin "PostgreSQL migration contracts"
 compose up --detach postgres
 
+(
+  cd "$generated_root"
+  ALLOW_GENERATED_APP_DB_RESET=true \
+  GENERATED_APP_DATABASE_URL="postgres://generated_app:$GENERATED_APP_DB_PASSWORD@127.0.0.1:$GENERATED_APP_POSTGRES_PORT/generated_app" \
+    cargo test --locked -p app_infrastructure --no-default-features \
+      --features db-postgres --test resource_pagination -- --include-ignored
+)
+
 if [ "$mode" = default ]; then (
   cd "$generated_root"
   ALLOW_GENERATED_APP_DB_RESET=true \
@@ -407,6 +455,13 @@ if [ "$mode" = default ]; then (
       --test database_contracts postgres_fresh_install_and_v020_upgrade_pass -- \
       --ignored --test-threads=1
 ); fi
+(
+  cd "$generated_root"
+  GENERATED_APP_DATABASE_URL="postgres://generated_app:$GENERATED_APP_DB_PASSWORD@127.0.0.1:$GENERATED_APP_POSTGRES_PORT/generated_app" \
+    cargo test --locked -p app_server --no-default-features \
+      --features database-operations,db-postgres --test database_operations -- \
+      --ignored --test-threads=1
+)
 phase_finish
 
 phase_begin "production container build"

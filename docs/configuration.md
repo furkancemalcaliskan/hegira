@@ -15,6 +15,14 @@ APP__RUNTIME__ROLE=web
 Profiles are `development`, `sqlite`, `test`, and `production`. Treat committed
 YAML values as defaults, not a secret store.
 
+The public `hegira dev` workflow explicitly selects `sqlite` or `development`
+from the recorded provider, overrides the database backend to match compiled
+features, and binds the application/site to `127.0.0.1:3000`. It does not load
+runtime configuration while previewing or certify the configured database as
+disposable. Other inherited overrides, including `APP__DATABASE__URL`, remain
+effective; review them before explicitly authorized startup, which may migrate
+and seed. See [Application development](getting-started.md#develop-an-application).
+
 Startup validates configuration before initializing telemetry, the database,
 or another external dependency. Validation runs in this order:
 
@@ -42,6 +50,45 @@ This preflight runs before telemetry, database pools, or other external clients
 are initialized. A bad capability selection therefore fails deterministically
 instead of appearing later as a connection or missing-provider error. Disabled
 optional providers do not require their Cargo features.
+
+## Database Operation Profiles
+
+The separate application-owned `app_database` binary uses the same profile
+files, defaults, and `APP__` overrides, but deserializes only environment,
+database, and `startup.ensure_database` settings. It accepts only the four
+documented `APP_ENV` profiles and pins its policy environment to that selection.
+Database structure, compiled database provider, and database production policy
+are validated in order before connecting. Production operations require
+`startup.ensure_database=false` and `database.auto_migrate=false`; explicit
+forward migration remains a separate request. Unrelated HTTP, Identity, worker,
+and optional-service settings do not initialize or block this isolated path.
+Normal server startup retains its full validation contract. See
+[application-owned database operations](operations.md#application-owned-database-entry-point).
+
+Public `hegira db status` and `db migrate` require an explicit baseline profile
+matching the application's recorded provider. Their preview never loads these
+runtime values. Explicit execution selects `APP_ENV` and the manifest's backend
+before delegating to the application binary; inherited URL and credential
+overrides remain the operator's responsibility. Production migration requires
+independent `--approve-production-migration` in addition to tool/application
+trust, but this flag does not certify the actual target. See
+[CLI database operations](getting-started.md#operate-an-application-database).
+
+The public CLI validates this baseline profile/provider contract before execution:
+
+| Profile | Default Identity application | Minimal application, including Identity added later |
+| --- | --- | --- |
+| `sqlite` | SQLite | SQLite |
+| `development` | PostgreSQL | PostgreSQL |
+| `test` | PostgreSQL | SQLite |
+| `production` | PostgreSQL | PostgreSQL |
+
+The `test` distinction comes from the application's original template, not just
+whether Identity is currently installed. Minimal's committed test profile uses
+an in-memory SQLite URL, which database operations reject: explicitly select an
+existing file-backed disposable target when testing those commands. Profile
+selection never certifies a database as disposable; review inherited URL
+overrides even when status is the requested operation.
 
 ## Compile-Time Features
 
@@ -94,7 +141,8 @@ Small local application:
 db-sqlite + runtime.role=all + database sessions + log mailer
 ```
 
-Minimal production application (the committed `production` profile):
+Default Identity application with optional providers disabled (the committed
+`production` profile):
 
 ```text
 db-postgres + runtime.role=web + database sessions + memory rate limiting
@@ -111,8 +159,10 @@ optional Meilisearch, S3, Prometheus, and OTLP
 SQLite is intended for local development, tests, and single-process small
 deployments. Do not run independently scaled SQLite web and worker replicas.
 
-The minimal profile is deliberately compatible with a binary compiled using
-only `ssr,db-postgres`. To select Redis, SMTP, S3, Meilisearch, Prometheus, or
+This production profile is deliberately compatible with a binary compiled using
+only `ssr,db-postgres`. It still includes Identity; the separate `minimal`
+composition has no authentication or authorization until Identity is installed.
+To select Redis, SMTP, S3, Meilisearch, Prometheus, or
 OTLP at runtime, first compile the corresponding Cargo feature and then
 override the provider configuration. Runtime configuration never adds a
 provider that was omitted from the binary.
@@ -148,8 +198,11 @@ for health, migrations, backup, and recovery.
 
 `hegira.toml` records release, composition, adapter selection, and source
 ownership; it is not runtime configuration. The current authenticated
-v0.6.0-to-v0.7.0 source upgrade changes only that manifest, `Cargo.toml`, and
-`Cargo.lock`. It preserves application-owned `config/` profiles and does not
+v0.7.0-to-v0.8.0 source upgrade edits that manifest, `Cargo.toml`, and
+`Cargo.lock` and adds an unregistered Infrastructure `database_operations.rs`.
+Before database use, the owner must
+[integrate its profile loader and entry point](getting-started.md#adopt-database-operations-after-a-source-upgrade).
+It preserves application-owned `config/` profiles and does not
 read runtime secrets, connect to providers, execute SQL, or enable optional
 capabilities. Keeping the selected database/client in the manifest does not
 override runtime settings or bypass startup validation.

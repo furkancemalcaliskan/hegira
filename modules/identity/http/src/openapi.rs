@@ -3,7 +3,6 @@ use utoipa::{
     Modify, OpenApi,
     openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme},
 };
-use utoipa_swagger_ui::SwaggerUi;
 
 use crate::{
     controllers::{
@@ -155,14 +154,69 @@ pub fn routes_with_document<S>(document: utoipa::openapi::OpenApi) -> Router<S>
 where
     S: Clone + Send + Sync + 'static,
 {
-    SwaggerUi::new("/swagger-ui")
-        .url("/api-docs/openapi.json", document)
-        .into()
+    // Keep the application's composed, typed document independent of UI assets.
+    Router::new()
+        .route(
+            "/api-docs/openapi.json",
+            axum::routing::get(move || {
+                let document = document.clone();
+                async move { axum::Json(document) }
+            }),
+        )
+        .merge(crate::swagger::routes())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn swagger_serves_the_composed_application_document_without_changing_its_schema() {
+        use axum::{body::Body, http::Request};
+        use http_body_util::BodyExt;
+        use tower::ServiceExt;
+
+        let mut document = document();
+        document.info.title = "Application-owned API".to_owned();
+        let path = document.paths.paths.values().next().unwrap().clone();
+        document
+            .paths
+            .paths
+            .insert("/api/application/probe".to_owned(), path);
+        let expected = document.to_json().unwrap();
+        let routes = routes_with_document::<()>(document);
+        let response = routes
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api-docs/openapi.json")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), axum::http::StatusCode::OK);
+        assert_eq!(response.headers()["content-type"], "application/json");
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        assert_eq!(body.as_ref(), expected.as_bytes());
+
+        let response = routes
+            .oneshot(
+                Request::builder()
+                    .uri("/swagger-ui/swagger-initializer.js")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), axum::http::StatusCode::OK);
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        assert!(
+            std::str::from_utf8(&body)
+                .unwrap()
+                .contains("/api-docs/openapi.json")
+        );
+    }
 
     #[test]
     fn identity_lifecycle_paths_are_documented() {

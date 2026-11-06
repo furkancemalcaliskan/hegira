@@ -122,11 +122,12 @@ minimal application until Identity has been installed.
 Installation is additive only. Dry-run and apply consume the same typed,
 content-redacted plan; apply publishes manifest, dependency, configuration,
 migration-source, server, HTTP, OpenAPI, and Leptos contributions through the
-application mutation transaction. The CLI currently provides no removal,
-unattended upgrades, remote package source, or database migration execution or
-rollback. Explicit direct application upgrades are a separate command contract;
-publication rollback on recoverable source failures is not a public downgrade
-or database rollback command. The application owner must review configuration,
+application mutation transaction. Installation provides no removal, unattended
+upgrade, remote package source, or database execution. Separate `hegira db status`
+and `db migrate` commands delegate explicitly approved database operations to the
+application's entry point. Direct source upgrades use their own authenticated
+command contract. Publication rollback on recoverable source failures is not a
+public downgrade or database rollback command. The application owner must review configuration,
 regenerate `Cargo.lock`, apply the selected provider migrations, and validate
 the application after installation.
 
@@ -179,7 +180,7 @@ The direct local dependency allowlist is enforced from locked Cargo metadata by
 | `identity_sqlx` | `background_jobs`, `identity_application`, `identity_application_contracts`, `identity_domain`, `identity_domain_shared`, `persistence`, `search` |
 | `identity_http` | `http_support`, `identity_application`, `identity_application_contracts`, `leptos_support` |
 | `identity_leptos` | `identity_application`, `identity_application_contracts`, `identity_domain_shared`, `leptos_support` |
-| `application_mutator` | `application_manifest` |
+| `application_mutator` | `application_manifest`; test-only `upgrade_test_support` |
 | `hegira_cli` | `application_manifest`, `application_mutator`, `resource_generator`, `template_renderer`; test-only `upgrade_test_support` |
 | `resource_generator` | `application_manifest`, `application_mutator` |
 | `template_renderer` | `application_manifest`, `application_mutator`; test-only `resource_generator`, `upgrade_test_support` |
@@ -299,7 +300,11 @@ before repository access.
 
 When OpenAPI is compiled, resource paths and schemas contribute a typed
 document which the application server explicitly merges with the Identity API
-document. The same managed-entry contract rejects missing, duplicate,
+document. The Identity HTTP adapter serves this typed document at
+`/api-docs/openapi.json` and embeds the official Swagger UI distribution from a
+locked, data-only dependency at `/swagger-ui/`. Asset extraction uses supported
+ZIP code and fixed output names; builds do not download UI assets separately.
+The same managed-entry contract rejects missing, duplicate,
 reordered, or malformed service, route, and document registrations before a
 change plan is produced. Provider migrations seed generated permission
 identifiers for the canonical administrator role so the composed authorization
@@ -315,6 +320,15 @@ icons are registered through keyed managed blocks. Route, localization, and
 registration conflicts fail before publication. Permission gates improve the
 presentation experience but do not replace authorization in the generated
 application service.
+
+Generated lists use the existing ordered, bound provider queries with 50-row
+pages and authorized totals. First/previous/next/last and refresh controls show
+localized page and record counts; empty and boundary pages disable unavailable
+navigation. Refresh and successful mutations reload the selected page, correcting
+out-of-range pages after deletion before publishing rows or counts. Request
+generations discard superseded responses, and loading or list failures hide
+previous results and totals. This presentation state does not replace backend
+authorization or modify existing application-owned resource pages.
 
 The Identity-added minimal composition uses its smaller Leptos shell instead:
 the generator registers a native route and a permission-gated dashboard link,
@@ -439,7 +453,8 @@ It delegates new-application component planning and atomic publication to
 to the public command. Help, version information, successful creation
 instructions, inspection results, and mutation plans are written to standard
 output; usage and failure diagnostics are written to standard error, except
-upgrade assessments, whose typed unsuccessful outcomes also remain on stdout.
+upgrade assessments and JSON operation/artifact reports, whose typed unsuccessful
+outcomes also remain on stdout.
 
 The process outcomes are `0` for success, `1` for an internal error, `2` for
 invalid usage, `3` for validation failure, and `4` for a destination or state
@@ -455,8 +470,8 @@ external commands.
 The CLI library provides common `--dry-run` and `--json` options for mutation
 commands. A command constructs and validates one typed `ChangePlan`, then hands
 that same value to the shared execution path for either preview or publication;
-dry-run does not open or write the application root. Human output lists every
-ordered relative path and operation. Machine output is deterministic,
+dry-run performs no publication and does not write the application root. Human
+output lists every ordered relative path and operation. Machine output is deterministic,
 explicitly versioned, and includes the content-redacted plan summary rather
 than file bodies, runtime configuration, credentials, environment values, or
 machine-local framework paths. Empty plans are successful no-ops, planning and
@@ -512,6 +527,347 @@ checks the recovery marker and bounded, no-follow application integration
 sources without reading runtime configuration or connecting to a provider.
 Its local tool checks and selected-provider requirements are diagnostics, not
 startup preflight or application mutation.
+
+`doctor --operation` additionally obtains the same privately typed operation
+plan as execution. The closed selections cover development, check, test,
+release build, and the still non-executable database status/migrate contracts.
+It diagnoses required toolchain/lock metadata, selected provider/profile,
+frontend assets and installed receipts, pending recovery, concurrent Hegira
+operations, and reusable release-output ownership. The executor's read-only
+frontend source check and release ownership check are shared rather than
+duplicated. Diagnosis never creates a tool shim, output directory, or marker.
+Operation-specific readiness currently supports Linux; unsupported hosts fail
+closed without a probe. The default doctor contract is unchanged.
+
+Without `--probe-tools`, operation doctor starts no process. Explicit native
+tool selection enables only closed version arguments and the Rust WASM target
+library query. Probes run from `/`, not the application, with a cleared
+environment except trusted tool discovery and Rustup home/toolchain settings;
+auto-installation is disabled. They reuse the native executable anchors,
+bounded output/deadlines, signals, and owned child-group cleanup. No Cargo
+metadata, compilation, tests, npm lifecycle, Tailwind JavaScript, database,
+or application hook is invoked. A failing bounded probe prevents later probes.
+The selected tools remain explicitly trusted code, not a sandbox guarantee.
+
+The existing schema-1 doctor report retains its default shape; operation mode
+adds a typed `operation` identity and deterministic prerequisite checks.
+Missing/mismatched or unprobed tools are warnings, while invalid composition,
+recovery, unsafe tool selections/output ownership, or interrupted/over-limit
+probes are failures. Frontend execution and provider connectivity remain
+unprobed. A diagnostic report cannot grant consent or certify runtime settings,
+compiled authorization, or executable readiness. See
+[Operation diagnostics](getting-started.md#diagnose-operation-prerequisites).
+
+### Application operation planning library
+
+`hegira_cli::operations::plan_application_operation` accepts the source
+repository root and an `OperationRequest` containing the existing
+`ApplicationContextRequest` and a closed `OperationIntent`. It reuses the
+no-follow context resolver, current release compatibility policy, and
+authenticated bundled composition graph. Missing, ambiguous, unsafe, legacy,
+unsupported, or graph-inconsistent application state fails before a plan is
+returned. It reads no application source, runtime profile, environment value,
+or credential, and does not execute a tool or connect to a provider.
+
+The privately constructed `OperationPlan` retains an open root directory and
+the observed manifest privately for later precondition checks, but excludes
+machine-local paths and source content from Debug, human review text, and
+the deterministic schema-1 `OperationPlanSummary`. Summaries record exact
+component/module versions and capabilities, selected adapters, potential
+execution effects, ordered steps, unprobed prerequisites, and execution
+requirements. Tool steps use a closed program identity and separate arguments,
+not shell scripts. Native check/test steps select only the recorded database
+feature, disable defaults, and preserve Cargo locks; a separate hydration check
+selects only `hydrate`. Development and release-bundle plans delegate to the
+existing locked Cargo Leptos contract. Required frontend dependencies,
+lockfile-selected Tailwind/wasm-bindgen tools, and toolchain versions are
+declarations, not installed or probed by the planner.
+
+Database intents carry a typed status/forward-migrate request and an explicit
+baseline profile. They require an application-owned operation entry point;
+the planner declares that requirement without invoking the application-owned
+`app_database` binary or inventing a CLI SQL engine. Baseline profile/provider mismatches
+are rejected: `sqlite` selects SQLite; `development` and `production` select
+PostgreSQL; `test` selects PostgreSQL for the default Identity template and
+SQLite for minimal or Identity-added applications. User runtime overrides are
+not read or validated by planning. Production migration plans additionally
+declare explicit approval as an execution requirement.
+
+Planning is read-only, but planned check/test/build execution would still run
+trusted application and toolchain code; development execution can initialize
+the application's configured dependencies. A summary is not execution
+authority, a readiness certificate, a cached publication token, or a sandbox.
+Public `dev`, `check`, `test`, `build --release`, `db status`, and `db migrate`
+commands reuse this planner. Database commands require an explicit profile.
+Development plans
+explicitly select the recorded backend and development profile, localhost site
+and server address, reload port, canonical CSS input, and standard Cargo
+server-build command without reading runtime
+configuration or certifying the intended database target.
+Static schema-1 errors preserve validation/conflict/internal
+outcomes without echoing input, parser excerpts, or source paths.
+
+### Trusted application process execution library
+
+`hegira_cli::operations::execution::execute_application_operation` is separate
+from inspection and planning. It requires a privately constructed plan,
+`ExecutionConsent::ExecuteTrustedApplicationAndToolchain`, an explicitly
+resolved `TrustedToolchain`, an `ExecutionControl`, and a child-output policy.
+Public `dev`, `check`, `test`, and `build --release` commands delegate to this library.
+Database steps fail before spawning through this general executor. The separate
+`execute_database_operation` API additionally requires `DatabaseExecutionApproval`;
+production forward migration requires its independent `ProductionMigration`
+variant, while other database requests require `Ordinary`. A preview, generic
+execution consent, or source upgrade cannot substitute for that approval.
+It validates the registered `app_database` binary, database-operations feature,
+Infrastructure source, and selected real profile file before spawning locked
+Cargo with only the selected database feature. It explicitly selects `APP_ENV`
+and the manifest's backend; inherited URL overrides remain the owner's responsibility.
+Database configuration and SQL behavior remain in the trusted application.
+Check/test plans execute native provider validation and a hydration check.
+Development plans require explicit lock-matched wasm-bindgen selection plus a
+verified frontend/toolchain preflight before foreground Cargo Leptos watch/serve.
+Release builds additionally require explicit native Binaryen `wasm-opt` 123
+selection, canonical host/profile metadata, and a separately claimed output
+root before compilation. Directory presence alone never
+establishes tool readiness; no missing-tool installation is delegated to Leptos.
+
+Execution currently supports Linux with accessible `/proc/self/fd`; other
+platforms fail closed. The application root and manifest are checked again,
+and the current release and authenticated bundled composition must still match
+the reviewed plan. A separate open description acquires a nonblocking advisory
+lock on the application directory, so concurrent executors fail without creating
+or deleting lock files. Any existing `.hegira-mutation.lock`, including a
+directory or dangling symlink, blocks execution without being read or removed.
+This coordination applies to Hegira executors, not arbitrary editors or source
+mutation publishers. Owners must not publish mutations while operations run.
+
+The primary Cargo executable is selected by an explicit absolute path, not
+ambient `PATH`. Normal rustup proxy symlinks are resolved once to a native ELF
+file; scripts and set-id executables are rejected. Its open file descriptor and
+the root's open directory descriptor provide the executable and working
+directory through verified `/proc/self/fd` paths. Root, manifest, executable,
+and auxiliary-directory identity changes fail preconditions before each step.
+Auxiliary tools use only explicitly trusted, absolute directories outside the
+application. Empty and application-relative search entries are rejected; the
+primary executable must also be outside the application. The executor never
+interpolates a shell command or accepts arbitrary operation arguments.
+
+Basic native prerequisite paths (`Cargo.toml`, `Cargo.lock`, and
+`rust-toolchain.toml`) must be real regular files reached without following
+symlinks. This is not a tool-version or
+provider-readiness certificate: missing WASM targets, tool versions, dependencies,
+or runtime services can still cause child failure. The executor installs nothing
+and sets `RUSTUP_AUTO_INSTALL=0`, disabling rustup's automatic toolchain
+installation. It removes an inherited `RUSTUP_TOOLCHAIN` override so the
+application's toolchain file remains effective; ordered Cargo arguments remain
+locked. Cargo may still download locked dependencies when executing an explicitly
+approved build. Application-controlled Cargo configuration, build scripts,
+tests, and tools execute with the owner's privileges.
+Trusted source must remain trusted: descriptor anchoring prevents pathname
+substitution, not malicious in-place writes to approved tool files or arbitrary
+replacement of tools that Cargo itself invokes.
+
+Leptos development and release builds verify the pinned Rust version and WASM core target,
+Cargo Leptos 0.3.7, Node.js 22+, the exact Cargo-lock wasm-bindgen version, npm
+installed receipts, and the lock-selected Tailwind entry point/version. Probes
+have bounded output and deadlines and use owned process-group cleanup.
+Consistency checks do not authenticate every installed dependency's contents;
+the installed application frontend remains trusted code. Required metadata and
+frontend sources are rechecked before startup through no-follow reads. The
+canonical Tailwind input and disabled native/hydration defaults are required;
+customized tool composition fails closed rather than being reinterpreted.
+
+A private 0700 temporary directory places only the reviewed Cargo proxy,
+Cargo Leptos, Rust, Node, wasm-bindgen, Tailwind, and (for release) wasm-opt names ahead of trusted
+external auxiliary directories. The general application `node_modules/.bin`
+is never trusted. The separately selected wasm-bindgen executable may reside
+under the application's explicitly prepared tool directory. The native proxy
+uses the source-built Hegira executable and the approved Cargo inode, accepts
+only the required Cargo operations, and adds `--locked` when absent; this
+includes Cargo Leptos 0.3.7's otherwise unlocked initial metadata call. It
+exec-replaces itself, preserving the owned process group. Hegira removes its
+private tool directory on ordinary completion/error/unwinding, not after
+SIGKILL or a crash; it never recursively removes application directories.
+
+Apart from that toolchain policy and the plan's explicit environment overrides,
+the child inherits the caller's environment, including runtime overrides and
+possibly credentials. Trust approval must cover this environment and Cargo
+configuration as well as application and toolchain source. Credentials are not
+copied into arguments, plan summaries, execution reports, or framework errors.
+For non-database operations, child output is either inherited unchanged or
+discarded, not captured in schema-1 framework reports; arbitrary tool/application
+output is **not redacted**. Database execution discards stderr and captures at
+most 1 MiB of stdout. Only a closed schema-1 success result with matching
+operation/provider, known module identities, and ordered migration states is
+accepted. Forward-migration success additionally requires present history and
+no pending entries. Malformed, oversized, or failed child output produces a
+non-success outcome without raw output. Successful execution adds the optional
+`database` field to its report; it is a trusted application observation, not an
+independent CLI audit of the database. Child stdin is closed. Execution is a trust decision, not an OS
+sandbox, network isolation, or a promise of secret-output sanitization.
+
+Each child owns a new process group. Cancellation or termination requested
+through `ExecutionControl` sends SIGTERM, allows a 250 ms grace period, then
+SIGKILLs remaining group members and waits for the direct child. The leader is
+observed without reaping until group cleanup finishes, preventing PID reuse
+during cleanup. Normal leader exit also stops leftover group members. The
+child guard kills and reaps on errors or unwinding. Callers are responsible for
+forwarding their OS signal handling to `ExecutionControl`; the library installs
+no global handlers. SIGKILL of the parent, detached descendants that deliberately
+leave the group, and uninterruptible kernel waits cannot be handled as a sandbox
+guarantee. Orphaned grandchildren are ultimately reaped by the host's init or
+subreaper, not by the executor.
+
+Versioned, content-redacted reports distinguish success, child failure, child
+signal, cancellation, and termination and record only completed successful
+steps. Spawn and lifecycle errors remain non-success diagnostics. A successful
+report is produced only after all steps and owned direct-child cleanup finish.
+`ExecutionReport::exit()` maps only success to zero; every other outcome maps
+to the CLI's existing nonzero internal outcome while retaining its typed status.
+
+### Public application validation commands
+
+`hegira check` and `hegira test` require either `--dry-run` or `--execute`.
+Preview constructs the existing privately typed plan without probing tools or
+running code. Execution builds that same plan type and requires
+`--trust-application`, an absolute `--cargo`, and explicit absolute
+`--tool-directory` selections; it does not infer consent from an earlier preview.
+The commands accept no arbitrary Cargo arguments or ignored-database-test flag.
+The existing steps cover locked native/provider validation followed by hydration
+checking for all six supported compositions. These are trusted application
+tests/builds, not guaranteed read-only or service-free code execution.
+
+The CLI installs scoped SIGINT/SIGTERM actions only for explicit execution,
+forwarding cancellation/termination directly into the executor's atomic control;
+it unregisters its actions before returning. The library still installs no
+handlers on its own. Human execution inherits raw child output. JSON execution
+discards it and emits one schema-1 envelope with mode, the reviewed plan,
+optional execution outcome, and static diagnostics. Preview and execution
+consume the same plan within one invocation; a serialized preview cannot be
+submitted as execution authority. See [Application checks and tests](getting-started.md#check-and-test-an-application)
+for arguments, output channels, exit codes, and trust limitations.
+
+### Public application development command
+
+`hegira dev` uses the same explicit preview/execution, consent, JSON envelope,
+exit outcomes, scoped signal handling, and recovery/concurrency boundaries as
+validation commands. Execution additionally requires `--wasm-bindgen`; preview
+does not probe installed tools or start a server. All six compositions select
+their recorded provider, `APP_ENV=sqlite` or `development`, `ssr,db-<provider>`
+for native code and `hydrate` for the browser. Server/site bind is explicitly
+`127.0.0.1:3000`, with reload port `3001`; the canonical CSS path is relative to
+the server package's Cargo Leptos metadata. No production-profile/public-bind
+flag or arbitrary command passthrough is provided.
+
+After preflight, the existing executor delegates foreground watch/serve to
+Cargo Leptos, not a new runtime or daemon. Configured application startup may
+connect to providers, create/open a database, migrate, and seed. Review the
+development configuration and inherited database URL overrides before explicit
+execution: the selected profile does not certify disposable data. Other
+inherited settings remain effective; this is trusted execution, not network
+isolation. No Docker, deployment, tool installation, source mutation, or
+lockfile regeneration is performed by Hegira. See [Application development](getting-started.md#develop-an-application).
+
+### Public application release build command
+
+`hegira build --release` exposes preview or explicit Linux execution through
+the same typed plan, trust consent, frontend preflight, locked Cargo proxy,
+signal lifecycle, and schema-1 envelope. It delegates native release and
+`wasm-release` hydration compilation to Cargo Leptos, selecting only the
+recorded provider. Binaryen `wasm-opt` 123 is explicitly selected and probed
+before compilation so missing release optimization cannot trigger an automatic
+download. Hegira loads no runtime profile and starts neither application nor
+provider. Build code and inherited environment remain trusted, not sandboxed.
+
+The release plan records closed application-relative artifact identities and
+explicit output overrides. Without `--validation-cache`, the executor creates only a new
+`target/hegira/release-build` root or reuses its exact application-bound ownership
+claim. It never adopts an existing unclaimed root. Bounded no-follow metadata
+walks reject symlinks, special files, external hard links, and unsupported deep
+trees. Internal Cargo hard links are allowed only when every link is observed
+inside the claimed root. This is a root-specific claim, not adoption of normal
+developer Cargo output or a cache size/cleanup policy. The builder can clear
+its owned site subtree; users must not put unrelated data there or forge the
+ownership marker to bypass rejection.
+
+Native output, the site, browser WASM, JavaScript, and CSS stay inside the
+claimed root. Canonical host/profile metadata and explicit Cargo target,
+site, package-name, standard Cargo command, and asset-path overrides constrain
+the supported layout; customized cross-target/intermediate paths fail closed.
+Frontend sources and locks are rechecked after the builder. Only successful
+execution with verified ELF, WASM, JS, and CSS outputs adds verified artifact
+locations to the execution report. Preview artifact paths are expectations,
+not existing outputs. Failure/cancellation never grants an artifact receipt,
+even if older or partial output remains. Trusted builder changes are not
+silently reverted. A receipt certifies source-build output only, not secret-free
+assets, runtime correctness, tests, container validation, signing, or deployment.
+See [Application release builds](getting-started.md#build-an-application-release-bundle).
+
+### Read-only application artifact diagnostics
+
+`hegira artifacts status` reuses the current operation plan's authenticated
+application/composition and root anchor without executing its steps. On Linux,
+one sorted, descriptor-relative metadata walk partitions local `target` output
+into developer/unclaimed data and the fixed CLI release root. Diagnostics share
+the executor's exact release-claim serialization and directory-lock contract;
+they never create claims, lock files, output directories, or child processes.
+No runtime profile, environment override, Cargo configuration, or artifact body
+is loaded. Only bounded ownership and cache-access markers are read as file content.
+
+The schema-1 human/JSON report exposes logical/allocated regular-file usage,
+per-region hard-link deduplication, active/idle/unknown operation state,
+exclusions, and cleanup eligibility. Unsafe entries, substitutions, external
+release hard links, and bounded-walk failures produce redacted diagnostics and
+partial measurements without claiming unsafe output. There is no budget over
+all application output or deletion authority over release/developer output.
+The validation subtree is delegated once to the dedicated ownership walker and
+reported separately.
+Ordinary developer output, global caches, Docker state, and external output are
+not adopted.
+See [Artifact usage](getting-started.md#inspect-application-artifact-usage).
+
+### Explicit application validation caches
+
+`OperationPlan::with_validation_cache(ValidationCache)` derives a read-only
+check/test/release-build plan with a positive byte budget and fixed disposable
+output under `target/hegira/validation/{check,test,build}`. The public
+`--validation-cache` flag selects it; `--cache-budget-mib` defaults to 65536 MiB.
+Planning does not read output or create claims. The executor rederives this
+selection while reauthenticating the plan. Development and database operations
+reject it. Validation release receipts identify their disposable cache paths;
+ordinary release-bundle claims remain separate and ineligible for pruning.
+
+The application-directory lock serializes preparation, execution and postflight
+with explicit maintenance. Each cache's directory lease survives exec so an
+orphaned trusted child remains protected after the CLI is killed. Bounded,
+no-follow, device-checked metadata snapshots validate exact root/cache claims,
+closed child names, access markers and internal-only hard links before any LRU
+reclamation. Deletion verifies opened directories and observed entry identities,
+unlinks relative to those descriptors, and retains the claim until the end.
+Preparation/completion measure allocated file and directory bytes and reclaim
+only inactive owned caches; an unreclaimable budget fails without deleting
+active or unowned data. It is not a live quota or hostile-code sandbox.
+`artifacts cache-status` and `artifacts prune --dry-run` remain read-only;
+`artifacts prune --execute` obtains execution coordination anew and refuses
+pending application recovery. Interrupted partial deletion fails subsequent
+ownership validation rather than repairing/adopting state automatically.
+
+Application storage has distinct ownership and budget boundaries:
+
+| Output | Budget and cleanup authority |
+| --- | --- |
+| Ordinary Cargo check/test and development/watch output | No overall Hegira budget; application owner maintains it |
+| `target/hegira/release-build` | Separately claimed ordinary release output; uncapped and excluded from validation pruning |
+| `target/hegira/validation/{check,test,build}` | Explicit CLI validation caches; 65536 MiB default pre/post budget and inactive owned-cache reclamation |
+| Framework repository `target/validation/` | Separate maintainer-script lifecycle; no ownership over a generated application's output |
+| Global Cargo/Rustup, npm and Docker storage | Excluded from the application validation-cache budget and pruner |
+
+Read-only artifact measurements and idle status grant no deletion authority.
+See [application cache maintenance](getting-started.md#bound-application-validation-caches)
+and the [repository cache policy](maintainers.md#validation-build-cache-lifecycle).
+
+### Application creation and source publication
 
 When an application name or destination is omitted in an interactive terminal,
 the same command gathers missing values through a guided workflow, displays the
@@ -598,12 +954,51 @@ Leptos, SQLx, Redis, and vendor SDKs. Transactions live at use-case boundaries.
 The server explicitly composes configuration, persistence, providers, routes,
 telemetry, runtime roles, and worker loops after validation succeeds.
 
+Generated application CI is application-owned scaffolding. Its read-only GitHub
+workflow runs source, selected-provider native/WASM, release plus disposable startup,
+and supply-chain checks before an unconditional `quality` aggregate. Cargo
+execution uses the CLI's bounded validation-cache namespace and explicit tool
+trust; cleanup uses only its inactive-owned-cache pruner. Tool bootstrap, registry,
+frontend, and container storage remain outside that application cache budget.
+The CI tool source selects the same immutable published release tag as the
+application catalog and verifies HEAD against that local tag before bootstrap.
+Actions and tools have explicit pins; credentials for
+disposable integration targets are ephemeral and application logs are discarded.
+All CI artifacts are generated-once and preserved during component installation
+and direct source upgrades. GitHub YAML expressions are preserved as literal data
+only in workflow/action YAML; the renderer never evaluates them.
+
 The application infrastructure layer owns the immutable host migration history
 needed for supported upgrades together with application-specific migrations.
 It composes those sources with selected module migration sources. Historical
 migration identifiers and checksums remain unchanged even after their runtime
 feature is retired. Destructive reset requires an explicit disposable-database
 authorization token and is never part of normal startup.
+
+The same `persistence::migrations::MigrationPlan` exposes typed read-only
+`status(&DatabaseConfig)` inspection. It retains each migration's module owner
+without changing execution identities, checksums, or order. Provider-specific
+inspection uses a dedicated connection and validates observed history against
+the composed plan; it never executes migrations or provisions missing state.
+SQLite WAL coordination is distinct from database/schema writes. Infrastructure
+still owns composition and explicit database-access intent; neither Presentation
+nor the Hegira CLI acquires a new database command through this primitive.
+See [migration status](operations.md#read-only-migration-status) for provider
+limits, typed errors, and the point-in-time observation boundary.
+
+Fresh canonical applications also contain the transport-only `app_database`
+binary in `apps/server`, explicitly enabled by `database-operations`. It parses
+only status/forward-migrate requests and delegates to Infrastructure's
+`database_operations` module, which shares normal profile sources/defaults but
+deserializes only database-relevant settings. Structural, selected-provider,
+and database production validation precedes connection. It reuses the same
+`migration_plan`, never normal initialization, ensure, seed, or worker paths.
+Its exact binary, Cargo registration, Infrastructure module/config integration,
+and operation-source claims are declared for governed upgrades. Claims alone
+do not authorize source publication. The v0.7.0-to-v0.8.0 edge delivers only an
+unregistered Infrastructure operation source in addition to the three release
+files. The owner must separately integrate the module, configuration loader,
+server binary and feature before the real entry point can pass preflight.
 
 ## Rendering And Validation
 
@@ -668,8 +1063,14 @@ or module profiles differ; shared declarations apply to every selected
 composition. A managed integration may explicitly take its target bytes from
 another declared package component at the same path. Its ownership stays with
 the installed component, while the target path and digest must match the
-authenticated package snapshot. This lets an Identity-added application use
-the canonical Identity lockfile without installing the default UI component.
+authenticated package snapshot. The package may also declare sorted, unique
+`upgrade_lockfiles` assets under `upgrades/locks/`. Their bytes participate in
+the same immutable no-follow snapshot, closed file set and package digest.
+Only an edit to the managed `Cargo.lock` / `framework-lockfile` integration may
+select a declared `target_lockfile`, with its exact target SHA-256; it cannot
+also select another source component. These assets preserve the released
+minimal or Identity-added owner dependency graph rather than substituting fresh
+server scaffolding. They are never emitted by ordinary application rendering.
 Edges cannot contain executable commands or change the framework source,
 package identity, database adapter, or client adapter.
 
@@ -721,11 +1122,26 @@ Blocked, unsupported, incompatible, and conflicting inputs are distinct typed,
 content-redacted outcomes. Planning performs no publication, database, network,
 or process operation.
 
-The bundled package declares one direct v0.6.0-to-v0.7.0 edge for default,
+Compatibility tests additionally authenticate immutable v0.7.0 application
+inputs against explicit synthetic additive plans alongside the supported
+bundled release edge. Their hypothetical target is assembled only in private unit tests after loading
+the authenticated current package; the production compiled-release guard and
+baseline authentication remain enforced. Tests reject occupied/unclaimed paths and
+custom managed boundaries, preserve product/history/governance source, and verify
+rollback, process interruption and recovery blocking. File creation still
+requires existing real parent directories. See the
+[maintainer validation contract](maintainers.md) for fixture prerequisites and
+the distinction from a supported release transition.
+
+The bundled package declares one direct v0.7.0-to-v0.8.0 edge for default,
 minimal, and Identity-added layered applications with SQLite or PostgreSQL.
-It authenticates the released baseline and changes only `hegira.toml`, the
-workspace `Cargo.toml`, and `Cargo.lock`. Default and later-installed Identity
-compositions retain their explicit server, HTTP, migration-source, configuration,
+It authenticates the released baseline, edits `hegira.toml`, the workspace
+`Cargo.toml`, and `Cargo.lock`, and creates the exact absent
+`crates/infrastructure/src/database_operations.rs`. This new module remains
+unregistered until the owner reviews the configuration loader and explicitly
+integrates the server binary, feature, and Infrastructure module. Existing
+application-owned registration files cannot be adopted by an ownership claim.
+Default and later-installed Identity compositions retain their explicit server, HTTP, migration-source, configuration,
 and Leptos integrations because these application files do not change across
 this release edge; the version-pinned official packages advance together.
 Product layers, runtime configuration values, generated resources, and migration
@@ -734,12 +1150,12 @@ through read-only `upgrade status`, `upgrade --dry-run`, and explicit `upgrade`
 application through the existing mutation publisher.
 Authentication checks the edge-declared managed files, not byte equality of the
 entire application against the released fixture. Product source and generated
-resources may therefore evolve independently. For this edge, all three managed
+resources may therefore evolve independently. For this edge, all three existing managed
 files must still match their authenticated source digests: even an unrelated
 dependency or lockfile customization is a conflict, not an instruction to merge.
 The general plan contract supports declared managed creates, edits, and
-retirements, but this bundled edge uses only edits. It does not remove components,
-skip releases, downgrade, run migration SQL, or supply another client adapter.
+retirements; this bundled edge uses three edits and one absent-file create. It
+does not remove components, skip releases, downgrade, run migration SQL, or supply another client adapter.
 Readiness authenticates the package, application ownership and managed boundary,
 then shares the planner's pure target-manifest validation without constructing
 a change plan. Recovery-marker inspection is anchored and no-follow; any marker
@@ -782,21 +1198,25 @@ versus closed stdin do not change deterministic output. Snapshot mismatches
 require explicit review; they are not auto-accepted and are not the sole API
 test. Upgrade commands have no interactive prompt protocol.
 
-Upgrade tests obtain v0.6.0 application source from committed, content-addressed
-release baselines rather than current templates or mutable remote content. One
-release manifest pins the annotated tag object, commit, source tree, package
-digest, and generated lock revision. Sorted tree manifests cover default,
+Upgrade test support obtains v0.6.0 and v0.7.0 application source from committed,
+content-addressed release baselines. Each release manifest pins the annotated
+tag object, commit, source tree, package digest, and generated lock revision.
+Sorted tree manifests cover default,
 minimal, and Identity-added SQLite and PostgreSQL states while a shared SHA-256
 object store avoids duplicate bytes. The test-only `upgrade_test_support` tool
 authenticates the complete closed fixture set before exposing an in-memory
 snapshot or materializing it into a previously absent disposable directory; it
-does not invoke Git, execute fixture content, or access the network.
+does not invoke Git, execute fixture content, or access the network. Version
+selection is closed and explicit; legacy entry points retain v0.6.0. Code-pinned
+inventories prevent coordinated rehashing of altered history. The v0.7.0 set
+also authenticates provenance from its maintainer-only signed-source import,
+including its released-default lock selection after Identity installation.
 
-Focused preservation tests customize these released baselines with product
+Current direct-edge preservation tests customize the v0.7.0 baselines with product
 code in every application layer, provider-specific generated resources where
 Identity is installed, runtime configuration values, and append-only application
 migrations. Sorted path/SHA-256 fingerprints prove that every file outside the
-three declared release-managed files and every historical migration remains
+four declared release-managed paths and every historical migration remains
 unchanged. Minimal applications retain their capability boundary and reject
 protected resource generation. Conflicting managed edits block planning, and
 edits made after planning block publication without changing product files.
@@ -813,9 +1233,12 @@ while reusing compatible framework artifacts.
 The separate upgraded-application lifecycle validator extends those public-source
 checks to disposable fresh and released-schema databases, migration checksum/data
 preservation, release assets, and production images for both providers and all three
-compositions. Released Identity SQL is verified against its v0.6.0 source inventory.
+compositions. Released Identity SQL is verified against its v0.7.0 source inventory.
 Only separate validation copies receive local dependencies, test fixtures, and a
-post-upgrade application migration. Production HTTP probes retain authentication,
+post-upgrade application migration. Their production copies select the current
+checksum-authenticated wasm-bindgen installer for the locally resolved lock;
+verified public output retains its original owner script. Production HTTP probes
+retain authentication,
 authorization, cookie/Bearer, and minimal-composition boundaries. The gate never
 resets persistent data or modifies verified public upgrade output.
 CI runs its three composition selections as additional cells of the existing

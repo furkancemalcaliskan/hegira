@@ -1,0 +1,7 @@
+schema = 1
+authentication = "git-ssh-tag"
+signer_fingerprint = "SHA256:Nq2p1V/hlkhUrXEv1UiPMlLKnZ4w5D7ux7/ki5XDRDA"
+published_release = "https://github.com/furkancemalcaliskan/hegira/releases/tag/v0.7.0"
+published_at = "2026-10-04T15:13:18Z"
+producer = "released-source-hegira-cli"
+identity_added_lock = "matching-released-default-composition"

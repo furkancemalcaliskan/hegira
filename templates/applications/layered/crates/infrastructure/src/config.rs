@@ -332,7 +332,12 @@ pub struct LoggingConfig {
 impl AppConfig {
     pub fn load() -> Result<Self, configuration::ConfigError> {
         let profile = configuration::Profile::from_environment("APP_ENV", "development");
+        Self::load_profile(&profile)?.try_deserialize()
+    }
 
+    pub(crate) fn load_profile(
+        profile: &configuration::Profile,
+    ) -> Result<configuration::Config, configuration::ConfigError> {
         profile
             .builder("config", "APP")
             .set_default("environment", "development")?
@@ -472,8 +477,7 @@ impl AppConfig {
             )?
             .set_default("logging.filter", "info")?
             .set_override("environment", profile.name())?
-            .build()?
-            .try_deserialize()
+            .build()
     }
 
     pub fn validate_structure(&self) -> Result<(), String> {

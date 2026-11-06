@@ -10,6 +10,11 @@ default-run = "app_server"
 [lib]
 crate-type = ["cdylib", "rlib"]
 
+[[bin]]
+name = "app_database"
+path = "src/bin/app_database.rs"
+required-features = ["database-operations"]
+
 [dependencies]
 app_infrastructure = { workspace = true, optional = true }
 app_presentation = { workspace = true, optional = true }
@@ -23,6 +28,7 @@ console_error_panic_hook = { workspace = true, optional = true }
 leptos.workspace = true
 leptos_axum = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true }
 tower-http = { workspace = true, optional = true }
 tracing = { workspace = true, optional = true }
@@ -30,6 +36,7 @@ wasm-bindgen = { workspace = true, optional = true }
 
 [features]
 default = ["{{database_feature}}"]
+database-operations = ["app_web/ssr", "dep:app_infrastructure", "dep:serde_json", "dep:tokio"]
 db-postgres = [
     "app_infrastructure/db-postgres",
     "app_presentation/db-postgres",
@@ -67,6 +74,9 @@ ssr = [
 openapi = ["ssr", "app_presentation/openapi"]
 wasm-split = ["app_web/wasm-split"]
 
+[dev-dependencies]
+sqlx.workspace = true
+
 [package.metadata.leptos]
 output-name = "app"
 bin-target = "app_server"
@@ -83,4 +93,3 @@ bin-default-features = false
 lib-features = ["hydrate"]
 lib-default-features = false
 lib-profile-release = "wasm-release"
-

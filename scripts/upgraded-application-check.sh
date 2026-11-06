@@ -4,11 +4,13 @@ set -eu
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 mode="${1:-all}"
 case "$mode" in
+  fresh-minimal) compositions="minimal" ;;
   all) compositions="default minimal identity-added" ;;
   default|minimal|identity-added) compositions="$mode" ;;
-  *) echo "usage: sh scripts/upgraded-application-check.sh [all|default|minimal|identity-added]" >&2; exit 2 ;;
+  *) echo "usage: sh scripts/upgraded-application-check.sh [all|default|minimal|identity-added|fresh-minimal]" >&2; exit 2 ;;
 esac
 case "$mode" in
+  fresh-minimal) default_http_port=38086; default_postgres_port=35437 ;;
   minimal) default_http_port=38084; default_postgres_port=35435 ;;
   identity-added) default_http_port=38085; default_postgres_port=35436 ;;
   *) default_http_port=38083; default_postgres_port=35434 ;;
@@ -87,8 +89,20 @@ fi
 phase_begin "authenticated baselines, customization, and public upgrade workflow"
 node --test "$repo_root/scripts/upgraded-application-http.test.mjs"
 cargo build --locked -p hegira_cli --bin hegira
+export HEGIRA_UPGRADE_CLI="$CARGO_TARGET_DIR/debug/hegira"
+export HEGIRA_UPGRADE_CARGO="$(rustup which cargo)"
+export HEGIRA_UPGRADE_TOOL_DIRECTORY="$(dirname "$HEGIRA_UPGRADE_CARGO")"
+export HEGIRA_UPGRADE_FRESH_ONLY=false
+fixture_mode=--production
+if [ "$mode" = fresh-minimal ]; then
+  export HEGIRA_UPGRADE_FRESH_ONLY=true
+  fixture_mode=--fresh-minimal
+else
+  cargo run --locked --quiet -p template_renderer --example public_upgrade_locks -- \
+    "$repo_root" "$staging_parent/public-locks" "$HEGIRA_UPGRADE_CLI" "$mode"
+fi
 cargo run --locked --quiet -p template_renderer --example upgrade_preservation -- \
-  "$repo_root" "$staging_parent/fixtures" "$CARGO_TARGET_DIR/debug/hegira" --production
+  "$repo_root" "$staging_parent/fixtures" "$HEGIRA_UPGRADE_CLI" "$fixture_mode"
 phase_finish
 
 for composition in $compositions; do
@@ -105,6 +119,12 @@ for composition in $compositions; do
     # One source location for equal package names; copy only after the preceding build.
     rm -rf "$application" "$UPGRADE_SQLITE_DIRECTORY"
     cp -R "$staging_parent/fixtures/$case_id" "$application"
+    # The preserved owner installer supports the released lock. Only this
+    # disposable copy resolves a new local-source lock, so its Docker build
+    # needs the current reviewed installer for that lock's wasm-bindgen CLI.
+    # The public source retains the original script and is fingerprinted below.
+    cp "$repo_root/templates/applications/layered/scripts/prepare-wasm-bindgen.sh" \
+      "$application/scripts/prepare-wasm-bindgen.sh"
     mkdir -p "$UPGRADE_SQLITE_DIRECTORY" "$application/.hegira-validation/framework"
     if find "$repo_root/.cargo" "$repo_root/crates" "$repo_root/modules" "$repo_root/tools" \
       -name node_modules -prune -o -type l -print -quit | grep . >/dev/null; then
@@ -127,6 +147,14 @@ for composition in $compositions; do
       cd "$application"
       cargo check --locked --workspace --all-targets --no-default-features \
         --features "app_server/ssr,app_server/db-$database"
+      first_cache_kib=$(du -sk "$CARGO_TARGET_DIR" | awk '{ print $1 }')
+      cargo check --locked --workspace --all-targets --no-default-features \
+        --features "app_server/ssr,app_server/db-$database"
+      reused_cache_kib=$(du -sk "$CARGO_TARGET_DIR" | awk '{ print $1 }')
+      echo "locked native cache reuse: $first_cache_kib -> $reused_cache_kib KiB"
+      [ "$reused_cache_kib" -le "$first_cache_kib" ] || {
+        echo "unchanged locked native check allocated new build output" >&2; exit 1;
+      }
       cargo test --locked --workspace --no-default-features \
         --features "app_server/ssr,app_server/db-$database" -- --skip fresh_and_released_upgrade
       cargo check --locked -p app_server --no-default-features --features hydrate --target wasm32-unknown-unknown
@@ -151,9 +179,13 @@ for composition in $compositions; do
     fi
     (
       cd "$application"
-      ALLOW_UPGRADE_DISPOSABLE_DATABASES=true \
-        cargo test --locked -p app_server --no-default-features --features "ssr,db-$database" \
-          --test upgrade_lifecycle -- --test-threads=1
+      cargo build --locked -p app_server --bin app_database --no-default-features \
+        --features "database-operations,db-$database"
+      cargo test --locked -p app_server --no-default-features --features "ssr,db-$database" \
+        --test upgrade_lifecycle --no-run --message-format=json \
+        | node "$repo_root/scripts/database-operation-test-binary.mjs" "$CARGO_TARGET_DIR" upgrade_lifecycle
+      test_binary=$(node "$repo_root/scripts/database-operation-test-binary.mjs" --read "$CARGO_TARGET_DIR" upgrade_lifecycle)
+      ALLOW_UPGRADE_DISPOSABLE_DATABASES=true "$test_binary" --test-threads=1
     )
     phase_finish
 
@@ -192,4 +224,4 @@ for composition in $compositions; do
     image_built=false
   done
 done
-echo "released v0.6.0 -> v0.7.0 $mode production lifecycle: ok"
+echo "released v0.7.0 -> v0.8.0 $mode production lifecycle: ok"

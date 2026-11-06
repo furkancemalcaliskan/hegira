@@ -16,27 +16,80 @@ use upgrade_test_support::{BaselineComposition, BaselineDatabase, BaselineReques
 fn main() {
     let arguments: Vec<_> = env::args_os().skip(1).collect();
     assert!(
-        arguments.len() == 3 || (arguments.len() == 4 && arguments[3] == "--production"),
-        "usage: upgrade_preservation <repository-root> <new-output> <hegira-binary> [--production]"
+        arguments.len() == 3
+            || (arguments.len() == 4
+                && matches!(
+                    arguments[3].to_str(),
+                    Some("--production" | "--fresh-minimal")
+                )),
+        "usage: upgrade_preservation <repository-root> <new-output> <hegira-binary> [--production|--fresh-minimal]"
     );
     let production = arguments.len() == 4;
+    let fresh_minimal = arguments
+        .get(3)
+        .is_some_and(|value| value == "--fresh-minimal");
     let repository = fs::canonicalize(&arguments[0]).unwrap();
     let output = PathBuf::from(&arguments[1]);
     let binary = fs::canonicalize(&arguments[2]).unwrap();
     fs::create_dir(&output).expect("validation output must be new");
     let catalog = ManifestCatalog::load(&repository, "layered").unwrap();
     for composition in BaselineComposition::ALL {
+        if fresh_minimal && composition != BaselineComposition::Minimal {
+            continue;
+        }
         for database in BaselineDatabase::ALL {
             let request = BaselineRequest::new(composition, database);
             let source = output.join(format!("{}-source", request.id()));
-            support::customize(&repository, &source, request);
-            let history = production
-                .then(|| snapshot_database_history(&repository, &source, request, &output));
-            let product = support::product_fingerprint(&source);
-            support::upgrade_and_verify_with(&repository, &source, request, |application| {
-                upgrade_matrix::verify(&binary, application);
-            });
-            assert_eq!(product, support::product_fingerprint(&source));
+            let history = if fresh_minimal {
+                let created = std::process::Command::new(&binary)
+                    .args([
+                        "new",
+                        "baseline-application",
+                        "--composition",
+                        "minimal",
+                        "--database",
+                        database.as_str(),
+                        "--destination",
+                    ])
+                    .arg(&source)
+                    .env_clear()
+                    .env("PATH", "")
+                    .output()
+                    .unwrap();
+                assert!(
+                    created.status.success(),
+                    "{}",
+                    String::from_utf8_lossy(&created.stderr)
+                );
+                let before = support::fingerprints(&source);
+                assert!(
+                    std::process::Command::new("cargo")
+                        .args([
+                            "metadata",
+                            "--locked",
+                            "--all-features",
+                            "--format-version",
+                            "1"
+                        ])
+                        .current_dir(&source)
+                        .stdout(std::process::Stdio::null())
+                        .status()
+                        .unwrap()
+                        .success()
+                );
+                assert_eq!(before, support::fingerprints(&source));
+                None
+            } else {
+                support::customize(&repository, &source, request);
+                let history = production
+                    .then(|| snapshot_database_history(&repository, &source, request, &output));
+                let product = support::product_fingerprint(&source);
+                support::upgrade_and_verify_with(&repository, &source, request, |application| {
+                    upgrade_matrix::verify(&binary, application);
+                });
+                assert_eq!(product, support::product_fingerprint(&source));
+                history
+            };
             let verified = support::fingerprints(&source);
             let staged = output.join(request.id());
             fs::create_dir(&staged).unwrap();
@@ -46,8 +99,11 @@ fn main() {
                 fs::copy(source.join(path), destination).unwrap();
             }
             assert_eq!(verified, support::fingerprints(&staged));
-            if let Some(history) = history {
-                prepare_lifecycle(&binary, &staged, &history, request);
+            if production {
+                prepare_lifecycle(&binary, &staged, history.as_deref(), request);
+                if !fresh_minimal {
+                    adopt_database_operations(&repository, &staged);
+                }
             }
             stage_dependencies(&catalog, &repository, &staged, production);
             // Local resolution belongs only to the separate disposable compile copy.
@@ -61,6 +117,9 @@ fn main() {
                             "apps/server/Cargo.toml",
                             "Dockerfile",
                             "crates/infrastructure/migrations/.hegira-generator.toml",
+                            "crates/infrastructure/Cargo.toml",
+                            "crates/infrastructure/src/config.rs",
+                            "crates/infrastructure/src/lib.rs",
                         ]
                         .iter()
                         .any(|allowed| path == Path::new(allowed)))
@@ -82,13 +141,14 @@ fn snapshot_database_history(
 ) -> PathBuf {
     use sha2::{Digest, Sha256};
     let inventory: serde_json::Value = serde_json::from_str(include_str!(
-        "../../../test-fixtures/upgrade-lifecycle/v0.6.0-identity-migrations.json"
+        "../../../test-fixtures/upgrade-lifecycle/v0.7.0-identity-migrations.json"
     ))
     .unwrap();
     assert_eq!(inventory["schema"], 1);
-    assert_eq!(inventory["release"], upgrade_test_support::RELEASE_TAG);
-    assert_eq!(inventory["commit"], upgrade_test_support::RELEASE_COMMIT);
-    let history = output.join(format!("{}-v060-migrations", request.id()));
+    let release = upgrade_test_support::BaselineVersion::V0_7_0.expected_release();
+    assert_eq!(inventory["release"], release.tag);
+    assert_eq!(inventory["commit"], release.commit);
+    let history = output.join(format!("{}-v070-migrations", request.id()));
     fs::create_dir(&history).unwrap();
     let database = request.database.as_str();
     for entry in
@@ -119,12 +179,19 @@ fn snapshot_database_history(
     history
 }
 
-fn prepare_lifecycle(binary: &Path, staged: &Path, history: &Path, request: BaselineRequest) {
-    let target = staged.join(".hegira-validation/v060-migrations");
-    fs::create_dir_all(&target).unwrap();
-    for entry in fs::read_dir(history).unwrap() {
-        let entry = entry.unwrap();
-        fs::copy(entry.path(), target.join(entry.file_name())).unwrap();
+fn prepare_lifecycle(
+    binary: &Path,
+    staged: &Path,
+    history: Option<&Path>,
+    request: BaselineRequest,
+) {
+    if let Some(history) = history {
+        let target = staged.join(".hegira-validation/v070-migrations");
+        fs::create_dir_all(&target).unwrap();
+        for entry in fs::read_dir(history).unwrap() {
+            let entry = entry.unwrap();
+            fs::copy(entry.path(), target.join(entry.file_name())).unwrap();
+        }
     }
     let output = std::process::Command::new(binary)
         .args(["generate", "migration", "upgrade_complete", "--json"])
@@ -202,6 +269,13 @@ fn prepare_lifecycle(binary: &Path, staged: &Path, history: &Path, request: Base
             toml::Value::Boolean(true),
         )])),
     );
+    dependencies.insert(
+        "serde_json".to_owned(),
+        toml::Value::Table(toml::Table::from_iter([(
+            "workspace".to_owned(),
+            toml::Value::Boolean(true),
+        )])),
+    );
     fs::write(path, toml::to_string(&manifest).unwrap()).unwrap();
 }
 
@@ -255,7 +329,7 @@ fn stage_dependencies(
             dependency.get("git").unwrap().as_str(),
             Some(manifest.framework.repository.as_str())
         );
-        assert_eq!(dependency.get("tag").unwrap().as_str(), Some("v0.7.0"));
+        assert_eq!(dependency.get("tag").unwrap().as_str(), Some("v0.8.0"));
         assert!(!dependency.contains_key("path"));
         dependency.remove("git");
         dependency.remove("tag");
@@ -280,4 +354,96 @@ fn stage_dependencies(
             != Some(manifest.framework.repository.as_str())
     ));
     fs::write(path, toml::to_string(&cargo).unwrap()).unwrap();
+}
+
+fn adopt_database_operations(repository: &Path, staged: &Path) {
+    let workspace = staged.join("Cargo.toml");
+    let mut manifest: toml::Table = fs::read_to_string(&workspace).unwrap().parse().unwrap();
+    manifest["workspace"]["dependencies"]
+        .as_table_mut()
+        .unwrap()
+        .entry("serde_json")
+        .or_insert_with(|| toml::Value::String("1".to_owned()));
+    fs::write(workspace, toml::to_string(&manifest).unwrap()).unwrap();
+    let infrastructure = staged.join("crates/infrastructure/Cargo.toml");
+    let mut manifest: toml::Table = fs::read_to_string(&infrastructure)
+        .unwrap()
+        .parse()
+        .unwrap();
+    manifest
+        .entry("dev-dependencies")
+        .or_insert_with(|| toml::Value::Table(toml::Table::new()))
+        .as_table_mut()
+        .unwrap()
+        .entry("tokio")
+        .or_insert_with(|| {
+            toml::Value::Table(toml::Table::from_iter([(
+                "workspace".to_owned(),
+                toml::Value::Boolean(true),
+            )]))
+        });
+    fs::write(infrastructure, toml::to_string(&manifest).unwrap()).unwrap();
+    let config = staged.join("crates/infrastructure/src/config.rs");
+    let source = fs::read_to_string(&config).unwrap();
+    assert!(!source.contains("fn load_profile("));
+    let start = source
+        .find("    pub fn load() -> Result<Self, configuration::ConfigError> {")
+        .unwrap();
+    let end = start + source[start..].find("\n    }\n").unwrap() + "\n    }".len();
+    let original = &source[start..end];
+    let builder = original.split_once("        profile\n").unwrap().1;
+    let builder = builder
+        .strip_suffix("            .build()?\n            .try_deserialize()\n    }")
+        .unwrap();
+    let replacement = format!(
+        "    pub fn load() -> Result<Self, configuration::ConfigError> {{\n        let profile = configuration::Profile::from_environment(\"APP_ENV\", \"development\");\n        Self::load_profile(&profile)?.try_deserialize()\n    }}\n\n    pub(crate) fn load_profile(profile: &configuration::Profile) -> Result<configuration::Config, configuration::ConfigError> {{\n        profile\n{builder}            .build()\n    }}"
+    );
+    fs::write(
+        &config,
+        format!("{}{replacement}{}", &source[..start], &source[end..]),
+    )
+    .unwrap();
+    let module = staged.join("crates/infrastructure/src/lib.rs");
+    let source = fs::read_to_string(&module).unwrap();
+    assert!(!source.contains("pub mod database_operations;"));
+    fs::write(module, format!("{source}\npub mod database_operations;\n")).unwrap();
+    let canonical = repository.join("templates/applications/layered-minimal/apps/server");
+    let source = fs::read(canonical.join("src/bin/app_database.rs")).unwrap();
+    let bin = staged.join("apps/server/src/bin/app_database.rs");
+    assert!(!bin.exists());
+    fs::create_dir_all(bin.parent().unwrap()).unwrap();
+    fs::write(bin, source).unwrap();
+    let current: toml::Table = fs::read_to_string(canonical.join("Cargo.toml"))
+        .unwrap()
+        .parse()
+        .unwrap();
+    let path = staged.join("apps/server/Cargo.toml");
+    let mut manifest: toml::Table = fs::read_to_string(&path).unwrap().parse().unwrap();
+    let dependencies = manifest
+        .get_mut("dependencies")
+        .unwrap()
+        .as_table_mut()
+        .unwrap();
+    assert!(!dependencies.contains_key("serde_json"));
+    dependencies.insert(
+        "serde_json".to_owned(),
+        current["dependencies"]["serde_json"].clone(),
+    );
+    let features = manifest
+        .get_mut("features")
+        .unwrap()
+        .as_table_mut()
+        .unwrap();
+    assert!(!features.contains_key("database-operations"));
+    features.insert(
+        "database-operations".to_owned(),
+        current["features"]["database-operations"].clone(),
+    );
+    manifest
+        .entry("bin")
+        .or_insert_with(|| toml::Value::Array(Vec::new()))
+        .as_array_mut()
+        .unwrap()
+        .push(current["bin"].as_array().unwrap()[0].clone());
+    fs::write(path, toml::to_string(&manifest).unwrap()).unwrap();
 }

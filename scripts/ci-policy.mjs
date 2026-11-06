@@ -30,6 +30,8 @@ const REQUIRED_CONTRACTS = [
   ["explicit disposable PostgreSQL authentication", "POSTGRES_HOST_AUTH_METHOD: trust"],
   ["dependency policy", "EmbarkStudios/cargo-deny-action@v2"],
   ["dependency audit", "cargo audit --file Cargo.lock"],
+  ["minimal upgrade lock audit", "cargo audit --file templates/upgrades/locks/v0-8-0-minimal.Cargo.lock"],
+  ["Identity-added upgrade lock audit", "cargo audit --file templates/upgrades/locks/v0-8-0-identity-added.Cargo.lock"],
 ];
 
 const QUALITY_DEPENDENCIES = [
@@ -75,6 +77,12 @@ const GENERATED_APPLICATION_CONTRACTS = [
   ["locked Cargo Leptos server build", "--bin-cargo-args=--locked"],
   ["locked Cargo Leptos client build", "--lib-cargo-args=--locked"],
   ["locked generated workspace tests", "cargo test --locked --workspace"],
+  ["generated pagination repository fixture", '"$validation_root/crates/infrastructure/tests/resource_pagination.rs"'],
+  ["generated pagination presentation fixture", 'cat "$repo_root/scripts/resource-pagination-ui-contract.rs"'],
+  ["disposable PostgreSQL pagination execution", '--features db-postgres --test resource_pagination -- --include-ignored'],
+  ["generated pagination hydration tests", 'cargo check --locked -p app_web --all-targets --no-default-features --features hydrate'],
+  ["isolated database binary tests", "app_server/ssr,app_server/database-operations"],
+  ["disposable database entry-point PostgreSQL contract", "--features database-operations,db-postgres --test database_operations"],
   ["generated hydration build", "--features hydrate"],
   ["production container build", 'docker build --tag "$GENERATED_APP_IMAGE" "$generated_root"'],
   ["production readiness probe", '"$base_url/readyz"'],
@@ -127,6 +135,9 @@ export function validateUpgradeLifecycleMatrix(job) {
       errors.push(`upgrade lifecycle matrix entry/cache is missing: ${composition}`);
     }
   }
+  if (!job.includes("        if: matrix.lifecycle == 'default'\n        run: sh scripts/generated-application-check.sh minimal")) {
+    errors.push("fresh minimal lifecycle must run in the existing default cell");
+  }
   if (/^    if:/m.test(job) || job.includes("continue-on-error:")) {
     errors.push("upgrade lifecycle validation may not be conditional or tolerate failures");
   }
@@ -143,14 +154,29 @@ export function validateUpgradeScripts(root) {
   const errors = [];
   const contracts = [
     ["scripts/framework-check.sh", "cargo test --locked -p application_manifest"],
+    ["scripts/database-operation-check.sh", "for composition in default minimal identity-added; do"],
+    ["scripts/database-operation-check.sh", 'providers="sqlite postgres"'],
+    ["scripts/database-operation-check.sh", "validation_cache_prepare"],
+    ["scripts/database-operation-check.sh", "validation_cache_release"],
+    ["scripts/database-operation-check.sh", '\n    "$test_binary" --test-threads=1\n'],
+    ["scripts/database-operation-check.sh", 'DATABASE_OPERATION_COMPOSITION_CONFLICT=true "$test_binary" --test-threads=1'],
+    ["scripts/database-operation-contract.rs", "public_database_security_contract"],
     ["scripts/layered-template-check.sh", "cargo test --locked -p template_renderer"],
-    ["scripts/cli-check.sh", "cargo test --locked -p upgrade_test_support"],
+    ["scripts/layered-template-check.sh", 'echo "==> Isolated application database entry-point matrix"'],
+    ["scripts/layered-template-check.sh", '--features "database-operations,db-$database"'],
+    ["scripts/layered-template-check.sh", "--bin app_database --test database_operations"],
+    ["scripts/cli-check.sh", "cargo test --locked -p upgrade_test_support --all-targets"],
     ["scripts/cli-check.sh", "cargo test --locked -p application_mutator"],
     ["scripts/cli-check.sh", "cargo test --locked -p hegira_cli"],
     ["scripts/generated-application-check.sh",
       'exec sh "$repo_root/scripts/upgraded-application-check.sh" "${1#upgrade-}"'],
     ["scripts/upgraded-application-check.sh", "for database in sqlite postgres; do"],
     ["scripts/upgraded-application-check.sh", "--production"],
+    ["scripts/upgraded-application-check.sh", "--example public_upgrade_locks"],
+    ["scripts/upgraded-application-check.sh", "--fresh-minimal"],
+    ["scripts/upgraded-application-check.sh", "locked native cache reuse"],
+    ["scripts/upgrade-database-contract.rs", "production-migration-approval"],
+    ["scripts/upgrade-database-contract.rs", "HEGIRA_UPGRADE_CLI"],
     ["scripts/upgraded-application-check.sh", "composition/provider=$case_id phase=$phase"],
     ["scripts/upgraded-application-check.sh", "failed/interrupted"],
     ["scripts/upgraded-application-check.sh", "validation_cache_prepare"],
@@ -161,7 +187,7 @@ export function validateUpgradeScripts(root) {
     ["scripts/upgraded-application-check.sh", 'docker build --tag "$UPGRADE_APP_IMAGE"'],
     ["scripts/upgraded-application-http.mjs", "cookie BFF mutation requires the trusted Origin"],
     ["scripts/upgrade-database-contract.rs", "released migration history changed"],
-    ["test-fixtures/upgrade-lifecycle/v0.6.0-identity-migrations.json", '"release": "v0.6.0"'],
+    ["test-fixtures/upgrade-lifecycle/v0.7.0-identity-migrations.json", '"release": "v0.7.0"'],
   ];
   for (const [file, contract] of contracts) {
     const location = path.join(root, file);
@@ -201,6 +227,27 @@ export function validateFrontendAuditJob(job) {
   }
   if (/^\s+(?:-\s+)?(?:if:|continue-on-error:)/m.test(job)) {
     errors.push("frontend audit job must not skip or tolerate failures");
+  }
+  return errors;
+}
+
+export function validateMigrationStatusJob(job) {
+  const errors = [];
+  for (const contract of [
+    "POSTGRES_HOST_AUTH_METHOD: trust",
+    "DATABASE_URL: postgres://postgres@localhost:5432/hegira_test",
+    "run: WITH_IGNORED_DB_TESTS=true sh scripts/framework-check.sh",
+    "ALLOW_DATABASE_OPERATION_DISPOSABLE_TARGETS: \"true\"",
+    "DATABASE_OPERATION_POSTGRES_URL: postgres://postgres@localhost:5432/hegira_test",
+    "run: sh scripts/database-operation-check.sh",
+  ]) {
+    if (!job.includes(contract)) {
+      errors.push(`framework migration status gate is missing: ${contract}`);
+    }
+  }
+  if (/^\s+(?:-\s+)?(?:if:|continue-on-error:)/m.test(job)
+      || job.includes("|| true") || job.includes("secrets.")) {
+    errors.push("framework migration status gate must be unconditional, fail closed, and secret-free");
   }
   return errors;
 }
@@ -277,6 +324,14 @@ export function validateRepositoryValidationWorkflow(workflow) {
     /^  supply-chain:\s*$([\s\S]*?)(?=^  [a-zA-Z0-9_-]+:\s*$|(?![\s\S]))/m,
   )?.[1] ?? "";
   errors.push(...validateFrontendAuditJob(supplyChainJob));
+  if (!/^      - uses: EmbarkStudios\/cargo-deny-action@v2\n        with:\n(?:          [^\n]+\n)*?          rust-version: "1\.96\.1"(?:\n|$)/m.test(supplyChainJob)) {
+    errors.push("dependency policy requires the pinned Rust toolchain inside cargo-deny's container");
+  }
+
+  const frameworkJob = workflow.match(
+    /^  framework:\s*$([\s\S]*?)(?=^  [a-zA-Z0-9_-]+:\s*$|(?![\s\S]))/m,
+  )?.[1] ?? "";
+  errors.push(...validateMigrationStatusJob(frameworkJob));
 
   const qualityJob = workflow.match(
     /^  quality:\s*$([\s\S]*?)(?=^  [a-zA-Z0-9_-]+:\s*$|(?![\s\S]))/m,

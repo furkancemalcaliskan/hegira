@@ -9,6 +9,9 @@ use std::{
 
 static NEXT_DIRECTORY: AtomicU64 = AtomicU64::new(0);
 
+#[path = "support/governance_contract.rs"]
+mod governance_contract;
+
 fn hegira(arguments: &[&str]) -> Output {
     let environment = TestDirectory::new("process-environment");
     let result = Command::new(env!("CARGO_BIN_EXE_hegira"))
@@ -54,8 +57,40 @@ fn top_level_help_is_human_readable_output() {
     assert!(output.contains("new"));
     assert!(output.contains("inspect"));
     assert!(output.contains("doctor"));
+    assert!(output.contains("check"));
+    assert!(output.contains("test"));
     assert!(output.contains("component"));
     assert!(output.contains("generate"));
+}
+
+#[test]
+fn validation_operation_help_and_modes_are_available_without_tools_on_every_platform() {
+    for operation in ["check", "test"] {
+        let help = hegira(&[operation, "--help"]);
+        assert!(help.status.success());
+        assert!(help.stderr.is_empty());
+        let text = String::from_utf8(help.stdout).unwrap();
+        assert!(text.contains("--dry-run"));
+        assert!(text.contains("--execute"));
+        assert!(text.contains("--trust-application"));
+        assert!(text.contains("--cargo"));
+        assert!(text.contains("--tool-directory"));
+        for args in [
+            vec![operation],
+            vec![operation, "--execute"],
+            vec![operation, "--dry-run", "--execute"],
+        ] {
+            let invalid = hegira(&args);
+            assert_eq!(invalid.status.code(), Some(2));
+            assert!(invalid.stdout.is_empty());
+        }
+        let missing = hegira(&[operation, "--dry-run", "--json"]);
+        assert_eq!(missing.status.code(), Some(3));
+        assert!(missing.stderr.is_empty());
+        let value: serde_json::Value = serde_json::from_slice(&missing.stdout).unwrap();
+        assert_eq!(value["output_schema"], 1);
+        assert_eq!(value["diagnostics"][0]["code"], "application-context");
+    }
 }
 
 #[test]
@@ -905,11 +940,11 @@ fn new_generates_the_default_layered_application_without_prompts() {
         .expect("workspace manifest should exist");
     assert!(server_manifest.contains("default = [\"db-sqlite\"]"));
     assert!(workspace_manifest.contains("git = \"https://github.com/"));
-    assert!(workspace_manifest.contains("tag = \"v0.7.0\""));
+    assert!(workspace_manifest.contains("tag = \"v0.8.0\""));
     assert!(!workspace_manifest.contains(repository_root().to_string_lossy().as_ref()));
     let lockfile = fs::read_to_string(destination.join("Cargo.lock"))
         .expect("application lockfile should exist");
-    assert!(lockfile.contains("?tag=v0.7.0#"));
+    assert!(lockfile.contains("?tag=v0.8.0#"));
 }
 
 #[test]
@@ -1021,11 +1056,11 @@ fn inspect_reports_the_discovered_application_without_writing() {
     assert!(output.contains("Manifest schema: 3\n"));
     assert!(output.contains("Framework: https://github.com/furkancemalcaliskan/hegira.git"));
     assert!(output.contains("Composition status: compatible\n"));
-    assert!(output.contains("Component package: hegira-canonical @ v0.7.0\n"));
+    assert!(output.contains("Component package: hegira-canonical @ v0.8.0\n"));
     assert!(
-        output.contains("Components: layered-base @ v0.7.0, layered-leptos-identity @ v0.7.0\n")
+        output.contains("Components: layered-base @ v0.8.0, layered-leptos-identity @ v0.8.0\n")
     );
-    assert!(output.contains("Modules: identity @ v0.7.0\n"));
+    assert!(output.contains("Modules: identity @ v0.8.0\n"));
     assert!(output.contains("Capabilities: authentication, authorization\n"));
     assert!(output.contains("Databases: sqlite\n"));
     assert!(output.contains("Clients: leptos\n"));
@@ -1397,7 +1432,7 @@ fn doctor_incompatible_manifest_is_a_redacted_blocking_json_result() {
     );
     let manifest_path = application.join("hegira.toml");
     let manifest = fs::read_to_string(&manifest_path).unwrap();
-    fs::write(&manifest_path, manifest.replace("v0.7.0", "v9.9.9")).unwrap();
+    fs::write(&manifest_path, manifest.replace("v0.8.0", "v9.9.9")).unwrap();
     let before = output_tree(&application);
 
     let first = doctor_with_stubbed_tools(&fixture, &application, true, &["doctor", "--json"]);
@@ -1466,7 +1501,7 @@ fn inspect_json_is_versioned_deterministic_and_matches_explicit_resolution() {
     );
     assert_eq!(
         document["composition"]["components"][0]["version"],
-        "v0.7.0"
+        "v0.8.0"
     );
     assert_eq!(document["composition"]["modules"][0]["id"], "identity");
     assert_eq!(document["composition"]["databases"][0], "sqlite");
@@ -1691,8 +1726,8 @@ fn explicit_sibling_destination_still_works() {
 #[test]
 fn provider_snapshots_and_interactive_requests_match() {
     for (database, expected) in [
-        ("sqlite", 4137004169986954457_u64),
-        ("postgres", 6167913998638998944_u64),
+        ("sqlite", 4397831145653011592_u64),
+        ("postgres", 9803008888859801769_u64),
     ] {
         let root = TestDirectory::new(database);
         let explicit = root.path().join("explicit");
@@ -1724,7 +1759,7 @@ fn provider_snapshots_and_interactive_requests_match() {
         assert!(manifest.contains("clients = [\"leptos\"]"));
         assert!(manifest.contains("\"layered-leptos-identity\""));
         let workspace = fs::read_to_string(explicit.join("Cargo.toml")).unwrap();
-        assert!(workspace.contains("tag = \"v0.7.0\""));
+        assert!(workspace.contains("tag = \"v0.8.0\""));
         assert!(!workspace.contains(repository_root().to_str().unwrap()));
         assert!(!explicit.join(".git").exists());
         assert!(!explicit.join("target").exists());
@@ -1742,6 +1777,510 @@ fn provider_snapshots_and_interactive_requests_match() {
             fingerprint, expected,
             "review {database} output before updating its snapshot"
         );
+    }
+}
+
+const APPLICATION_DOCUMENTATION: [&str; 8] = [
+    "README.md",
+    "docs/architecture.md",
+    "docs/development.md",
+    "docs/ownership.md",
+    "AGENTS.md",
+    "CLAUDE.md",
+    ".cursor/rules/application.mdc",
+    "docs/repository.md",
+];
+
+#[test]
+fn application_documentation_matches_all_six_states_and_preserves_owner_edits() {
+    use application_manifest::{ApplicationManifest, SourceOwnershipClass};
+    for composition in ["default", "minimal", "identity-added"] {
+        for database in ["sqlite", "postgres"] {
+            let root = TestDirectory::new("application-documentation");
+            let application = root.path().join("application");
+            let mut arguments = vec![
+                "new",
+                "travel-notes",
+                "--destination",
+                path_argument(&application),
+                "--database",
+                database,
+            ];
+            if composition != "default" {
+                arguments.extend(["--composition", "minimal"]);
+            }
+            assert!(hegira(&arguments).status.success());
+            let original = APPLICATION_DOCUMENTATION
+                .map(|path| fs::read_to_string(application.join(path)).unwrap());
+            let second = root.path().join("second");
+            arguments[3] = path_argument(&second);
+            assert!(hegira(&arguments).status.success());
+            for (path, content) in APPLICATION_DOCUMENTATION.iter().zip(&original) {
+                assert_eq!(*content, fs::read_to_string(second.join(path)).unwrap());
+            }
+            if composition == "identity-added" {
+                for (path, content) in APPLICATION_DOCUMENTATION.iter().zip(&original) {
+                    fs::write(
+                        application.join(path),
+                        format!("{content}\nOwner product notes.\n"),
+                    )
+                    .unwrap();
+                }
+                let installed = hegira_at(&application, &["component", "add", "identity"]);
+                assert!(installed.status.success(), "{:?}", installed.stderr);
+                for (path, content) in APPLICATION_DOCUMENTATION.iter().zip(&original) {
+                    assert_eq!(
+                        fs::read_to_string(application.join(path)).unwrap(),
+                        format!("{content}\nOwner product notes.\n")
+                    );
+                }
+            }
+            let manifest = ApplicationManifest::read(application.join("hegira.toml")).unwrap();
+            let ownership = &manifest.upgrade.as_ref().unwrap().ownership;
+            assert_eq!(ownership.default, SourceOwnershipClass::ApplicationOwned);
+            for (path, content) in APPLICATION_DOCUMENTATION.iter().zip(&original) {
+                let claims = ownership
+                    .claims
+                    .iter()
+                    .filter(|claim| claim.path == *path)
+                    .collect::<Vec<_>>();
+                assert_eq!(claims.len(), 1);
+                assert_eq!(claims[0].class, SourceOwnershipClass::GeneratedOnce);
+                assert!(claims[0].integration.is_none());
+                assert!(content.contains("travel-notes"));
+                for forbidden in [
+                    "{{",
+                    "}}",
+                    "# Hegira",
+                    "my-application",
+                    "postgres:postgres",
+                    repository_root().to_str().unwrap(),
+                ] {
+                    assert!(!content.contains(forbidden), "{path}: {forbidden}");
+                }
+                assert_documentation_links(&application, path, content);
+                assert_documented_cli_syntax(&application, content);
+            }
+            let profile = if database == "sqlite" {
+                "sqlite"
+            } else {
+                "development"
+            };
+            let development = &original[2];
+            let instructions = original[4].split_whitespace().collect::<Vec<_>>().join(" ");
+            assert!(instructions.contains(&format!("selected provider is `{database}`")));
+            assert!(instructions.contains(&format!("development profile is `{profile}`")));
+            for convention in [
+                "<type>/<issue>-<short-description>",
+                "#<issue> <type>(<scope>): <description>",
+                "<type>(<scope>): <description>` without an issue number",
+                "Exactly one `Closes #<issue>` matching the branch issue",
+                "`develop`, squash merge",
+                "release: promote travel-notes vX.Y.Z to main",
+                "the application owner's policy",
+                "Domain and Application rules must not depend on",
+                "Protected operations must authorize in Application before repository/count",
+                "UI permission checks are presentation only",
+                "cookie-authenticated browser/BFF and Bearer API policies separate",
+                "explicit owner authority for that action",
+            ] {
+                assert!(
+                    instructions.contains(convention),
+                    "missing instruction: {convention}"
+                );
+            }
+            for absent in [
+                "not currently accepting unsolicited",
+                "scripts/backend-check.sh",
+                "modules/identity/",
+                "tools/hegira_cli/",
+                "Closes #384",
+            ] {
+                assert!(
+                    !instructions.contains(absent),
+                    "framework-specific instruction: {absent}"
+                );
+            }
+            assert!(instructions.contains(
+                "minimal starts without an official module, login pages, authentication,"
+            ));
+            assert!(
+                instructions
+                    .contains("Only an explicit Identity installation adds those capabilities")
+            );
+            let claude = &original[5];
+            assert!(claude.starts_with("@AGENTS.md\n"));
+            assert!(claude.contains("[AGENTS.md](AGENTS.md)"));
+            let cursor = &original[6];
+            let frontmatter = cursor
+                .strip_prefix("---\n")
+                .unwrap()
+                .split_once("---\n")
+                .unwrap()
+                .0;
+            assert_eq!(
+                frontmatter,
+                "description: Canonical travel-notes application instructions\nglobs:\nalwaysApply: true\n"
+            );
+            assert!(cursor.contains("[AGENTS.md](../../AGENTS.md)"));
+            assert!(cursor.ends_with("@AGENTS.md\n"));
+            for adapter in [claude, cursor] {
+                assert!(adapter.contains("This adapter adds no separate project rules."));
+                assert!(adapter.lines().count() <= 12);
+                for canonical_rule in [
+                    "<type>",
+                    "--dry-run",
+                    "--execute",
+                    "--approve-production-migration",
+                    "squash",
+                    "Domain",
+                ] {
+                    assert!(
+                        !adapter.contains(canonical_rule),
+                        "adapter duplicates a canonical rule: {canonical_rule}"
+                    );
+                }
+            }
+            assert!(development.contains(&format!("config/{profile}.yaml")));
+            assert!(development.contains(&format!("ssr,db-{database}")));
+            assert!(development.contains(&format!("database-operations,db-{database}")));
+            assert!(
+                fs::read_to_string(application.join(format!("config/{profile}.yaml")))
+                    .unwrap()
+                    .contains(&format!("backend: {database}"))
+            );
+            for operation in ["status", "migrate"] {
+                assert!(
+                    development.contains(&format!("hegira db {operation} --profile {profile}"))
+                );
+                let preview = hegira_at(
+                    &application,
+                    &["db", operation, "--profile", profile, "--dry-run", "--json"],
+                );
+                assert!(preview.status.success(), "{:?}", preview.stderr);
+                let report: serde_json::Value = serde_json::from_slice(&preview.stdout).unwrap();
+                assert_eq!(report["plan"]["database"], database);
+            }
+            for operation in ["dev", "check", "test"] {
+                assert!(
+                    hegira_at(&application, &[operation, "--dry-run"])
+                        .status
+                        .success()
+                );
+            }
+            assert!(
+                hegira_at(&application, &["build", "--release", "--dry-run"])
+                    .status
+                    .success()
+            );
+            assert!(
+                hegira_at(&application, &["doctor", "--operation", "check"])
+                    .status
+                    .success()
+            );
+            if composition == "default" {
+                assert!(
+                    original[0]
+                        .contains("initial composition includes the official\nIdentity module")
+                );
+            } else {
+                assert!(
+                    original[0].contains(
+                        "no official module, login pages, authentication, or authorization"
+                    )
+                );
+                assert!(original[1].contains("Once `hegira.toml` records Identity"));
+                assert!(original[1].contains("Installation preserves existing documentation"));
+            }
+            assert_eq!(
+                manifest.composition.unwrap().modules.is_empty(),
+                composition == "minimal"
+            );
+            assert!(!application.join(".git").exists());
+            assert!(!application.join("target").exists());
+        }
+    }
+}
+
+const APPLICATION_POLICY: [&str; 7] = [
+    ".github/PULL_REQUEST_TEMPLATE.md",
+    ".github/repository-policy.json",
+    ".github/workflows/repository-policy.yml",
+    "docs/repository.md",
+    "scripts/repository-policy.mjs",
+    "scripts/repository-policy.sh",
+    "scripts/repository-policy.test.mjs",
+];
+
+#[test]
+fn application_policy_runs_in_all_six_states_and_preserves_owner_edits() {
+    use application_manifest::{ApplicationManifest, SourceOwnershipClass};
+    for composition in ["default", "minimal", "identity-added"] {
+        for database in ["sqlite", "postgres"] {
+            let root = TestDirectory::new("application-policy");
+            let application = root.path().join("application");
+            let mut arguments = vec![
+                "new",
+                "owner-product",
+                "--destination",
+                path_argument(&application),
+                "--database",
+                database,
+            ];
+            if composition != "default" {
+                arguments.extend(["--composition", "minimal"]);
+            }
+            assert!(hegira(&arguments).status.success());
+            let original = APPLICATION_POLICY.map(|path| fs::read(application.join(path)).unwrap());
+            let second = root.path().join("second");
+            arguments[3] = path_argument(&second);
+            assert!(hegira(&arguments).status.success());
+            for (path, bytes) in APPLICATION_POLICY.iter().zip(&original) {
+                assert_eq!(*bytes, fs::read(second.join(path)).unwrap());
+            }
+            let result = Command::new("sh")
+                .arg("scripts/repository-policy.sh")
+                .current_dir(&application)
+                .output()
+                .expect("application policy needs Node.js 22+ and Git on PATH");
+            assert!(
+                result.status.success(),
+                "{}\n{}",
+                String::from_utf8_lossy(&result.stdout),
+                String::from_utf8_lossy(&result.stderr)
+            );
+            assert!(!application.join(".git").exists());
+            assert!(!application.join("target").exists());
+            if composition == "identity-added" {
+                for path in APPLICATION_POLICY {
+                    fs::write(application.join(path), "Owner customized policy.\n").unwrap();
+                }
+                let installed = hegira_at(&application, &["component", "add", "identity"]);
+                assert!(installed.status.success(), "{:?}", installed.stderr);
+                for path in APPLICATION_POLICY {
+                    assert_eq!(
+                        fs::read_to_string(application.join(path)).unwrap(),
+                        "Owner customized policy.\n"
+                    );
+                }
+            }
+            let manifest = ApplicationManifest::read(application.join("hegira.toml")).unwrap();
+            let ownership = manifest.upgrade.unwrap().ownership;
+            for path in APPLICATION_POLICY {
+                let claims = ownership
+                    .claims
+                    .iter()
+                    .filter(|claim| claim.path == path)
+                    .collect::<Vec<_>>();
+                assert_eq!(claims.len(), 1);
+                assert_eq!(claims[0].class, SourceOwnershipClass::GeneratedOnce);
+                assert!(claims[0].integration.is_none());
+            }
+        }
+    }
+}
+
+const APPLICATION_QUALITY: [&str; 8] = [
+    ".github/workflows/quality.yml",
+    ".github/actions/application-tools/action.yml",
+    ".cargo/audit.toml",
+    "deny.toml",
+    "scripts/ci.sh",
+    "scripts/ci-tools.sh",
+    "scripts/ci-integration.mjs",
+    "scripts/ci.test.mjs",
+];
+
+#[test]
+fn application_quality_is_provider_correct_executable_and_generated_once_in_six_states() {
+    use application_manifest::{ApplicationManifest, SourceOwnershipClass};
+    for composition in ["default", "minimal", "identity-added"] {
+        for database in ["sqlite", "postgres"] {
+            let parent = TestDirectory::new("application-quality");
+            let application = parent.path().join("application");
+            let mut args = vec![
+                "new",
+                "quality-app",
+                "--destination",
+                path_argument(&application),
+                "--database",
+                database,
+            ];
+            if composition != "default" {
+                args.extend(["--composition", "minimal"]);
+            }
+            assert!(hegira(&args).status.success());
+            if composition == "identity-added" {
+                assert!(
+                    hegira_at(&application, &["component", "add", "identity"])
+                        .status
+                        .success()
+                );
+            }
+            let result = Command::new("node")
+                .args(["--test", "scripts/ci.test.mjs"])
+                .current_dir(&application)
+                .output()
+                .unwrap();
+            assert!(
+                result.status.success(),
+                "{composition}/{database}: {}\n{}",
+                String::from_utf8_lossy(&result.stdout),
+                String::from_utf8_lossy(&result.stderr)
+            );
+            let manifest = ApplicationManifest::read(application.join("hegira.toml")).unwrap();
+            let claims = manifest.upgrade.unwrap().ownership.claims;
+            for path in APPLICATION_QUALITY {
+                assert!(application.join(path).is_file());
+                let claim = claims
+                    .iter()
+                    .filter(|claim| claim.path == path)
+                    .collect::<Vec<_>>();
+                assert_eq!(claim.len(), 1, "{path}");
+                assert_eq!(claim[0].class, SourceOwnershipClass::GeneratedOnce);
+                assert!(claim[0].integration.is_none());
+                fs::write(application.join(path), "Owner customized quality source.\n").unwrap();
+            }
+            if composition == "minimal" {
+                assert!(
+                    hegira_at(&application, &["component", "add", "identity"])
+                        .status
+                        .success()
+                );
+                for path in APPLICATION_QUALITY {
+                    assert_eq!(
+                        fs::read_to_string(application.join(path)).unwrap(),
+                        "Owner customized quality source.\n"
+                    );
+                }
+            }
+        }
+    }
+}
+
+fn assert_documentation_links(root: &Path, document: &str, content: &str) {
+    for suffix in content.split("](").skip(1) {
+        let destination = suffix.split_once(')').unwrap().0;
+        let (path, anchor) = destination.split_once('#').unwrap_or((destination, ""));
+        let target = root.join(document).parent().unwrap().join(path);
+        assert!(target.exists(), "{document}: {destination}");
+        assert!(
+            target
+                .canonicalize()
+                .unwrap()
+                .starts_with(root.canonicalize().unwrap())
+        );
+        if !anchor.is_empty() {
+            let source = fs::read_to_string(target).unwrap();
+            assert!(
+                source
+                    .lines()
+                    .filter_map(|line| line.strip_prefix("## "))
+                    .any(|heading| heading.to_ascii_lowercase().replace(' ', "-") == anchor)
+            );
+        }
+    }
+}
+
+fn assert_documented_cli_syntax(root: &Path, content: &str) {
+    let joined = content.replace("\\\n", " ");
+    let mut fenced = false;
+    for line in joined.lines() {
+        if line.starts_with("```") {
+            fenced = !fenced;
+        } else if fenced && let Some(command) = line.strip_prefix("hegira ") {
+            // Parse every example through the real public command without
+            // executing trusted source or publishing an upgrade/installation.
+            let mut arguments = command.split_whitespace().collect::<Vec<_>>();
+            arguments.push("--help");
+            let result = hegira_at(root, &arguments);
+            assert!(result.status.success(), "{command}: {:?}", result.stderr);
+        }
+    }
+}
+
+#[test]
+fn database_entry_point_and_exact_ownership_survive_all_six_compositions() {
+    use application_manifest::{ApplicationManifest, SourceOwnershipClass};
+    for composition in ["default", "minimal", "identity-added"] {
+        for database in ["sqlite", "postgres"] {
+            let root = TestDirectory::new("database-entry-point-ownership");
+            let application = root.path().join("application");
+            let mut arguments = vec![
+                "new",
+                "database-application",
+                "--destination",
+                path_argument(&application),
+                "--database",
+                database,
+            ];
+            if composition != "default" {
+                arguments.extend(["--composition", "minimal"]);
+            }
+            assert!(hegira(&arguments).status.success());
+            if composition == "identity-added" {
+                let installed = hegira_at(&application, &["component", "add", "identity"]);
+                assert!(
+                    installed.status.success(),
+                    "{}",
+                    String::from_utf8_lossy(&installed.stderr)
+                );
+            }
+            let manifest = ApplicationManifest::from_toml(
+                &fs::read_to_string(application.join("hegira.toml")).unwrap(),
+            )
+            .unwrap();
+            let claims = manifest.upgrade.unwrap().ownership.claims;
+            for (path, integration) in [
+                ("apps/server/Cargo.toml", "database-entry-point-manifest"),
+                (
+                    "apps/server/src/bin/app_database.rs",
+                    "database-entry-point",
+                ),
+                (
+                    "crates/infrastructure/src/database_operations.rs",
+                    "database-operations",
+                ),
+                (
+                    "crates/infrastructure/src/config.rs",
+                    "database-operation-config",
+                ),
+                (
+                    "crates/infrastructure/src/lib.rs",
+                    "database-operation-module",
+                ),
+            ] {
+                assert!(application.join(path).is_file());
+                assert_eq!(
+                    claims
+                        .iter()
+                        .filter(|claim| {
+                            claim.path == path
+                                && claim.class == SourceOwnershipClass::ManagedIntegration
+                                && claim.integration.as_deref() == Some(integration)
+                        })
+                        .count(),
+                    1
+                );
+            }
+            let server = fs::read_to_string(application.join("apps/server/Cargo.toml")).unwrap();
+            assert!(server.contains("name = \"app_database\""));
+            assert!(server.contains("required-features = [\"database-operations\"]"));
+            assert!(server.contains("default-run = \"app_server\""));
+            let entry = fs::read_to_string(application.join("apps/server/src/bin/app_database.rs"))
+                .unwrap();
+            assert!(entry.contains("database_operations::execute"));
+            assert!(!entry.contains("server::run"));
+            let operations = fs::read_to_string(
+                application.join("crates/infrastructure/src/database_operations.rs"),
+            )
+            .unwrap();
+            assert!(operations.contains("migration_plan(&config.database.backend)"));
+            assert!(operations.contains(".create_if_missing(false)"));
+            assert!(operations.contains("AppConfig::load_profile(&profile)"));
+            assert!(!operations.contains("initialize_database("));
+            assert!(!operations.contains("seed_identity("));
+        }
     }
 }
 

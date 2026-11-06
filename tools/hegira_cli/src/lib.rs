@@ -37,10 +37,12 @@ use template_renderer::{
 };
 
 mod application_context;
+mod artifacts;
 mod component;
 mod doctor;
 mod identity_installation;
 mod mutation;
+pub mod operations;
 mod upgrade;
 
 use component::ComponentCommand;
@@ -91,6 +93,18 @@ enum CliCommand {
     Inspect(InspectCommand),
     /// Diagnose application composition and local prerequisites without modifying it.
     Doctor(DoctorCommand),
+    /// Report artifact usage or explicitly prune owned inactive validation caches.
+    Artifacts(artifacts::ArtifactsCommand),
+    /// Preview or explicitly run locked native and hydration checks.
+    Check(operations::command::ValidationCommand),
+    /// Preview or explicitly run native tests and a hydration check (no ignored tests).
+    Test(operations::command::ValidationCommand),
+    /// Preview or explicitly run the local foreground Leptos development workflow.
+    Dev(operations::command::DevelopmentCommand),
+    /// Preview or explicitly build a locked application release bundle (no deployment).
+    Build(operations::command::BuildCommand),
+    /// Preview or explicitly run application-owned database status or forward migration.
+    Db(operations::command::DatabaseCommand),
     /// Inspect application upgrade readiness without modifying source.
     Upgrade(upgrade::UpgradeCommand),
     /// Manage bundled additive application components.
@@ -426,6 +440,50 @@ fn run_command(
             diagnostics,
         ),
         CliCommand::Doctor(command) => doctor::run(
+            command,
+            repository_root,
+            working_directory,
+            output,
+            diagnostics,
+        ),
+        CliCommand::Artifacts(command) => artifacts::run(
+            command,
+            repository_root,
+            working_directory,
+            output,
+            diagnostics,
+        ),
+        CliCommand::Check(command) => operations::command::run(
+            command,
+            operations::OperationIntent::Check,
+            repository_root,
+            working_directory,
+            output,
+            diagnostics,
+        ),
+        CliCommand::Test(command) => operations::command::run(
+            command,
+            operations::OperationIntent::Test,
+            repository_root,
+            working_directory,
+            output,
+            diagnostics,
+        ),
+        CliCommand::Dev(command) => operations::command::run_development(
+            command,
+            repository_root,
+            working_directory,
+            output,
+            diagnostics,
+        ),
+        CliCommand::Build(command) => operations::command::run_build(
+            command,
+            repository_root,
+            working_directory,
+            output,
+            diagnostics,
+        ),
+        CliCommand::Db(command) => operations::command::run_database(
             command,
             repository_root,
             working_directory,

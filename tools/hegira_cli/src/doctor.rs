@@ -8,13 +8,19 @@ use std::{
 
 use application_manifest::{DatabaseAdapter, MutationCompatibility, MutationCompatibilityPolicy};
 use application_mutator::MUTATION_MARKER;
-use clap::Args;
+use clap::{Args, ValueEnum};
 use serde::Serialize;
 
 use crate::{
     ApplicationContext, ApplicationContextErrorKind, ApplicationContextRequest, CliDiagnostic,
-    CliExit, CompositionInspectionStatus, inspect_composition, resolve_application_context,
-    write_diagnostic,
+    CliExit, CompositionInspectionStatus, inspect_composition,
+    operations::{
+        OperationIntent, OperationRequest, RuntimeProfile, plan_application_operation,
+        readiness::{
+            ReadinessCheck as DoctorCheck, ReadinessStatus as CheckStatus, ReadinessTools,
+        },
+    },
+    resolve_application_context, write_diagnostic,
 };
 
 pub const DOCTOR_OUTPUT_SCHEMA: u32 = 1;
@@ -29,22 +35,64 @@ pub(crate) struct DoctorCommand {
     /// Emit a versioned, machine-readable diagnostic report.
     #[arg(long)]
     json: bool,
+
+    /// Diagnose one closed application operation without executing it.
+    #[arg(long, value_enum)]
+    operation: Option<DoctorOperation>,
+
+    /// Required only for database operation diagnostics; never loads the profile.
+    #[arg(long, value_enum, requires = "operation",
+        required_if_eq_any([("operation", "database-status"), ("operation", "database-migrate")]))]
+    profile: Option<DoctorProfile>,
+
+    /// Consent to bounded, sanitized native tool probes; never application hooks.
+    #[arg(long, requires_all = ["operation", "cargo", "tool_directory"])]
+    probe_tools: bool,
+
+    /// Absolute trusted Cargo executable (Linux native probes only).
+    #[arg(long, value_name = "PATH", requires = "probe_tools")]
+    cargo: Option<PathBuf>,
+
+    /// Absolute trusted external tool directory; repeat as needed.
+    #[arg(long, value_name = "PATH", requires = "probe_tools")]
+    tool_directory: Vec<PathBuf>,
+
+    /// Explicit trusted wasm-bindgen CLI for development/release diagnostics.
+    #[arg(long, value_name = "PATH", requires = "probe_tools")]
+    wasm_bindgen: Option<PathBuf>,
+
+    /// Explicit trusted Binaryen optimizer for release diagnostics.
+    #[arg(long, value_name = "PATH", requires = "probe_tools")]
+    wasm_opt: Option<PathBuf>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "kebab-case")]
-enum CheckStatus {
-    Pass,
-    Warning,
-    Failure,
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum DoctorOperation {
+    Dev,
+    Check,
+    Test,
+    Build,
+    DatabaseStatus,
+    DatabaseMigrate,
 }
 
-#[derive(Debug, Serialize)]
-struct DoctorCheck {
-    code: &'static str,
-    status: CheckStatus,
-    message: &'static str,
-    action: Option<&'static str>,
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum DoctorProfile {
+    Sqlite,
+    Development,
+    Test,
+    Production,
+}
+
+impl From<DoctorProfile> for RuntimeProfile {
+    fn from(profile: DoctorProfile) -> Self {
+        match profile {
+            DoctorProfile::Sqlite => Self::Sqlite,
+            DoctorProfile::Development => Self::Development,
+            DoctorProfile::Test => Self::Test,
+            DoctorProfile::Production => Self::Production,
+        }
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -52,6 +100,8 @@ struct DoctorReport {
     output_schema: u32,
     status: CheckStatus,
     checks: Vec<DoctorCheck>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    operation: Option<OperationIntent>,
 }
 
 impl DoctorReport {
@@ -60,6 +110,7 @@ impl DoctorReport {
             output_schema: DOCTOR_OUTPUT_SCHEMA,
             status: CheckStatus::Pass,
             checks: Vec::new(),
+            operation: None,
         }
     }
 
@@ -91,6 +142,32 @@ pub(crate) fn run(
     output: &mut impl Write,
     diagnostics: &mut impl Write,
 ) -> CliExit {
+    let intent = match (command.operation, command.profile) {
+        (None, None) => None,
+        (Some(DoctorOperation::Dev), None) => Some(OperationIntent::Develop),
+        (Some(DoctorOperation::Check), None) => Some(OperationIntent::Check),
+        (Some(DoctorOperation::Test), None) => Some(OperationIntent::Test),
+        (Some(DoctorOperation::Build), None) => Some(OperationIntent::ReleaseBuild),
+        (Some(DoctorOperation::DatabaseStatus), Some(profile)) => {
+            Some(OperationIntent::DatabaseStatus {
+                profile: profile.into(),
+            })
+        }
+        (Some(DoctorOperation::DatabaseMigrate), Some(profile)) => {
+            Some(OperationIntent::DatabaseMigrate {
+                profile: profile.into(),
+            })
+        }
+        _ => {
+            return write_diagnostic(
+                CliDiagnostic::usage(
+                    "doctor profile is valid only for database operation diagnostics",
+                    "Select --operation database-status or database-migrate with --profile.",
+                ),
+                diagnostics,
+            );
+        }
+    };
     let policy = match MutationCompatibilityPolicy::for_current_release() {
         Ok(policy) => policy,
         Err(_) => {
@@ -115,6 +192,13 @@ pub(crate) fn run(
                     "application root is ambiguous or changed during inspection"
                 }
             };
+            if let Some(intent) = intent {
+                let mut report = DoctorReport::new();
+                report.operation = Some(intent);
+                report.push("application-context", CheckStatus::Failure, message,
+                    Some("Restore a valid, unambiguous real application root and manifest; no tool was probed."));
+                return emit_report(&report, command.json, output, diagnostics);
+            }
             return write_diagnostic(CliDiagnostic::validation(message), diagnostics);
         }
     };
@@ -152,9 +236,42 @@ pub(crate) fn run(
     check_recovery_marker(&context.root, &mut report);
     check_integrations(&context, &mut report);
     check_provider(&context, &mut report);
-    check_prerequisites(&mut report);
+    if let Some(intent) = intent {
+        report.operation = Some(intent);
+        // Invalid composition/recovery/integrations never authorize a tool probe.
+        if report.status != CheckStatus::Failure {
+            match plan_application_operation(&repository_root, &OperationRequest { application: request, intent }) {
+                Ok(plan) => {
+                    let tools = command.cargo.filter(|_| command.probe_tools).map(|cargo| ReadinessTools {
+                        cargo, directories: command.tool_directory,
+                        wasm_bindgen: command.wasm_bindgen, wasm_opt: command.wasm_opt,
+                    });
+                    for check in crate::operations::execution::diagnose_operation(&plan, tools.as_ref()) {
+                        report.push(check.code, check.status, check.message, check.action);
+                    }
+                }
+                Err(_) => report.push("operation-plan", CheckStatus::Failure,
+                    "The selected operation is not supported by the recorded composition or provider/profile.",
+                    Some("Review `hegira inspect` and select a supported operation and provider-compatible profile.")),
+            }
+        } else {
+            report.push("operation-plan", CheckStatus::Failure,
+                "Operation prerequisites were not probed because application state is blocked.",
+                Some("Resolve the reported manifest, composition, integration or recovery blocker first; doctor repairs nothing."));
+        }
+    } else {
+        check_prerequisites(&mut report);
+    }
+    emit_report(&report, command.json, output, diagnostics)
+}
 
-    let rendered = if command.json {
+fn emit_report(
+    report: &DoctorReport,
+    json: bool,
+    output: &mut impl Write,
+    diagnostics: &mut impl Write,
+) -> CliExit {
+    let rendered = if json {
         match serde_json::to_string_pretty(&report) {
             Ok(rendered) => rendered,
             Err(_) => {
@@ -165,7 +282,7 @@ pub(crate) fn run(
             }
         }
     } else {
-        render_human(&report)
+        render_human(report)
     };
     if writeln!(output, "{rendered}").is_err() {
         return CliExit::Internal;
@@ -440,7 +557,7 @@ fn render_human(report: &DoctorReport) -> String {
 fn read_managed_source(root: &Path, relative: &str) -> Result<String, ()> {
     use rustix::fs::{self, FileType, Mode, OFlags};
     let directory_flags = OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW | OFlags::CLOEXEC;
-    let file_flags = OFlags::RDONLY | OFlags::NOFOLLOW | OFlags::CLOEXEC;
+    let file_flags = OFlags::RDONLY | OFlags::NOFOLLOW | OFlags::NONBLOCK | OFlags::CLOEXEC;
     let mut directory = fs::open(root, directory_flags, Mode::empty()).map_err(|_| ())?;
     let path = Path::new(relative);
     let mut parts = path.components().peekable();

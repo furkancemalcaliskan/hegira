@@ -73,7 +73,7 @@ ownership:
 | `templates/package.toml` | Versioned canonical component-package identity, framework compatibility, component graph, and source digest |
 | `templates/components/` | Typed data-only manifests for canonical rendering and trusted additive component contributions |
 | `tools/application_mutator/` | Typed additive component and general change plans, canonical file ownership, controlled Cargo/Rust/TOML integration, and failure-safe publication for coordinated existing-application changes |
-| `tools/hegira_cli/` | Source-runnable creation, inspection, direct-upgrade readiness/preview/apply, additive component installation, layered resource and migration generation with stable diagnostics and exit outcomes |
+| `tools/hegira_cli/` | Source-runnable creation, inspection, direct-upgrade readiness/preview/apply, additive component installation, layered resource and migration generation; public application dev/check/test/build previews and explicitly trusted Linux execution, backed by typed operation planning and process-lifecycle libraries |
 | `tools/resource_generator/` | Typed layered resource specifications plus inward-layer, provider-specific SQLx persistence, explicit Axum/OpenAPI and Leptos UI composition, and append-only migration planning |
 | `tools/template_renderer/` | Reusable deterministic render core with no-follow, digest-verified package-source loading and a separate disposable repository-validation adapter; it is not a public CLI |
 | `tools/upgrade_test_support/` | Test-only authenticated access to immutable, content-addressed released-application baselines |
@@ -82,7 +82,19 @@ ownership:
 The canonical rendered application is an independent Cargo workspace, consumes framework
 packages from a pinned release source, and records its generation identity, installed
 composition, and selected adapters in a validated `hegira.toml`. Runtime configuration and
-secrets remain outside that manifest. The canonical package locks its source inputs with a
+secrets remain outside that manifest. Its generated-once README and architecture,
+development, and ownership guides describe the selected application and remain
+under the application owner's control after installation and upgrades.
+Its canonical `AGENTS.md` supplies the same working contract for humans and
+agents, with thin Claude/Cursor adapters and owner-controlled contribution policy.
+Generated-once repository/PR policy scripts, configuration, and a read-only GitHub
+workflow validate application conventions; remote hosting and protection setup
+remain explicit application-owner actions.
+The generated `quality` workflow checks formatting, architecture, selected-provider
+native/WASM compilation, tests, release output, disposable database startup, and
+Rust/frontend supply-chain policy. It uses explicitly bounded CLI-owned validation
+output and a stable aggregate that requires every constituent to succeed.
+The canonical package locks its source inputs with a
 deterministic SHA-256 digest so repository-local or untracked files cannot silently enter
 generated output. Package and framework identity, declared paths, regular-file types, and the
 opened package root are verified before those snapshot bytes become render input. Releases remain
@@ -116,8 +128,62 @@ not provide module management, arbitrary source merging, or unattended upgrades.
 Its stable process outcomes are success (`0`), internal error (`1`), usage
 error (`2`), validation error (`3`), and conflict (`4`). Human-readable help
 and version output use standard output; diagnostics use standard error except
-typed upgrade assessments and execution results, which use standard output even
-when unsuccessful.
+typed upgrade assessments and execution results, and JSON operation/artifact
+reports, which use standard output even when unsuccessful.
+
+Choose the appropriate source, execution or maintenance command using the
+[application workflow table](docs/getting-started.md#choose-an-application-workflow).
+Application source changes, trusted process execution, database migration and
+deployment are separate decisions. Read the [tool and application trust boundary](SECURITY.md#local-tool-and-application-trust)
+before executing an application or sharing raw child output.
+
+`hegira doctor --operation check` diagnoses an operation's application files
+and declared prerequisites without running it. Narrow native tool-version
+probes require explicit `--probe-tools` and trusted tool selections; no
+application hook, frontend script, installation, or provider connection is
+performed. See [Operation diagnostics](docs/getting-started.md#diagnose-operation-prerequisites).
+
+Use `hegira check --dry-run` or `hegira test --dry-run` to inspect the current
+application's locked native/provider and hydration steps. Execution requires
+`--execute --trust-application`, an absolute `--cargo` selection, and explicit
+`--tool-directory` entries. It runs trusted code, not a sandbox; ignored database
+tests are never selected. See [Application checks and tests](docs/getting-started.md#check-and-test-an-application)
+for trust, output, and prerequisite boundaries.
+
+`hegira dev --dry-run` reviews the provider-correct localhost development plan.
+Explicit Linux execution additionally selects a lock-matched `--wasm-bindgen`
+and verifies installed Rust/WASM, Cargo Leptos, Node, and Tailwind prerequisites
+before delegating foreground watch/serve. Startup can migrate, seed, and access
+configured dependencies; review the intended development database first.
+No tools are automatically installed. See [Application development](docs/getting-started.md#develop-an-application)
+for the command and trust boundaries.
+
+`hegira build --release --dry-run` reviews a selected-provider application
+production-bundle build. Explicit Linux execution verifies frontend tools,
+including Binaryen `wasm-opt` 123, and selects a separately claimed
+release-output area, leaving ordinary developer Cargo output alone. It reports
+verified native/server and browser artifact locations without starting or
+deploying an application. See [Application release builds](docs/getting-started.md#build-an-application-release-bundle).
+Framework releases remain source-only.
+
+`hegira artifacts status` reports local application output ownership and disk
+usage on Linux, with `--json` for schema-1 automation. It separates developer
+output from validated CLI release output, observes active operations, and
+performs no build, claim, or cleanup. Explicit `--validation-cache` on
+check/test/release builds selects separately claimed disposable output with a
+configurable 64 GiB default budget, pre/post enforcement and inactive LRU
+reclamation. `artifacts cache-status` reports that lifecycle; `artifacts prune`
+requires a preview or explicit execution selection. Ordinary developer/watch
+and release-bundle output remain uncapped. See [Application artifact usage](docs/getting-started.md#inspect-application-artifact-usage)
+for measurements, exclusions, and partial results.
+
+`hegira db status --profile sqlite --dry-run` reviews read-only database
+inspection; `db migrate` reviews explicit forward migration. Linux execution
+requires reviewed application/toolchain trust and delegates to the application-owned
+`app_database` binary, not a CLI SQL engine. Production migration additionally
+requires `--approve-production-migration`. Neither command provisions a database,
+seeds Identity, or starts HTTP. See [Application database operations](docs/getting-started.md#operate-an-application-database)
+for target selection, safe reports, and SQLite WAL coordination.
 
 ## Quick Start
 
@@ -184,16 +250,18 @@ supported direct transition through the atomic mutation boundary. See
 [Upgrade readiness](docs/getting-started.md#assess-application-upgrade-readiness)
 for supported release states, recovery checks, and process outcomes.
 
-The bundled transition supports v0.6.0 → v0.7.0 for default, minimal, and
-Identity-added applications with either supported database. It changes only
-`Cargo.toml`, `Cargo.lock`, and `hegira.toml`; customized managed files fail
+The bundled transition supports v0.7.0 → v0.8.0 for default, minimal, and
+Identity-added applications with either supported database. It edits
+`Cargo.toml`, `Cargo.lock`, and `hegira.toml` and creates only the absent
+`crates/infrastructure/src/database_operations.rs`; customized managed files fail
 closed rather than being merged. Application-owned product code, generated-once
 scaffolding, and immutable migration history are preserved. Review the
 [ownership contract](docs/getting-started.md#generated-ownership-and-hegiratoml),
 [post-upgrade checks](docs/getting-started.md#after-an-application-upgrade), and
 [conflict and recovery guidance](docs/getting-started.md#resolve-upgrade-conflicts-and-recovery)
 before applying a transition. Source upgrade does not execute database migrations
-or deploy the application.
+or deploy the application. The new operation source remains unregistered until
+the owner completes the [manual database integration](docs/getting-started.md#adopt-database-operations-after-a-source-upgrade).
 
 From a generated application, create an append-only migration scaffold for
 the database adapter selected in `hegira.toml`:
@@ -224,6 +292,12 @@ cargo run --locked --manifest-path /path/to/hegira/Cargo.toml \
 
 Use `--plural <NAME>` for an irregular plural. The command reports the manual
 migration and validation steps after publication; it does not execute them.
+
+New Leptos resource lists include 50-row pagination, navigation and refresh with
+record counts. Application services retain authorization before repository
+access; UI permission gates do not replace it. Existing customized pages are
+preserved. See [resource generation](docs/getting-started.md#generate-a-layered-resource)
+for supported fields, provider selection and pagination behavior.
 
 ## Documentation
 
@@ -287,8 +361,10 @@ the sole owner of application database, provider, upgrade, container,
 hydration, and HTTP integration coverage. Its isolated default and
 Identity-added cells and released-upgrade default, minimal, and Identity-added
 cells run in parallel while the stable `quality` result waits for all five.
-Each upgrade cell validates both providers through the public v0.6.0-to-v0.7.0
-workflow, preserved migrations/data, and production behavior.
+The default cell also validates fresh minimal applications with both providers.
+Each upgrade cell checks unchanged public release locks before local staging and
+validates both providers through the public v0.7.0-to-v0.8.0 workflow, explicit
+database status/approved migration, preserved history/data, and production behavior.
 
 PostgreSQL tests marked `ignored` require a disposable `DATABASE_URL` because
 they reset the target database.

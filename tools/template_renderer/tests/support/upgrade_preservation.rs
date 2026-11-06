@@ -26,7 +26,12 @@ use upgrade_test_support::{
     BaselineCatalog, BaselineComposition, BaselineDatabase, BaselineRequest,
 };
 
-pub const MANAGED_FILES: [&str; 3] = ["Cargo.lock", "Cargo.toml", "hegira.toml"];
+pub const MANAGED_FILES: [&str; 4] = [
+    "Cargo.lock",
+    "Cargo.toml",
+    "crates/infrastructure/src/database_operations.rs",
+    "hegira.toml",
+];
 const LAYER_ROOTS: [&str; 6] = [
     "crates/domain/src/lib.rs",
     "crates/application_contracts/src/lib.rs",
@@ -37,12 +42,15 @@ const LAYER_ROOTS: [&str; 6] = [
 ];
 
 pub fn customize(repository: &Path, application: &Path, request: BaselineRequest) {
-    BaselineCatalog::from_repository(repository)
-        .unwrap()
-        .snapshot(request)
-        .unwrap()
-        .materialize(application)
-        .unwrap();
+    BaselineCatalog::from_repository_release(
+        repository,
+        upgrade_test_support::BaselineVersion::V0_7_0,
+    )
+    .unwrap()
+    .snapshot(request)
+    .unwrap()
+    .materialize(application)
+    .unwrap();
     let historical = history_fingerprints(application);
     let manifest = ApplicationManifest::read(application.join("hegira.toml")).unwrap();
     let namespace = ArtifactNamespace::new(
@@ -164,8 +172,13 @@ pub fn upgrade_and_verify_with(
     apply(application);
     let after = fingerprints(application);
     assert_eq!(
-        before.keys().collect::<Vec<_>>(),
-        after.keys().collect::<Vec<_>>()
+        before
+            .keys()
+            .chain(std::iter::once(&std::path::PathBuf::from(
+                "crates/infrastructure/src/database_operations.rs"
+            )))
+            .collect::<std::collections::BTreeSet<_>>(),
+        after.keys().collect::<std::collections::BTreeSet<_>>()
     );
     for (path, digest) in &before {
         if !MANAGED_FILES
@@ -183,7 +196,7 @@ pub fn upgrade_and_verify_with(
     }
     assert_eq!(history, history_fingerprints(application));
     let target = ApplicationManifest::read(application.join("hegira.toml")).unwrap();
-    assert_eq!(target.framework.version, "v0.7.0");
+    assert_eq!(target.framework.version, "v0.8.0");
     assert_eq!(source.application, target.application);
     assert_eq!(source.selection, target.selection);
     assert_eq!(

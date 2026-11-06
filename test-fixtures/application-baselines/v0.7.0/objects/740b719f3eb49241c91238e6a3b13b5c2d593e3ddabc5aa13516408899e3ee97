@@ -1,0 +1,160 @@
+application:
+  name: Application
+  public_url: https://example.com
+
+server:
+  addr: 0.0.0.0:3000
+  request_timeout_seconds: 30
+  body_limit_bytes: 2097152
+
+runtime:
+  role: web # all | web | worker
+
+worker_operations:
+  enabled: false
+  addr: 127.0.0.1:9091
+  heartbeat_grace_seconds: 30
+
+startup:
+  ensure_database: false
+  seed_identity: false
+  scheduler: true
+  durable_jobs: true
+
+database:
+  backend: postgres
+  url: postgres://user@host:5432/application
+  max_connections: 10
+  auto_migrate: false
+
+security:
+  trusted_proxies: [] # Example: ["10.0.0.0/8", "2001:db8::/32"]
+  cors:
+    enabled: true
+    allowed_origins:
+      - https://example.com
+    allow_credentials: false
+  rate_limit:
+    enabled: true
+    backend: memory # memory | redis
+    max_requests: 60
+    window_seconds: 60
+    redis:
+      url: redis://redis:6379
+
+sessions:
+  backend: database # database | redis
+  sliding_ttl_seconds: 1800
+  max_lifetime_seconds: 43200
+  refresh_threshold_percent: 25
+  redis:
+    url: redis://redis:6379
+
+oauth:
+  enabled: false
+  state_ttl_seconds: 600
+  providers:
+    google:
+      enabled: false
+      client_id: ""
+      client_secret: ""
+      redirect_uri: https://example.com/oauth/google/callback
+      authorization_url: https://accounts.google.com/o/oauth2/v2/auth
+      token_url: https://oauth2.googleapis.com/token
+      userinfo_url: https://openidconnect.googleapis.com/v1/userinfo
+      scopes:
+        - openid
+        - email
+        - profile
+    github:
+      enabled: false
+      client_id: ""
+      client_secret: ""
+      redirect_uri: https://example.com/oauth/github/callback
+      authorization_url: https://github.com/login/oauth/authorize
+      token_url: https://github.com/login/oauth/access_token
+      userinfo_url: https://api.github.com/user
+      scopes:
+        - read:user
+        - user:email
+
+mailer:
+  enabled: false
+  backend: "null" # null | log | smtp
+  from: no-reply@example.com
+  smtp:
+    host: smtp.example.com
+    port: 587
+    username:
+    password:
+    starttls: true
+
+cache:
+  enabled: false
+  backend: "null" # null | memory | redis
+  authorization_ttl_seconds: 60
+  redis:
+    url: redis://redis:6379
+
+storage:
+  enabled: false
+  backend: "null" # null | local | s3
+  local:
+    root: storage/production
+  s3:
+    bucket: application
+    region: us-east-1
+    endpoint_url: http://minio:9000
+    force_path_style: true
+
+search:
+  enabled: false
+  backend: "null" # null | meilisearch
+  index_prefix: application
+  task_timeout_milliseconds: 10000
+  meilisearch:
+    url: http://meilisearch:7700
+    api_key:
+
+scheduler:
+  enabled: true
+  run_on_startup: true
+  cleanup_expired_sessions_interval_seconds: 300
+
+jobs:
+  durable:
+    enabled: false
+    poll_interval_milliseconds: 1000
+    batch_size: 20
+    lock_timeout_seconds: 300
+
+audit:
+  enabled: true
+
+settings:
+  enabled: true
+  cache_ttl_seconds: 60
+
+openapi:
+  enabled: false
+
+metrics:
+  enabled: false
+  path: /metrics
+
+telemetry:
+  enabled: false
+  protocol: grpc # grpc | http_protobuf
+  endpoint: http://127.0.0.1:4317
+  timeout_milliseconds: 5000
+  sample_ratio: 0.1
+
+health:
+  readiness_timeout_milliseconds: 2000
+
+seed:
+  seed_admin: false
+  admin_username: admin@example.com
+
+logging:
+  filter: info

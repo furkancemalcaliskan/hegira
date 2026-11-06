@@ -62,6 +62,22 @@ platform_contract() {
       asset="wasm-bindgen-0.2.129-aarch64-apple-darwin.tar.gz"
       checksum="81d4a23d56b3c3eb8187658329116d50e0b228a93b343825fb71f70179051cd1"
       ;;
+    0.2.130:Linux:x86_64)
+      asset="wasm-bindgen-0.2.130-x86_64-unknown-linux-musl.tar.gz"
+      checksum="9687f3bb551b9f66f37ed32a40d7913a00f7962db653054e56857bc306c3227f"
+      ;;
+    0.2.130:Linux:aarch64 | 0.2.130:Linux:arm64)
+      asset="wasm-bindgen-0.2.130-aarch64-unknown-linux-musl.tar.gz"
+      checksum="99ffc93ce80081b91632e2b539b782821a8f3439ab0fddc645287462b2f55d3d"
+      ;;
+    0.2.130:Darwin:x86_64)
+      asset="wasm-bindgen-0.2.130-x86_64-apple-darwin.tar.gz"
+      checksum="eb209c115b7cb95832423c1aa3f4d06d6c53f63ef74fc4b6fb79ef0b2eea5f10"
+      ;;
+    0.2.130:Darwin:arm64 | 0.2.130:Darwin:aarch64)
+      asset="wasm-bindgen-0.2.130-aarch64-apple-darwin.tar.gz"
+      checksum="b90ddb9357f584b1af897d58ad77e4cce2b48fc17e2a967bc249a87f72809444"
+      ;;
     *)
       error "no authenticated wasm-bindgen CLI asset is declared for version $version on $system/$machine"
       ;;

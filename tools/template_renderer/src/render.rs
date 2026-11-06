@@ -4,7 +4,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use application_manifest::{ApplicationComposition, ApplicationManifest};
+use application_manifest::{
+    ApplicationComposition, ApplicationManifest, SourceOwnershipClaim, SourceOwnershipClass,
+};
 
 use crate::{
     ComponentManifest, ComponentPackageManifest, ManifestCatalog, RendererError, RendererErrorKind,
@@ -168,6 +170,33 @@ fn write_resolved_application_composition(
     composition: &ResolvedComposition,
     files: &mut BTreeMap<PathBuf, PlannedFile>,
 ) -> Result<()> {
+    let generated_once = [
+        ".cursor/rules/application.mdc",
+        ".github/PULL_REQUEST_TEMPLATE.md",
+        ".github/actions/application-tools/action.yml",
+        ".github/repository-policy.json",
+        ".github/workflows/quality.yml",
+        ".github/workflows/repository-policy.yml",
+        "AGENTS.md",
+        "CLAUDE.md",
+        "README.md",
+        "docs/architecture.md",
+        "docs/development.md",
+        "docs/ownership.md",
+        "docs/repository.md",
+        "scripts/repository-policy.mjs",
+        "scripts/repository-policy.sh",
+        "scripts/repository-policy.test.mjs",
+        ".cargo/audit.toml",
+        "deny.toml",
+        "scripts/ci.sh",
+        "scripts/ci-tools.sh",
+        "scripts/ci-integration.mjs",
+        "scripts/ci.test.mjs",
+    ]
+    .into_iter()
+    .filter(|path| files.contains_key(Path::new(path)))
+    .collect::<Vec<_>>();
     let Some(planned) = files.get_mut(Path::new("hegira.toml")) else {
         return Ok(());
     };
@@ -190,6 +219,17 @@ fn write_resolved_application_composition(
         modules: composition.modules.clone(),
         capabilities: composition.capabilities.clone(),
     });
+    // Freshly rendered guides and policy belong to the owner. Historical edges retain their
+    // exact ownership and raw manifest source rather than adopting these paths.
+    if let Some(upgrade) = &mut manifest.upgrade {
+        for path in generated_once {
+            upgrade.ownership.claims.push(SourceOwnershipClaim {
+                path: path.to_owned(),
+                class: SourceOwnershipClass::GeneratedOnce,
+                integration: None,
+            });
+        }
+    }
     planned.bytes = manifest
         .to_toml()
         .map_err(|error| {
@@ -261,6 +301,27 @@ fn resolve_variables(
             }
         }
     }
+    if let Some(database) = variables.get("database_adapter") {
+        let profile = match database.as_str() {
+            "sqlite" => "sqlite",
+            "postgres" => "development",
+            _ => {
+                return Err(RendererError::with_kind(
+                    RendererErrorKind::Variables,
+                    "unsupported database adapter for development documentation",
+                ));
+            }
+        };
+        if variables
+            .insert("development_profile".to_owned(), profile.to_owned())
+            .is_some()
+        {
+            return Err(RendererError::with_kind(
+                RendererErrorKind::Catalog,
+                "reserved derived variable is declared by the template: development_profile",
+            ));
+        }
+    }
     Ok(variables)
 }
 
@@ -325,6 +386,21 @@ fn substitute_variables(
             )
         })?;
         let name = &token[..end];
+        // GitHub evaluates these expressions later. They are literal data in
+        // authenticated workflow/action YAML, never renderer variables or code.
+        if prefix.ends_with('$')
+            && (path.starts_with(".github/workflows") || path.starts_with(".github/actions"))
+            && matches!(
+                path.extension().and_then(|extension| extension.to_str()),
+                Some("yml" | "yaml")
+            )
+        {
+            output.push_str("{{");
+            output.push_str(name);
+            output.push_str("}}");
+            remaining = &token[end + 2..];
+            continue;
+        }
         validate_variable(name).map_err(|error| error.classified(RendererErrorKind::Variables))?;
         let value = variables.get(name).ok_or_else(|| {
             RendererError::with_kind(
@@ -376,4 +452,42 @@ fn fnv1a64(bytes: &[u8]) -> u64 {
         hash = hash.wrapping_mul(0x100000001b3);
     }
     hash
+}
+
+#[cfg(test)]
+mod workflow_tests {
+    use super::*;
+
+    #[test]
+    fn github_yaml_expressions_survive_next_to_real_template_variables() {
+        let source = b"name: {{application_name}}\nvalue: ${{ needs.build.result }}\npath: ${{ github.workspace }}/application\n";
+        let variables = [("application_name".to_owned(), "owner-app".to_owned())].into();
+        for path in [
+            ".github/workflows/quality.yml",
+            ".github/actions/setup/action.yml",
+        ] {
+            let rendered =
+                substitute_variables(Path::new(path), source.to_vec(), &variables).unwrap();
+            assert_eq!(rendered, b"name: owner-app\nvalue: ${{ needs.build.result }}\npath: ${{ github.workspace }}/application\n");
+        }
+        assert!(
+            substitute_variables(Path::new("src/config.rs"), source.to_vec(), &variables).is_err()
+        );
+        assert!(
+            substitute_variables(
+                Path::new(".github/workflows/quality.yml"),
+                b"${{ github.ref".to_vec(),
+                &variables
+            )
+            .is_err()
+        );
+        assert!(
+            substitute_variables(
+                Path::new(".github/workflows/quality.yml"),
+                b"{{unknown}}".to_vec(),
+                &variables
+            )
+            .is_err()
+        );
+    }
 }

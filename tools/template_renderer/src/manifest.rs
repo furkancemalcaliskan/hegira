@@ -39,6 +39,8 @@ pub struct ComponentPackageManifest {
     pub modules: Vec<String>,
     #[serde(default)]
     pub upgrade_edges: Vec<PathBuf>,
+    #[serde(default)]
+    pub upgrade_lockfiles: Vec<PathBuf>,
     pub content_digest: String,
 }
 
@@ -338,7 +340,11 @@ impl ManifestCatalog {
             )?;
         }
 
-        for path in &package.upgrade_edges {
+        for path in package
+            .upgrade_edges
+            .iter()
+            .chain(&package.upgrade_lockfiles)
+        {
             insert_package_entry(
                 &mut entries,
                 path_to_package_key(path)?,
@@ -374,6 +380,17 @@ impl ManifestCatalog {
         self.source.file(path).ok_or_else(|| {
             RendererError::new(format!("component package is missing the declared {kind}"))
         })
+    }
+
+    pub(crate) fn upgrade_lockfile(&self, path: &Path) -> Result<&[u8]> {
+        if !self
+            .package
+            .as_ref()
+            .is_some_and(|package| package.upgrade_lockfiles.contains(&path.to_path_buf()))
+        {
+            return Err(RendererError::new("undeclared upgrade lockfile"));
+        }
+        self.required_file(path, "upgrade lockfile")
     }
 
     pub(crate) fn component_files<'a>(
@@ -424,6 +441,7 @@ impl ManifestCatalog {
             );
         }
         declared.extend(package.upgrade_edges.iter().cloned());
+        declared.extend(package.upgrade_lockfiles.iter().cloned());
         for component in self.components.values() {
             declared.insert(PathBuf::from("components").join(format!("{}.toml", component.id)));
             let source_root = &component.source;
@@ -457,10 +475,18 @@ impl ManifestCatalog {
                 );
             }
         }
+        let mut lockfiles = BTreeMap::new();
+        for path in &package.upgrade_lockfiles {
+            lockfiles.insert(
+                path.clone(),
+                format!("sha256:{:x}", Sha256::digest(self.upgrade_lockfile(path)?)),
+            );
+        }
         crate::upgrade::validate_upgrade_graph(
             package,
             &self.components,
             &component_paths,
+            &lockfiles,
             &mut self.upgrade_edges,
         )
     }
@@ -662,6 +688,31 @@ fn validate_package(package: &ComponentPackageManifest, path: &Path) -> Result<(
     validate_sorted_identifiers(&package.components, "package component", false)?;
     validate_sorted_identifiers(&package.modules, "package module", true)?;
     validate_upgrade_paths(&package.upgrade_edges)?;
+    if package
+        .upgrade_lockfiles
+        .windows(2)
+        .any(|pair| pair[0] >= pair[1])
+    {
+        return Err(RendererError::new(
+            "upgrade lockfile paths must be sorted and unique",
+        ));
+    }
+    for path in &package.upgrade_lockfiles {
+        validate_relative_path(path, "upgrade lockfile").map_err(|_| {
+            crate::upgrade::graph_error(
+                crate::UpgradeGraphDiagnosticKind::InvalidManagedPath,
+                "component-package.upgrade-lockfile-path",
+            )
+        })?;
+        if path.parent() != Some(Path::new("upgrades/locks"))
+            || !path
+                .components()
+                .all(|component| matches!(component, Component::Normal(_)))
+            || path.extension().and_then(|value| value.to_str()) != Some("lock")
+        {
+            return Err(RendererError::new("invalid upgrade lockfile path"));
+        }
+    }
     let digest = package
         .content_digest
         .strip_prefix("sha256:")
@@ -1002,3 +1053,7 @@ fn canonical_directory(path: &Path, kind: &str) -> Result<PathBuf> {
     }
     Ok(canonical)
 }
+
+#[cfg(test)]
+#[path = "manifest_additive_tests.rs"]
+mod additive_upgrade_tests;
