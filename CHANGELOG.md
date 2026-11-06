@@ -4,14 +4,7 @@ All notable changes are documented here. Releases follow Semantic Versioning.
 
 ## [Unreleased]
 
-## [0.8.0] - 2026-10-31
-
-- Verify unchanged public upgrade locks for all six released states, preserve
-  composition-specific owner dependency graphs with authenticated upgrade locks,
-  and exercise explicit database operations and fresh minimal production coverage
-  within existing lifecycle CI contexts.
-
-Source preparation; publication still requires the governed release gates.
+## [0.8.0] - 2026-11-03
 
 ### Added
 
@@ -22,7 +15,9 @@ Source preparation; publication still requires the governed release gates.
 - Added generated application documentation, agent instructions, repository
   policy, and mandatory provider-specific quality automation.
 - Added pagination to generated Leptos resource lists and bounded CLI-owned
-  validation caches with status, pruning, and active-work protection.
+  validation caches with status, pruning, and active-work protection. Ordinary
+  developer, watch, and release-bundle output retain separate ownership and
+  remain outside that budget.
 - Added authenticated direct v0.7.0 to v0.8.0 upgrades for default, minimal, and
   Identity-added SQLite/PostgreSQL applications. The edge edits three release
   files and creates one absent, unregistered Infrastructure operation source;
@@ -36,6 +31,16 @@ Source preparation; publication still requires the governed release gates.
   bootstrap while preserving existing application-owned automation on upgrades.
 - Preserved immutable v0.6.0/v0.7.0 baselines and archived the historical direct
   edge; current lifecycle validation now uses the six frozen v0.7.0 inputs.
+- Extended existing lifecycle CI contexts to verify pristine public upgrade
+  locks for all six released states, public database operations, and fresh
+  minimal production behavior for both providers.
+
+### Fixed
+
+- Preserved released minimal and Identity-added owner dependency graphs through
+  separate package-authenticated upgrade locks, without regenerating dependencies.
+- Isolated lock-matched wasm-bindgen tools by version so parallel validation of
+  fresh and upgraded applications cannot replace each other's executable.
 
 ### Security
 
@@ -43,6 +48,18 @@ Source preparation; publication still requires the governed release gates.
   execution trust and immutable migration-history controls across the handoff.
 - Updated canonical locks and security floors for reviewed ctutils, Tokio,
   rustls, rustls-webpki, quinn-proto, and webpki-roots fixes.
+
+### Upgrade And Distribution Notes
+
+- Use the matching v0.8.0 CLI and bundled catalog for the direct upgrade. Review
+  the exact managed-file plan and complete manual database-operation adoption
+  before using the new entry point; source upgrades do not execute SQL.
+- Distribution remains source-only: a signed immutable tag and GitHub Release,
+  source archives, an SPDX SBOM, and a release attestation. Workspace packages
+  remain non-publishable; no executable, container image, or preview is shipped.
+- Publication follows governed promotion and exact promoted-main validation.
+  See the [v0.8.0 release notes](docs/releases/v0.8.0.md) for compatibility,
+  verification evidence, and publication requirements.
 
 ## [0.7.0] - 2026-10-04
 

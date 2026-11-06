@@ -909,8 +909,12 @@ edge to assess.
 
 Use the target v0.8.0 source tree or source release archive to run these upgrade
 commands; the source application's v0.7.0 CLI does not acquire a new edge by
-reading its manifest. A prerelease checkout can exercise its bundled source
-contract, but does not prove that the target tag is published or resolvable.
+reading its manifest. Keep the complete matching CLI source and bundled catalog
+available through assessment, preview and apply. A prerelease checkout can
+exercise its bundled source contract, but does not prove that the target tag is
+published or resolvable. Before application dependency validation, verify that
+the v0.8.0 source release is available; use locked builds without replacing the
+reviewed public source pin with a local path.
 
 | Source composition | Databases | Direct target and preserved composition |
 | --- | --- | --- |
